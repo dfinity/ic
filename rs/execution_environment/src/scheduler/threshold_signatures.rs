@@ -199,6 +199,19 @@ mod tests {
         (callback_id, context)
     }
 
+    fn setup_pre_signatures<T: IntoIterator<Item = u64>>(
+        key_id: &MasterPublicKeyId,
+        ids: T,
+    ) -> AvailablePreSignatures {
+        AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                ids.into_iter()
+                    .map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        }
+    }
+
     fn match_pre_signatures_basic_test(
         key_id: &MasterPublicKeyId,
         pre_sigs: AvailablePreSignatures,
@@ -260,12 +273,7 @@ mod tests {
         key_id2: &MasterPublicKeyId,
     ) {
         // 2 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id1),
-            pre_signatures: BTreeMap::from_iter(
-                (1..3).map(|i| (PreSigId(i), pre_signature_for_tests(key_id1))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id1, 1..3);
         // 3 contexts for key 2
         let contexts = BTreeMap::from_iter((1..4).map(|i| fake_context(i, key_id2, None)));
         // No contexts should be matched
@@ -280,12 +288,7 @@ mod tests {
 
     fn test_match_pre_signatures_doesnt_match_more_than_delivered(key_id: &MasterPublicKeyId) {
         // 2 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id),
-            pre_signatures: BTreeMap::from_iter(
-                (1..3).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id, 1..3);
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id, None)));
         // The first 2 contexts should be matched
@@ -300,12 +303,7 @@ mod tests {
 
     fn test_match_pre_signatures_doesnt_match_more_than_requested(key_id: &MasterPublicKeyId) {
         // 3 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id),
-            pre_signatures: BTreeMap::from_iter(
-                (1..4).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id, 1..4);
         // 2 contexts for key 1
         let contexts = BTreeMap::from_iter((1..3).map(|i| fake_context(i, key_id, None)));
         // The first 2 contexts should be matched
@@ -320,12 +318,7 @@ mod tests {
 
     fn test_match_pre_signatures_respects_max(key_id: &MasterPublicKeyId) {
         // 4 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id),
-            pre_signatures: BTreeMap::from_iter(
-                (1..5).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id, 1..5);
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id, None)));
         // The first 3 contexts (up to max_ongoing_signatures) should be matched
@@ -349,14 +342,7 @@ mod tests {
         key_id2: &MasterPublicKeyId,
     ) {
         // 4 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id1),
-            pre_signatures: BTreeMap::from_iter(
-                [1, 3, 4, 5]
-                    .into_iter()
-                    .map(|i| (PreSigId(i), pre_signature_for_tests(key_id1))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id1, [1, 3, 4, 5]);
         let height = Height::from(1);
         // 4 contexts for key 1 and 1 context for key 2
         let contexts = BTreeMap::from_iter([
@@ -378,12 +364,7 @@ mod tests {
 
     fn test_matched_pre_signatures_arent_matched_again(key_id: &MasterPublicKeyId) {
         // 4 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id),
-            pre_signatures: BTreeMap::from_iter(
-                (1..5).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id, 1..5);
         let height = Height::from(1);
         // 5 contexts for key 1, 2 are already matched
         let contexts = BTreeMap::from_iter([
@@ -405,12 +386,7 @@ mod tests {
 
     fn test_matched_pre_signatures_arent_overwritten(key_id: &MasterPublicKeyId) {
         // 4 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id),
-            pre_signatures: BTreeMap::from_iter(
-                (3..7).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id, 3..7);
         let height = Height::from(2);
         // 4 contexts for key 1, the first 3 are already matched
         let contexts = BTreeMap::from_iter([
@@ -431,12 +407,7 @@ mod tests {
 
     fn test_match_pre_signatures_doesnt_update_height(key_id: &MasterPublicKeyId) {
         // 2 pre-signatures for key 1
-        let pre_sigs = AvailablePreSignatures {
-            key_transcript: key_transcript_for_tests(key_id),
-            pre_signatures: BTreeMap::from_iter(
-                (5..=6).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
-            ),
-        };
+        let pre_sigs = setup_pre_signatures(key_id, 5..=6);
         // 2 contexts for key 1, the first was already matched to the first pre-signature
         // in the previous round.
         let mut contexts = BTreeMap::from_iter([

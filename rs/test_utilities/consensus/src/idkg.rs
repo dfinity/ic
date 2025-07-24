@@ -99,13 +99,13 @@ pub fn pre_signature_for_tests(key_id: &MasterPublicKeyId) -> PreSignature {
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let alg = AlgorithmId::from(key_id);
     match key_id {
-        &MasterPublicKeyId::Ecdsa(_) => {
+        MasterPublicKeyId::Ecdsa(_) => {
             let key = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
             let pre_sig =
                 generate_ecdsa_presig_quadruple(&env, &dealers, &receivers, alg, &key, rng);
             PreSignature::Ecdsa(Arc::new(pre_sig))
         }
-        &MasterPublicKeyId::Schnorr(_) => {
+        MasterPublicKeyId::Schnorr(_) => {
             let blinder_params = setup_unmasked_random_params(&env, alg, &dealers, &receivers, rng);
             let blinder_transcript = env
                 .nodes
@@ -114,7 +114,7 @@ pub fn pre_signature_for_tests(key_id: &MasterPublicKeyId) -> PreSignature {
                 SchnorrPreSignatureTranscript::new(blinder_transcript).unwrap(),
             ))
         }
-        &MasterPublicKeyId::VetKd(_) => panic!("No pre-signatures for vetKD"),
+        MasterPublicKeyId::VetKd(_) => panic!("No pre-signatures for vetKD"),
     }
 }
 
