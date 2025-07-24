@@ -74,8 +74,8 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
             chain_key_config: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
@@ -198,8 +198,8 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             ssh_readonly_access: None,
             ssh_backup_access: None,
             chain_key_config: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
@@ -314,8 +314,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
             chain_key_config: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
@@ -504,7 +504,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         // update payload message
         let mut payload = UpdateSubnetPayload {
             chain_key_config: Some(chain_key_config.clone()),
-            chain_key_signing_enable: Some(vec![key_id.clone()]),
+            chain_key_enable: Some(vec![key_id.clone()]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -535,7 +535,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         // Change one field at a time in this payload
         payload = UpdateSubnetPayload {
             chain_key_config: None,
-            chain_key_signing_enable: Some(vec![key_id.clone()]),
+            chain_key_enable: Some(vec![key_id.clone()]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -608,7 +608,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         {
             // This update should enable signing on our subnet for the given key.
             let payload_2 = UpdateSubnetPayload {
-                chain_key_signing_enable: Some(vec![key_id.clone()]),
+                chain_key_enable: Some(vec![key_id.clone()]),
                 ..empty_update_subnet_payload(subnet_id)
             };
 
@@ -619,7 +619,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                 Encode!(&payload_2).unwrap(),
             )
             .await
-            .expect("2nd call to update_subnet to set chain_key_signing_enable must succeed.");
+            .expect("2nd call to update_subnet to set chain_key_enable must succeed.");
 
             // Inspect the subnet record
             {
@@ -671,8 +671,8 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         ssh_readonly_access: None,
         ssh_backup_access: None,
         chain_key_config: None,
-        chain_key_signing_enable: None,
-        chain_key_signing_disable: None,
+        chain_key_enable: None,
+        chain_key_disable: None,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,

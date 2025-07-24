@@ -113,7 +113,7 @@ pub fn enable_chain_key_signing_on_subnet(
 
     let enable_signing_payload = UpdateSubnetPayload {
         subnet_id,
-        chain_key_signing_enable: Some(key_ids.clone()),
+        chain_key_enable: Some(key_ids.clone()),
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
@@ -146,7 +146,7 @@ pub fn disable_chain_key_on_subnet(
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     let disable_signing_payload = UpdateSubnetPayload {
         subnet_id,
-        chain_key_signing_disable: Some(key_ids.clone()),
+        chain_key_disable: Some(key_ids.clone()),
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
