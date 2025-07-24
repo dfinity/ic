@@ -1,11 +1,6 @@
-use std::collections::BTreeMap;
-
+use crate::{hash_of_map, HASH_LENGTH};
 use ic_crypto_sha2::Sha256;
-
-use crate::hash_of_map;
-
-/// The length of a environment variables hash in bytes.
-pub const HASH_LENGTH: usize = 32;
+use std::collections::BTreeMap;
 
 /// Represents a set of environment variables for a canister
 /// mapping environment variable names to their values.

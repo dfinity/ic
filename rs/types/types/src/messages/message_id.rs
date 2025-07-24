@@ -171,27 +171,6 @@ pub(crate) fn hash_key_val(key: &String, val: &RawHttpRequestVal) -> Vec<u8> {
     key_hash
 }
 
-// /// Describes `hash_of_map` as specified in the public spec.
-// pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
-//     let mut hashes: Vec<Vec<u8>> = Vec::new();
-//     for (key, val) in map.iter() {
-//         hashes.push(hash_key_val(key.to_string(), val));
-//     }
-
-//     // Computes hash by first sorting by "field name" hash, which is the
-//     // same as sorting by concatenation of H(field name) · H(field value)
-//     // (although in practice it's actually more stable in the presence of
-//     // duplicated field names).  Then concatenate all the hashes.
-//     hashes.sort();
-
-//     let mut hasher = Sha256::new();
-//     for hash in hashes {
-//         hasher.write(&hash);
-//     }
-
-//     hasher.finish()
-// }
-
 impl From<&MessageId> for u32 {
     fn from(message_id: &MessageId) -> u32 {
         (message_id.0[0] as u32)
