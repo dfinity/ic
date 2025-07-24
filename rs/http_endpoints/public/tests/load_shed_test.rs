@@ -406,7 +406,7 @@ fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Ca
         let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),
-            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::SERVICE_UNAVAILABLE,
             "{:?}",
             call_response.text().await.unwrap()
         );
