@@ -15,7 +15,7 @@ use fixtures::{account, new_motion_proposal, principal, NNSBuilder, NeuronBuilde
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType, MemoryMetrics};
 use ic_nervous_system_common::{
     ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
     ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -1989,7 +1989,7 @@ fn test_enforce_private_neuron() {
             },
             full_neurons: vec![full_neuron],
             total_pages_available: Some(1),
-        },
+        }
     );
 }
 
@@ -5694,6 +5694,7 @@ fn test_seed_neuron_split() {
     );
 
     let neuron = gov
+        .neuron_store
         .with_neuron_mut(&id, |neuron| {
             neuron.neuron_type = Some(NeuronType::Seed as i32);
             neuron.clone()
@@ -7995,6 +7996,7 @@ async fn test_make_proposal_message() {
         )),
         // Fill in the rest of the fields with those of a motion proposal.
         // (They are not relevant to this test.)
+        // (They are not relevant to this test.)
         ..new_motion_proposal()
     };
 
@@ -10079,8 +10081,7 @@ fn test_wfq_majority_reached_no_delay() {
         .unwrap()
         .current_deadline_timestamp_seconds;
     assert!(
-        deadline_after_test
-            < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS / 20
+        deadline_after_test < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS / 20
     );
 }
 
@@ -11700,6 +11701,7 @@ lazy_static! {
                     268693, // idle_cycles_burned_per_day
                     (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
                     123478, // wasm_memory_threshold
+                    MemoryMetrics::default(), // memory_metrics
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -11741,6 +11743,7 @@ lazy_static! {
                 cycles: Some(766182),
                 freezing_threshold: Some(448076),
                 idle_cycles_burned_per_day: Some(268693),
+                memory_metrics: Some(MemoryMetrics::default()),
             }),
         }),
 

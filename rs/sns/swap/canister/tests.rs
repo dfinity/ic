@@ -57,6 +57,7 @@ async fn test_get_canister_status() {
             wasm_memory_threshold: Some(candid::Nat::from(0_u32)),
         },
         memory_size: candid::Nat::from(0_u32),
+        memory_metrics: Some(Default::default()),
         cycles: candid::Nat::from(0_u32),
         idle_cycles_burned_per_day: candid::Nat::from(0_u32),
         query_stats: Some(QueryStats {
