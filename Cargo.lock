@@ -1794,6 +1794,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytecount"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
+
+[[package]]
 name = "bytemuck"
 version = "1.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3708,6 +3714,17 @@ checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
 dependencies = [
  "powerfmt",
  "serde",
+]
+
+[[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -10731,6 +10748,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_cbor",
+ "sns-treasury-manager",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
@@ -10981,6 +10999,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-icrc1",
  "ic-icrc1-index-ng",
+ "ic-icrc1-ledger",
  "ic-icrc1-tokens-u64",
  "ic-interfaces-registry",
  "ic-ledger-core",
@@ -11036,6 +11055,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash 1.1.0",
  "serde",
+ "sns-treasury-manager",
  "tempfile",
  "tokio",
  "url",
@@ -13078,6 +13098,7 @@ dependencies = [
  "itertools 0.12.1",
  "json-patch",
  "lazy_static",
+ "maplit",
  "pretty_assertions",
  "serde",
  "serde_cbor",
@@ -13163,6 +13184,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "sns-treasury-manager",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
@@ -15107,6 +15129,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
+ "ssh2",
  "tempfile",
  "tokio",
  "url",
@@ -18261,6 +18284,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "papergrid"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6978128c8b51d8f4080631ceb2302ab51e32cc6e8615f735ee2f83fd269ae3f1"
+dependencies = [
+ "bytecount",
+ "fnv",
+ "unicode-width 0.2.0",
+]
+
+[[package]]
 name = "parity-scale-codec"
 version = "3.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19159,6 +19193,28 @@ dependencies = [
  "proc-macro2",
  "quote",
  "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr2"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "proc-macro-error2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
+dependencies = [
+ "proc-macro-error-attr2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -20457,6 +20513,7 @@ dependencies = [
  "maplit",
  "rust_decimal",
  "rust_decimal_macros",
+ "tabled",
 ]
 
 [[package]]
@@ -22169,6 +22226,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sns-treasury-manager"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "derivative",
+ "serde",
+]
+
+[[package]]
 name = "sns_system_test_lib"
 version = "0.9.0"
 dependencies = [
@@ -22761,6 +22827,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "tabled"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
+dependencies = [
+ "papergrid",
+ "tabled_derive",
+ "testing_table",
+]
+
+[[package]]
+name = "tabled_derive"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea5d1b13ca6cff1f9231ffd62f15eefd72543dab5e468735f1a456728a02846"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "tagptr"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22934,6 +23024,15 @@ dependencies = [
  "ssh2",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "testing_table"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f8daae29995a24f65619e19d8d31dea5b389f3d853d8bf297bbf607cd0014cc"
+dependencies = [
+ "unicode-width 0.2.0",
 ]
 
 [[package]]

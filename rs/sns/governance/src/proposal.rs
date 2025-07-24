@@ -1,5 +1,8 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
+use crate::extensions::validate_extension_wasm;
+use crate::pb::v1::{
+    AdvanceSnsTargetVersion, RegisterExtension, SetTopicsForCustomProposals, Topic,
+};
 use crate::treasury::assess_treasury_balance;
 use crate::types::Wasm;
 use crate::{
@@ -449,8 +452,8 @@ pub(crate) async fn validate_and_render_action(
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::RegisterExtension(_) => {
-            Err("RegisterExtension proposals are not supported yet.".to_string())
+        proposal::Action::RegisterExtension(register_extension) => {
+            validate_and_render_register_extension(register_extension).await
         }
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
@@ -1496,6 +1499,92 @@ pub async fn validate_and_render_execute_nervous_system_function(
             }
         }
     }
+}
+
+async fn validate_and_render_register_extension(
+    register_extension: &RegisterExtension,
+) -> Result<String, String> {
+    let mut defects = vec![];
+
+    let RegisterExtension {
+        chunked_canister_wasm,
+        extension_init,
+    } = register_extension.clone();
+
+    // Validate the extension WASM
+    let wasm_and_canister_id = match chunked_canister_wasm {
+        None => {
+            defects.push("RegisterExtension must specify chunked_canister_wasm".to_string());
+            None
+        }
+        Some(chunked_wasm) => {
+            if let Some(canister_id) = chunked_wasm.store_canister_id {
+                match Wasm::try_from(chunked_wasm.clone()) {
+                    Ok(wasm) => Some((wasm, canister_id)),
+                    Err(err) => {
+                        defects.push(format!("Invalid chunked_canister_wasm: {}", err));
+                        None
+                    }
+                }
+            } else {
+                defects.push(
+                    "RegisterExtension must specify chunked_canister_wasm.store_canister_id"
+                        .to_string(),
+                );
+                None
+            }
+        }
+    };
+
+    // Validate the extension init parameters
+    if extension_init.is_none() {
+        defects.push("RegisterExtension must specify extension_init".to_string());
+    };
+
+    // Generate final report
+    if !defects.is_empty() {
+        return Err(format!(
+            "RegisterExtension proposal was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ));
+    }
+
+    // If this is reached, then defects is empty. In that case, it is safe to unwrap the values
+    // required for rendering the proposal.
+
+    let (wasm, canister_id) = wasm_and_canister_id.unwrap();
+
+    let extension_spec = match validate_extension_wasm(&wasm.sha256sum()) {
+        Err(err) => {
+            return Err(format!(
+                "RegisterExtension proposal was invalid because: {}",
+                err
+            ));
+        }
+        Ok(spec) => spec,
+    };
+
+    let wasm_info = wasm.description();
+
+    let extension_init = format!("{:#?}", extension_init.unwrap());
+
+    Ok(format!(
+        r"# Proposal to Register {extension_spec}
+
+## Extension canister: {canister_id}
+
+## Wasm Details
+
+{wasm_info}
+
+## Initialization
+
+{extension_init}
+
+## Extension Configuration
+
+The extension will be deployed and configured according to the provided parameters.",
+    ))
 }
 
 fn validate_and_render_register_dapp_canisters(

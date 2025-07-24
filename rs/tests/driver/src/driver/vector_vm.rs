@@ -10,6 +10,7 @@ use slog::{info, warn};
 
 use crate::{
     driver::{
+        farm::HostFeature,
         log_events::LogEvent,
         prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
@@ -79,6 +80,13 @@ impl VectorVm {
 
     pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
         self.universal_vm = self.universal_vm.with_vm_resources(vm_resources);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_required_host_features(required_host_features);
         self
     }
 

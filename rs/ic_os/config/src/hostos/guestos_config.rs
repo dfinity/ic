@@ -32,6 +32,9 @@ pub fn generate_guestos_config(
     let (node_type, upgrade_peer_node_type) = match guest_vm_type {
         GuestVMType::Default => (NodeType::GuestOS, NodeType::UpgradeGuestOS),
         GuestVMType::Upgrade => (NodeType::UpgradeGuestOS, NodeType::GuestOS),
+        GuestVMType::Unknown => {
+            anyhow::bail!("GuestVMType::Unknown is not a valid type for generating GuestOS config");
+        }
     };
 
     let guestos_ipv6_address =
