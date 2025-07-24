@@ -5160,12 +5160,12 @@ impl Governance {
                 }
 
                 if let Some(ref account_identifier) = node_provider.reward_account {
-                    if let Err(e) = validate_account_identifier(account_identifier) {
-                        return Err(GovernanceError::new_with_message(
+                    validate_account_identifier(account_identifier).map_err(|e| {
+                        GovernanceError::new_with_message(
                             ErrorType::InvalidProposal,
                             format!("The account_identifier field is invalid: {}", e),
-                        ));
-                    }
+                        )
+                    })?;
                 }
 
                 // Validate that np does not exist
