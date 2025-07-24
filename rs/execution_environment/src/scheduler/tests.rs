@@ -4174,21 +4174,7 @@ fn http_outcalls_free() {
     test.state_mut().metadata.own_subnet_features.http_requests = true;
     test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
 
-    observe_replicated_state_metrics(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &test.scheduler().metrics,
-        &no_op_logger(),
-    );
-
-    let consumed_cycles_before = NominalCycles::from(
-        fetch_gauge(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_since_replica_started",
-        )
-        .unwrap() as u128,
-    );
+    let cycles_before = test.canister_state(caller_canister).system_state.balance();
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -4239,24 +4225,9 @@ fn http_outcalls_free() {
         http_request_context.variable_parts_size(),
         Some(NumBytes::from(response_size_limit)),
     );
-
-    observe_replicated_state_metrics(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &test.scheduler().metrics,
-        &no_op_logger(),
-    );
-    let consumed_cycles_after = NominalCycles::from(
-        fetch_gauge(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_since_replica_started",
-        )
-        .unwrap() as u128,
-    );
-
     assert_eq!(fee, Cycles::new(0));
-    assert_eq!(consumed_cycles_before, consumed_cycles_after);
+    let cycles_after = test.canister_state(caller_canister).system_state.balance();
+    assert_eq!(cycles_before, cycles_after);
 }
 
 #[test]

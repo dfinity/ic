@@ -814,12 +814,9 @@ fn create_canister_free() {
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
         canister.system_state.canister_metrics.consumed_cycles.get(),
-        creation_fee.get()
+        0
     );
-    assert_eq!(
-        canister.system_state.balance(),
-        *INITIAL_CYCLES - creation_fee
-    );
+    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
