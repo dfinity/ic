@@ -476,11 +476,13 @@ pub struct Transfer {
     pub receiver: Option<Account>,
 }
 
-/// Most of the time, this just points to the Ledger block index. But for generality, once can
+/// Most of the time, this just points to the Ledger block index. But for generality, one can
 /// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
 /// a token to a DEX for the first time.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionWitness {
+    Pending,
+
     Ledger(Vec<Transfer>),
 
     /// Represents a transaction that is not related to the ledger, e.g., DEX operations.
