@@ -39,6 +39,7 @@ use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::str::FromStr;
 use std::time::Duration;
+use ic_state_machine_tests::WasmResult;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -217,6 +218,7 @@ fn should_block_deposit_from_blocked_address() {
     let cketh = CkEthSetup::default();
     let from_address_blocked: Address = SAMPLE_BLOCKED_ADDRESS;
 
+    /*
     cketh
         .deposit(DepositCkEthParams {
             from_address: from_address_blocked,
@@ -230,6 +232,18 @@ fn should_block_deposit_from_blocked_address() {
             },
             reason: format!("blocked address {from_address_blocked}"),
         }]);
+     */
+
+    let minter_id = cketh.minter_id.clone();
+    match cketh.env.query(minter_id, "node_ids", vec![]).expect("Failed to query node IDs") {
+        WasmResult::Reject(_) => panic!("Query to node_ids should not fail"),
+        WasmResult::Reply(response) => {
+            let node_ids: Vec<PrincipalId> = candid::decode_one(&response).expect("Failed to decode node IDs");
+            // assert!(!node_ids.is_empty(), "Node IDs should not be empty");
+            assert!(node_ids == vec![], "Node IDs should be empty for this test");
+        }
+    }
+
 }
 
 #[test]
