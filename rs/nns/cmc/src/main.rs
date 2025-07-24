@@ -374,7 +374,7 @@ pub struct StateV2 {
 
 impl StateV2 {
     fn state_version() -> StateVersion {
-        StateVersion(3)
+        StateVersion(2)
     }
 }
 
