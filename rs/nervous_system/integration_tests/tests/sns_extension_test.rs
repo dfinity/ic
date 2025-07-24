@@ -315,7 +315,7 @@ async fn test_treasury_manager() {
             withdraw_accounts: Some(ledger_id_to_account),
         };
 
-        let _response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
+        let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
             .call(adaptor_canister_id, request)
             .await
             .unwrap()
@@ -328,20 +328,19 @@ async fn test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        // TODO: Reenable this assertion.
-        // assert_eq!(
-        //     response.asset_to_balances,
-        //     Some(btreemap! {
-        //         sns_token => empty_sns_balance_book
-        //             .clone()
-        //             .treasury_owner(treasury_allocation_sns_e8s - 4 * SNS_FEE)
-        //             .fee_collector(4 * SNS_FEE),
-        //         icp_token => empty_icp_balance_book
-        //             .clone()
-        //             .treasury_owner(treasury_allocation_icp_e8s - 4 * ICP_FEE)
-        //             .fee_collector(4 * ICP_FEE),
-        //     }),
-        // );
+        assert_eq!(
+            response.asset_to_balances,
+            Some(btreemap! {
+                sns_token => empty_sns_balance_book
+                    .clone()
+                    .treasury_owner(treasury_allocation_sns_e8s - 4 * SNS_FEE)
+                    .fee_collector(4 * SNS_FEE),
+                icp_token => empty_icp_balance_book
+                    .clone()
+                    .treasury_owner(treasury_allocation_icp_e8s - 4 * ICP_FEE)
+                    .fee_collector(4 * ICP_FEE),
+            }),
+        );
     };
 
     validate_treasury_balances(
