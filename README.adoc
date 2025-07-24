@@ -1,5 +1,5 @@
 
-= The Internet Computer Protocol (ICP)
+= The Internet Computer Protocol (ICP) Test
 :toc: macro
 
 
