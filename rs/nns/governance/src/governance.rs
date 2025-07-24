@@ -7097,15 +7097,15 @@ impl Governance {
             })?;
 
         if let Some(new_reward_account) = update.reward_account {
-            if let Err(e) = validate_account_identifier(&new_reward_account) {
-                return Err(GovernanceError::new_with_message(
+            validate_account_identifier(&new_reward_account).map_err(|e| {
+                GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
                         "Invalid reward_account for Node Provider {}: {}",
                         node_provider_id, e
                     ),
-                ));
-            }
+                )
+            })?;
             node_provider.reward_account = Some(new_reward_account);
         } else {
             return Err(GovernanceError::new_with_message(

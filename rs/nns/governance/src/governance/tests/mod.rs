@@ -1781,14 +1781,27 @@ fn test_validate_add_or_remove_node_provider() {
     let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
     assert!(result.is_err());
 
-    // Test case 5: ToRemove with existing node provider (should succeed)
+    // Test case 5: ToAdd with 28-byte length (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1; 28], // 32-byte required, but only 28 bytes provided
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 6: ToRemove with existing node provider (should succeed)
     let add_or_remove_remove_existing = AddOrRemoveNodeProvider {
         change: Some(Change::ToRemove(existing_node_provider)),
     };
     let result = governance.validate_add_or_remove_node_provider(&add_or_remove_remove_existing);
     assert!(result.is_ok());
 
-    // Test case 6: ToRemove with non-existing node provider (should fail)
+    // Test case 7: ToRemove with non-existing node provider (should fail)
     let non_existing_node_provider = NodeProvider {
         id: Some(PrincipalId::new_user_test_id(999)),
         reward_account: None,
@@ -1800,7 +1813,7 @@ fn test_validate_add_or_remove_node_provider() {
         governance.validate_add_or_remove_node_provider(&add_or_remove_remove_non_existing);
     assert!(result.is_err());
 
-    // Test Case 7: ToAdd with no NodeProvider ID (should fail)
+    // Test Case 8: ToAdd with no NodeProvider ID (should fail)
     let node_provider_without_id = NodeProvider {
         id: None,
         reward_account: Some(valid_proto_account_identifier(valid_account)),
@@ -1815,7 +1828,7 @@ fn test_validate_add_or_remove_node_provider() {
         result
     );
 
-    // Test Case 8: ToRemove with no NodeProvider ID (should fail)
+    // Test Case 9: ToRemove with no NodeProvider ID (should fail)
     let node_provider_without_id = NodeProvider {
         id: None,
         reward_account: None,
