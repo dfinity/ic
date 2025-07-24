@@ -632,7 +632,7 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
 
 #[test]
 fn do_not_charge_canister_for_compute_allocation_free_schedule() {
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
     with_test_replica_logger(|log| {
         const HOUR: Duration = Duration::from_secs(3600);
         let compute_allocation = ComputeAllocation::try_from(20).unwrap();
