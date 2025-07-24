@@ -241,3 +241,48 @@ system_test(
         "@crate_index//:url",
     ],
 )
+
+system_test(
+    name = "rent_subnet_test",
+    env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
+        # Keep sorted.
+        "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+        "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+    },
+    tags = [
+        "k8s",
+    ],
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        # Keep sorted.
+        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types",
+        "//rs/canister_client",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/cmc",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:lazy_static",
+        "@crate_index//:slog",
+    ],
+)
