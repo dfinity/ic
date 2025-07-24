@@ -133,18 +133,14 @@ pub fn hash_of_map<K, V, F>(map: &BTreeMap<K, V>, hash_key_val: F) -> [u8; HASH_
 where
     F: Fn(&K, &V) -> Vec<u8>,
 {
-    // Create a vector to store the hashes of key-value pairs
     let mut pair_hashes: Vec<Vec<u8>> = Vec::with_capacity(map.len());
 
-    // 1. For each key-value pair, hash the key and value, and concatenate the hashes.
     for (key, value) in map {
         pair_hashes.push(hash_key_val(key, value));
     }
 
-    // 2. Sort the concatenated hashes.
     pair_hashes.sort();
 
-    // 3. Concatenate the sorted hashes, and hash the result.
     let mut hasher = Sha256::new();
     for hash in pair_hashes {
         hasher.write(&hash);
