@@ -304,6 +304,7 @@ pub struct CanisterStatusResultV2 {
     pub module_hash: Option<Vec<u8>>,
     pub settings: DefiniteCanisterSettingsArgs,
     pub memory_size: candid::Nat,
+    pub memory_metrics: Option<MemoryMetrics>,
     pub cycles: candid::Nat,
     // this is for compat with Spec 0.12/0.13
     pub idle_cycles_burned_per_day: candid::Nat,
@@ -324,11 +325,13 @@ impl CanisterStatusResultV2 {
         idle_cycles_burned_per_day: u128,
         wasm_memory_limit: u64,
         wasm_memory_threshold: u64,
+        memory_metrics: MemoryMetrics,
     ) -> Self {
         Self {
             status,
             module_hash,
             memory_size: candid::Nat::from(memory_size.get()),
+            memory_metrics: Some(memory_metrics),
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
             // "\x00" denotes cycles
@@ -392,6 +395,7 @@ impl CanisterStatusResultV2 {
             46,                // idle_cycles_burned_per_day
             47,                // wasm_memory_limit
             41,                // wasm_memory_threshold
+            MemoryMetrics::default(),              // memory_metrics
         )
     }
 
@@ -485,6 +489,7 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResultV2
                 wasm_memory_threshold: Some(value.settings.wasm_memory_threshold),
             },
             memory_size: value.memory_size,
+            memory_metrics: Some(value.memory_metrics),
             cycles: value.cycles,
             idle_cycles_burned_per_day: value.idle_cycles_burned_per_day,
             query_stats: Some(QueryStats {
