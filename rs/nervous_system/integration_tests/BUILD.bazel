@@ -11,6 +11,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/ledger_suite/icrc1/ledger",
     "//rs/ledger_suite/icrc1/tokens_u64",
     "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
@@ -86,8 +87,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = []
 
-MACRO_DEV_DEPENDENCIES = []
-
 ALIASES = {}
 
 DEV_DATA = [
@@ -109,6 +108,7 @@ DEV_DATA = [
     "//rs/registry/canister:registry-canister",
     "//rs/registry/canister:registry-canister-test",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+    "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/governance:sns-governance-canister-test",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
@@ -159,7 +159,8 @@ DEV_ENV = {
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
+    "SNS_GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
     "MAINNET_SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-governance-canister//file)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "MAINNET_SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-root-canister//file)",
@@ -201,13 +202,14 @@ rust_test_suite_with_extra_srcs(
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
             "tests/custom_upgrade_path.rs",
             "tests/sns_topics.rs",
+            "tests/sns_extension_test.rs",
         ],
     ),
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:6",
     ],
@@ -225,7 +227,7 @@ rust_test(
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:6",
     ],
@@ -241,7 +243,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -257,7 +259,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -273,7 +275,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -290,7 +292,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -306,7 +308,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -322,7 +324,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
@@ -338,9 +340,34 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "sns_extension_test",
+    timeout = "long",
+    srcs = [
+        "tests/sns_extension_test.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA + [
+        "@kong_backend_canister//file",
+        "@kongswap-adaptor-canister//file",
+    ],
+    env = DEV_ENV | {
+        "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath @kong_backend_canister//file)",
+        "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath @kongswap-adaptor-canister//file)",
+        "RUST_TEST_NOCAPTURE": "1",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+        "//rs/sns/treasury_manager",
+    ],
 )

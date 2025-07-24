@@ -2588,6 +2588,7 @@ impl From<MintSnsTokens> for Action {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Wasm {
     Bytes(Vec<u8>),
     Chunked {
@@ -2595,6 +2596,35 @@ pub enum Wasm {
         store_canister_id: CanisterId,
         chunk_hashes_list: Vec<Vec<u8>>,
     },
+}
+
+impl TryFrom<ChunkedCanisterWasm> for Wasm {
+    type Error = String;
+
+    fn try_from(chunked_canister_wasm: ChunkedCanisterWasm) -> Result<Self, Self::Error> {
+        let ChunkedCanisterWasm {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = chunked_canister_wasm;
+
+        if wasm_module_hash.is_empty() {
+            return Err("ChunkedCanisterWasm.wasm_module_hash cannot be empty".to_string());
+        }
+
+        let Some(store_canister_id) = store_canister_id else {
+            return Err("ChunkedCanisterWasm.store_canister_id cannot be None".to_string());
+        };
+
+        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+            .map_err(|err| format!("Invalid store_canister_id: {err}"))?;
+
+        Ok(Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        })
+    }
 }
 
 /// Validates that the specified byte sequence meets the following requirements:
@@ -2756,23 +2786,33 @@ impl Wasm {
         }
     }
 
-    pub fn description(&self) -> String {
+    pub fn sha256sum(&self) -> Vec<u8> {
         match self {
             Self::Bytes(bytes) => {
-                let canister_wasm_sha256 = {
-                    let mut state = Sha256::new();
-                    state.write(&bytes[..]);
-                    let sha = state.finish();
-                    sha.to_vec()
-                };
+                let mut state = Sha256::new();
+                state.write(&bytes[..]);
+                state.finish().to_vec()
+            }
+            Self::Chunked {
+                wasm_module_hash, ..
+            } => wasm_module_hash.clone(),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        let wasm_module_hash = self.sha256sum();
+        let wasm_module_hash = format_full_hash(&wasm_module_hash);
+
+        match self {
+            Self::Bytes(bytes) => {
                 format!(
                     "Embedded module with {} bytes and SHA256 `{}`.",
                     bytes.len(),
-                    format_full_hash(&canister_wasm_sha256)
+                    wasm_module_hash,
                 )
             }
             Self::Chunked {
-                wasm_module_hash,
+                wasm_module_hash: _, // computed above
                 store_canister_id,
                 chunk_hashes_list,
             } => {
@@ -2780,7 +2820,7 @@ impl Wasm {
                     "Remote module stored on canister {} with SHA256 `{}`. \
                      Split into {} chunks:\n  - {}",
                     store_canister_id.get(),
-                    format_full_hash(wasm_module_hash),
+                    wasm_module_hash,
                     chunk_hashes_list.len(),
                     chunk_hashes_list
                         .iter()

@@ -465,6 +465,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "derivative": crate.spec(
+                version = "^2.2",
+            ),
             "der": crate.spec(
                 version = "0.7",
                 default_features = False,
@@ -1345,6 +1348,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "sys-mount": crate.spec(
                 version = "3.0",
+            ),
+            "tabled": crate.spec(
+                version = "^0.20.0",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",

@@ -1,12 +1,16 @@
 use crate::rewards_calculator_results::DayUTC;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, SubnetId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_types::Time;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
 
 pub type UnixTsNanos = u64;
+pub type NodesCount = u64;
+
+pub type Region = String;
+
 pub const NANOS_PER_DAY: UnixTsNanos = 24 * 60 * 60 * 1_000_000_000;
 
 #[cfg(target_arch = "wasm32")]
@@ -28,12 +32,6 @@ fn current_time() -> Time {
 pub struct RewardPeriod {
     pub from: DayUTC,
     pub to: DayUTC,
-}
-
-impl RewardPeriod {
-    pub fn days(&self) -> Vec<DayUTC> {
-        self.from.days_until(&self.to).expect("Always valid days")
-    }
 }
 
 impl Display for RewardPeriod {
@@ -106,24 +104,12 @@ impl fmt::Display for RewardPeriodError {
 
 impl Error for RewardPeriodError {}
 
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug, Default)]
-pub struct Region(pub String);
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug, Default)]
-pub struct NodeType(pub String);
-
-#[derive(Default)]
-pub struct ProviderRewardableNodes {
-    pub provider_id: PrincipalId,
-    pub rewardable_nodes_count: HashMap<(Region, NodeType), u32>,
-    pub rewardable_nodes: Vec<RewardableNode>,
-}
 #[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug)]
 pub struct RewardableNode {
     pub node_id: NodeId,
     pub rewardable_days: Vec<DayUTC>,
     pub region: Region,
-    // TODO: remove this when rewards_calculation is performed with NodeRewardType
-    pub node_type: NodeType,
+    pub node_reward_type: NodeRewardType,
     pub dc_id: String,
 }
 
@@ -143,7 +129,6 @@ pub struct SubnetMetricsDailyKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rewards_calculator_results::days_between;
     use crate::types::UnixTsNanos;
     use chrono::{TimeZone, Utc};
 
@@ -162,7 +147,7 @@ mod tests {
         let rp = RewardPeriod::new(unaligned_start_ts, unaligned_end_ts).unwrap();
         let expected_start_ts = ymdh_to_ts(2020, 1, 12, 0);
         let expected_end_ts = ymdh_to_ts(2020, 1, 16, 0) - 1;
-        let days = days_between(rp.from, rp.to);
+        let days = rp.from.days_until(&rp.to).unwrap().len();
 
         assert_eq!(rp.from.unix_ts_at_day_start(), expected_start_ts);
         assert_eq!(rp.to.unix_ts_at_day_end(), expected_end_ts);
@@ -171,7 +156,7 @@ mod tests {
         let unaligned_end_ts = ymdh_to_ts(2020, 1, 12, 13);
 
         let rp = RewardPeriod::new(unaligned_start_ts, unaligned_end_ts).unwrap();
-        let days = days_between(rp.from, rp.to);
+        let days = rp.from.days_until(&rp.to).unwrap().len();
 
         assert_eq!(days, 1);
     }
