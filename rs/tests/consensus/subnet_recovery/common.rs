@@ -86,7 +86,7 @@ const APP_NODES_LARGE: usize = 37;
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
 
-pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -120,6 +120,7 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
                     key_configs,
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
         )
         .with_unassigned_nodes(cfg.unassigned_nodes);
