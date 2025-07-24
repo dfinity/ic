@@ -172,11 +172,11 @@ pub fn upgrade(
     for redundant_node in &redundant_nodes {
         info!(
             logger,
-            "Stopping redundant node: {}", redundant_node.node_id
+            "Stopping redundant node: {} ...", redundant_node.node_id
         );
         stop_node(&logger, redundant_node);
     }
-    info!(logger, "Starting faulty nodes {}", faulty_node.node_id);
+    info!(logger, "Starting faulty node: {} ...", faulty_node.node_id);
     start_node(&logger, &faulty_node);
 
     info!(
@@ -227,7 +227,7 @@ pub fn upgrade(
     for redundant_node in &redundant_nodes {
         info!(
             logger,
-            "Starting redundant node: {}", redundant_node.node_id
+            "Starting redundant node: {} ...", redundant_node.node_id
         );
         start_node(&logger, redundant_node);
     }
