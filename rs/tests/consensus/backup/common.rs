@@ -36,7 +36,7 @@ use ic_consensus_system_test_utils::{
     },
     upgrade::{
         assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
-        get_assigned_replica_version, UpdateImageType,
+        get_assigned_replica_version,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -112,7 +112,6 @@ pub fn test(env: TestEnv) {
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
-        UpdateImageType::Image,
         &log,
         &sha256,
         vec![upgrade_url.to_string()],
