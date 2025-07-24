@@ -245,10 +245,6 @@ class BazelRustDependencyManager(DependencyManager):
         if is_bazel_repo:
             # bazel repos use "Cargo.Bazel.toml.lock" as source of truth
             # we need to rename it to "Cargo.lock" before using "cargo audit"
-            logging.info("Performing cargo audit on old Cargo.lock")
-            old_cargo_audit = self.executor.get_cargo_audit_output(path)
-            logging.info("Old cargo audit output %s", old_cargo_audit)
-
             # move Cargo.Bazel.toml.lock to Cargo.lock
             logging.info("Moving Cargo.Bazel.toml.lock to Cargo.lock")
             src = path / "Cargo.Bazel.toml.lock"
@@ -259,8 +255,6 @@ class BazelRustDependencyManager(DependencyManager):
 
         logging.info("Performing cargo audit on new Cargo.lock")
         new_cargo_audit = self.executor.get_cargo_audit_output(path)
-
-        # cargo_audit_diff = jsondiff.diff(old_cargo_audit, new_cargo_audit)
 
         if "vulnerabilities" in new_cargo_audit and "list" in new_cargo_audit["vulnerabilities"]:
             logging.info("Iterating through vulnerable crates in cargo audit")
