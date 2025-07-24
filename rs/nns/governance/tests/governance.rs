@@ -7160,7 +7160,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal to add NP.")
         .command
         .unwrap()
     {
@@ -7185,7 +7185,7 @@ fn test_manage_and_reward_node_providers() {
     );
 
     // Adding the same node provider again should fail.
-    let pid = match gov
+    assert!(gov
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
@@ -7208,18 +7208,10 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
-        .command
+        .err()
         .unwrap()
-    {
-        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        _ => panic!("Invalid response"),
-    };
-
-    assert_eq!(
-        gov.get_proposal_data(pid).unwrap().status(),
-        ProposalStatus::Failed
-    );
+        .error_message
+        .contains("cannot add already existing Node Provider"));
 
     // Rewarding the node provider to the default account should now work.
     let pid = match gov
@@ -7546,7 +7538,7 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Adding any of the same node providers again should fail
     for np_pid in np_pid_vec {
-        let prop_id = match gov
+        assert!(gov
             .manage_neuron(
                 &voter_pid,
                 &ManageNeuron {
@@ -7569,19 +7561,10 @@ fn test_manage_and_reward_multiple_node_providers() {
             )
             .now_or_never()
             .unwrap()
-            .panic_if_error("Couldn't submit proposal.")
-            .command
+            .err()
             .unwrap()
-        {
-            manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            _ => panic!("Invalid response"),
-        };
-
-        // The proposal should have failed
-        assert_eq!(
-            gov.get_proposal_data(prop_id).unwrap().status(),
-            ProposalStatus::Failed
-        );
+            .error_message
+            .contains("cannot add already existing Node Provider"));
     }
 
     let to_subaccount = Subaccount({
