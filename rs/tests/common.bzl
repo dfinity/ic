@@ -3,7 +3,6 @@ Common dependencies for system-tests.
 """
 
 load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
-load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
@@ -122,11 +121,6 @@ MAINNET_NNS_CANISTER_RUNTIME_DEPS, MAINNET_NNS_CANISTER_ENV = canister_runtime_d
     qualifying_canisters = [],
 )
 
-QUALIFYING_NNS_CANISTER_RUNTIME_DEPS, QUALIFYING_NNS_CANISTER_ENV = canister_runtime_deps_impl(
-    canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
-    qualifying_canisters = QUALIFYING_NNS_CANISTERS,
-)
-
 SNS_CANISTER_RUNTIME_DEPS, SNS_CANISTER_ENV = canister_runtime_deps_impl(
     canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
@@ -135,11 +129,6 @@ SNS_CANISTER_RUNTIME_DEPS, SNS_CANISTER_ENV = canister_runtime_deps_impl(
 MAINNET_SNS_CANISTER_RUNTIME_DEPS, MAINNET_SNS_CANISTER_ENV = canister_runtime_deps_impl(
     canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = [],
-)
-
-QUALIFYING_SNS_CANISTER_RUNTIME_DEPS, QUALIFYING_SNS_CANISTER_ENV = canister_runtime_deps_impl(
-    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-    qualifying_canisters = QUALIFYING_SNS_CANISTERS,
 )
 
 UNIVERSAL_VM_RUNTIME_DEPS = [
