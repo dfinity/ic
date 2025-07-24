@@ -59,7 +59,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::HasTopologySnapshot,
+    test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets, set_icp_xdr_exchange_rate};
 use slog::info;
@@ -164,14 +164,24 @@ pub fn setup(env: TestEnv, config: Config) {
 
     ic = ic.add_subnet(subnet);
 
-    let _vms = ic
+    let vms = ic
         .setup_and_start_return_vms(&env)
         .expect("Failed to setup IC under test");
+
+    let topology_snapshot = env.topology_snapshot();
+    for node in topology_snapshot.subnets().next().unwrap().nodes() {
+        let node_id = node.node_id.to_string();
+        let vm = vms.get(&node_id).expect("Failed to get VM for node");
+        info!(
+            env.logger(),
+            "Node {} is allocated to host: {}", node_id, vm.hostname
+        );
+    }
 
     // set up NNS canisters
     // Installing the NNS canisters enables submitting proposals to upgrade the replica version without needing to redeploy the testnet.
     install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
+        topology_snapshot,
         nns_dapp_customizations(),
     );
 
