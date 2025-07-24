@@ -5788,7 +5788,7 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
 
         // Check that quadruple and nonce are none
         assert!(sign_with_ecdsa_context.nonce.is_none());
-        assert!(sign_with_ecdsa_context.matched_pre_signature.is_none());
+        assert!(sign_with_ecdsa_context.requires_pre_signature());
     }
 }
 
@@ -5952,8 +5952,7 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();
     assert!(context0.nonce.is_none());
-    assert!(context0.matched_pre_signature.is_none());
-    assert!(context0.ecdsa_args().pre_signature.is_none());
+    assert!(context0.requires_pre_signature());
 
     // Remaining contexts should have been matched
     let expected_height = Height::from(test.last_round().get() - 1);

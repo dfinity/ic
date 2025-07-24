@@ -212,6 +212,30 @@ mod tests {
         }
     }
 
+    fn assert_matched_pre_signature(
+        context: &SignWithThresholdContext,
+        expected_id: u64,
+        expected_height: Height,
+    ) {
+        assert!(context
+            .matched_pre_signature
+            .is_some_and(|(pid, h)| pid.id() == expected_id && h == expected_height));
+        match &context.args {
+            ThresholdArguments::Ecdsa(args) => {
+                let pre_sig = args.pre_signature.clone().unwrap();
+                assert_eq!(pre_sig.height, expected_height);
+                assert_eq!(pre_sig.id.0, expected_id);
+            }
+            ThresholdArguments::Schnorr(args) => {
+                let pre_sig = args.pre_signature.clone().unwrap();
+                assert_eq!(pre_sig.height, expected_height);
+                assert_eq!(pre_sig.id.0, expected_id);
+            }
+            ThresholdArguments::VetKd(_) => panic!("Unexpected VetKD context"),
+        }
+        assert!(!context.requires_pre_signature());
+    }
+
     fn match_pre_signatures_basic_test(
         key_id: &MasterPublicKeyId,
         pre_sigs: AvailablePreSignatures,
@@ -233,23 +257,7 @@ mod tests {
         // the remaining contexts should remain unmatched.
         contexts.iter_mut().for_each(|(id, context)| {
             if id.get() <= cutoff {
-                assert!(context
-                    .matched_pre_signature
-                    .is_some_and(|(pid, h)| pid.id() == id.get() && h == height));
-                match &context.args {
-                    ThresholdArguments::Ecdsa(args) => {
-                        let pre_sig = args.pre_signature.clone().unwrap();
-                        assert_eq!(pre_sig.height, height);
-                        assert_eq!(pre_sig.id.0, id.get());
-                    }
-                    ThresholdArguments::Schnorr(args) => {
-                        let pre_sig = args.pre_signature.clone().unwrap();
-                        assert_eq!(pre_sig.height, height);
-                        assert_eq!(pre_sig.id.0, id.get());
-                    }
-                    ThresholdArguments::VetKd(_) => panic!("Unexpected VetKD context"),
-                }
-                assert!(!context.requires_pre_signature());
+                assert_matched_pre_signature(context, id.get(), height);
             } else {
                 assert!(context.requires_pre_signature());
             }
@@ -427,14 +435,10 @@ mod tests {
 
         // The first context should still be matched at the height of the previous round (height 2).
         let first_context = contexts.pop_first().unwrap().1;
-        assert!(first_context
-            .matched_pre_signature
-            .is_some_and(|(pid, h)| { pid == PreSigId(5) && h == Height::from(2) }));
+        assert_matched_pre_signature(&first_context, 5, Height::from(2));
 
         // The second context should have been matched to the second pre-signature at height 3.
         let second_context = contexts.pop_first().unwrap().1;
-        assert!(second_context
-            .matched_pre_signature
-            .is_some_and(|(pid, h)| { pid == PreSigId(6) && h == Height::from(3) }));
+        assert_matched_pre_signature(&second_context, 6, Height::from(3));
     }
 }
