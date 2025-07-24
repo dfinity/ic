@@ -70,7 +70,7 @@ use ic_types::{
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
-        threshold_sig::ni_dkg::NiDkgTargetId,
+        threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTargetId},
         ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -3161,12 +3161,13 @@ impl ExecutionEnvironment {
     ) -> Result<(), UserError> {
         let args = VetKdDeriveKeyArgs::decode(payload)?;
         let key_id = MasterPublicKeyId::VetKd(args.key_id.clone());
+        let nidkg_key_id = NiDkgMasterPublicKeyId::VetKd(args.key_id.clone());
         let _master_public_key_exists = get_master_public_key(
             &chain_key_data.master_public_keys,
             self.own_subnet_id,
             &key_id,
         )?;
-        let Some(ni_dkg_id) = chain_key_data.nidkg_ids.get(&key_id) else {
+        let Some(ni_dkg_id) = chain_key_data.nidkg_ids.get(&nidkg_key_id) else {
             warn!(
                 self.log,
                 "No NiDkgId delivered to answer vetkd request for key {}.", key_id

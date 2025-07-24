@@ -2378,7 +2378,10 @@ impl ExecutionTestBuilder {
                         )),
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
-                    Some((key_id.clone(), nidkg_id))
+                    Some((
+                        NiDkgMasterPublicKeyId::VetKd(vetkd_key_id.clone()),
+                        nidkg_id,
+                    ))
                 } else {
                     None
                 }

@@ -12,7 +12,7 @@ use ic_protobuf::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::{common::PreSignature, PreSigId},
+    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
     crypto::{
         canister_threshold_sig::{
             idkg::IDkgTranscript, EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
@@ -231,7 +231,7 @@ pub struct SubnetCallContextManager {
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
     pub raw_rand_contexts: VecDeque<RawRandContext>,
-    pub pre_signature_stashes: BTreeMap<MasterPublicKeyId, PreSignatureStash>,
+    pub pre_signature_stashes: BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
 }
 
 impl SubnetCallContextManager {
@@ -511,7 +511,7 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .iter()
                 .map(
                     |(key_id, pre_signature_stash)| pb_metadata::PreSignatureStashTree {
-                        key_id: Some(key_id.into()),
+                        key_id: Some(key_id.inner().into()),
                         key_transcript: Some(pre_signature_stash.key_transcript.as_ref().into()),
                         pre_signatures: pre_signature_stash
                             .pre_signatures
@@ -624,12 +624,14 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             sign_with_threshold_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut pre_signature_stashes = BTreeMap::<MasterPublicKeyId, PreSignatureStash>::new();
+        let mut pre_signature_stashes = BTreeMap::<IDkgMasterPublicKeyId, PreSignatureStash>::new();
         for entry in item.pre_signature_stashes {
-            let key_id: MasterPublicKeyId = try_from_option_field(
+            let master_key_id: MasterPublicKeyId = try_from_option_field(
                 entry.key_id,
-                "SystemMetadata::PreSignatureStash::MasterPublicKeyId",
+                "SystemMetadata::PreSignatureStash::IDkgMasterPublicKeyId",
             )?;
+            let key_id =
+                IDkgMasterPublicKeyId::try_from(master_key_id).map_err(ProxyDecodeError::Other)?;
             let key_transcript: IDkgTranscript = try_from_option_field(
                 entry.key_transcript.as_ref(),
                 "SystemMetadata::PreSignatureStash::IDkgTranscript",

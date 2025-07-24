@@ -27,7 +27,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
-    consensus::idkg::{common::PreSignature, PreSigId},
+    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
     crypto::{
         canister_threshold_sig::{
             idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
@@ -725,27 +725,33 @@ pub fn generate_pre_signature(
     }
 }
 
-fn make_key_ids() -> Vec<(MasterPublicKeyId, AlgorithmId)> {
+fn make_key_ids() -> Vec<(IDkgMasterPublicKeyId, AlgorithmId)> {
     vec![
         (
             MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key1".into(),
-            }),
+            })
+            .try_into()
+            .unwrap(),
             AlgorithmId::ThresholdEcdsaSecp256k1,
         ),
         (
             MasterPublicKeyId::Schnorr(SchnorrKeyId {
                 algorithm: SchnorrAlgorithm::Ed25519,
                 name: "key1".into(),
-            }),
+            })
+            .try_into()
+            .unwrap(),
             AlgorithmId::ThresholdEd25519,
         ),
         (
             MasterPublicKeyId::Schnorr(SchnorrKeyId {
                 algorithm: SchnorrAlgorithm::Bip340Secp256k1,
                 name: "key1".into(),
-            }),
+            })
+            .try_into()
+            .unwrap(),
             AlgorithmId::ThresholdSchnorrBip340,
         ),
     ]
@@ -779,7 +785,7 @@ fn pre_signature_stash_roundtrip() {
     }
     // insert empty stash
     stashes.insert(
-        MasterPublicKeyId::Ecdsa(make_key_id()),
+        MasterPublicKeyId::Ecdsa(make_key_id()).try_into().unwrap(),
         PreSignatureStash {
             pre_signatures: BTreeMap::new(),
             key_transcript: Arc::new(generate_key_transcript(
@@ -825,7 +831,7 @@ fn sign_with_threshold_context_roundtrip() {
 
     // create some contexts with and without pre-signatures
     for (key_id, key_transcript, pre_signature) in transcripts {
-        let arguments = match (key_id, pre_signature) {
+        let arguments = match (key_id.inner(), pre_signature) {
             (MasterPublicKeyId::Ecdsa(key_id), PreSignature::Ecdsa(ecdsa)) => {
                 let message_hash = [1; 32];
                 let args_matched = ThresholdArguments::Ecdsa(EcdsaArguments {
@@ -839,7 +845,7 @@ fn sign_with_threshold_context_roundtrip() {
                     }),
                 });
                 let args_empty = ThresholdArguments::Ecdsa(EcdsaArguments {
-                    key_id,
+                    key_id: key_id.clone(),
                     message_hash,
                     pre_signature: None,
                 });
@@ -859,7 +865,7 @@ fn sign_with_threshold_context_roundtrip() {
                     taproot_tree_root: Some(Arc::new(vec![2; 32])),
                 });
                 let args_empty = ThresholdArguments::Schnorr(SchnorrArguments {
-                    key_id,
+                    key_id: key_id.clone(),
                     message,
                     pre_signature: None,
                     taproot_tree_root: None,
