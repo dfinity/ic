@@ -84,7 +84,7 @@ const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
 
 /// The limit for the number of cycles that can be minted by the Subnet Rental Canister in a month.
-const SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT: u128 = 500e15 as u128;
+const SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT: u128 = 500_000e15 as u128; // DO NOT MERGE
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
