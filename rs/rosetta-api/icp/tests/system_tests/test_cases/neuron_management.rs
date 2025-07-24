@@ -4,8 +4,10 @@ use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
     utils::{get_custom_agent, get_test_agent, list_neurons, test_identity},
 };
+use core::convert::TryFrom;
 use ic_agent::{identity::BasicIdentity, Identity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
+use ic_icp_rosetta_client::RosettaDisburseMaturityArgs;
 use ic_icp_rosetta_client::RosettaHotKeyArgs;
 use ic_icp_rosetta_client::RosettaIncreaseNeuronStakeArgs;
 use ic_icp_rosetta_client::RosettaNeuronInfoArgs;
@@ -16,10 +18,13 @@ use ic_icp_rosetta_client::{
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
 use ic_nns_governance_api::{neuron::DissolveState, KnownNeuronData};
+// use ic_rosetta_api::ledger_client::disburse_maturity_response;
+use ic_rosetta_api::ledger_client::disburse_maturity_response::DisburseMaturityResponse;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
 use ic_rosetta_api::models::AccountBalanceRequest;
+// use ic_rosetta_api::request::transaction_operation_results;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
@@ -665,6 +670,8 @@ fn test_disburse_neuron() {
             .value.parse::<u64>().unwrap();
         // The balance should be the same as before the creation of the neuron minus the transfer fee
         assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_e8s());
+        let balance_after_ledger = account_balance_nb(&env.pocket_ic, &AccountIdentifier::from(TEST_IDENTITY.sender().unwrap())).await;
+        assert_eq!(balance_after_disburse, balance_after_ledger.get_e8s());
     });
 }
 
@@ -1492,4 +1499,257 @@ fn test_refresh_voting_power() {
             },
         )
         .unwrap();
+}
+
+#[test]
+fn test_disburse_maturity() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = 1_000_000_000u64;
+        let neuron_index = 0;
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into())
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        // See if the neuron was created successfully
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+        let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+        let new_maturity = 110_000_000;
+        neuron.maturity_e8s_equivalent = new_maturity;
+        update_neuron(&agent, neuron).await;
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_e8s_equivalent, new_maturity);
+
+        let neuron = list_neurons_nb(&env.pocket_ic).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_disbursements_in_progress.unwrap().len(), 0);
+
+        let receiver = AccountIdentifier::new(PrincipalId::new_user_test_id(100), None);
+
+        let balance_before = account_balance_nb(&env.pocket_ic, &receiver).await;
+
+        let result = env
+            .rosetta_client
+            .disburse_maturity(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaDisburseMaturityArgs::builder(neuron_index, 100)
+                    .with_recipient(receiver)
+                    .build(),
+            )
+            .await
+            .expect("failed to disburse maturity");
+
+        set_time_warp(&agent, -60 * 60 * 24 * 10).await;
+
+        println!("receiver {}", receiver);
+
+        println!(
+            "current time {}",
+            env.pocket_ic.get_time().await.as_nanos_since_unix_epoch()
+        );
+
+        let transaction_operation_results =
+            TransactionOperationResults::try_from(result.metadata).unwrap();
+        let disburse_maturity_response = DisburseMaturityResponse::try_from(
+            transaction_operation_results
+                .operations
+                .first()
+                .unwrap()
+                .clone()
+                .metadata,
+        )
+        .unwrap();
+        assert_eq!(
+            disburse_maturity_response.amount_disbursed_e8s,
+            new_maturity
+        );
+
+        // use ic_nns_governance_api::MaturityDisbursement;
+        // neuron.maturity_disbursements_in_progress = Some(vec![MaturityDisbursement {
+        //     finalize_disbursement_timestamp_seconds: Some(1),
+        //     ..Default::default()
+        // }]);
+        // update_neuron(&agent, neuron).await;
+
+        let neuron = list_neurons_nb(&env.pocket_ic).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_disbursements_in_progress.unwrap().len(), 1);
+
+        env.pocket_ic
+            .advance_time(std::time::Duration::from_secs(60 * 60 * 24 * 20))
+            .await;
+        // env.pocket_ic.tick().await;
+        for _ in 0..20 {
+            env.pocket_ic
+                .advance_time(std::time::Duration::from_secs(1))
+                .await;
+            env.pocket_ic.tick().await;
+        }
+        println!(
+            "current time 2 {}",
+            env.pocket_ic.get_time().await.as_nanos_since_unix_epoch()
+        );
+
+        for _ in 0..100 {
+            env.pocket_ic
+                .advance_time(std::time::Duration::from_secs(1))
+                .await;
+            env.pocket_ic.tick().await;
+        }
+        let neuron = list_neurons_nb(&env.pocket_ic).await.full_neurons[0].to_owned();
+        let finalization = neuron.maturity_disbursements_in_progress.clone().unwrap()[0]
+            .finalize_disbursement_timestamp_seconds
+            .unwrap();
+        let amount = neuron.maturity_disbursements_in_progress.unwrap()[0]
+            .amount_e8s
+            .unwrap();
+        let curr_time = env.pocket_ic.get_time().await.as_nanos_since_unix_epoch() / 1_000_000_000;
+        println!(
+            "amount {amount} finalization at: {}, currtime {}, should be finalized {}",
+            finalization,
+            curr_time,
+            curr_time > finalization
+        );
+
+        let balance_after_disburse = env
+            .rosetta_client
+            .account_balance(
+                AccountBalanceRequest::builder(env.network_identifier.clone(), receiver.into())
+                    .build(),
+            )
+            .await
+            .unwrap()
+            .balances
+            .first()
+            .unwrap()
+            .clone()
+            .value
+            .parse::<u64>()
+            .unwrap();
+
+        println!("balance_after_disburse {}", balance_after_disburse);
+
+        let balance_test_id = account_balance_nb(
+            &env.pocket_ic,
+            &AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+        )
+        .await;
+        println!("balance of the TEST_IDENTITY: {}", balance_test_id);
+
+        let balance_after = account_balance_nb(&env.pocket_ic, &receiver).await;
+
+        println!("balance_after 2: {}", balance_after);
+
+        assert_eq!(
+            balance_after.get_e8s(),
+            balance_before.get_e8s() + new_maturity
+        )
+    });
+}
+
+use ic_nns_governance_api::ListNeurons;
+use ic_nns_governance_api::ListNeuronsResponse as NnsListNeuronsResponse;
+use pocket_ic::nonblocking::PocketIc;
+pub async fn list_neurons_nb(pocket_ic: &PocketIc) -> NnsListNeuronsResponse {
+    query_or_panic_nb(
+        pocket_ic,
+        candid::Principal::from(ic_nns_constants::GOVERNANCE_CANISTER_ID),
+        TEST_IDENTITY.sender().unwrap(),
+        "list_neurons",
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
+        },
+    )
+    .await
+}
+
+use candid::CandidType;
+use candid::Decode;
+use candid::Deserialize;
+use candid::Encode;
+use candid::Principal;
+use ic_nns_constants::LEDGER_CANISTER_ID;
+use icp_ledger::BinaryAccountBalanceArgs;
+use icp_ledger::Tokens;
+
+pub async fn account_balance_nb(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
+    query_or_panic_nb(
+        pocket_ic,
+        candid::Principal::from(LEDGER_CANISTER_ID),
+        candid::Principal::anonymous(),
+        "account_balance",
+        BinaryAccountBalanceArgs {
+            account: account.to_address(),
+        },
+    )
+    .await
+}
+
+// Panics if the canister is unreachable or it has rejected the query.
+pub async fn query_or_panic_nb<I, O>(
+    pocket_ic: &PocketIc,
+    canister_id: Principal,
+    caller: Principal,
+    method: &str,
+    arg: I,
+) -> O
+where
+    I: CandidType,
+    O: CandidType + for<'a> Deserialize<'a>,
+{
+    let arg = Encode!(&arg).unwrap();
+    match pocket_ic.query_call(canister_id, caller, method, arg).await {
+        Err(err) => {
+            panic!("{canister_id}.{method} query failed with error {err} (caller: {caller})");
+        }
+        Ok(res) => Decode!(&res, O)
+            .unwrap_or_else(|_| panic!("error decoding response to {} query", method)),
+    }
+}
+
+use ic_agent::Agent;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::test_api::TimeWarp;
+pub async fn set_time_warp(agent: &Agent, delta_s: i64) {
+    let _ = Decode!(
+        &agent
+            .update(&GOVERNANCE_CANISTER_ID.into(), "set_time_warp")
+            .with_arg(Encode!(&TimeWarp { delta_s }).unwrap())
+            .call_and_wait()
+            .await
+            .unwrap(),
+        ()
+    )
+    .unwrap();
+    // assert!(result.is_none(), "Failed setTimewarp {:?}", result);
 }
