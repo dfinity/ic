@@ -73,14 +73,14 @@ pub struct DefiniteCanisterSettings {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct MemoryMetrics {
-    wasm_memory_size: candid::Nat,
-    stable_memory_size: candid::Nat,
-    global_memory_size: candid::Nat,
-    wasm_binary_size: candid::Nat,
-    custom_sections_size: candid::Nat,
-    canister_history_size: candid::Nat,
-    wasm_chunk_store_size: candid::Nat,
-    snapshots_size: candid::Nat,
+    pub wasm_memory_size: candid::Nat,
+    pub stable_memory_size: candid::Nat,
+    pub global_memory_size: candid::Nat,
+    pub wasm_binary_size: candid::Nat,
+    pub custom_sections_size: candid::Nat,
+    pub canister_history_size: candid::Nat,
+    pub wasm_chunk_store_size: candid::Nat,
+    pub snapshots_size: candid::Nat,
 }
 
 /// Partial copy-paste of `ic_management_canister_types_private::CanisterStatusResultV2`, and it's used for
