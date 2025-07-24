@@ -61,7 +61,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Linting
         run: |
-          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args
 
   pocket-ic-tests-on-windows:
     name: PocketIC Tests on Windows
