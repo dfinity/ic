@@ -67,47 +67,49 @@ fn main() -> Result<()> {
 
 fn switch_to_ssd(host: &str) {
     let script = r##"
-	#!/bin/bash
-	set -e
+        #!/bin/bash
+        set -e
         exec 2>&1
 
         # Get the name of the currently running VM.
-	# virsh prints four lines for a single instance running, two lines of header,
-	# VM info and trailing empty line. The script should fail if the format is
-	# different or there are multiple VMs running. The trailing line is lost when
-	# assigning to a variable.
-	virsh_list=$(sudo virsh list)
-	if [ $(echo "$virsh_list" | wc -l) -ne 3 ]; then
-		echo "Unexpected virsh list output"
-		exit 2
-	fi
-	VMNAME=$(echo "$virsh_list" | awk '{ if (NR==3) print $2 }')
+        # virsh prints four lines for a single instance running, two lines of header,
+        # VM info and trailing empty line. The script should fail if the format is
+        # different or there are multiple VMs running. The trailing line is lost when
+        # assigning to a variable.
+        virsh_list=$(sudo virsh list)
+        if [ $(echo "$virsh_list" | wc -l) -ne 3 ]; then
+                echo "Unexpected virsh list output"
+                exit 2
+        fi
+        VMNAME=$(echo "$virsh_list" | awk '{ if (NR==3) print $2 }')
 
         # Shutdown the VM
         echo "Shutting down $VMNAME"
-	for i in {1..300}; do
-		if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
-			break
-		fi
-		echo Waiting for shutdown of $VMNAME: retry $i...
-		sleep 1
-		sudo virsh shutdown $VMNAME || true
-	done
+        for i in {1..300}; do
+                if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
+                        break
+                fi
+                echo Waiting for shutdown of $VMNAME: retry $i...
+                sleep 1
+                sudo virsh shutdown $VMNAME || true
+        done
 
         # Get the file name and dd it to disk device
-	CONFIG=$(mktemp)
-	sudo virsh dumpxml $VMNAME > $CONFIG
-	IMAGE=$(cat $CONFIG | sed -n 45p | cut -d\' -f 2)
-	echo "Moving $VMNAME to /dev/hostlvm/guest"
-	sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
+        CONFIG=$(mktemp)
+        trap "rm -f $CONFIG" INT TERM EXIT
+        sudo virsh dumpxml $VMNAME > $CONFIG
+        IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
+        echo "Moving $VMNAME to /dev/hostlvm/guest"
+        sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
 
         # Patch the config to point to the disk device
-	sed -i '43s/file/block/' $CONFIG
-	sed -i "44s/\/>/ discard=\'unmap\' cache=\'none\'\/>/" $CONFIG
-	sed -i "45s/file.*/dev='\/dev\/hostlvm\/guestos'\/>/" $CONFIG
-	sudo virsh create $CONFIG
+        xmlstarlet --inplace ed -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n discard -v unmap
+        xmlstarlet --inplace ed -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n cache -v none 
+        xmlstarlet --inplace ed -u "//domain/devices/disk[target[@dev='vda']]/@type" -v block
+        xmlstarlet --inplace ed -u "//domain/devices/disk[target[@dev='vda']]/source/@file" -v "/dev/hostlvm/guestos"
+
+        sudo virsh create $CONFIG
         echo "Migration done"
-	rm $CONFIG
     "##;
 
     if std::env::var("SSH_AUTH_SOCK") == Err(std::env::VarError::NotPresent) {
@@ -145,7 +147,7 @@ pub fn setup(env: TestEnv) {
         .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    switch_to_ssd(PERF_HOST);
+    //switch_to_ssd(PERF_HOST);
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
