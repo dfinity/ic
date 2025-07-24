@@ -208,12 +208,12 @@ impl Destination {
     /// corruption. Note that even when the user specifies an icrc1 account, the corresponding
     /// account identifier is still returned.
     pub fn into_account_identifier_proto(&self) -> Option<AccountIdentifierProto> {
-        let account_identifer = self.try_into_account_identifier().ok()?;
         // Note we should not use `AccountIdentifierProto::from` directly here, since it simply
         // outputs a 28-byte hash without the 4-byte checksum. Instead, we should use the
-        // `AccountIdentifier::to_vec` which computes and prepends the checksum.
-        let hash = account_identifer.to_vec();
-        Some(AccountIdentifierProto { hash })
+        // `AccountIdentifier::into_proto_with_checksum` which computes and prepends the checksum.
+        self.try_into_account_identifier()
+            .ok()
+            .map(|id| id.into_proto_with_checksum())
     }
 }
 

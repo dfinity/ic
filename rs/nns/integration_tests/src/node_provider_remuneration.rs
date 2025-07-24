@@ -89,7 +89,7 @@ fn test_list_node_provider_rewards() {
         None,
     );
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into()),
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_1 = ((10 * 24_000) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
     let expected_node_provider_reward_1 = RewardNodeProvider {

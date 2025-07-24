@@ -5132,13 +5132,10 @@ impl Governance {
         add_or_remove_node_provider: &AddOrRemoveNodeProvider,
     ) -> Result<(), GovernanceError> {
         match &add_or_remove_node_provider.change {
-            None => {
-                // this is invalid
-                Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    "AddOrRemoveNodeProvider proposal must have a change field",
-                ))
-            }
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "AddOrRemoveNodeProvider proposal must have a change field",
+            )),
             Some(Change::ToAdd(node_provider)) => {
                 let Some(np_id) = node_provider.id else {
                     return Err(GovernanceError::new_with_message(
