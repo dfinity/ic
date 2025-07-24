@@ -177,8 +177,8 @@ pub fn test(env: TestEnv) {
         n.await_status_is_healthy().unwrap();
     }
     ic_consensus_system_test_utils::assert_node_is_making_progress(
-        nodes[FAULTY],
-        log,
+        &nodes[FAULTY],
+        &log,
         Height::new(50),
     );
 
