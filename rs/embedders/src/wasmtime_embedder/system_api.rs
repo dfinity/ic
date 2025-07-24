@@ -4347,6 +4347,32 @@ impl SystemApi for SystemApiImpl {
         Ok(CostReturnCode::Success as u32)
     }
 
+    fn ic0_subnet_num_nodes(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_num_nodes")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                Ok(self.sandbox_safe_system_state.subnet_size)
+            }
+        };
+
+        trace_syscall!(self, SubnetSelfSize, result);
+        result
+    }
+
+
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_subnet_self_size")),
@@ -4426,6 +4452,103 @@ impl SystemApi for SystemApiImpl {
 
         result
     }
+
+    fn ic0_subnet_node_id_copy(&self, node_index: usize, dst: usize, offset: usize, size: usize, heap: &mut [u8]) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_node_id_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                valid_subslice(
+                    "ic0.subnet_node_id_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let nodes = self.sandbox_safe_system_state.subnet_nodes();
+                let node = nodes.iter().nth(node_index)
+                    .ok_or_else(|| ToolchainContractViolation {
+                        error: format!(
+                            "ic0_subnet_node_id_copy failed because node index {} is out of bounds. \
+                             The subnet has only {} nodes.",
+                            node_index,
+                            nodes.len()
+                        ),
+                    })?;
+                let id_bytes = node.get_ref().as_slice();
+                let slice = valid_subslice(
+                    "ic0.subnet_node_id_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+
+                Ok(())
+            }
+        };
+
+        trace_syscall!(
+            self,
+            SubnetNodeIdCopy,
+            node_index,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+
+        result
+    }
+
+    fn ic0_subnet_node_id_size(&self, node_index: usize) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_node_id_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                let nodes = self.sandbox_safe_system_state.subnet_nodes();
+                nodes.iter().nth(node_index)
+                    .map(|node| node.get_ref().as_slice().len())
+                    .ok_or_else(|| {
+                        ToolchainContractViolation {
+                            error: format!(
+                                "ic0_subnet_node_id_size failed because node index {} is out of bounds. \
+                                 The subnet has only {} nodes.",
+                                node_index,
+                                nodes.len()
+                            ),
+                        }
+                    })
+            }
+        };
+
+        trace_syscall!(self, SubnetSelfSize, result);
+        result
+    }
+
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

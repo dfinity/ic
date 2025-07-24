@@ -1348,6 +1348,19 @@ pub trait SystemApi {
         size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    fn ic0_subnet_num_nodes(&self) -> HypervisorResult<usize>;
+
+    fn ic0_subnet_node_id_size(&self, node_index: usize) -> HypervisorResult<usize>;
+
+    fn ic0_subnet_node_id_copy(
+        &self,
+        node_index: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

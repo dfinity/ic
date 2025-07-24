@@ -256,6 +256,10 @@ impl NetworkTopology {
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
+
+    pub fn get_nodes(&self, subnet_id: SubnetId) -> Option<BTreeSet<NodeId>> {
+        self.subnets.get(&subnet_id).map(|topology| topology.nodes.clone())
+    }
 }
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {

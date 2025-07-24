@@ -1039,6 +1039,19 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "subnet_num_nodes", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::subnet_self_size failed: {}", e))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "subnet_self_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;

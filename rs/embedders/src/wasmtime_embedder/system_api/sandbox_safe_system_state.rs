@@ -4,7 +4,7 @@ use super::{
     cycles_balance_change::CyclesBalanceChange, routing, routing::ResolveDestinationError, ApiType,
     CERTIFIED_DATA_MAX_LENGTH,
 };
-use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, NodeId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -824,6 +824,10 @@ impl SandboxSafeSystemState {
             is_wasm64_execution,
             network_topology.clone(),
         )
+    }
+
+    pub fn subnet_nodes(&self) -> BTreeSet<NodeId> {
+        self.network_topology.get_nodes(self.get_subnet_id()).unwrap()
     }
 
     pub fn canister_id(&self) -> CanisterId {
