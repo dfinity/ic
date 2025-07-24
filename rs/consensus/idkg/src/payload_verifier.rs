@@ -20,6 +20,7 @@
 //! algorithm) can be verified this way, but it is a simple and effective
 //! approach, similar to what we have been doing in verifying other kinds
 //! payloads.
+#![allow(clippy::result_large_err)]
 
 use crate::{
     metrics::timed_call,
@@ -109,8 +110,8 @@ pub enum InvalidIDkgPayloadReason {
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
-    IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
-    IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
+    IDkgVerifyTranscriptError(Box<IDkgVerifyTranscriptError>),
+    IDkgVerifyInitialDealingsError(Box<IDkgVerifyInitialDealingsError>),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
     ChainKeyConfigNotFound,
@@ -186,7 +187,7 @@ impl From<idkg::TranscriptParamsError> for IDkgPayloadValidationFailure {
 
 impl From<IDkgVerifyTranscriptError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyTranscriptError) -> Self {
-        InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(err)
+        InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(Box::new(err))
     }
 }
 
@@ -198,7 +199,7 @@ impl From<IDkgVerifyTranscriptError> for IDkgPayloadValidationFailure {
 
 impl From<IDkgVerifyInitialDealingsError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyInitialDealingsError) -> Self {
-        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(err)
+        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(Box::new(err))
     }
 }
 

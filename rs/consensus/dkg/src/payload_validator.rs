@@ -22,6 +22,7 @@ use std::collections::HashSet;
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::result_large_err)]
 pub fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -130,6 +131,7 @@ pub fn validate_payload(
 }
 
 // Validates the payload containing dealings.
+#[allow(clippy::result_large_err)]
 fn validate_dealings_payload(
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,

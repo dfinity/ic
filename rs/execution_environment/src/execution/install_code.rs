@@ -226,6 +226,7 @@ impl InstallCodeHelper {
     /// Replays the previous `install_code` steps on the given clean canister.
     /// Returns an error if any step fails. Otherwise, it returns an instance of
     /// the helper that can be used to continue the `install_code` execution.
+    #[allow(clippy::result_large_err)]
     pub fn resume(
         clean_canister: &CanisterState,
         paused: PausedInstallCodeHelper,
