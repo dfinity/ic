@@ -2,8 +2,6 @@
 
 set -e
 
-source /opt/ic/bin/config.sh
-
 copy_ssh_keys() {
     local SOURCE_FILE="$1"
     local DEST_FILE="$2"
