@@ -17,6 +17,7 @@ ic-config = { path = "../../config" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-system-test-driver = { path = "../../tests/driver" }
@@ -88,3 +89,7 @@ path = "nns_dapp_test.rs"
 [[bin]]
 name = "ic-systest-bitcoin-set-config-proposal-test"
 path = "bitcoin_set_config_proposal_test.rs"
+
+[[bin]]
+name = "rent_subnet_test"
+path = "rent_subnet_test.rs"
