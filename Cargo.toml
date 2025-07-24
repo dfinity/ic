@@ -155,6 +155,7 @@ members = [
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
+    "rs/ic_os/os_tools/guest_disk",
     "rs/ic_os/os_tools/guest_vm_runner",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",

@@ -1,0 +1,16 @@
+[package]
+name = "guest_disk"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+ic_device = { path = "../../device" }
+itertools = { workspace = true }
+ic_sev = { path = "../../sev" }
+tempfile = { workspace = true }
+rand = { workspace = true }
+libcryptsetup-rs = { workspace = true }
+grub = { path = "../../grub" }
