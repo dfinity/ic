@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "byte_count",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_byte_count",
+    version = "0.1.0",
+    deps = [
+    ],
+)
+
+rust_test(
+    name = "byte_count_test",
+    crate = ":byte_count",
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/utils/byte_count_derive",
+        "@crate_index//:paste",
+    ],
+)

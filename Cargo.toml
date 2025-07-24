@@ -442,6 +442,8 @@ members = [
     "rs/types/wasm_types",
     "rs/universal_canister/lib",
     "rs/utils",
+    "rs/utils/byte_count",
+    "rs/utils/byte_count_derive",
     "rs/utils/ensure",
     "rs/utils/lru_cache",
     "rs/utils/rustfmt",

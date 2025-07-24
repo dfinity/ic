@@ -6787,6 +6787,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-byte-count"
+version = "0.9.0"
+dependencies = [
+ "ic-byte-count-derive",
+ "paste",
+]
+
+[[package]]
+name = "ic-byte-count-derive"
+version = "0.9.0"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "ic-canister-client"
 version = "0.9.0"
 dependencies = [

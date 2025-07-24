@@ -1,0 +1,15 @@
+[package]
+name = "ic-byte-count"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_byte_count"
+path = "src/lib.rs"
+
+[dependencies]
+ic-byte-count-derive = { path = "../byte_count_derive" }
+paste = { workspace = true }
