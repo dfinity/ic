@@ -5696,7 +5696,6 @@ fn test_seed_neuron_split() {
     );
 
     let neuron = gov
-        .neuron_store
         .with_neuron_mut(&id, |neuron| {
             neuron.neuron_type = Some(NeuronType::Seed as i32);
             neuron.clone()
@@ -7997,7 +7996,6 @@ async fn test_make_proposal_message() {
             CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
         )),
         // Fill in the rest of the fields with those of a motion proposal.
-        // (They are not relevant to this test.)
         // (They are not relevant to this test.)
         ..new_motion_proposal()
     };
