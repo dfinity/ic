@@ -628,7 +628,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
         for entry in item.pre_signature_stashes {
             let master_key_id: MasterPublicKeyId = try_from_option_field(
                 entry.key_id,
-                "SystemMetadata::PreSignatureStash::IDkgMasterPublicKeyId",
+                "SystemMetadata::PreSignatureStash::MasterPublicKeyId",
             )?;
             let key_id =
                 IDkgMasterPublicKeyId::try_from(master_key_id).map_err(ProxyDecodeError::Other)?;
