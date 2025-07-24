@@ -1042,11 +1042,49 @@ pub fn syscalls<
         .func_wrap("ic0", "subnet_num_nodes", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
+                with_system_api(&mut caller, |s| s.ic0_subnet_num_nodes()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::subnet_self_size failed: {}", e))
+                        anyhow::Error::msg(format!("ic0::subnet_num_nodes failed: {}", e))
                     })
                 })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "subnet_node_id_size", {
+            move |mut caller: Caller<'_, StoreData>, node_index: I| {
+                let node_index: usize =
+                    node_index.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_node_id_size(node_index)).and_then(
+                    |s| {
+                        I::try_from(s).map_err(|e| {
+                            anyhow::Error::msg(format!("ic0::subnet_node_id_size failed: {}", e))
+                        })
+                    },
+                )
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "subnet_node_id_copy", {
+            move |mut caller: Caller<'_, StoreData>, node_index: I, dst: I, offset: I, size: I| {
+                let node_index: usize =
+                    node_index.try_into().expect("Failed to convert I to usize");
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::SUBNET_SELF_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_subnet_node_id_copy(node_index, dst, offset, size, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, size)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();

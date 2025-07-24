@@ -751,6 +751,36 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "subnet_num_nodes",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "subnet_node_id_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "subnet_node_id_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "cost_call",
             vec![(
                 API_VERSION_IC0,
