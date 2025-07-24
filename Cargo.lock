@@ -5342,7 +5342,7 @@ dependencies = [
  "gpt",
  "grub",
  "ic-metrics-tool",
-    "ic_device",
+ "ic_device",
  "ic_sev",
  "macaddr",
  "nix 0.24.3",
@@ -15197,17 +15197,17 @@ dependencies = [
 name = "ic_device"
 version = "0.1.0"
 dependencies = [
-    "anyhow",
-    "async-trait",
-    "devicemapper",
-    "gpt",
-    "loopdev-3",
-    "nix 0.24.3",
-    "partition_tools",
-    "sys-mount",
-    "tempfile",
-    "tokio",
-    "uuid",
+ "anyhow",
+ "async-trait",
+ "devicemapper",
+ "gpt",
+ "loopdev-3",
+ "nix 0.24.3",
+ "partition_tools",
+ "sys-mount",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
