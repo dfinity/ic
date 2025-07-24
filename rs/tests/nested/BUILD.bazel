@@ -64,7 +64,9 @@ system_test_nns(
     uses_guestos_img = False,
     uses_guestos_mainnet_img = True,
     uses_setupos_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + [
+        "//ic-os/setupos:test-img.tar.zst",
+    ],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -86,7 +88,10 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + [
+        "//ic-os/guestos/envs/dev:update-img-test.tar.zst",
+        "//ic-os/setupos:test-img.tar.zst",
+    ],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -110,7 +115,10 @@ system_test_nns(
     uses_guestos_mainnet_img = True,
     uses_hostos_test_update = True,
     uses_setupos_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + [
+        "//ic-os/hostos/envs/dev:update-img-test.tar.zst",
+        "//ic-os/setupos:test-img.tar.zst",
+    ],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -129,7 +137,11 @@ system_test_nns(
     uses_guestos_mainnet_img = True,
     uses_hostos_update = True,
     uses_setupos_mainnet_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + [
+        "//ic-os/hostos/envs/dev:update-img.tar.zst",
+        "//ic-os/setupos:config/node_operator_private_key.pem",
+        "//ic-os/setupos:mainnet-test-img.tar.zst",
+    ],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -150,6 +162,9 @@ system_test_nns(
     uses_guestos_mainnet_img = True,
     uses_hostos_mainnet_update = True,
     uses_setupos_mainnet_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + [
+        "//ic-os/setupos:config/node_operator_private_key.pem",
+        "//ic-os/setupos:mainnet-test-img.tar.zst",
+    ],
     deps = RUNNER_DEPENDENCIES,
 )
