@@ -65,12 +65,16 @@ use slog::info;
 
 const NUM_IC_GATEWAYS: u64 = 1;
 const DEFAULT_IMAGE_SIZE_GIB: u64 = 5120;
+const DEFAULT_NUM_HOSTS: u64 = 1;
 
 fn main() -> Result<()> {
-    // No default value is set for PERF_HOSTS to ensure users consciously select dedicated performance hosts and understand their significance.
-    let perf_hosts = std::env::var("PERF_HOSTS").unwrap_or_else(|_| {
-        panic!("PERF_HOSTS environment variable must be set (comma-separated list of host names)")
-    });
+    let perf_hosts = std::env::var("PERF_HOSTS")
+        .map(|s| s.split(',').map(|s| s.to_string()).collect::<Vec<String>>())
+        .ok();
+
+    let num_hosts = std::env::var("NUM_HOSTS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok());
 
     // By default, the image size is set to 5 TiB, which supports testing up to 2 TiB of state under heavy write workloads.
     // Note: Migrating such a large image to the LVM partition on the hosts can be time-consuming.
@@ -80,8 +84,7 @@ fn main() -> Result<()> {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DEFAULT_IMAGE_SIZE_GIB);
 
-    let perf_hosts: Vec<String> = perf_hosts.split(',').map(|s| s.to_string()).collect();
-    let config = Config::new(perf_hosts, image_size_gib);
+    let config = Config::new(perf_hosts, num_hosts, image_size_gib);
 
     SystemTestGroup::new()
         .with_setup(config.build())
@@ -91,14 +94,17 @@ fn main() -> Result<()> {
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    hosts: Vec<String>,
+    hosts: Option<Vec<String>>,
+    // If hosts is not specified, Farm will automatically select this number of available hosts to use.
+    num_hosts: Option<u64>,
     image_size_gib: u64,
 }
 
 impl Config {
-    pub fn new(hosts: Vec<String>, image_size_gib: u64) -> Config {
+    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>, image_size_gib: u64) -> Config {
         Config {
             hosts,
+            num_hosts,
             image_size_gib,
         }
     }
@@ -127,23 +133,37 @@ pub fn setup(env: TestEnv, config: Config) {
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .with_default_vm_resources(vm_resources);
-    let mut subnet = Subnet::new(SubnetType::System);
+
+    // `HostFeature::IoPerformance` is required for the system subnet to use the performance hosts even if hosts are specified.
+    let mut subnet = Subnet::new(SubnetType::System)
+        .with_required_host_features(vec![HostFeature::IoPerformance]);
+
     let logger = env.logger();
-    info!(
-        logger,
-        "Adding {} nodes with hosts: {:?}",
-        config.hosts.len(),
-        config.hosts
-    );
-    for host in config.hosts.iter() {
-        subnet = subnet.add_node_with_required_host_features(vec![
-            HostFeature::Host(host.clone()),
-            HostFeature::IoPerformance,
-        ]);
+
+    if let Some(hosts) = config.hosts {
+        info!(
+            logger,
+            "Adding {} nodes with specified hosts: {:?}",
+            hosts.len(),
+            hosts
+        );
+        for host in hosts.iter() {
+            subnet =
+                subnet.add_node_with_required_host_features(vec![HostFeature::Host(host.clone())]);
+        }
+    } else {
+        let num_hosts = config.num_hosts.unwrap_or(DEFAULT_NUM_HOSTS);
+        info!(
+            logger,
+            "Farm is automatically selecting {} avaliable hosts", num_hosts
+        );
+        subnet = subnet.add_nodes(num_hosts as usize);
     }
+
     ic = ic.add_subnet(subnet);
 
-    ic.setup_and_start(&env)
+    let _vms = ic
+        .setup_and_start_return_vms(&env)
         .expect("Failed to setup IC under test");
 
     // set up NNS canisters
