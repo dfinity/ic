@@ -116,6 +116,14 @@ impl<K: Ord, V> FlatMap<K, V> {
             .ok()
     }
 
+    pub fn lower_bound(&self, key: &K) -> Option<(&K, &V)> {
+        match self.keys.binary_search(key) {
+            Ok(idx) => Some((&self.keys[idx], &self.values[idx])),
+            Err(0) => None,
+            Err(idx) => Some((&self.keys[idx - 1], &self.values[idx - 1])),
+        }
+    }
+
     /// Removes a value by key.
     ///
     /// Complexity: O(N)

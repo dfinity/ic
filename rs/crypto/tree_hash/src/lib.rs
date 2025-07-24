@@ -603,6 +603,95 @@ impl MixedHashTree {
         }
         LookupStatus::Found(t)
     }
+
+    pub fn filter(&mut self, paths: &LabeledTree<()>) -> Result<(), String> {
+        let result = match (std::mem::replace(self, MixedHashTree::Empty), paths) {
+            (MixedHashTree::Empty, LabeledTree::Leaf(_)) => Err("Empty and leaf".into()),
+            (MixedHashTree::Empty, LabeledTree::SubTree(_flat_map)) => Err("Empty and subtree"),
+            (MixedHashTree::Fork(b), _) => {
+                let (mut l, mut r) = *b;
+                l.filter(paths)?;
+                r.filter(paths)?;
+                let both_pruned = match (&l, &r) {
+                    (MixedHashTree::Pruned(_), MixedHashTree::Pruned(_)) => true,
+                    _ => false,
+                };
+                let tree = MixedHashTree::Fork(Box::new((l, r)));
+                if both_pruned {
+                    Ok(MixedHashTree::Pruned(tree.digest()))
+                } else {
+                    Ok(tree)
+                }
+            }
+            (MixedHashTree::Labeled(_label, _mixed_hash_tree), LabeledTree::Leaf(_)) => {
+                Err("Labeled and leaf".into())
+            }
+            (
+                MixedHashTree::Labeled(label, mut mixed_hash_tree),
+                LabeledTree::SubTree(flat_map),
+            ) => match flat_map.get(&label) {
+                Some(subtree) => {
+                    mixed_hash_tree.filter(subtree)?;
+                    Ok(MixedHashTree::Labeled(label, mixed_hash_tree))
+                }
+                None => Ok(MixedHashTree::Pruned(
+                    MixedHashTree::Labeled(label, mixed_hash_tree).digest(),
+                )),
+            },
+            (tree @ MixedHashTree::Leaf(_), LabeledTree::Leaf(_)) => Ok(tree),
+            (MixedHashTree::Leaf(_items), LabeledTree::SubTree(_flat_map)) => {
+                Err("Leaf and subtree".into())
+            }
+            (tree @ MixedHashTree::Pruned(_), LabeledTree::Leaf(_)) => Ok(tree),
+            (tree @ MixedHashTree::Pruned(_), LabeledTree::SubTree(_)) => Ok(tree),
+        }?;
+
+        *self = result;
+        Ok(())
+    }
+
+    pub fn filtered(&self, paths: &LabeledTree<()>) -> Result<MixedHashTree, String> {
+        match (self, paths) {
+            (MixedHashTree::Empty, LabeledTree::Leaf(_)) => Err("Empty and leaf".into()),
+            (MixedHashTree::Empty, LabeledTree::SubTree(_flat_map)) => {
+                Err("Empty and subtree".into())
+            }
+            (MixedHashTree::Fork(b), paths) => {
+                let l = b.0.filtered(paths)?;
+                let r = b.1.filtered(paths)?;
+                let both_pruned = match (&l, &r) {
+                    (MixedHashTree::Pruned(_), MixedHashTree::Pruned(_)) => true,
+                    _ => false,
+                };
+                let tree = MixedHashTree::Fork(Box::new((l, r)));
+                if both_pruned {
+                    Ok(MixedHashTree::Pruned(tree.digest()))
+                } else {
+                    Ok(tree)
+                }
+            }
+            (MixedHashTree::Labeled(_label, _mixed_hash_tree), LabeledTree::Leaf(_)) => {
+                Err("Labeled and leaf".into())
+            }
+            (tree @ MixedHashTree::Labeled(label, mixed_hash_tree), LabeledTree::SubTree(flat_map)) => {
+                match flat_map.get(label) {
+                    Some(subtree) => {
+                        let mixed_hash_tree = mixed_hash_tree.filtered(subtree)?;
+                        Ok(MixedHashTree::Labeled(label.clone(), Box::new(mixed_hash_tree)))
+                    }
+                    None => Ok(MixedHashTree::Pruned(
+                        tree.digest(),
+                    )),
+                }
+            }
+            (tree @ MixedHashTree::Leaf(_), LabeledTree::Leaf(_)) => Ok(tree.clone()),
+            (MixedHashTree::Leaf(_items), LabeledTree::SubTree(_flat_map)) => {
+                Err("Leaf and subtree".into())
+            }
+            (tree @ MixedHashTree::Pruned(_), LabeledTree::Leaf(_)) => Ok(tree.clone()),
+            (tree @ MixedHashTree::Pruned(_), LabeledTree::SubTree(_)) => Ok(tree.clone()),
+        }
+    }
 }
 
 /// An error indicating that a hash tree doesn't correspond to a valid

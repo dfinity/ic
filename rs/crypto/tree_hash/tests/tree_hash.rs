@@ -3287,3 +3287,131 @@ fn witness_generator_exceeding_recursion_depth_should_error() {
         ))
     );
 }
+
+#[test]
+fn filter_mixed_hash_tree() {
+    let label_a = Label::from("label_a");
+    let label_a_3 = Label::from("label_a_3");
+    let label_a_3_2 = Label::from("label_a_3_2");
+    let label_b = Label::from("label_b");
+    let label_b_2 = Label::from("label_b_2");
+    let label_b_4 = Label::from("label_b_4");
+    let label_b_4_3 = Label::from("label_b_4_3");
+    let label_c = Label::from("label_c");
+    let contents = Vec::from("ignored");
+
+    let subtree_a_3_map = flatmap!(
+        label_a_3_2 => LabeledTree::Leaf(contents.to_owned()),
+    );
+    let subtree_a_map = flatmap!(
+        label_a_3 => LabeledTree::SubTree(subtree_a_3_map),
+    );
+    let subtree_b_4_map = flatmap!(
+        label_b_4_3 => LabeledTree::Leaf(contents.to_owned()),
+    );
+    let subtree_b_map = flatmap!(
+        label_b_2 => LabeledTree::SubTree(FlatMap::new()),
+        label_b_4 => LabeledTree::SubTree(subtree_b_4_map),
+    );
+    let root_map = flatmap!(
+        label_a => LabeledTree::SubTree(subtree_a_map),
+        label_b => LabeledTree::SubTree(subtree_b_map),
+        label_c => LabeledTree::Leaf(contents),
+    );
+    let partial_tree = LabeledTree::SubTree(root_map);
+
+    let builder = tree_with_three_levels();
+    let witness_generator = builder.witness_generator().unwrap();
+    let mut mixed_hash_tree = witness_generator.mixed_hash_tree(&partial_tree).unwrap();
+    let digest = mixed_hash_tree.digest();
+
+    println!("{:#?}", mixed_hash_tree);
+    println!(
+        "{:#?}",
+        LabeledTree::try_from(mixed_hash_tree.clone()).unwrap()
+    );
+
+    let partial_tree = sparse_labeled_tree_from_paths(&[
+        Path::from(vec![
+            "label_a".into(),
+            "label_a_3".into(),
+            "label_a_3_2".into(),
+        ]),
+        Path::from(vec![
+            "label_b".into(),
+            "label_b_4".into(),
+            "label_b_4_3".into(),
+        ]),
+    ])
+    .unwrap();
+
+    mixed_hash_tree.filter(&partial_tree).unwrap();
+    println!("{:#?}", mixed_hash_tree);
+
+    assert_eq!(digest, mixed_hash_tree.digest());
+}
+
+#[test]
+fn filtered_mixed_hash_tree() {
+    let label_a = Label::from("label_a");
+    let label_a_3 = Label::from("label_a_3");
+    let label_a_3_2 = Label::from("label_a_3_2");
+    let label_b = Label::from("label_b");
+    let label_b_2 = Label::from("label_b_2");
+    let label_b_4 = Label::from("label_b_4");
+    let label_b_4_3 = Label::from("label_b_4_3");
+    let label_c = Label::from("label_c");
+    let contents = Vec::from("ignored");
+
+    let subtree_a_3_map = flatmap!(
+        label_a_3_2 => LabeledTree::Leaf(contents.to_owned()),
+    );
+    let subtree_a_map = flatmap!(
+        label_a_3 => LabeledTree::SubTree(subtree_a_3_map),
+    );
+    let subtree_b_4_map = flatmap!(
+        label_b_4_3 => LabeledTree::Leaf(contents.to_owned()),
+    );
+    let subtree_b_map = flatmap!(
+        label_b_2 => LabeledTree::SubTree(FlatMap::new()),
+        label_b_4 => LabeledTree::SubTree(subtree_b_4_map),
+    );
+    let root_map = flatmap!(
+        label_a => LabeledTree::SubTree(subtree_a_map),
+        label_b => LabeledTree::SubTree(subtree_b_map),
+        label_c => LabeledTree::Leaf(contents),
+    );
+    let partial_tree = LabeledTree::SubTree(root_map);
+
+    let builder = tree_with_three_levels();
+    let witness_generator = builder.witness_generator().unwrap();
+    let mixed_hash_tree = witness_generator.mixed_hash_tree(&partial_tree).unwrap();
+    let digest = mixed_hash_tree.digest();
+
+    println!("{:#?}", mixed_hash_tree);
+    println!(
+        "{:#?}",
+        LabeledTree::try_from(mixed_hash_tree.clone()).unwrap()
+    );
+
+    let partial_tree = sparse_labeled_tree_from_paths(&[
+        Path::from(vec![
+            "label_a".into(),
+            "label_a_3".into(),
+            "label_a_3_2".into(),
+        ]),
+        Path::from(vec![
+            "label_b".into(),
+            "label_b_4".into(),
+            "label_b_4_3".into(),
+        ]),
+    ])
+    .unwrap();
+
+    let mixed_hash_tree = mixed_hash_tree.filtered(&partial_tree).unwrap();
+    println!("{:#?}", mixed_hash_tree);
+
+    assert_eq!(digest, mixed_hash_tree.digest());
+
+    assert!(false);
+}
