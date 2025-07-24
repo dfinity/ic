@@ -57,7 +57,7 @@ pub(crate) fn representation_independent_hash_call_or_query(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    hash_of_map(&map, |key, value| hash_key_val(key, value))
+    hash_of_map(&map, hash_key_val)
 }
 
 pub(crate) fn representation_independent_hash_read_state(
@@ -85,7 +85,7 @@ pub(crate) fn representation_independent_hash_read_state(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    hash_of_map(&map, |key, value| hash_key_val(key, value))
+    hash_of_map(&map, hash_key_val)
 }
 
 /// Describes the fields of a canister update call as defined in
@@ -630,9 +630,7 @@ impl QueryResponseHash {
             }
         };
 
-        let hash = hash_of_map(&self_map_representation, |key, value| {
-            hash_key_val(key, value)
-        });
+        let hash = hash_of_map(&self_map_representation, hash_key_val);
 
         Self(hash)
     }
