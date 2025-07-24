@@ -166,7 +166,7 @@ mod sys {
 async fn node_ids() -> Vec<candid::Principal> {
     fn subnet_num_nodes() -> usize {
         // SAFETY: ic0.subnet_self_size is always safe to call.
-        unsafe { sys::subnet_self_size() }
+        unsafe { sys::subnet_num_nodes() }
     }
     fn subnet_node_id_size(node_index: usize) -> usize {
         // SAFETY: ic0.subnet_node_id_size is always safe to call.
@@ -175,25 +175,20 @@ async fn node_ids() -> Vec<candid::Principal> {
     fn subnet_node_id_copy(node_index: usize, dst: &mut [u8]) {
         // SAFETY: ic0.subnet_node_id_copy is always safe to call.
         unsafe {
-            sys::subnet_node_id_copy(
-                node_index,
-                dst.as_mut_ptr() as usize,
-                0,
-                dst.len(),
-            );
+            sys::subnet_node_id_copy(node_index, dst.as_mut_ptr() as usize, 0, dst.len());
         }
     }
 
-    fn subnet_id(node_index:usize) -> candid::Principal {
+    let subnet_id = ic_cdk::api::subnet_id();
+
+    fn get_node_id(node_index: usize) -> candid::Principal {
         let size = subnet_node_id_size(node_index);
         let mut id = vec![0u8; size];
         subnet_node_id_copy(node_index, &mut id);
         candid::Principal::from_slice(&id)
     }
 
-    (0..subnet_num_nodes())
-        .map(subnet_id)
-        .collect()
+    (0..subnet_num_nodes()).map(get_node_id).collect()
 }
 
 #[query]

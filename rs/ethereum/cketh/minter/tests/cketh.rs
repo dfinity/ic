@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::{Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::events::{
@@ -32,6 +32,7 @@ use ic_cketh_test_utils::{
     EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
+use ic_state_machine_tests::WasmResult;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
@@ -39,7 +40,6 @@ use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::str::FromStr;
 use std::time::Duration;
-use ic_state_machine_tests::WasmResult;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -235,15 +235,23 @@ fn should_block_deposit_from_blocked_address() {
      */
 
     let minter_id = cketh.minter_id.clone();
-    match cketh.env.query(minter_id, "node_ids", vec![]).expect("Failed to query node IDs") {
+    match cketh
+        .env
+        .query(
+            minter_id,
+            "node_ids",
+            Encode!(&()).expect("Couldn't encode unit"),
+        )
+        .expect("Failed to query node IDs")
+    {
         WasmResult::Reject(_) => panic!("Query to node_ids should not fail"),
         WasmResult::Reply(response) => {
-            let node_ids: Vec<PrincipalId> = candid::decode_one(&response).expect("Failed to decode node IDs");
+            let node_ids: Vec<PrincipalId> =
+                candid::decode_one(&response).expect("Failed to decode node IDs");
             // assert!(!node_ids.is_empty(), "Node IDs should not be empty");
-            assert!(node_ids == vec![], "Node IDs should be empty for this test");
+            assert_eq!(node_ids, vec![], "Node IDs should be empty for this test");
         }
     }
-
 }
 
 #[test]
