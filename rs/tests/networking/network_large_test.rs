@@ -176,9 +176,9 @@ pub fn test(env: TestEnv) {
     for n in nodes.iter().skip(FAULTY) {
         n.await_status_is_healthy().unwrap();
     }
-    info!(log, "Storing message ...");
+    info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
-    info!(log, "Reading message ...");
+    info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_5.to_string()))
