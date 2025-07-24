@@ -59,7 +59,6 @@ system_test_nns(
     env = MAINNET_ENV | VECTOR_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_mainnet_img = True,
@@ -81,7 +80,6 @@ system_test_nns(
     env = MAINNET_ENV | VECTOR_ENV,
     extra_head_nns_tags = [],
     flaky = True,
-    tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_test_update = True,
@@ -103,7 +101,6 @@ system_test_nns(
     env = MAINNET_ENV | VECTOR_ENV,
     extra_head_nns_tags = [],
     flaky = True,
-    tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_img = False,
@@ -122,7 +119,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_img = False,
