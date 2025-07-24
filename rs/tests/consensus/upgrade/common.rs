@@ -135,12 +135,14 @@ pub fn upgrade(
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
+    info!(logger, "Storing message: '{}'", msg);
     let can_id = store_message(
         &subnet_node.get_public_url(),
         subnet_node.effective_canister_id(),
         msg,
         &logger,
     );
+    info!(logger, "Reading message: '{}'", msg);
     assert!(can_read_msg(
         &logger,
         &subnet_node.get_public_url(),
@@ -149,7 +151,7 @@ pub fn upgrade(
     ));
     info!(logger, "Could store and read message '{}'", msg);
 
-    // Create canister snapshot before upgrading.
+    info!(logger, "Creating canister snapshot before upgrading ...");
     block_on(async {
         let agent = create_agent(subnet_node.get_public_url().as_str())
             .await
@@ -158,17 +160,29 @@ pub fn upgrade(
         mgr.take_canister_snapshot(&can_id, None).await.unwrap();
     });
 
+    info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
     upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
 
+    info!(logger, "Stopping redundant nodes ...");
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
     // and catching up after restarting.
     for redundant_node in &redundant_nodes {
+        info!(
+            logger,
+            "Stopping redundant node: {} ...", redundant_node.node_id
+        );
         stop_node(&logger, redundant_node);
     }
+    info!(logger, "Starting faulty node: {} ...", faulty_node.node_id);
     start_node(&logger, &faulty_node);
+
+    info!(
+        logger,
+        "Asserting that the faulty node is running the expected version: {} ...", upgrade_version
+    );
     assert_assigned_replica_version(&faulty_node, upgrade_version, env.logger());
 
     // make sure that state sync is completed
@@ -209,8 +223,12 @@ pub fn upgrade(
         }
     }
 
-    // Start redundant nodes.
+    info!(logger, "Starting redundant nodes ...");
     for redundant_node in &redundant_nodes {
+        info!(
+            logger,
+            "Starting redundant node: {} ...", redundant_node.node_id
+        );
         start_node(&logger, redundant_node);
     }
 
