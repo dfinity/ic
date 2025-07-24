@@ -440,6 +440,7 @@ mod tests {
 
     /// Configures all the dependencies and calls [`validate_payload`] with
     /// `dealings_to_validate` as an argument.
+    #[allow(clippy::result_large_err)]
     fn validate_payload_test_case(
         dealings_to_validate: Vec<Message>,
         parent_dealings: Vec<Message>,

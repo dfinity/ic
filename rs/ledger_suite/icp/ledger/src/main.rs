@@ -1345,10 +1345,7 @@ fn get_nodes_() {
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let ledger = LEDGER.try_read().map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to get a LEDGER for read: {}", err),
-        )
+        std::io::Error::other(format!("Failed to get a LEDGER for read: {}", err))
     })?;
     let archive_guard = ledger.blockchain.archive.read().unwrap();
     let num_archives = archive_guard
