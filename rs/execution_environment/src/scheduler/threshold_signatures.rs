@@ -10,6 +10,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_types::{
     batch::AvailablePreSignatures, consensus::idkg::common::PreSignature, ExecutionRound, Height,
 };
+use more_asserts::debug_unreachable;
 use rand::RngCore;
 
 use super::SchedulerMetrics;
@@ -116,7 +117,10 @@ fn match_pre_signatures_by_key_id(
                     key_transcript: Arc::new(pre_sigs.key_transcript.clone()),
                 })
             }
-            _ => continue,
+            _ => {
+                debug_unreachable!("Attempted to pair signature request context with pre-signature of different scheme.");
+                continue;
+            }
         }
         let _ = context.matched_pre_signature.insert((pre_sig_id, height));
         matched += 1;
