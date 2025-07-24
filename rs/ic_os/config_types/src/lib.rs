@@ -11,6 +11,8 @@
 //!
 //! - **Adding New Fields**: If adding a new field to a configuration struct, make sure it is optional or has a default value by implementing `Default` or via `#[serde(default)]`.
 //!
+//! - **Adding Enum Variants (Forward Compatibility)**: When adding new variants to an enum, ensure older versions can handle unknown variants gracefully by using `#[serde(other)]` on a fallback variant.
+//!
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
@@ -70,6 +72,10 @@ pub enum GuestVMType {
     Default,
     /// The Guest VM brought up temporarily during the GuestOS upgrade process.
     Upgrade,
+    /// Unknown variant fallback for forward compatibility with future version
+    /// (used in case a newer HostOS sends a value that an older GuestOS does not understand)
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -273,6 +279,10 @@ pub enum Ipv6Config {
     Deterministic(DeterministicIpv6Config),
     Fixed(FixedIpv6Config),
     RouterAdvertisement,
+    /// Unknown variant for forward compatibility with future versions
+    /// (used in case a newer HostOS sends a value that an older GuestOS does not understand)
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -315,6 +325,41 @@ mod tests {
         }"#;
         let settings: HostOSSettings = serde_json::from_str(json)?;
         assert_eq!(settings.vm_nr_of_vcpus, 64);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_guest_vm_type_forward_compatibility() -> Result<(), Box<dyn std::error::Error>> {
+        // Test that unknown enum variants deserialize to Unknown
+        // Create a minimal GuestOSConfig with the unknown variant
+        let config_json = serde_json::json!({
+            "config_version": CONFIG_VERSION,
+            "network_settings": {
+                "ipv6_config": "RouterAdvertisement"
+            },
+            "icos_settings": {
+                "mgmt_mac": "00:00:00:00:00:00",
+                "deployment_environment": "testnet",
+                "logging": {},
+                "use_nns_public_key": false,
+                "nns_urls": [],
+                "use_node_operator_private_key": false,
+                "use_ssh_authorized_keys": false,
+                "icos_dev_settings": {}
+            },
+            "guestos_settings": {
+                "inject_ic_crypto": false,
+                "inject_ic_state": false,
+                "inject_ic_registry_local_store": false,
+                "guestos_dev_settings": {}
+            },
+            "guest_vm_type": "unknown_future_variant"
+        });
+
+        // This should not fail and should deserialize guest_vm_type to Unknown
+        let config: GuestOSConfig = serde_json::from_value(config_json)?;
+        assert_eq!(config.guest_vm_type, GuestVMType::Unknown);
 
         Ok(())
     }

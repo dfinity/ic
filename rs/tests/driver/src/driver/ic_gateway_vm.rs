@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::{
     driver::{
-        farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
+        farm::{DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate},
         log_events,
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
@@ -77,6 +77,13 @@ impl IcGatewayVm {
             .with_config_img(get_dependency_path(IMAGE_PATH))
             .enable_ipv4();
         Self { universal_vm }
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_required_host_features(required_host_features);
+        self
     }
 
     pub fn disable_ipv4(mut self) -> Self {
