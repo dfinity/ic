@@ -788,7 +788,7 @@ pub fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSig
 
 // Creates a test signature input
 pub fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
-    create_sig_inputs_with_height(caller, Height::new(0), key_id.clone())
+    create_sig_inputs_with_height(caller, Height::new(100), key_id.clone())
 }
 
 pub fn add_available_quadruple_to_payload(
