@@ -385,17 +385,17 @@ impl CanisterStatusResultV2 {
     pub fn dummy_with_controllers(controllers: Vec<PrincipalId>) -> CanisterStatusResultV2 {
         CanisterStatusResultV2::new(
             CanisterStatusType::Running,
-            None,              // module_hash
-            controllers,       // controllers
-            NumBytes::new(42), // memory_size
-            43,                // cycles
-            44,                // compute_allocation
-            None,              // memory_allocation
-            45,                // freezing_threshold
-            46,                // idle_cycles_burned_per_day
-            47,                // wasm_memory_limit
-            41,                // wasm_memory_threshold
-            MemoryMetrics::default(),              // memory_metrics
+            None,                     // module_hash
+            controllers,              // controllers
+            NumBytes::new(42),        // memory_size
+            43,                       // cycles
+            44,                       // compute_allocation
+            None,                     // memory_allocation
+            45,                       // freezing_threshold
+            46,                       // idle_cycles_burned_per_day
+            47,                       // wasm_memory_limit
+            41,                       // wasm_memory_threshold
+            MemoryMetrics::default(), // memory_metrics
         )
     }
 

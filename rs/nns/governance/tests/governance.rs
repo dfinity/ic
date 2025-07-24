@@ -15,7 +15,9 @@ use fixtures::{account, new_motion_proposal, principal, NNSBuilder, NeuronBuilde
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType, MemoryMetrics};
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResultV2, CanisterStatusType, MemoryMetrics,
+};
 use ic_nervous_system_common::{
     ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
     ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -10081,7 +10083,8 @@ fn test_wfq_majority_reached_no_delay() {
         .unwrap()
         .current_deadline_timestamp_seconds;
     assert!(
-        deadline_after_test < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS / 20
+        deadline_after_test
+            < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS / 20
     );
 }
 
