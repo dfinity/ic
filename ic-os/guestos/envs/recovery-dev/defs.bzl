@@ -45,10 +45,10 @@ def generate_dummy_recovery_archive(name):
             head -c $$((250 * 1024 * 1024)) < <(yes "$$DATA") > ic_registry_local_store/08090a0b0c/0d/0e/0f.pb
 
             # Archive the local store
-            tar zcf ic_registry_local_store.tar.zst -C ic_registry_local_store .
+            tar --zstd -cf ic_registry_local_store.tar.zst -C ic_registry_local_store .
 
             # Final archive
-            tar zcf recovery.tar.zst cup.proto ic_registry_local_store.tar.zst
+            tar --zstd -cf recovery.tar.zst cup.proto ic_registry_local_store.tar.zst
 
             base64 -w 0 cup.proto > cup.proto.b64
             base64 -w 0 ic_registry_local_store/0001020304/05/06/07.pb > ic_registry_local_store_1.b64
