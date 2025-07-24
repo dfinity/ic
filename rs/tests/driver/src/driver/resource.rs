@@ -142,6 +142,7 @@ impl ResourceGroup {
 pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,
+    pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
     pub ipv4: Option<Ipv4Addr>,
@@ -335,10 +336,16 @@ pub fn allocate_resources(
                 let (vm_name, created_vm) = thread
                     .join()
                     .expect("Couldn't join on the associated thread");
-                let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
+                let VMCreateResponse {
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ..
+                } = created_vm?;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    hostname,
                     ipv4: None,
                     ipv6,
                     mac6,
@@ -348,11 +355,16 @@ pub fn allocate_resources(
         InfraProvider::K8s => {
             for (vm_name, created_vm) in vm_responses {
                 let VMCreateResponse {
-                    ipv6, mac6, ipv4, ..
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ipv4,
+                    ..
                 } = created_vm;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    hostname,
                     ipv4,
                     ipv6,
                     mac6,

@@ -27,8 +27,9 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
-    get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
+    expect_canister_did_not_reply, get_reply, wasm_compilation_cost, wat_compilation_cost,
+    ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{
     fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
@@ -76,7 +77,7 @@ fn ic0_canister_status_works() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![0, 1, 2, 3]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -95,7 +96,7 @@ fn ic0_msg_arg_data_size_works() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![0, 1, 2, 3]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -127,7 +128,7 @@ fn ic0_stable_grow_works() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -150,7 +151,7 @@ fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
     test.canister_update_allocations_settings(canister_id, None, Some(30 * 1024 * 1024))
         .unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -176,7 +177,7 @@ fn ic0_stable64_size_works() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -202,7 +203,7 @@ fn ic0_stable_write_increases_heap_delta() {
     let canister_id = test.canister_from_wat(wat(4097)).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // We wrote more than 1 page but less than 2 pages so we expect 2 pages in
     // heap delta.
     assert_eq!(
@@ -212,7 +213,7 @@ fn ic0_stable_write_increases_heap_delta() {
     let canister_id = test.canister_from_wat(wat(8192)).unwrap();
     let heap_delta_estimate_before = test.state().metadata.heap_delta_estimate;
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // We wrote exactly 2 pages so we expect 2 pages in heap delta.
     assert_eq!(
         heap_delta_estimate_before + NumBytes::from(8192),
@@ -243,7 +244,7 @@ fn ic0_stable64_write_increases_heap_delta() {
     let canister_id = test.canister_from_wat(wat(4097)).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // We wrote more than 1 page but less than 2 pages so we expect 2 pages in
     // heap delta.
     assert_eq!(
@@ -253,7 +254,7 @@ fn ic0_stable64_write_increases_heap_delta() {
     let canister_id = test.canister_from_wat(wat(8192)).unwrap();
     let heap_delta_estimate_before = test.state().metadata.heap_delta_estimate;
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // We wrote exactly 2 pages so we expect 2 pages in heap delta.
     assert_eq!(
         heap_delta_estimate_before + NumBytes::from(8192),
@@ -280,7 +281,7 @@ fn ic0_stable64_grow_does_not_change_heap_delta() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
 }
 
@@ -304,7 +305,7 @@ fn ic0_grow_handles_overflow() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -328,7 +329,7 @@ fn ic0_grow_can_reach_max_number_of_pages() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -365,7 +366,7 @@ fn ic0_stable64_grow_works() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -387,7 +388,7 @@ fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
     );
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -705,7 +706,7 @@ fn ic0_stable_write_works_at_max_size() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -727,7 +728,7 @@ fn ic0_stable_read_does_not_trap_if_in_bounds() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -751,7 +752,7 @@ fn ic0_stable_read_works_at_max_size() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -911,7 +912,7 @@ fn ic0_stable64_read_does_not_trap_if_in_bounds() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -1689,7 +1690,7 @@ fn ic0_msg_reply_data_append_has_no_effect_without_ic0_msg_reply() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -2678,7 +2679,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(0, test.xnet_messages().len());
     // Cycles deducted by `ic0.call_cycles_add` are refunded.
     assert_eq!(
@@ -2995,7 +2996,7 @@ fn globals_are_updated() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         Global::I32(1),
         test.execution_state(canister_id).exported_globals[0]
@@ -3014,7 +3015,7 @@ fn comparison_of_non_canonical_nans() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         Global::I32(0),
         test.execution_state(canister_id).exported_globals[0]
@@ -3071,7 +3072,7 @@ fn subnet_available_memory_is_updated() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
         test.subnet_available_memory().get_execution_memory()
@@ -3152,7 +3153,7 @@ fn subnet_available_memory_is_not_updated_in_query() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         initial_subnet_available_memory.get_execution_memory(),
         test.subnet_available_memory().get_execution_memory()
@@ -3372,7 +3373,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
     );
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // memory taken should not change
     assert_eq!(
         initial_subnet_available_memory.get_execution_memory(),
@@ -3405,7 +3406,7 @@ fn ic0_msg_cycles_available_returns_zero_for_ingress() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -3882,7 +3883,7 @@ fn grow_memory_beyond_max_size_0() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         Global::I32(-1),
         test.execution_state(canister_id).exported_globals[0]
@@ -4086,7 +4087,7 @@ fn upgrade_preserves_stable_memory() {
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "write", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
     test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap())
@@ -4111,7 +4112,7 @@ fn reinstall_clears_stable_memory() {
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "write", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
     test.reinstall_canister(canister_id, wat::parse_str(wat).unwrap())
@@ -4316,7 +4317,7 @@ fn update_message_produces_heap_delta() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     let result = test.ingress(canister_id, "hello", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         NumBytes::from(PAGE_SIZE as u64),
         test.state().metadata.heap_delta_estimate
@@ -4477,7 +4478,7 @@ impl MemoryAccessor {
         let mut payload = addr.to_le_bytes().to_vec();
         payload.extend(bytes.iter());
         let result = self.test.ingress(self.canister_id, "write", payload);
-        assert_empty_reply(result);
+        expect_canister_did_not_reply(result);
     }
 
     fn read(&mut self, addr: i32, size: i32) -> Vec<u8> {
@@ -4494,7 +4495,7 @@ impl MemoryAccessor {
         let result = self
             .test
             .ingress(self.canister_id, "grow_and_write", bytes.to_vec());
-        assert_empty_reply(result);
+        expect_canister_did_not_reply(result);
     }
 
     #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -4815,7 +4816,7 @@ fn install_gzip_compressed_module() {
 
     let canister_id = test.canister_from_binary(binary).unwrap();
     let result = test.ingress(canister_id, "inc", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![1, 0, 0, 0])));
 }
@@ -6523,10 +6524,10 @@ fn memory_out_of_bounds_accesses() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "read_heap0", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 
     let result = test.ingress(canister_id, "write_heap0", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 
     let err = test.ingress(canister_id, "read_heap1", vec![]).unwrap_err();
     err.assert_contains(
@@ -6571,10 +6572,10 @@ fn memory_out_of_bounds_accesses() {
     );
 
     let result = test.ingress(canister_id, "read_stable0", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 
     let result = test.ingress(canister_id, "write_stable0", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 
     let err = test
         .ingress(canister_id, "read_stable1", vec![])
@@ -6865,7 +6866,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_query() {
         .unwrap();
     let body = wasm().stable_grow(10_000).build();
     let result = test.ingress(canister_id, "query", body);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -6878,7 +6879,7 @@ fn stable64_grow_does_not_check_freezing_threshold_in_query() {
         .unwrap();
     let body = wasm().stable64_grow(10_000).build();
     let result = test.ingress(canister_id, "query", body);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -6897,7 +6898,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_query() {
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
 }
 
 #[test]
@@ -6918,7 +6919,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reply() {
         )
         .build();
     let result = test.ingress(canister_id, "update", body);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         test.execution_state(canister_id).stable_memory.size,
         NumWasmPages::new(10_000)
@@ -6943,7 +6944,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reject() {
         )
         .build();
     let result = test.ingress(canister_id, "update", body);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_eq!(
         test.execution_state(canister_id).stable_memory.size,
         NumWasmPages::new(10_000)
@@ -7631,7 +7632,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "write", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
 
@@ -8592,7 +8593,7 @@ fn ic0_mint_cycles_u64() {
         canister_id = test.canister_from_wat(wat).unwrap();
     }
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     assert_balance_equals(
         test.canister_state(canister_id).system_state.balance(),
         Cycles::new(2 * (1 << 64)),
@@ -8614,7 +8615,7 @@ fn check_correct_execution_state(is_wasm64: bool) {
     );
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     let execution_state = test.execution_state(canister_id);
     let bool_wasm_exec_mode: bool = execution_state.wasm_execution_mode.is_wasm64();
     assert_eq!(bool_wasm_exec_mode, is_wasm64);
