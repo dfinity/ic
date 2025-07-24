@@ -580,10 +580,10 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
         {
             match pre_signature.translate(&block_reader) {
                 Ok(pre_sig) => {
-                    entry.pre_signatures.insert(*pre_sig_id, Some(pre_sig));
+                    entry.pre_signatures.insert(*pre_sig_id, pre_sig);
                 }
                 Err(err) => {
-                    warn!(log, "Failed to translate Pre signature ref {:?}", err);
+                    warn!(log, "Failed to translate Pre-signature ref: {:?}", err);
                 }
             }
         }

@@ -1228,6 +1228,22 @@ pub enum PreSignature {
     Schnorr(Arc<SchnorrPreSignatureTranscript>),
 }
 
+impl PreSignature {
+    pub fn as_ecdsa(&self) -> Option<Arc<EcdsaPreSignatureQuadruple>> {
+        match self {
+            PreSignature::Ecdsa(ecdsa) => Some(ecdsa.clone()),
+            PreSignature::Schnorr(_) => None,
+        }
+    }
+
+    pub fn as_schnorr(&self) -> Option<Arc<SchnorrPreSignatureTranscript>> {
+        match self {
+            PreSignature::Ecdsa(_) => None,
+            PreSignature::Schnorr(schnorr) => Some(schnorr.clone()),
+        }
+    }
+}
+
 impl From<&PreSignature> for pb::PreSignature {
     fn from(value: &PreSignature) -> Self {
         use pb::pre_signature::Msg;

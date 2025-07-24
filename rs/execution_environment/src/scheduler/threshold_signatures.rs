@@ -1,10 +1,15 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::BTreeMap, sync::Arc};
 
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
-use ic_types::{batch::AvailablePreSignatures, consensus::idkg::PreSigId, ExecutionRound, Height};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    EcdsaMatchedPreSignature, SchnorrMatchedPreSignature, SignWithThresholdContext,
+    ThresholdArguments,
+};
+use ic_types::{
+    batch::AvailablePreSignatures, consensus::idkg::common::PreSignature, ExecutionRound, Height,
+};
 use rand::RngCore;
 
 use super::SchedulerMetrics;
@@ -41,7 +46,6 @@ pub(crate) fn update_signature_request_contexts(
     }
 
     for (key_id, pre_sigs) in idkg_pre_signatures {
-        let pre_sig_ids: BTreeSet<PreSigId> = pre_sigs.pre_signatures.keys().copied().collect();
         // Match up to the maximum number of contexts per key ID to delivered pre-signatures.
         let max_ongoing_signatures = registry_settings
             .chain_key_settings
@@ -52,11 +56,11 @@ pub(crate) fn update_signature_request_contexts(
         metrics
             .delivered_pre_signatures
             .with_label_values(&[&key_id.to_string()])
-            .observe(pre_sig_ids.len() as f64);
+            .observe(pre_sigs.pre_signatures.len() as f64);
 
         match_pre_signatures_by_key_id(
             key_id,
-            pre_sig_ids,
+            pre_sigs,
             &mut contexts,
             max_ongoing_signatures,
             Height::from(current_round.get()),
@@ -64,11 +68,11 @@ pub(crate) fn update_signature_request_contexts(
     }
 }
 
-/// Match up to `max_ongoing_signatures` pre-signature IDs to unmatched signature request contexts
+/// Match up to `max_ongoing_signatures` pre-signatures to unmatched signature request contexts
 /// of the given `key_id`.
 fn match_pre_signatures_by_key_id(
     key_id: MasterPublicKeyId,
-    mut pre_sig_ids: BTreeSet<PreSigId>,
+    mut pre_sigs: AvailablePreSignatures,
     contexts: &mut [&mut SignWithThresholdContext],
     max_ongoing_signatures: usize,
     height: Height,
@@ -80,21 +84,40 @@ fn match_pre_signatures_by_key_id(
         .filter(|context| context.key_id() == key_id)
         .flat_map(|context| context.matched_pre_signature)
     {
-        pre_sig_ids.remove(&pre_sig_id);
+        pre_sigs.pre_signatures.remove(&pre_sig_id);
         matched += 1;
     }
 
     // Assign pre-signatures to unmatched contexts until `max_ongoing_signatures` is reached.
     for context in contexts.iter_mut() {
-        if !(context.matched_pre_signature.is_none() && context.key_id() == key_id) {
+        if !(context.requires_pre_signature() && context.key_id() == key_id) {
             continue;
         }
         if matched >= max_ongoing_signatures {
             break;
         }
-        let Some(pre_sig_id) = pre_sig_ids.pop_first() else {
+        let Some((pre_sig_id, pre_signature)) = pre_sigs.pre_signatures.pop_first() else {
             break;
         };
+        match (&mut context.args, pre_signature) {
+            (ThresholdArguments::Ecdsa(args), PreSignature::Ecdsa(pre_signature)) => {
+                args.pre_signature = Some(EcdsaMatchedPreSignature {
+                    id: pre_sig_id,
+                    height,
+                    pre_signature,
+                    key_transcript: Arc::new(pre_sigs.key_transcript.clone()),
+                })
+            }
+            (ThresholdArguments::Schnorr(args), PreSignature::Schnorr(pre_signature)) => {
+                args.pre_signature = Some(SchnorrMatchedPreSignature {
+                    id: pre_sig_id,
+                    height,
+                    pre_signature,
+                    key_transcript: Arc::new(pre_sigs.key_transcript.clone()),
+                })
+            }
+            _ => continue,
+        }
         let _ = context.matched_pre_signature.insert((pre_sig_id, height));
         matched += 1;
     }
@@ -111,8 +134,9 @@ mod tests {
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
     };
+    use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::{messages::CallbackId, time::UNIX_EPOCH};
+    use ic_types::{consensus::idkg::PreSigId, messages::CallbackId, time::UNIX_EPOCH};
 
     fn ecdsa_key_id(i: u8) -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -135,17 +159,31 @@ mod tests {
     ) -> (CallbackId, SignWithThresholdContext) {
         let callback_id = CallbackId::from(id);
         let args = match key_id {
-            MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
-                key_id: key_id.clone(),
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
+                key_id: ecdsa_key_id.clone(),
                 message_hash: [0; 32],
-                pre_signature: None,
+                pre_signature: matched_pre_signature.map(|(id, height)| EcdsaMatchedPreSignature {
+                    id: PreSigId(id),
+                    height,
+                    pre_signature: pre_signature_for_tests(key_id).as_ecdsa().unwrap(),
+                    key_transcript: Arc::new(key_transcript_for_tests(key_id)),
+                }),
             }),
-            MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
-                key_id: key_id.clone(),
-                message: Arc::new(vec![1; 64]),
-                taproot_tree_root: None,
-                pre_signature: None,
-            }),
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+                ThresholdArguments::Schnorr(SchnorrArguments {
+                    key_id: schnorr_key_id.clone(),
+                    message: Arc::new(vec![1; 64]),
+                    taproot_tree_root: None,
+                    pre_signature: matched_pre_signature.map(|(id, height)| {
+                        SchnorrMatchedPreSignature {
+                            id: PreSigId(id),
+                            height,
+                            pre_signature: pre_signature_for_tests(key_id).as_schnorr().unwrap(),
+                            key_transcript: Arc::new(key_transcript_for_tests(key_id)),
+                        }
+                    }),
+                })
+            }
             MasterPublicKeyId::VetKd(_) => panic!("vetKD does not have pre-signatures"),
         };
         let context = SignWithThresholdContext {
@@ -163,7 +201,7 @@ mod tests {
 
     fn match_pre_signatures_basic_test(
         key_id: &MasterPublicKeyId,
-        pre_sig_ids: BTreeSet<PreSigId>,
+        pre_sigs: AvailablePreSignatures,
         mut contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         max_ongoing_signatures: usize,
         height: Height,
@@ -172,7 +210,7 @@ mod tests {
         let mut context_vec: Vec<_> = contexts.values_mut().collect();
         match_pre_signatures_by_key_id(
             key_id.clone(),
-            pre_sig_ids,
+            pre_sigs,
             &mut context_vec,
             max_ongoing_signatures,
             height,
@@ -184,9 +222,23 @@ mod tests {
             if id.get() <= cutoff {
                 assert!(context
                     .matched_pre_signature
-                    .is_some_and(|(pid, h)| pid.id() == id.get() && h == height))
+                    .is_some_and(|(pid, h)| pid.id() == id.get() && h == height));
+                match &context.args {
+                    ThresholdArguments::Ecdsa(args) => {
+                        let pre_sig = args.pre_signature.clone().unwrap();
+                        assert_eq!(pre_sig.height, height);
+                        assert_eq!(pre_sig.id.0, id.get());
+                    }
+                    ThresholdArguments::Schnorr(args) => {
+                        let pre_sig = args.pre_signature.clone().unwrap();
+                        assert_eq!(pre_sig.height, height);
+                        assert_eq!(pre_sig.id.0, id.get());
+                    }
+                    ThresholdArguments::VetKd(_) => panic!("Unexpected VetKD context"),
+                }
+                assert!(!context.requires_pre_signature());
             } else {
-                assert!(context.matched_pre_signature.is_none())
+                assert!(context.requires_pre_signature());
             }
         });
     }
@@ -208,11 +260,16 @@ mod tests {
         key_id2: &MasterPublicKeyId,
     ) {
         // 2 pre-signatures for key 1
-        let ids = BTreeSet::from_iter((1..3).map(PreSigId));
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id1),
+            pre_signatures: BTreeMap::from_iter(
+                (1..3).map(|i| (PreSigId(i), pre_signature_for_tests(key_id1))),
+            ),
+        };
         // 3 contexts for key 2
         let contexts = BTreeMap::from_iter((1..4).map(|i| fake_context(i, key_id2, None)));
         // No contexts should be matched
-        match_pre_signatures_basic_test(key_id1, ids, contexts, 5, Height::from(1), 0);
+        match_pre_signatures_basic_test(key_id1, pre_sigs, contexts, 5, Height::from(1), 0);
     }
 
     #[test]
@@ -223,11 +280,16 @@ mod tests {
 
     fn test_match_pre_signatures_doesnt_match_more_than_delivered(key_id: &MasterPublicKeyId) {
         // 2 pre-signatures for key 1
-        let ids = BTreeSet::from_iter((1..3).map(PreSigId));
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                (1..3).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        };
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id, None)));
         // The first 2 contexts should be matched
-        match_pre_signatures_basic_test(key_id, ids, contexts, 5, Height::from(1), 2);
+        match_pre_signatures_basic_test(key_id, pre_sigs, contexts, 5, Height::from(1), 2);
     }
 
     #[test]
@@ -238,11 +300,16 @@ mod tests {
 
     fn test_match_pre_signatures_doesnt_match_more_than_requested(key_id: &MasterPublicKeyId) {
         // 3 pre-signatures for key 1
-        let ids = BTreeSet::from_iter((1..4).map(PreSigId));
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                (1..4).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        };
         // 2 contexts for key 1
         let contexts = BTreeMap::from_iter((1..3).map(|i| fake_context(i, key_id, None)));
         // The first 2 contexts should be matched
-        match_pre_signatures_basic_test(key_id, ids, contexts, 5, Height::from(1), 2);
+        match_pre_signatures_basic_test(key_id, pre_sigs, contexts, 5, Height::from(1), 2);
     }
 
     #[test]
@@ -253,11 +320,16 @@ mod tests {
 
     fn test_match_pre_signatures_respects_max(key_id: &MasterPublicKeyId) {
         // 4 pre-signatures for key 1
-        let ids = BTreeSet::from_iter((1..5).map(PreSigId));
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                (1..5).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        };
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id, None)));
         // The first 3 contexts (up to max_ongoing_signatures) should be matched
-        match_pre_signatures_basic_test(key_id, ids, contexts, 3, Height::from(1), 3);
+        match_pre_signatures_basic_test(key_id, pre_sigs, contexts, 3, Height::from(1), 3);
     }
 
     #[test]
@@ -277,7 +349,14 @@ mod tests {
         key_id2: &MasterPublicKeyId,
     ) {
         // 4 pre-signatures for key 1
-        let ids = BTreeSet::from_iter([PreSigId(1), PreSigId(3), PreSigId(4), PreSigId(5)]);
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id1),
+            pre_signatures: BTreeMap::from_iter(
+                [1, 3, 4, 5]
+                    .into_iter()
+                    .map(|i| (PreSigId(i), pre_signature_for_tests(key_id1))),
+            ),
+        };
         let height = Height::from(1);
         // 4 contexts for key 1 and 1 context for key 2
         let contexts = BTreeMap::from_iter([
@@ -288,7 +367,7 @@ mod tests {
             fake_context(5, key_id1, None),
         ]);
         // With max_ongoing_signatures = 3 per key, the first 4 contexts should be matched in total.
-        match_pre_signatures_basic_test(key_id1, ids, contexts, 3, height, 4);
+        match_pre_signatures_basic_test(key_id1, pre_sigs, contexts, 3, height, 4);
     }
 
     #[test]
@@ -299,7 +378,12 @@ mod tests {
 
     fn test_matched_pre_signatures_arent_matched_again(key_id: &MasterPublicKeyId) {
         // 4 pre-signatures for key 1
-        let ids = BTreeSet::from_iter((1..5).map(PreSigId));
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                (1..5).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        };
         let height = Height::from(1);
         // 5 contexts for key 1, 2 are already matched
         let contexts = BTreeMap::from_iter([
@@ -310,7 +394,7 @@ mod tests {
             fake_context(5, key_id, None),
         ]);
         // The first 4 contexts should be matched
-        match_pre_signatures_basic_test(key_id, ids, contexts, 5, height, 4);
+        match_pre_signatures_basic_test(key_id, pre_sigs, contexts, 5, height, 4);
     }
 
     #[test]
@@ -321,7 +405,12 @@ mod tests {
 
     fn test_matched_pre_signatures_arent_overwritten(key_id: &MasterPublicKeyId) {
         // 4 pre-signatures for key 1
-        let ids = BTreeSet::from_iter((3..7).map(PreSigId));
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                (3..7).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        };
         let height = Height::from(2);
         // 4 contexts for key 1, the first 3 are already matched
         let contexts = BTreeMap::from_iter([
@@ -331,18 +420,23 @@ mod tests {
             fake_context(4, key_id, None),
         ]);
         // The first 4 contexts should be matched
-        match_pre_signatures_basic_test(key_id, ids, contexts, 5, height, 4);
+        match_pre_signatures_basic_test(key_id, pre_sigs, contexts, 5, height, 4);
     }
 
     #[test]
-    fn test_match_pre_signatures_doesnt_update_heightn_all() {
+    fn test_match_pre_signatures_doesnt_update_height_all() {
         test_match_pre_signatures_doesnt_update_height(&ecdsa_key_id(1));
         test_match_pre_signatures_doesnt_update_height(&schnorr_key_id(2));
     }
 
     fn test_match_pre_signatures_doesnt_update_height(key_id: &MasterPublicKeyId) {
         // 2 pre-signatures for key 1
-        let ids = BTreeSet::from_iter([PreSigId(5), PreSigId(6)]);
+        let pre_sigs = AvailablePreSignatures {
+            key_transcript: key_transcript_for_tests(key_id),
+            pre_signatures: BTreeMap::from_iter(
+                (5..=6).map(|i| (PreSigId(i), pre_signature_for_tests(key_id))),
+            ),
+        };
         // 2 contexts for key 1, the first was already matched to the first pre-signature
         // in the previous round.
         let mut contexts = BTreeMap::from_iter([
@@ -352,7 +446,13 @@ mod tests {
         let mut context_vec: Vec<_> = contexts.values_mut().collect();
 
         // Match them at height 3
-        match_pre_signatures_by_key_id(key_id.clone(), ids, &mut context_vec, 5, Height::from(3));
+        match_pre_signatures_by_key_id(
+            key_id.clone(),
+            pre_sigs,
+            &mut context_vec,
+            5,
+            Height::from(3),
+        );
 
         // The first context should still be matched at the height of the previous round (height 2).
         let first_context = contexts.pop_first().unwrap().1;
