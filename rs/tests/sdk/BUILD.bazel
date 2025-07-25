@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -24,7 +24,7 @@ rust_library(
     ],
 )
 
-RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + [
+RUNTIME_DEPS = [
     "@dfx",
 ]
 

@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -57,7 +57,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -77,7 +77,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -96,7 +96,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -116,7 +116,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -137,7 +137,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = True,
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -158,7 +158,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = True,
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -178,7 +178,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -198,7 +198,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -218,7 +218,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = True,
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -239,7 +239,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = True,
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -260,7 +260,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = True,
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -280,7 +280,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/recovery",
@@ -305,7 +305,6 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
