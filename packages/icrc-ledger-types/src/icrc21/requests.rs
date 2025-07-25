@@ -10,10 +10,7 @@ pub struct ConsentMessageMetadata {
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DisplayMessageType {
     GenericDisplay,
-    LineDisplay {
-        characters_per_line: u16,
-        lines_per_page: u16,
-    },
+    FieldsDisplay,
 }
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
