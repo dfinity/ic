@@ -330,7 +330,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
         info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)
