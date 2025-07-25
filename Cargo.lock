@@ -5346,7 +5346,6 @@ dependencies = [
  "ic_sev",
  "macaddr",
  "nix 0.24.3",
- "partition_tools",
  "regex",
  "systemd",
  "tempfile",
