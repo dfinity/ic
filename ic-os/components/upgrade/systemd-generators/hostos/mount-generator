@@ -20,23 +20,13 @@
 
 UNIT_DIR="$1"
 
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
+function get_boot_arg_value() {
+    local ARGNAME="$1"
+    for ARG in $(cat /proc/cmdline); do
+        echo "$ARG" | while IFS='=' read KEY VALUE; do
+            if [ "$ARGNAME" == "$KEY" ]; then echo "$VALUE"; fi
+        done
+    done
 }
 
 function make_requires() {
@@ -102,15 +92,12 @@ function make_var_mount() {
     echo "Options=defaults"
 }
 
-# Read current state
-mount /grub
-read_grubenv "/grub/grubenv"
-umount /grub
-CURRENT_SYSTEM="${boot_alternative}"
+CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
+make_requires boot-grub.mount boot.mount
 
 make_var_setup "$CURRENT_SYSTEM" >"$UNIT_DIR"/var-setup.service
 make_var_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/var.mount

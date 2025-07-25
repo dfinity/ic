@@ -46,7 +46,7 @@ managed dynamically at runtime:
   of the system and is wiped on upgrades. It is labeled once
   initially on creation
 
-* +/grub+, +/boot/efi+ are labeled as per their filesystem type (vfat);
+* +/boot/grub+, +/boot/efi+ are labeled as per their filesystem type (vfat);
   this is then accounted for in the policy
 
 * persistent data stores are labeled per file using +restorecon+
