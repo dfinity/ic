@@ -20,7 +20,11 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_universal_canister::call_args;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::Duration,
+};
 
 const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
 const MORE_THAN_MAX_EXPIRY_TIME: Duration = Duration::from_secs(11);
@@ -771,7 +775,7 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
-    assert_eq!(BIG_RESPONSE_SIZE, res.memory_bytes());
+    assert_eq!(size_of_val(&res) + BIG_RESPONSE_SIZE, res.memory_bytes());
     let memory_bytes = query_cache(&test).memory_bytes();
     // After the first reply, the cache should have more than 1MB of data.
     assert!(memory_bytes > BIG_RESPONSE_SIZE);
@@ -786,7 +790,7 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
-    assert_eq!(SMALL_RESPONSE_SIZE, res.memory_bytes());
+    assert_eq!(size_of_val(&res) + SMALL_RESPONSE_SIZE, res.memory_bytes());
     let memory_bytes = query_cache(&test).memory_bytes();
     // The second 42 reply should invalidate and replace the first 1MB reply in the cache.
     assert!(memory_bytes > SMALL_RESPONSE_SIZE);
@@ -1562,4 +1566,149 @@ fn query_cache_future_proof_test() {
             ////////////////////////////////////////////////////////////////////
         }
     }
+}
+
+#[test]
+fn memory_bytes_future_proof_guard() {
+    const HEAP_BYTES: usize = 2;
+    const MORE_HEAP_BYTES: usize = 3;
+
+    // Key with no heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: String::new(),
+        method_payload: vec![],
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(key.memory_bytes(), size_of_val(&key));
+
+    // Key with some heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: " ".repeat(HEAP_BYTES),
+        method_payload: vec![42; HEAP_BYTES],
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(key.memory_bytes(), size_of_val(&key) + HEAP_BYTES * 2);
+
+    // Key with more heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: "0".repeat(MORE_HEAP_BYTES),
+        method_payload: vec![42; MORE_HEAP_BYTES],
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(key.memory_bytes(), size_of_val(&key) + MORE_HEAP_BYTES * 2);
+
+    // Value with no heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![],
+    };
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(value.memory_bytes(), size_of_val(&value));
+
+    // Value with some heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![
+            (
+                CanisterId::from_u64(1),
+                0,
+                0_u64.into(),
+                QueryStats::default(),
+            );
+            HEAP_BYTES
+        ],
+    };
+    let env_vec_size = size_of_val(&*env.canisters_versions_balances_stats);
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![42; HEAP_BYTES])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(
+        value.memory_bytes(),
+        size_of_val(&value) + env_vec_size + HEAP_BYTES
+    );
+
+    // Value with more heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![
+            (
+                CanisterId::from_u64(1),
+                0,
+                0_u64.into(),
+                QueryStats::default(),
+            );
+            MORE_HEAP_BYTES
+        ],
+    };
+    let env_vec_size = size_of_val(&*env.canisters_versions_balances_stats);
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![42; MORE_HEAP_BYTES])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(
+        value.memory_bytes(),
+        size_of_val(&value) + env_vec_size + MORE_HEAP_BYTES
+    );
+}
+
+#[test]
+fn btree_set_memory_bytes_future_proof_guard() {
+    let mut set = BTreeSet::new();
+    assert_eq!(set.heap_bytes(), 0);
+    assert_eq!(set.memory_bytes(), size_of::<BTreeSet::<u64>>());
+    set.insert(42_u64);
+    assert_eq!(set.heap_bytes(), size_of::<u64>());
+    assert_eq!(
+        set.memory_bytes(),
+        size_of::<BTreeSet::<u64>>() + size_of::<u64>()
+    );
+
+    let mut set = BTreeSet::new();
+    set.insert(" ".repeat(100));
+    set.insert(" ".repeat(1000));
+    // By default, the `heap_bytes` returns a constant time estimation.
+    assert_eq!(set.heap_bytes(), size_of::<String>() * 2);
+    assert_eq!(
+        set.memory_bytes(),
+        size_of::<BTreeSet::<u64>>() + size_of::<String>() * 2
+    );
+}
+
+#[test]
+fn vec_memory_bytes_future_proof_guard() {
+    let mut vec = vec![];
+    assert_eq!(vec.heap_bytes(), 0);
+    assert_eq!(vec.memory_bytes(), size_of::<Vec::<u64>>());
+    vec.push(42_u64);
+    assert_eq!(vec.heap_bytes(), size_of::<u64>());
+    assert_eq!(
+        vec.memory_bytes(),
+        size_of::<BTreeSet::<u64>>() + size_of::<u64>()
+    );
+
+    let mut vec = BTreeSet::new();
+    vec.insert(" ".repeat(100));
+    vec.insert(" ".repeat(1000));
+    // By default, the `heap_bytes` returns a constant time estimation.
+    assert_eq!(vec.heap_bytes(), size_of::<String>() * 2);
+    assert_eq!(
+        vec.memory_bytes(),
+        size_of::<BTreeSet::<u64>>() + size_of::<String>() * 2
+    );
 }
