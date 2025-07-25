@@ -20,6 +20,7 @@ ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_thre
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../../packages/ic-error-types" }
+ic-heap-bytes = { path = "../utils/heap_bytes" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-limits = { path = "../limits" }

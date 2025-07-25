@@ -1,5 +1,6 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
+use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
@@ -163,7 +164,7 @@ impl From<&Query> for EntryKey {
 ///
 /// The cache entry is valid as long as the metadata is unchanged,
 /// or it can be proven that the query does not depend on the change.
-#[derive(PartialEq)]
+#[derive(HeapBytes, PartialEq)]
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
