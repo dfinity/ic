@@ -1160,7 +1160,10 @@ impl Governance {
             })?,
         };
 
+        let max_burnable_fee = self.maximum_burnable_fees_for_neuron(&neuron)?;
+
         let fees_amount_e8s = neuron.neuron_fees_e8s;
+
         // Calculate the amount to transfer and make sure no matter what the user
         // disburses we still take the neuron management fees into account.
         //
@@ -1185,11 +1188,11 @@ impl Governance {
         // Transfer 1 - burn the neuron management fees, but only if the value
         // exceeds the cost of a transaction fee, as the ledger doesn't support
         // burn transfers for an amount less than the transaction fee.
-        if fees_amount_e8s > transaction_fee_e8s {
+        if max_burnable_fee > transaction_fee_e8s {
             let _result = self
                 .ledger
                 .transfer_funds(
-                    fees_amount_e8s,
+                    max_burnable_fee,
                     0, // Burning transfers don't pay a fee.
                     Some(from_subaccount),
                     self.governance_minting_account(),
@@ -1207,12 +1210,12 @@ impl Governance {
 
         // Update the neuron's stake and management fees to reflect the burning
         // above.
-        if neuron.cached_neuron_stake_e8s > fees_amount_e8s {
-            neuron.cached_neuron_stake_e8s -= fees_amount_e8s;
+        if neuron.cached_neuron_stake_e8s > max_burnable_fee {
+            neuron.cached_neuron_stake_e8s -= max_burnable_fee;
         } else {
             neuron.cached_neuron_stake_e8s = 0;
         }
-        neuron.neuron_fees_e8s = 0;
+        neuron.neuron_fees_e8s -= max_burnable_fee;
 
         // Transfer 2 - Disburse to the chosen account. This may fail if the
         // user told us to disburse more than they had in their account (but
@@ -1233,6 +1236,37 @@ impl Governance {
         neuron.cached_neuron_stake_e8s = neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
 
         Ok(block_height)
+    }
+
+    /// Returns the maximum amount of fees that can be burned for a given neuron.
+    /// This takes into account the open proposals that this neuron has submitted,
+    /// ensuring we don't burn fees that could potentially be refunded if those
+    /// proposals are accepted.
+    fn maximum_burnable_fees_for_neuron(&self, neuron: &Neuron) -> Result<u64, GovernanceError> {
+        let neuron_id = neuron.id.as_ref()
+            .ok_or_else(|| GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "Neuron does not have an ID"
+            ))?;
+
+        // Calculate the total reject costs from all open proposals submitted by this neuron
+        let total_open_proposal_reject_costs = self
+            .proto
+            .proposals
+            .values()
+            .filter(|proposal_data| {
+                // Only consider open proposals where this neuron is the proposer
+                proposal_data.status() == ProposalDecisionStatus::Open
+                    && proposal_data.proposer.as_ref() == Some(neuron_id)
+            })
+            .map(|proposal_data| proposal_data.reject_cost_e8s)
+            .sum::<u64>();
+
+        // The maximum burnable amount is the total fees minus any fees that are
+        // tied up in open proposals (which could potentially be refunded)
+        let max_burnable = neuron.neuron_fees_e8s.saturating_sub(total_open_proposal_reject_costs);
+
+        Ok(max_burnable)
     }
 
     /// Splits a (parent) neuron into two neurons (the parent and child neuron).
@@ -6669,6 +6703,9 @@ mod assorted_governance_tests;
 
 #[cfg(test)]
 mod cast_vote_and_cascade_follow_tests;
+
+#[cfg(test)]
+mod disburse_neuron_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;
