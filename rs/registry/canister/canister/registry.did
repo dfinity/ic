@@ -456,8 +456,8 @@ type UpdateSubnetPayload = record {
   subnet_type : opt SubnetType;
   ssh_readonly_access : opt vec text;
   chain_key_config : opt ChainKeyConfig;
-  chain_key_signing_enable : opt vec MasterPublicKeyId;
-  chain_key_signing_disable : opt vec MasterPublicKeyId;
+  chain_key_enable : opt vec MasterPublicKeyId;
+  chain_key_disable : opt vec MasterPublicKeyId;
 };
 
 type ChainKeyConfig = record {
