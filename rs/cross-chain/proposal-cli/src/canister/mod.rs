@@ -28,6 +28,7 @@ pub enum TargetCanister {
     LedgerSuiteOrchestrator,
     EvmRpc,
     CyclesLedger,
+    CyclesIndex,
     ExchangeRateCanister,
     SolRpc,
 }
@@ -37,7 +38,9 @@ impl TargetCanister {
         match self {
             TargetCanister::BtcChecker => "btc_checker",
             TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => "archive",
-            TargetCanister::CkBtcIndex | TargetCanister::CkEthIndex => "index",
+            TargetCanister::CkBtcIndex
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CyclesIndex => "index",
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => "ledger",
             TargetCanister::CkBtcMinter | TargetCanister::CkEthMinter => "minter",
             TargetCanister::IcpArchive1 => "icp-archive1",
@@ -65,6 +68,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -89,7 +93,9 @@ impl TargetCanister {
             TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => {
                 PathBuf::from("rs/ledger_suite/icrc1/archive/archive.did")
             }
-            TargetCanister::CkBtcIndex | TargetCanister::CkEthIndex => {
+            TargetCanister::CkBtcIndex
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CyclesIndex => {
                 PathBuf::from("rs/ledger_suite/icrc1/index-ng/index-ng.did")
             }
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => {
@@ -130,6 +136,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -148,6 +155,10 @@ impl TargetCanister {
 
     pub fn git_log_dirs(&self) -> Vec<PathBuf> {
         match &self {
+            TargetCanister::CyclesIndex => {
+                // FIXME: Add the rest
+                vec![PathBuf::from("packages/icrc-ledger-types")]
+            }
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -208,6 +219,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -232,7 +244,9 @@ impl TargetCanister {
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
             TargetCanister::CkEthArchive => "ic-icrc1-archive-u256.wasm.gz",
-            TargetCanister::CkEthIndex => "ic-icrc1-index-ng-u256.wasm.gz",
+            TargetCanister::CkEthIndex | TargetCanister::CyclesIndex => {
+                "ic-icrc1-index-ng-u256.wasm.gz"
+            }
             TargetCanister::CkEthLedger => "ic-icrc1-ledger-u256.wasm.gz",
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
             TargetCanister::IcpArchive1
@@ -262,6 +276,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -312,6 +327,7 @@ impl TargetCanister {
             | TargetCanister::IcpLedger => PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
+            | TargetCanister::CyclesIndex
             | TargetCanister::ExchangeRateCanister => PathBuf::from("canister_ids.json"),
             TargetCanister::SolRpc => PathBuf::from("canister/prod/canister_ids.json"),
         }
@@ -348,6 +364,7 @@ impl FromStr for TargetCanister {
             ["icp", "ledger"] => Ok(TargetCanister::IcpLedger),
             ["evm", "rpc"] => Ok(TargetCanister::EvmRpc),
             ["cycles", "ledger"] => Ok(TargetCanister::CyclesLedger),
+            ["cycles", "index"] => Ok(TargetCanister::CyclesIndex),
             ["exchange", "rate"] => Ok(TargetCanister::ExchangeRateCanister),
             ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             _ => Err(format!("Unknown canister name: {}", canister)),
@@ -376,6 +393,7 @@ impl Display for TargetCanister {
             TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),
             TargetCanister::EvmRpc => write!(f, "EVM RPC"),
             TargetCanister::CyclesLedger => write!(f, "cycles ledger"),
+            TargetCanister::CyclesIndex => write!(f, "cycles index"),
             TargetCanister::ExchangeRateCanister => write!(f, "exchange rate canister"),
             TargetCanister::SolRpc => write!(f, "SOL RPC"),
         }
