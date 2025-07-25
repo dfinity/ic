@@ -117,7 +117,7 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    uses_guestos_dev_test = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",

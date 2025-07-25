@@ -587,6 +587,24 @@ http_file(
     url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/sns_aggregator_dev.wasm.gz",
 )
 
+# KongSwap backend canister
+
+http_file(
+    name = "kong_backend_canister",
+    downloaded_file_path = "kong_backend.wasm.gz",
+    sha256 = "bed9a193158348843c8661616c65b152f57f875863f75dad3b75627ad6a2b4fc",
+    url = "https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz",
+)
+
+# SNS-KongSwap Adaptor canister (an SNS extension of the TreasuryManager kind)
+
+http_file(
+    name = "kongswap-adaptor-canister",
+    downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
+    sha256 = "d5b1326ddc4c002a211bb3e263c0d94c20250e5683b401096c74f385c326c175",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250723-193307-6c37829/kongswap-adaptor-canister.wasm.gz",
+)
+
 # Cycles Ledger canister
 
 http_file(

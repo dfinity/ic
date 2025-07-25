@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::{
     driver::{
-        farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
+        farm::{DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate},
         log_events,
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
@@ -77,6 +77,13 @@ impl IcGatewayVm {
             .with_config_img(get_dependency_path(IMAGE_PATH))
             .enable_ipv4();
         Self { universal_vm }
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_required_host_features(required_host_features);
+        self
     }
 
     pub fn disable_ipv4(mut self) -> Self {
@@ -269,6 +276,11 @@ IC_UNSAFE_ROOT_KEY_FETCH=true
 LISTEN_TLS=[::]:443
 CERT_PROVIDER_DIR=/certs
 METRICS_LISTEN=[::]:9325
+LOG_STDOUT=true
+LOG_STDOUT_JSON=true
+LOG_LEVEL=info
+# For logging each request enable this
+# LOG_REQUESTS=true
 EOF
 
 # Load the docker image from the tarball
@@ -279,6 +291,7 @@ docker run --name=ic-gateway -d \
   -v /tmp/certs:/certs \
   --network host \
   --env-file ic-gateway.env \
+  --log-driver=journald \
   ic_gatewayd:image
 "#,
             key = playnet.playnet_cert.cert.priv_key_pem,

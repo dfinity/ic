@@ -1175,9 +1175,13 @@ fn ready_for_migration() {
     fixture
         .push_input(best_effort_request_from(OTHER_CANISTER_ID).into())
         .unwrap();
+    fixture.stop_canister();
+
+    // Input queue is not empty, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
     fixture.pop_input().unwrap();
     fixture.push_output_response(best_effort_response_to(OTHER_CANISTER_ID));
-    fixture.stop_canister();
 
     // Output queue is not empty, not ready for migration.
     assert!(!fixture.state.ready_for_migration(&CANISTER_ID));

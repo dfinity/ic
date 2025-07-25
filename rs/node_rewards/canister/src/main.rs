@@ -23,7 +23,7 @@ thread_local! {
             Arc::new(RegistryCanister::new()));
         Arc::new(store)
     };
-    static CANISTER: RefCell<NodeRewardsCanister<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>>> = {
+    static CANISTER: RefCell<NodeRewardsCanister> = {
         RefCell::new(NodeRewardsCanister::new(REGISTRY_STORE.with(|store| {
             store.clone()
         })))
