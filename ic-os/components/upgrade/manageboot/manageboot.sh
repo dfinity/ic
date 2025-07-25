@@ -4,6 +4,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/grub.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
@@ -18,24 +19,6 @@ get_version_noreport() {
     fi
 }
 
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
-}
 
 # Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
 #
