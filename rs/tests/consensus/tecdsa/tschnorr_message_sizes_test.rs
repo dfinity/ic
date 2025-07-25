@@ -84,6 +84,7 @@ fn setup(env: TestEnv) {
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
         )
         .add_subnet(
@@ -135,15 +136,14 @@ async fn gen_message_and_get_signature_depending_on_limit(
         LimitType::Local => {
             generate_dummy_schnorr_signature_with_logger(message.len(), 0, 0, key_id, sig_can, log)
                 .await
-                .map(|sig| sig.signature)?
+                .map(|sig| sig.signature)
         }
 
         LimitType::XNet => {
-            get_schnorr_signature_with_logger(message.clone(), cycles, key_id, msg_can, log)
-                .await
-                .map_err(|err| err.to_string())?
+            get_schnorr_signature_with_logger(message.clone(), cycles, key_id, msg_can, log).await
         }
-    };
+    }
+    .map_err(|err| err.to_string())?;
 
     Ok((message, signature))
 }

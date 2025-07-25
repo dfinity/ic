@@ -15,7 +15,7 @@ use crate::{
     PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
@@ -405,7 +405,7 @@ pub struct SystemState {
     pub snapshots_memory_usage: NumBytes,
 
     /// Environment variables.
-    pub environment_variables: BTreeMap<String, String>,
+    pub environment_variables: EnvironmentVariables,
 }
 
 /// A wrapper around the different canister statuses.
@@ -849,7 +849,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
-            environment_variables,
+            environment_variables: EnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1856,8 +1856,13 @@ impl SystemState {
     }
 
     /// Checks if the given amount of cycles from the main balance can be moved to the reserved balance.
+    /// The provided `main_balance` might be lower than `self.cycles_balance` when this function is used to perform validation before cycles are actually consumed.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn can_reserve_cycles(&self, amount: Cycles) -> Result<(), ReservationError> {
+    pub fn can_reserve_cycles(
+        &self,
+        amount: Cycles,
+        main_balance: Cycles,
+    ) -> Result<(), ReservationError> {
         if amount == Cycles::zero() {
             return Ok(());
         }
@@ -1869,10 +1874,10 @@ impl SystemState {
             }
         }
 
-        if amount > self.cycles_balance {
+        if amount > main_balance {
             Err(ReservationError::InsufficientCycles {
                 requested: amount,
-                available: self.cycles_balance,
+                available: main_balance,
             })
         } else {
             Ok(())
@@ -1882,7 +1887,7 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
-        self.can_reserve_cycles(amount)?;
+        self.can_reserve_cycles(amount, self.cycles_balance)?;
         self.cycles_balance -= amount;
         self.reserved_balance += amount;
         Ok(())

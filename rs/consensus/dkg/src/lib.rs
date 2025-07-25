@@ -1576,6 +1576,7 @@ mod tests {
                             }],
                             signature_request_timeout_ns: None,
                             idkg_key_rotation_period_ms: None,
+                            max_parallel_pre_signature_transcripts_in_creation: None,
                         })
                         .build(),
                 )],
@@ -2067,6 +2068,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }
     }
 

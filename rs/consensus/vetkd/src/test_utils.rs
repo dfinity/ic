@@ -124,11 +124,13 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             key_id,
             message_hash: [0; 32],
+            pre_signature: None,
         }),
         MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
             key_id,
             message: Arc::new(vec![1; 48]),
             taproot_tree_root: None,
+            pre_signature: None,
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),

@@ -1,10 +1,9 @@
 use std::str::FromStr;
 use std::time::Duration;
 
-use url::Url;
-
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -13,18 +12,21 @@ use ic_system_test_driver::{
         nested::NestedVms,
         test_env::TestEnv,
         test_env_api::*,
+        vector_vm::VectorVm,
     },
-    retry_with_msg,
+    retry_with_msg, retry_with_msg_async,
     util::block_on,
 };
-use ic_types::hostos_version::HostosVersion;
+use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
+use reqwest::Client;
 
 use slog::info;
 
 mod util;
 use util::{
-    check_hostos_version, elect_hostos_version, setup_nested_vm, start_nested_vm,
-    update_nodes_hostos_version,
+    check_guestos_version, check_hostos_version, elect_guestos_version, elect_hostos_version,
+    get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm, start_nested_vm,
+    update_nodes_hostos_version, update_unassigned_nodes,
 };
 
 use anyhow::bail;
@@ -37,6 +39,9 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn config(env: TestEnv) {
+    let mut vector = VectorVm::new();
+    vector.start(&env).expect("Failed to start Vector VM");
+
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -45,7 +50,6 @@ pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_api_boundary_nodes(1)
-        .with_mainnet_config()
         .with_node_provider(principal)
         .with_node_operator(principal)
         .setup_and_start(&env)
@@ -57,7 +61,42 @@ pub fn config(env: TestEnv) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
-    setup_nested_vm(env, HOST_VM_NAME);
+    // Initial sync to scrape the network.
+    vector
+        .sync_targets(&env)
+        .expect("Failed to sync Vector targets");
+
+    setup_nested_vm(env.clone(), HOST_VM_NAME);
+
+    let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
+        panic!(
+            "Expected nested vm {HOST_VM_NAME} to exist, but got error: {:?}",
+            e
+        )
+    });
+
+    let network = vm.get_nested_network().unwrap();
+
+    for (job, ip) in [
+        ("node_exporter", network.guest_ip),
+        ("host_node_exporter", network.host_ip),
+    ] {
+        vector.add_custom_target(
+            format!("{HOST_VM_NAME}-{job}"),
+            ip.into(),
+            Some(
+                [("job", job)]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+
+    // Additional sync to generate new config for the nested vm.
+    vector
+        .sync_targets(&env)
+        .expect("Failed to sync Vector targets");
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -75,7 +114,22 @@ pub fn registration(env: TestEnv) {
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
-    start_nested_vm(env);
+    start_nested_vm(env.clone());
+
+    // Assert that the GuestOS was started with direct kernel boot.
+    let guest_kernel_cmdline = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.")
+        .get_guest_ssh()
+        .unwrap()
+        .block_on_bash_script("cat /proc/cmdline")
+        .expect("Could not read /proc/cmdline from GuestOS");
+    assert!(
+        guest_kernel_cmdline.contains("initrd=initrd"),
+        "GuestOS kernel command line does not contain 'initrd=initrd'. This is likely caused by \
+         the guest not being started with direct kernel boot but rather with the GRUB \
+         bootloader. guest_kernel_cmdline: '{guest_kernel_cmdline}'"
+    );
 
     // If the node is able to join successfully, the registry will be updated,
     // and the new node ID will enter the unassigned pool.
@@ -96,18 +150,14 @@ pub fn registration(env: TestEnv) {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    let target_version_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION").unwrap();
+    let target_version_str = get_hostos_update_img_version().unwrap();
     let target_version =
-        HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
+        HostosVersion::try_from(target_version_str.trim()).expect("Invalid target hostos version");
 
-    let update_image_url_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL").unwrap();
-    info!(
-        logger,
-        "HostOS update image URL: '{}'", update_image_url_str
-    );
     let update_image_url =
-        Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
-    let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();
+        get_hostos_update_img_url().expect("Invalid target hostos update image URL");
+    info!(logger, "HostOS update image URL: '{}'", update_image_url);
+    let update_image_sha256 = get_hostos_update_img_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
@@ -215,4 +265,158 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
+}
+
+/// Upgrade unassigned guestOS VMs to the target version, and verify that each one
+/// is healthy before and after the upgrade.
+pub fn upgrade_guestos(env: TestEnv) {
+    let logger = env.logger();
+
+    // start the nested VM and wait for it to join the network
+    let initial_topology = env.topology_snapshot();
+    start_nested_vm(env.clone());
+    info!(logger, "Waiting for node to join ...");
+    block_on(
+        initial_topology.block_for_newer_registry_version_within_duration(
+            NODE_REGISTRATION_TIMEOUT,
+            NODE_REGISTRATION_BACKOFF,
+        ),
+    )
+    .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
+
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    let guest_ipv6 = host
+        .get_nested_network()
+        .expect("Unable to get nested network")
+        .guest_ip;
+
+    // choose a node from the NNS subnet to submit the proposals to
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    nns_node.await_status_is_healthy().unwrap();
+
+    block_on(async {
+        // initial parameters
+        let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
+        let reg_ver = registry_canister.get_latest_version().await.unwrap();
+        info!(logger, "Registry is currently at version: {}", reg_ver);
+
+        let blessed_versions = get_blessed_guestos_versions(&nns_node).await;
+        info!(logger, "Initial blessed versions: {:?}", blessed_versions);
+
+        let unassigned_nodes_config = get_unassigned_nodes_config(&nns_node).await;
+        info!(
+            logger,
+            "Unassigned nodes config: {:?}", unassigned_nodes_config
+        );
+
+        let original_version = get_setupos_img_version().expect("Failed to find initial version");
+
+        // determine new GuestOS version
+        let upgrade_url = get_guestos_update_img_url()
+            .expect("no image URL")
+            .to_string();
+        info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
+
+        let target_version_str =
+            get_guestos_update_img_version().expect("Failed to get target replica version");
+        let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
+        info!(logger, "Target replica version: {}", target_version);
+
+        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
+        info!(logger, "Update image SHA256: {}", sha256);
+
+        // check that GuestOS is on the expected version (initial version)
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("Failed to build HTTP client");
+
+        retry_with_msg_async!(
+            format!(
+                "Waiting until the guest is on the right version '{}'",
+                original_version
+            ),
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavaiblable".to_string());
+                if current_version == original_version {
+                    info!(logger, "Guest upgraded to '{}'", current_version);
+                    Ok(())
+                } else {
+                    bail!("Guest is still on version '{}'", current_version)
+                }
+            }
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        // elect the new GuestOS version (upgrade version)
+        elect_guestos_version(&nns_node, target_version.clone(), sha256, vec![upgrade_url]).await;
+
+        // check that the registry was updated after blessing the new guestos version
+        let reg_ver2 = registry_canister.get_latest_version().await.unwrap();
+        info!(
+            logger,
+            "Registry version after blessing the upgrade version: {}", reg_ver2
+        );
+        assert!(reg_ver < reg_ver2);
+
+        // check that the new guestOS version is indeed part of the blessed versions
+        let blessed_versions = get_blessed_guestos_versions(&nns_node).await;
+        info!(logger, "Updated blessed versions: {:?}", blessed_versions);
+
+        // proposal to upgrade the unassigned nodes
+        update_unassigned_nodes(&nns_node, &target_version).await;
+
+        // check that the registry was updated after updating the unassigned nodes
+        let reg_ver3 = registry_canister.get_latest_version().await.unwrap();
+        info!(
+            logger,
+            "Registry version after updating the unassigned nodes: {}", reg_ver3
+        );
+        assert!(reg_ver2 < reg_ver3);
+
+        // check that the unassigned nodes config was indeed updated
+        let unassigned_nodes_config = get_unassigned_nodes_config(&nns_node).await;
+        info!(
+            logger,
+            "Unassigned nodes config: {:?}", unassigned_nodes_config
+        );
+
+        // Check that GuestOS is on the expected version (upgrade version)
+        retry_with_msg_async!(
+            format!(
+                "Waiting until the guest is on the right version '{}'",
+                target_version
+            ),
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || async {
+                let current_version = check_guestos_version(&client, &guest_ipv6)
+                    .await
+                    .unwrap_or("unavaiblable".to_string());
+                if current_version == target_version_str {
+                    info!(logger, "Guest upgraded to '{}'", current_version);
+                    Ok(())
+                } else {
+                    bail!("Guest is still on version '{}'", current_version)
+                }
+            }
+        )
+        .await
+        .expect("guest failed to upgrade");
+    });
 }

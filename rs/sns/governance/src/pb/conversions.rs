@@ -1,3 +1,4 @@
+use core::convert::Into;
 use core::option::Option::Some;
 
 use crate::pb::v1::{self as pb};
@@ -583,27 +584,27 @@ impl From<pb_api::RegisterDappCanisters> for pb::RegisterDappCanisters {
     }
 }
 
-impl From<pb::precise_value::PreciseValue> for pb_api::PreciseValue {
-    fn from(item: pb::precise_value::PreciseValue) -> Self {
+impl From<pb::precise::Value> for pb_api::PreciseValue {
+    fn from(item: pb::precise::Value) -> Self {
         match item {
-            pb::precise_value::PreciseValue::Bool(v) => Self::Bool(v),
-            pb::precise_value::PreciseValue::Blob(v) => Self::Blob(v),
-            pb::precise_value::PreciseValue::Text(v) => Self::Text(v),
-            pb::precise_value::PreciseValue::Nat(v) => Self::Nat(v),
-            pb::precise_value::PreciseValue::Int(v) => Self::Int(v),
-            pb::precise_value::PreciseValue::Array(pb::PreciseArray { array }) => {
+            pb::precise::Value::Bool(v) => Self::Bool(v),
+            pb::precise::Value::Blob(v) => Self::Blob(v),
+            pb::precise::Value::Text(v) => Self::Text(v),
+            pb::precise::Value::Nat(v) => Self::Nat(v),
+            pb::precise::Value::Int(v) => Self::Int(v),
+            pb::precise::Value::Array(pb::PreciseArray { array }) => {
                 let api_array = array
                     .into_iter()
-                    .filter_map(|pb::PreciseValue { precise_value }| precise_value.map(Self::from))
+                    .filter_map(|pb::Precise { value }| value.map(Self::from))
                     .collect();
 
                 Self::Array(api_array)
             }
-            pb::precise_value::PreciseValue::Map(pb::PreciseMap { map }) => {
+            pb::precise::Value::Map(pb::PreciseMap { map }) => {
                 let api_map = map
                     .into_iter()
-                    .filter_map(|(key, pb::PreciseValue { precise_value })| {
-                        precise_value.map(|value| (key, Self::from(value)))
+                    .filter_map(|(key, pb::Precise { value })| {
+                        value.map(|value| (key, Self::from(value)))
                     })
                     .collect();
 
@@ -613,18 +614,18 @@ impl From<pb::precise_value::PreciseValue> for pb_api::PreciseValue {
     }
 }
 
-impl From<pb_api::PreciseValue> for pb::PreciseValue {
+impl From<pb_api::PreciseValue> for pb::Precise {
     fn from(item: pb_api::PreciseValue) -> Self {
-        let precise_value = Some(match item {
-            pb_api::PreciseValue::Bool(v) => pb::precise_value::PreciseValue::Bool(v),
-            pb_api::PreciseValue::Blob(v) => pb::precise_value::PreciseValue::Blob(v),
-            pb_api::PreciseValue::Text(v) => pb::precise_value::PreciseValue::Text(v),
-            pb_api::PreciseValue::Nat(v) => pb::precise_value::PreciseValue::Nat(v),
-            pb_api::PreciseValue::Int(v) => pb::precise_value::PreciseValue::Int(v),
+        let value = Some(match item {
+            pb_api::PreciseValue::Bool(v) => pb::precise::Value::Bool(v),
+            pb_api::PreciseValue::Blob(v) => pb::precise::Value::Blob(v),
+            pb_api::PreciseValue::Text(v) => pb::precise::Value::Text(v),
+            pb_api::PreciseValue::Nat(v) => pb::precise::Value::Nat(v),
+            pb_api::PreciseValue::Int(v) => pb::precise::Value::Int(v),
             pb_api::PreciseValue::Array(array) => {
                 let array = array.into_iter().map(Self::from).collect();
                 let array = pb::PreciseArray { array };
-                pb::precise_value::PreciseValue::Array(array)
+                pb::precise::Value::Array(array)
             }
             pb_api::PreciseValue::Map(map) => {
                 let map = map
@@ -637,11 +638,11 @@ impl From<pb_api::PreciseValue> for pb::PreciseValue {
 
                 let map = pb::PreciseMap { map };
 
-                pb::precise_value::PreciseValue::Map(map)
+                pb::precise::Value::Map(map)
             }
         });
 
-        Self { precise_value }
+        Self { value }
     }
 }
 
@@ -649,9 +650,7 @@ impl From<pb::ExtensionInit> for pb_api::ExtensionInit {
     fn from(item: pb::ExtensionInit) -> Self {
         let pb::ExtensionInit { value } = item;
 
-        let value = value.and_then(|pb::PreciseValue { precise_value }| {
-            precise_value.map(pb_api::PreciseValue::from)
-        });
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
 
         Self { value }
     }
@@ -661,7 +660,7 @@ impl From<pb_api::ExtensionInit> for pb::ExtensionInit {
     fn from(item: pb_api::ExtensionInit) -> Self {
         let pb_api::ExtensionInit { value } = item;
 
-        let value = value.map(pb::PreciseValue::from);
+        let value = value.map(pb::Precise::from);
 
         Self { value }
     }
@@ -1770,6 +1769,12 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .neurons_with_less_than_6_months_dissolve_delay_count,
             neurons_with_less_than_6_months_dissolve_delay_e8s: item
                 .neurons_with_less_than_6_months_dissolve_delay_e8s,
+            treasury_metrics: item
+                .treasury_metrics
+                .into_iter()
+                .map(|metrics| metrics.into())
+                .collect(),
+            voting_power_metrics: item.voting_power_metrics.map(|metrics| metrics.into()),
         }
     }
 }
@@ -1793,6 +1798,12 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .neurons_with_less_than_6_months_dissolve_delay_count,
             neurons_with_less_than_6_months_dissolve_delay_e8s: item
                 .neurons_with_less_than_6_months_dissolve_delay_e8s,
+            treasury_metrics: item
+                .treasury_metrics
+                .into_iter()
+                .map(|metrics| metrics.into())
+                .collect(),
+            voting_power_metrics: item.voting_power_metrics.map(|metrics| metrics.into()),
         }
     }
 }
@@ -1949,12 +1960,109 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
+impl From<pb_api::TreasuryMetrics> for pb::TreasuryMetrics {
+    fn from(item: pb_api::TreasuryMetrics) -> Self {
+        let pb_api::TreasuryMetrics {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        } = item;
+
+        let account = account.map(pb::Account::from);
+        let amount_e8s = amount_e8s.unwrap_or_default();
+        let original_amount_e8s = original_amount_e8s.unwrap_or_default();
+        let timestamp_seconds = timestamp_seconds.unwrap_or_default();
+
+        Self {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
+    fn from(item: pb::TreasuryMetrics) -> Self {
+        let pb::TreasuryMetrics {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        } = item;
+
+        let account = account.map(pb_api::Account::from);
+        let amount_e8s = Some(amount_e8s);
+        let original_amount_e8s = Some(original_amount_e8s);
+        let timestamp_seconds = Some(timestamp_seconds);
+
+        Self {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb::VotingPowerMetrics> for pb_api::VotingPowerMetrics {
+    fn from(item: pb::VotingPowerMetrics) -> Self {
+        let pb::VotingPowerMetrics {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        } = item;
+
+        let governance_total_potential_voting_power = Some(governance_total_potential_voting_power);
+        let timestamp_seconds = Some(timestamp_seconds);
+
+        Self {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerMetrics> for pb::VotingPowerMetrics {
+    fn from(item: pb_api::VotingPowerMetrics) -> Self {
+        let pb_api::VotingPowerMetrics {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        } = item;
+
+        let governance_total_potential_voting_power =
+            governance_total_potential_voting_power.unwrap_or_default();
+
+        let timestamp_seconds = timestamp_seconds.unwrap_or_default();
+
+        Self {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        }
+    }
+}
+
 impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
     fn from(item: pb::Metrics) -> Self {
         let pb::Metrics {
             num_recently_submitted_proposals,
             last_ledger_block_timestamp,
             num_recently_executed_proposals,
+            treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         } = item;
 
         let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
@@ -1966,10 +2074,24 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
             Some(last_ledger_block_timestamp)
         };
 
+        let treasury_metrics = Some(
+            treasury_metrics
+                .into_iter()
+                .map(pb_api::TreasuryMetrics::from)
+                .collect(),
+        );
+
+        let voting_power_metrics = voting_power_metrics.map(pb_api::VotingPowerMetrics::from);
+
+        let genesis_timestamp_seconds = Some(genesis_timestamp_seconds);
+
         Self {
             num_recently_submitted_proposals,
             num_recently_executed_proposals,
             last_ledger_block_timestamp,
+            treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         }
     }
 }

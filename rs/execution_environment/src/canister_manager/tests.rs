@@ -13,11 +13,13 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        MAX_ENVIRONMENT_VARIABLES, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -35,11 +37,12 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
-    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-    OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs, RenameToArgs, StoredChunksArgs,
-    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence, IC_00,
+    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable,
+    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
+    NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs,
+    RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -105,7 +108,6 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
@@ -145,7 +147,6 @@ lazy_static! {
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS
         ),
-        canister_memory_limit: NumBytes::new(u64::MAX / 2),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -314,8 +315,6 @@ fn canister_manager_config(
         // Compute capacity for 2-core scheduler is 100%
         // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
         100,
-        MAX_CANISTER_MEMORY_SIZE,
-        MAX_CANISTER_MEMORY_SIZE,
         rate_limiting_of_instructions,
         100,
         FlagStatus::Enabled,
@@ -327,6 +326,9 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        MAX_ENVIRONMENT_VARIABLES,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
     )
 }
 
@@ -401,10 +403,7 @@ fn install_code(
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
     execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
-    execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
-        MemoryAllocation::Reserved(bytes) => bytes,
-        MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
-    };
+    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
     let dts_result = canister_manager.install_code_dts(
         context,
@@ -1295,6 +1294,35 @@ fn get_canister_status_of_stopping_canister() {
             .status();
         assert_eq!(status, CanisterStatusType::Stopping);
     });
+}
+
+#[test]
+fn canister_status_with_environment_variables() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_environment_variables_flag(FlagStatus::Enabled)
+        .build();
+    let environment_variables = btreemap![
+        "TEST_VAR".to_string() => "test_value".to_string(),
+        "TEST_VAR2".to_string() => "test_value2".to_string(),
+    ];
+
+    let expected_env_vars = environment_variables
+        .into_iter()
+        .map(|(name, value)| EnvironmentVariable { name, value })
+        .collect::<Vec<_>>();
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_environment_variables(expected_env_vars.clone())
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(*INITIAL_CYCLES, settings)
+        .unwrap();
+    let status = test.canister_status(canister_id);
+    let reply = get_reply(status);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(
+        status.settings().environment_variables(),
+        &expected_env_vars
+    );
 }
 
 #[test]
@@ -6671,23 +6699,33 @@ fn test_environment_variables_are_changed_via_create_canister() {
         })
         .build();
 
-    let mut env_vars = BTreeMap::new();
-    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+    let env_vars = BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]);
 
     // Create canister with environment variables.
     let canister_id = test
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(
+                    env_vars
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+                        .collect::<Vec<_>>(),
+                )
                 .build(),
         )
         .unwrap();
 
     // Verify environment variables are set.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, env_vars);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        EnvironmentVariables::new(env_vars)
+    );
 }
 
 #[test]
@@ -6700,15 +6738,24 @@ fn test_environment_variables_are_updated_on_update_settings() {
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
-    let mut env_vars = BTreeMap::new();
-    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
+    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]));
 
     // Set environment variables via `update_settings`.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(env_vars.clone())
+            .with_environment_variables(
+                env_vars
+                    .iter()
+                    .map(|(name, value)| EnvironmentVariable {
+                        name: name.clone(),
+                        value: value.clone(),
+                    })
+                    .collect::<Vec<_>>(),
+            )
             .build(),
         sender_canister_version: None,
     };
@@ -6743,29 +6790,39 @@ fn test_environment_variables_are_not_set_when_disabled() {
         .build();
 
     // Create environment variables.
-    let mut env_vars = BTreeMap::new();
-    env_vars.insert("KEY1".to_string(), "VALUE1".to_string());
-    env_vars.insert("KEY2".to_string(), "VALUE2".to_string());
-
+    let env_vars = BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]);
+    let env_vars_args = env_vars
+        .iter()
+        .map(|(name, value)| EnvironmentVariable {
+            name: name.clone(),
+            value: value.clone(),
+        })
+        .collect::<Vec<_>>();
     // Create canister with environment variables.
     let canister_id = test
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(env_vars_args.clone())
                 .build(),
         )
         .unwrap();
 
     // Verify environment variables are not set.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, BTreeMap::new());
+    assert_eq!(
+        canister.system_state.environment_variables,
+        EnvironmentVariables::new(BTreeMap::new())
+    );
 
     // Set environment variables via `update_settings`.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(env_vars.clone())
+            .with_environment_variables(env_vars_args)
             .build(),
         sender_canister_version: None,
     };
@@ -6774,7 +6831,169 @@ fn test_environment_variables_are_not_set_when_disabled() {
 
     // Verify environment variables are not set.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, BTreeMap::new());
+    assert_eq!(
+        canister.system_state.environment_variables,
+        EnvironmentVariables::new(BTreeMap::new())
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_too_many_keys() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
+        .map(|i| (format!("KEY{}", i), "VAL".to_string()))
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!(
+                "Too many environment variables: {} (max: {})",
+                env_vars.len(),
+                MAX_ENVIRONMENT_VARIABLES
+            )
+        )
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_key_is_too_long() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let long_key = "K".repeat(MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        (long_key.clone(), "VALUE3".to_string()),
+    ];
+    let env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!(
+                "Environment variable name \"{}\" exceeds the maximum allowed length of {}.",
+                long_key, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
+            )
+        )
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_value_is_too_long() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let long_value = "V".repeat(MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        ("KEY3".to_string(), long_value.clone()),
+    ];
+    let env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!(
+                "Environment variable value \"{}\" exceeds the maximum allowed length of {}.",
+                long_value, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH
+            )
+        )
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_duplicate_keys() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        ("KEY2".to_string(), "VALUE3".to_string()),
+    ];
+    let env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            "Duplicate environment variables are not allowed".to_string(),
+        )
+    );
 }
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one

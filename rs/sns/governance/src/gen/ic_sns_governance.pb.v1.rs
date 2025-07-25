@@ -652,12 +652,12 @@ pub struct RegisterDappCanisters {
     PartialEq,
     ::prost::Message,
 )]
-pub struct PreciseValue {
-    #[prost(oneof = "precise_value::PreciseValue", tags = "1, 2, 3, 4, 5, 6, 7")]
-    pub precise_value: ::core::option::Option<precise_value::PreciseValue>,
+pub struct Precise {
+    #[prost(oneof = "precise::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
+    pub value: ::core::option::Option<precise::Value>,
 }
-/// Nested message and enum types in `PreciseValue`.
-pub mod precise_value {
+/// Nested message and enum types in `Precise`.
+pub mod precise {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -666,7 +666,7 @@ pub mod precise_value {
         PartialEq,
         ::prost::Oneof,
     )]
-    pub enum PreciseValue {
+    pub enum Value {
         #[prost(bool, tag = "1")]
         Bool(bool),
         #[prost(bytes, tag = "2")]
@@ -693,7 +693,7 @@ pub mod precise_value {
 )]
 pub struct PreciseArray {
     #[prost(message, repeated, tag = "1")]
-    pub array: ::prost::alloc::vec::Vec<PreciseValue>,
+    pub array: ::prost::alloc::vec::Vec<Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -705,7 +705,7 @@ pub struct PreciseArray {
 )]
 pub struct PreciseMap {
     #[prost(btree_map = "string, message", tag = "1")]
-    pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, PreciseValue>,
+    pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -717,7 +717,7 @@ pub struct PreciseMap {
 )]
 pub struct ExtensionInit {
     #[prost(message, optional, tag = "1")]
-    pub value: ::core::option::Option<PreciseValue>,
+    pub value: ::core::option::Option<Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -2086,6 +2086,12 @@ pub mod governance {
         /// less than six months.
         #[prost(uint64, tag = "15")]
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
+        /// Metrics related to the treasury assets of this SNS.
+        #[prost(message, repeated, tag = "17")]
+        pub treasury_metrics: ::prost::alloc::vec::Vec<super::TreasuryMetrics>,
+        /// Metrics related to the voting power in this SNS.
+        #[prost(message, optional, tag = "18")]
+        pub voting_power_metrics: ::core::option::Option<super::VotingPowerMetrics>,
     }
     /// Metadata about this SNS.
     #[derive(
@@ -2326,13 +2332,51 @@ pub struct GetMetricsRequest {
     #[prost(uint64, tag = "1")]
     pub time_window_seconds: u64,
 }
-/// Response message for 'get_sns_status'
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TreasuryMetrics {
+    #[prost(enumeration = "valuation::Token", tag = "1")]
+    pub treasury: i32,
+    #[prost(string, optional, tag = "2")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "4")]
+    pub account: ::core::option::Option<Account>,
+    #[prost(uint64, tag = "5")]
+    pub amount_e8s: u64,
+    #[prost(uint64, tag = "6")]
+    pub original_amount_e8s: u64,
+    #[prost(uint64, tag = "7")]
+    pub timestamp_seconds: u64,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     Clone,
     Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerMetrics {
+    #[prost(uint64, tag = "1")]
+    pub governance_total_potential_voting_power: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_seconds: u64,
+}
+/// Response message for 'get_sns_status'
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
     PartialEq,
     ::prost::Message,
 )]
@@ -2343,6 +2387,12 @@ pub struct Metrics {
     pub last_ledger_block_timestamp: u64,
     #[prost(uint64, tag = "3")]
     pub num_recently_executed_proposals: u64,
+    #[prost(message, repeated, tag = "4")]
+    pub treasury_metrics: ::prost::alloc::vec::Vec<TreasuryMetrics>,
+    #[prost(message, optional, tag = "5")]
+    pub voting_power_metrics: ::core::option::Option<VotingPowerMetrics>,
+    #[prost(uint64, tag = "6")]
+    pub genesis_timestamp_seconds: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(
