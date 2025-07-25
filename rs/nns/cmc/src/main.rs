@@ -196,91 +196,6 @@ struct StateVersion(u64);
 ///   because they are no longer needed.
 type State = StateV2;
 
-// TODO(NNS1-3980): remove this code when we no longer support version 1.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct StateV1 {
-    pub ledger_canister_id: CanisterId,
-
-    pub governance_canister_id: CanisterId,
-
-    /// An ID that provides an interface to a canister that provides exchange
-    /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
-    pub exchange_rate_canister_id: Option<CanisterId>,
-
-    pub cycles_ledger_canister_id: Option<CanisterId>,
-
-    /// Account used to burn funds.
-    pub minting_account_id: Option<AccountIdentifier>,
-
-    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
-
-    pub default_subnets: Vec<SubnetId>,
-
-    /// How many XDR 1 ICP is worth, along with a timestamp.
-    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
-
-    /// The average ICP/XDR rate over `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days. The
-    /// timestamp is the UNIX epoch time in seconds at the start of the last
-    /// considered day, which should correspond to midnight of the current
-    /// day.
-    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
-
-    /// The recent ICP/XDR rates used to compute the average rate.
-    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
-
-    /// How many cycles 1 XDR is worth.
-    pub cycles_per_xdr: Cycles,
-
-    /// How many cycles are allowed to be minted in an hour.
-    pub cycles_limit: Cycles,
-
-    /// Maintain a count of how many cycles have been minted in the last hour.
-    pub limiter: limiter::Limiter,
-
-    pub total_cycles_minted: Cycles,
-
-    // We use this for synchronization.
-    //
-    // Because our operations (e.g. minting cycles) require calling other
-    // canister(s), in particular ledger, it is possible for duplicate requests
-    // to interleave. In such cases, we want subsequent operations to see that
-    // an operation is already in flight. Therefore, before making any canister
-    // calls, we check that the block does not already have a status. If it
-    // already has a status, do not proceed. If it dos not already have a
-    // status, set it to Processing. Then, we can proceed with calling the other
-    // canister (i.e. ledger). Once that comes back, we update the block's
-    // status. This avoids using the same ICP to perform multiple operations.
-    pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
-    // The status of blocks not new than this is ambiguous. This is because we
-    // must bound how much memory we use; in particular, blocks_notified must
-    // not grow without bound.
-    pub last_purged_notification: BlockIndex,
-
-    /// The current maturity modulation in basis points (permyriad), i.e.,
-    /// a value of 123 corresponds to 1.23%.
-    pub maturity_modulation_permyriad: Option<i32>,
-
-    /// Maintains the mapping of subnet types to subnet ids. Users can choose to
-    /// deploy their canisters on subnets with specific characteristics by
-    /// selecting one of these types.
-    ///
-    ///
-    /// These user facing subnet types capture common useful characteristics of
-    /// the subnets and should not be confused with the existing concept of
-    /// subnet types that exists in the registry (system/verified/application).
-    /// The idea is that these types provide an easy way for users to set their
-    /// preferences during canister creation. If no subnet type is provided
-    /// during canister creation, a subnet without a special type will be picked
-    /// at random as no special requirements were provided.
-    ///
-    /// Each subnet can be assigned to at most one type and cannot be a default
-    /// or an authorized subnet.
-    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
-
-    /// This is used to ensure that only one exchange rate update is being performed at a time from heartbeat.
-    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV2 {
     pub ledger_canister_id: CanisterId,
@@ -399,15 +314,13 @@ impl State {
                 ))
             }
             Ordering::Less => {
-                // Since the version 1 is the latest version and also the first one encoded along
-                // with the state version, this should never happen. When we have a higher version
-                // than 1, we should add migration code here.
-                // TODO(NNS1-3980): remove this code when we no longer support version 1.
-                if stored_state_version == StateVersion(1) {
-                    let state = deserializer.get_value::<StateV1>().unwrap();
-                    deserializer.done().unwrap();
-                    return Ok(migrate_v1_to_v2(state));
-                }
+                // This is where you would put a function to do the migration, which would look something like this:
+                // if stored_state_version == StateVersion(*last_state_version*) {
+                //   let state = deserializer.get_value::<StateVLast>().unwrap();
+                //   deserializer.done().unwrap();
+                //   return Ok(migrate_last_to_current(state));
+                // }
+                // Migrations should be deleted after execution to keep the codebase tidy.
                 return Err(format!(
                     "[cycles] ERROR: stored state version {:?} is lesser than the current state \
                      version {:?}! Did you forget to migrate the old to the current type?",
@@ -441,62 +354,6 @@ impl State {
         }
         // make sure this grows monotonically (a delayed callback might have added older status)
         self.last_purged_notification = last_purged.max(self.last_purged_notification);
-    }
-}
-
-// TODO(NNS1-3980): remove this code when we no longer support version 1.
-fn migrate_v1_to_v2(p0: StateV1) -> State {
-    let StateV1 {
-        ledger_canister_id,
-        governance_canister_id,
-        exchange_rate_canister_id,
-        cycles_ledger_canister_id,
-        minting_account_id,
-        authorized_subnets,
-        default_subnets,
-        icp_xdr_conversion_rate,
-        average_icp_xdr_conversion_rate,
-        recent_icp_xdr_rates,
-        cycles_per_xdr,
-        cycles_limit,
-        limiter,
-        total_cycles_minted,
-        blocks_notified,
-        last_purged_notification,
-        maturity_modulation_permyriad,
-        subnet_types_to_subnets,
-        update_exchange_rate_canister_state,
-    } = p0;
-
-    // new fields with default value
-    let subnet_rental_cycles_limit = Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT);
-    let subnet_rental_canister_limiter = limiter::Limiter::new(
-        Duration::from_secs(ONE_HOUR_SECONDS),
-        Duration::from_secs(ONE_MONTH_SECONDS),
-    );
-
-    StateV2 {
-        ledger_canister_id,
-        governance_canister_id,
-        exchange_rate_canister_id,
-        cycles_ledger_canister_id,
-        minting_account_id,
-        authorized_subnets,
-        default_subnets,
-        icp_xdr_conversion_rate,
-        average_icp_xdr_conversion_rate,
-        recent_icp_xdr_rates,
-        cycles_per_xdr,
-        base_cycles_limit: cycles_limit, // renamed
-        subnet_rental_cycles_limit,
-        base_limiter: limiter, // renamed                                                     //renamed
-        subnet_rental_canister_limiter,
-        total_cycles_minted,
-        blocks_notified,
-        last_purged_notification,
-        maturity_modulation_permyriad,
-        subnet_types_to_subnets,
-        update_exchange_rate_canister_state,
     }
 }
 
@@ -3948,111 +3805,6 @@ mod tests {
         assert_eq!(
             with_state(|state| state.blocks_notified.clone()),
             original_blocks_notified,
-        );
-    }
-
-    /// TODO(NNS1-3980): Remove this test once the migration is no longer needed.
-    #[test]
-    fn test_migrate_v1_to_v2() {
-        // Create a StateV1 with some test data
-        let v1_state = StateV1 {
-            ledger_canister_id: CanisterId::from_u64(123),
-            governance_canister_id: CanisterId::from_u64(456),
-            exchange_rate_canister_id: Some(CanisterId::from_u64(789)),
-            cycles_ledger_canister_id: Some(CanisterId::from_u64(101112)),
-            minting_account_id: Some(AccountIdentifier::new(
-                PrincipalId::new_user_test_id(1),
-                None,
-            )),
-            authorized_subnets: btreemap! {
-                PrincipalId::new_user_test_id(2) => vec![SubnetId::from(PrincipalId::new_subnet_test_id(3))],
-            },
-            default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(4))],
-            icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: 1000,
-                xdr_permyriad_per_icp: 2000,
-            }),
-            average_icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: 1100,
-                xdr_permyriad_per_icp: 2100,
-            }),
-            recent_icp_xdr_rates: Some(vec![IcpXdrConversionRate::default(); 5]),
-            cycles_per_xdr: Cycles::new(3000),
-            cycles_limit: Cycles::new(4000),
-            limiter: limiter::Limiter::new(Duration::from_secs(60), Duration::from_secs(3600)),
-            total_cycles_minted: Cycles::new(5000),
-            blocks_notified: btreemap! {
-                100 => NotificationStatus::NotifiedTopUp(Ok(Cycles::new(1000))),
-            },
-            last_purged_notification: 99,
-            maturity_modulation_permyriad: Some(42),
-            subnet_types_to_subnets: Some(btreemap! {
-                "test_type".to_string() => BTreeSet::from([SubnetId::from(PrincipalId::new_subnet_test_id(5))]),
-            }),
-            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
-        };
-
-        // Perform migration
-        let v2_state = migrate_v1_to_v2(v1_state.clone());
-
-        // Verify all existing fields are preserved
-        assert_eq!(v2_state.ledger_canister_id, v1_state.ledger_canister_id);
-        assert_eq!(
-            v2_state.governance_canister_id,
-            v1_state.governance_canister_id
-        );
-        assert_eq!(
-            v2_state.exchange_rate_canister_id,
-            v1_state.exchange_rate_canister_id
-        );
-        assert_eq!(
-            v2_state.cycles_ledger_canister_id,
-            v1_state.cycles_ledger_canister_id
-        );
-        assert_eq!(v2_state.minting_account_id, v1_state.minting_account_id);
-        assert_eq!(v2_state.authorized_subnets, v1_state.authorized_subnets);
-        assert_eq!(v2_state.default_subnets, v1_state.default_subnets);
-        assert_eq!(
-            v2_state.icp_xdr_conversion_rate,
-            v1_state.icp_xdr_conversion_rate
-        );
-        assert_eq!(
-            v2_state.average_icp_xdr_conversion_rate,
-            v1_state.average_icp_xdr_conversion_rate
-        );
-        assert_eq!(v2_state.recent_icp_xdr_rates, v1_state.recent_icp_xdr_rates);
-        assert_eq!(v2_state.cycles_per_xdr, v1_state.cycles_per_xdr);
-        assert_eq!(v2_state.base_cycles_limit, v1_state.cycles_limit); // renamed field
-        assert_eq!(v2_state.base_limiter, v1_state.limiter);
-        assert_eq!(v2_state.total_cycles_minted, v1_state.total_cycles_minted);
-        assert_eq!(v2_state.blocks_notified, v1_state.blocks_notified);
-        assert_eq!(
-            v2_state.last_purged_notification,
-            v1_state.last_purged_notification
-        );
-        assert_eq!(
-            v2_state.maturity_modulation_permyriad,
-            v1_state.maturity_modulation_permyriad
-        );
-        assert_eq!(
-            v2_state.subnet_types_to_subnets,
-            v1_state.subnet_types_to_subnets
-        );
-        assert_eq!(
-            v2_state.update_exchange_rate_canister_state,
-            v1_state.update_exchange_rate_canister_state
-        );
-
-        // Verify new fields are initialized correctly
-        assert_eq!(
-            v2_state.subnet_rental_cycles_limit,
-            Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT)
-        );
-
-        // Verify the new limiter is initialized with correct parameters
-        assert_eq!(
-            v2_state.subnet_rental_canister_limiter.get_count(),
-            Cycles::zero()
         );
     }
 }
