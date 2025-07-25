@@ -173,6 +173,7 @@ def system_test(
         colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_img = True,
         uses_guestos_mainnet_img = False,
+        uses_guestos_recovery_dev_img = False,
         uses_guestos_update = False,
         uses_guestos_test_update = False,
         uses_guestos_mainnet_update = False,
@@ -210,6 +211,7 @@ def system_test(
       For example: [ "performance" ]
       uses_guestos_img: the test uses the branch GuestOS image
       uses_guestos_mainnet_img: the test uses the mainnet GuestOS image
+      uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
       uses_guestos_update: the test uses the branch GuestOS update image
       uses_guestos_test_update: the test uses the branch GuestOS update-test image
       uses_guestos_mainnet_update: the test uses the mainnet GuestOS update image
@@ -257,7 +259,7 @@ def system_test(
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_recovery_dev_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
     if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) >= 2:
@@ -285,6 +287,13 @@ def system_test(
 
         # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
+
+    if uses_guestos_recovery_dev_img:
+        # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
+        _env_deps["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = _guestos + "version.txt"
+        _guestos_recovery_dev = "//ic-os/guestos/envs/recovery-dev:"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos_recovery_dev + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"  # use the branch update image for initial update image
 
     if uses_guestos_update:
         # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.

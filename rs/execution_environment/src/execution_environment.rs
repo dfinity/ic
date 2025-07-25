@@ -406,6 +406,9 @@ impl ExecutionEnvironment {
             canister_snapshot_data_baseline_instructions,
             config.default_wasm_memory_limit,
             config.max_number_of_snapshots_per_canister,
+            config.max_environment_variables,
+            config.max_environment_variable_name_length,
+            config.max_environment_variable_value_length,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -555,11 +558,12 @@ impl ExecutionEnvironment {
 
                             info!(
                                 self.log,
-                                "Canister Http request with request size {}, payload size {}, max response size {} and subnet size {}",
-                                context.variable_parts_size().get(),
+                                "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, request_id {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
-                                registry_settings.subnet_size
+                                registry_settings.subnet_size,
+                                context.request.sender_reply_callback,
+                                std::process::id(),
                             );
                         }
 

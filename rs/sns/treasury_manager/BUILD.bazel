@@ -8,7 +8,9 @@ DEPENDENCIES = [
     "@crate_index//:serde",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:derivative",
+]
 
 ALIASES = {}
 
