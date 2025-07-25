@@ -4,7 +4,7 @@ use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasGroupSetup, HasIcDependencies},
+    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
     universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,

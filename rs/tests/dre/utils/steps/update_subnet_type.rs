@@ -8,8 +8,8 @@ use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::{
     driver::test_env_api::{
-        GetFirstHealthyNodeSnapshot, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-        IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+        get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+        IcNodeContainer, IcNodeSnapshot,
     },
     nns::{
         get_governance_canister, submit_update_api_boundary_node_version_proposal,
@@ -17,10 +17,8 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
-use ic_types::NodeId;
 use itertools::Itertools;
 use slog::{info, Logger};
-use std::collections::{HashMap, HashSet};
 use tokio::runtime::Handle;
 
 use super::Step;
@@ -102,20 +100,13 @@ impl Step for UpdateSubnetType {
                 ))?;
             }
         } else {
-            let versions = get_unassigned_nodes_version(env.topology_snapshot());
-            if versions.len() > 1 {
-                return Err(anyhow::anyhow!(
-                    "Found multiple versions on unassigned nodes: {}",
-                    versions.iter().join(", ")
-                ));
-            }
-
-            if versions.is_empty() {
+            if env.topology_snapshot().unassigned_nodes().next().is_none() {
                 info!(logger, "Network contains no unassigned nodes");
                 return Ok(());
             }
 
-            let version = versions.first().unwrap();
+            let version =
+                get_guestos_img_version().expect("Should be able to read unassigned nodes version");
             if version.eq(&self.version) {
                 info!(
                     logger,
@@ -172,22 +163,10 @@ impl Step for UpdateApiBoundaryNodes {
             return Ok(());
         }
 
-        // all API BNs should be on the same version
-        let versions = get_api_boundary_nodes_version(env.topology_snapshot());
-        let unique_versions: HashSet<_> = versions.values().cloned().collect();
-
-        if unique_versions.len() > 1 {
-            return Err(anyhow::anyhow!(
-                "The API BNs are on different versions: {}",
-                versions
-                    .iter()
-                    .map(|(node_id, version)| format!("{} -> {}", node_id, version))
-                    .join(", ")
-            ));
-        }
-
         // check whether the current version of the API BNs is already the one they should be upgraded to
-        let current_version = unique_versions.iter().next().unwrap();
+        let current_version = get_guestos_img_version()
+            .expect("Should be able to read API boundary nodes version")
+            .to_string();
         if current_version.eq(&self.version) {
             info!(
                 logger,
@@ -260,30 +239,4 @@ async fn assert_version_on_all_nodes(
     }
 
     Ok(())
-}
-
-fn get_unassigned_nodes_version(topology_snapshot: TopologySnapshot) -> Vec<String> {
-    let unassigned_nodes = topology_snapshot.unassigned_nodes().collect_vec();
-    unassigned_nodes
-        .iter()
-        .map(|n| {
-            n.get_initial_replica_version()
-                .expect("Should be able to read unassigned nodes version")
-                .to_string()
-        })
-        .dedup()
-        .collect_vec()
-}
-
-fn get_api_boundary_nodes_version(topology_snapshot: TopologySnapshot) -> HashMap<NodeId, String> {
-    topology_snapshot
-        .api_boundary_nodes()
-        .map(|n| {
-            let version = n
-                .get_initial_replica_version()
-                .expect("Should be able to read API boundary nodes version")
-                .to_string();
-            (n.node_id, version)
-        })
-        .collect()
 }

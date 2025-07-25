@@ -18,7 +18,7 @@ use crate::{
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -98,10 +98,6 @@ pub fn init_ic(
 
     let replica_version = get_guestos_img_version()?;
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
-    let initial_replica_version = InitialReplicaVersion {
-        version: replica_version.clone(),
-    };
-    initial_replica_version.write_attribute(test_env);
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
