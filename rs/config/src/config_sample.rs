@@ -273,8 +273,8 @@ pub const SAMPLE_CONFIG: &str = r#"
     // =================================
     // Configuration of Malicious behavior.
     // =================================
-    malicious_behaviour: {
-       allow_malicious_behaviour: false,
+    malicious_behavior: {
+       allow_malicious_behavior: false,
        maliciously_seg_fault: false,
 
        malicious_flags: {

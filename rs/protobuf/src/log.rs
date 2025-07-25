@@ -12,9 +12,9 @@ import_mod!(
 import_mod!("log", block_log_entry, v1, "block_log_entry.v1");
 import_mod!(
     "log",
-    malicious_behaviour_log_entry,
+    malicious_behavior_log_entry,
     v1,
-    "malicious_behaviour_log_entry.v1"
+    "malicious_behavior_log_entry.v1"
 );
 
 pub mod log_entry {
@@ -43,7 +43,7 @@ pub mod log_entry {
                 crate::serialize_fallback_for!(self, ser, messaging);
                 crate::serialize_fallback_for!(self, ser, ingress_message);
                 crate::serialize_fallback_for!(self, ser, block);
-                crate::serialize_fallback_for!(self, ser, malicious_behaviour);
+                crate::serialize_fallback_for!(self, ser, malicious_behavior);
                 Ok(())
             }
 

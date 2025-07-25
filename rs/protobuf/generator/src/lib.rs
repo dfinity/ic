@@ -161,9 +161,9 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        MaliciousBehaviourLogEntry,
-        "log.malicious_behaviour_log_entry.v1",
-        malicious_behaviour
+        MaliciousBehaviorLogEntry,
+        "log.malicious_behavior_log_entry.v1",
+        malicious_behavior
     );
 
     compile_protos(config, def, &[def.join("log/log_entry/v1/log_entry.proto")]);

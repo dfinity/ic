@@ -24,7 +24,7 @@ use crate::{
     tracing::Config as TracingConfig,
     transport::TransportConfig,
 };
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
@@ -49,7 +49,7 @@ pub struct Config {
     // defaults to the value specified for `logger`.
     pub csp_vault_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
-    pub malicious_behaviour: MaliciousBehaviour,
+    pub malicious_behavior: MaliciousBehavior,
     pub firewall: ReplicaFirewallConfig,
     pub boundary_node_firewall: BoundaryNodeFirewallConfig,
     pub registration: RegistrationConfig,
@@ -77,7 +77,7 @@ pub struct ConfigOptional {
     pub orchestrator_logger: Option<LoggerConfig>,
     pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
-    pub malicious_behaviour: Option<MaliciousBehaviour>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
     pub firewall: Option<ReplicaFirewallConfig>,
     pub boundary_node_firewall: Option<BoundaryNodeFirewallConfig>,
     pub registration: Option<RegistrationConfig>,
@@ -110,7 +110,7 @@ impl Config {
             orchestrator_logger: logger.clone(),
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
-            malicious_behaviour: MaliciousBehaviour::default(),
+            malicious_behavior: MaliciousBehavior::default(),
             firewall: ReplicaFirewallConfig::default(),
             boundary_node_firewall: BoundaryNodeFirewallConfig::default(),
             registration: RegistrationConfig::default(),
@@ -163,9 +163,7 @@ impl Config {
             orchestrator_logger,
             csp_vault_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
-            malicious_behaviour: cfg
-                .malicious_behaviour
-                .unwrap_or(default.malicious_behaviour),
+            malicious_behavior: cfg.malicious_behavior.unwrap_or(default.malicious_behavior),
             firewall: cfg.firewall.unwrap_or(default.firewall),
             boundary_node_firewall: cfg
                 .boundary_node_firewall

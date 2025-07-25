@@ -34,12 +34,12 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
 };
 use ic_system_test_driver::systest;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 
 use anyhow::Result;
 
 fn setup(env: TestEnv) {
-    let malicious_behavior = MaliciousBehaviour::new(true)
+    let malicious_behavior = MaliciousBehavior::new(true)
         .set_maliciously_propose_empty_blocks()
         .set_maliciously_notarize_all()
         .set_maliciously_finalize_all();
