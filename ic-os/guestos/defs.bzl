@@ -61,7 +61,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "component_files": component_files,
+        "component_files": dict(component_files),  # Make a copy because we might update it later
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -103,11 +103,16 @@ def image_deps(mode, malicious = False):
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
-    # Update recovery rootfs
-    if "recovery" in mode:
-        deps["rootfs"].update({
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh": "/opt/ic/bin/guestos-recovery-engine.sh:0755",
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service": "/etc/systemd/system/guestos-recovery-engine.service:0644",
+    # Update recovery component_files
+    # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
+    if mode in ["recovery", "recovery-dev"]:
+        recovery_engine_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:guestos-recovery-engine.sh"
+
+        deps["component_files"].update({
+            recovery_engine_path: "/opt/ic/bin/guestos-recovery-engine.sh",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
+            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
+            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
 
     return deps

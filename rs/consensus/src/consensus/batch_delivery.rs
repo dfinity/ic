@@ -489,7 +489,7 @@ fn generate_dkg_response_payload(
     }
 }
 
-/// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
+/// Creates responses to `ReshareChainKeyArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
     idkg_payload: &idkg::IDkgPayload,

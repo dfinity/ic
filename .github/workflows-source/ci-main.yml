@@ -381,11 +381,13 @@ jobs:
     steps:
       - <<: *checkout
       - name: Run Libfuzzer targets
-        shell: bash
-        run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+        uses: ./.github/actions/bazel
+        with:
+          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
-        shell: bash
-        run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+        uses: ./.github/actions/bazel
+        with:
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
     name: Python CI Tests

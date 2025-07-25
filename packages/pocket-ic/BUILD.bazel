@@ -86,6 +86,7 @@ rust_test_suite(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",

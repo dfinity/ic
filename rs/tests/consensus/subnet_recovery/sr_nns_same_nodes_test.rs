@@ -60,12 +60,13 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
 
-    let ic_version = env.get_initial_replica_version().unwrap();
+    let ic_version = get_guestos_img_version().unwrap();
+    let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
 
     // identifies the version of the replica after the recovery
     let working_version =
-        ReplicaVersion::try_from(format!("{}-test", ic_version.as_ref())).unwrap();
+        ReplicaVersion::try_from(get_guestos_update_img_version().unwrap()).unwrap();
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     info!(
         logger,
@@ -126,8 +127,8 @@ pub fn test(env: TestEnv) {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
         replay_until_height: None, // We will set this after breaking the subnet, see below
-        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
+        upgrade_image_url: get_guestos_update_img_url().ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256(&env).ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         next_step: None,

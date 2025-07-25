@@ -4,11 +4,25 @@ use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
 
+#[cfg(test)]
+mod tests;
+
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
+        let reward_account = item.reward_account.map(|account| {
+            match icp_ledger::AccountIdentifier::try_from(&account) {
+                // If it's valid, we make sure it has the checksum.
+                Ok(account) => account.into_proto_with_checksum(),
+                Err(_) => {
+                    // If it fails, we return what is there, since this is going from internal
+                    // to API, and there's no good way to recover at this point
+                    account
+                }
+            }
+        });
         Self {
             id: item.id,
-            reward_account: item.reward_account,
+            reward_account,
         }
     }
 }
@@ -244,11 +258,21 @@ impl From<pb::reward_node_provider::RewardToAccount>
     for pb_api::reward_node_provider::RewardToAccount
 {
     fn from(item: pb::reward_node_provider::RewardToAccount) -> Self {
-        Self {
-            to_account: item.to_account,
-        }
+        let to_account = item.to_account.map(|account| {
+            match icp_ledger::AccountIdentifier::try_from(&account) {
+                // If it's valid, we make sure it has the checksum.
+                Ok(account) => account.into_proto_with_checksum(),
+                Err(_) => {
+                    // If it fails, we return what is there, since this is going from internal
+                    // to API, and there's no good way to recover at this point
+                    account
+                }
+            }
+        });
+        Self { to_account }
     }
 }
+
 impl From<pb_api::reward_node_provider::RewardToAccount>
     for pb::reward_node_provider::RewardToAccount
 {

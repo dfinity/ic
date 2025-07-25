@@ -1,5 +1,5 @@
 {
-  "checksum": "4ceb3906f4d577dacddf00174cc7d5fe4a9c94c87af2c7de1d3c74ceb4a4203f",
+  "checksum": "86ba1ef9d4eef16d56ae94c35870632df48e15aa13150e1b152875a76e0ed6df",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10923,6 +10923,45 @@
       ],
       "license_file": "LICENSE"
     },
+    "bytecount 0.6.9": {
+      "name": "bytecount",
+      "version": "0.6.9",
+      "package_url": "https://github.com/llogiq/bytecount",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bytecount/0.6.9/download",
+          "sha256": "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bytecount",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bytecount",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.6.9"
+      },
+      "license": "Apache-2.0/MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE.Apache2"
+    },
     "bytemuck 1.14.0": {
       "name": "bytemuck",
       "version": "1.14.0",
@@ -19808,6 +19847,62 @@
       ],
       "license_file": "LICENSE-Apache"
     },
+    "derivative 2.2.0": {
+      "name": "derivative",
+      "version": "2.2.0",
+      "package_url": "https://github.com/mcarton/rust-derivative",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derivative/2.2.0/download",
+          "sha256": "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derivative",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derivative",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "2.2.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "derive-new 0.7.0": {
       "name": "derive-new",
       "version": "0.7.0",
@@ -21860,6 +21955,10 @@
               "target": "systemd"
             },
             {
+              "id": "tabled 0.20.0",
+              "target": "tabled"
+            },
+            {
               "id": "tar 0.4.39",
               "target": "tar"
             },
@@ -22120,6 +22219,10 @@
             {
               "id": "async-trait 0.1.83",
               "target": "async_trait"
+            },
+            {
+              "id": "derivative 2.2.0",
+              "target": "derivative"
             },
             {
               "id": "derive-new 0.7.0",
@@ -53085,6 +53188,68 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "papergrid 0.17.0": {
+      "name": "papergrid",
+      "version": "0.17.0",
+      "package_url": "https://github.com/zhiburt/tabled",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/papergrid/0.17.0/download",
+          "sha256": "6978128c8b51d8f4080631ceb2302ab51e32cc6e8615f735ee2f83fd269ae3f1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "papergrid",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "papergrid",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "fnv",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytecount 0.6.9",
+              "target": "bytecount"
+            },
+            {
+              "id": "fnv 1.0.7",
+              "target": "fnv"
+            },
+            {
+              "id": "unicode-width 0.2.0",
+              "target": "unicode_width"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.17.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "parity-scale-codec 3.6.4": {
       "name": "parity-scale-codec",
       "version": "3.6.4",
@@ -57779,6 +57944,130 @@
           ],
           "selects": {}
         }
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "proc-macro-error-attr2 2.0.0": {
+      "name": "proc-macro-error-attr2",
+      "version": "2.0.0",
+      "package_url": "https://github.com/GnomedDev/proc-macro-error-2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/proc-macro-error-attr2/2.0.0/download",
+          "sha256": "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "proc_macro_error_attr2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_error_attr2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "proc-macro-error2 2.0.1": {
+      "name": "proc-macro-error2",
+      "version": "2.0.1",
+      "package_url": "https://github.com/GnomedDev/proc-macro-error-2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/proc-macro-error2/2.0.1/download",
+          "sha256": "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "proc_macro_error2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_error2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "syn-error"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "proc-macro-error-attr2 2.0.0",
+              "target": "proc_macro_error_attr2"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "2.0.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -76354,6 +76643,141 @@
       ],
       "license_file": null
     },
+    "tabled 0.20.0": {
+      "name": "tabled",
+      "version": "0.20.0",
+      "package_url": "https://github.com/zhiburt/tabled",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tabled/0.20.0/download",
+          "sha256": "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tabled",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tabled",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "assert",
+            "default",
+            "derive",
+            "macros",
+            "std",
+            "tabled_derive",
+            "testing_table"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "papergrid 0.17.0",
+              "target": "papergrid"
+            },
+            {
+              "id": "testing_table 0.3.0",
+              "target": "testing_table"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "tabled_derive 0.11.0",
+              "target": "tabled_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.20.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
+    "tabled_derive 0.11.0": {
+      "name": "tabled_derive",
+      "version": "0.11.0",
+      "package_url": "https://github.com/zhiburt/tabled",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tabled_derive/0.11.0/download",
+          "sha256": "0ea5d1b13ca6cff1f9231ffd62f15eefd72543dab5e468735f1a456728a02846"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "tabled_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tabled_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.5.0",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro-error2 2.0.1",
+              "target": "proc_macro_error2"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.11.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "tagptr 0.2.0": {
       "name": "tagptr",
       "version": "0.2.0",
@@ -77472,6 +77896,59 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "testing_table 0.3.0": {
+      "name": "testing_table",
+      "version": "0.3.0",
+      "package_url": "https://github.com/zhiburt/tabled",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/testing_table/0.3.0/download",
+          "sha256": "0f8daae29995a24f65619e19d8d31dea5b389f3d853d8bf297bbf607cd0014cc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "testing_table",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "testing_table",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "unicode-width 0.2.0",
+              "target": "unicode_width"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
     },
     "textplots 0.8.4": {
       "name": "textplots",
@@ -94401,6 +94878,7 @@
     "darling 0.20.11",
     "dashmap 5.5.3",
     "der 0.7.8",
+    "derivative 2.2.0",
     "derive-new 0.7.0",
     "devicemapper 0.34.4",
     "dfx-core 0.1.4",
@@ -94625,6 +95103,7 @@
     "sys-mount 3.0.1",
     "syscalls 0.6.18",
     "systemd 0.10.0",
+    "tabled 0.20.0",
     "tar 0.4.39",
     "tarpc 0.34.0",
     "tempfile 3.20.0",

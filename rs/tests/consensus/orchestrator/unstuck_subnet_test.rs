@@ -17,7 +17,6 @@ use anyhow::bail;
 use anyhow::Result;
 use ic_consensus_system_test_utils::upgrade::{
     bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
-    UpdateImageType,
 };
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -69,17 +68,16 @@ fn test(test_env: TestEnv) {
     info!(logger, "node3: {:?}", nodes[2].get_ip_addr());
 
     let target_version =
-        get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
+        get_guestos_update_img_version().expect("Failed to get target replica version");
     info!(logger, "Target version: {}", target_version);
 
-    let upgrade_url = get_ic_os_update_img_url().unwrap();
-    // Note: we're pulling a wrong hash on purpose to simulate a failed upgrade
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    // Note: we're pulling a wrong URL on purpose to simulate a failed upgrade
+    let upgrade_url = get_guestos_initial_update_img_url().unwrap();
+    let sha256 = get_guestos_update_img_sha256(&test_env).unwrap();
     let guest_launch_measurements = get_ic_os_launch_measurements_test().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
-        UpdateImageType::ImageTest,
         &logger,
         &sha256,
         guest_launch_measurements,
@@ -89,8 +87,7 @@ fn test(test_env: TestEnv) {
     let subnet_id = test_env.topology_snapshot().root_subnet_id();
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(format!("{}-test", target_version))
-            .expect("Wrong format of the version"),
+        &ReplicaVersion::try_from(target_version.clone()).expect("Wrong format of the version"),
         subnet_id,
     ));
     info!(logger, "Upgrade started");
@@ -141,7 +138,7 @@ fn test(test_env: TestEnv) {
         sudo chmod --reference=. image.bin
         sudo chown --reference=. image.bin
         "#,
-        get_ic_os_update_img_test_url().unwrap(),
+        get_guestos_update_img_url().unwrap(),
     );
     for n in &nodes {
         let s = n
@@ -161,10 +158,9 @@ fn test(test_env: TestEnv) {
     }
 
     info!(logger, "Waiting for update to finish on all 3 nodes...");
-    let updated_version = format!("{}-test", target_version);
     for n in &nodes {
         ic_system_test_driver::retry_with_msg!(
-            format!("check if all 3 nodes have version {}", updated_version),
+            format!("check if all 3 nodes have version {}", target_version),
             test_env.logger(),
             secs(1800),
             secs(60),
@@ -172,9 +168,9 @@ fn test(test_env: TestEnv) {
                 Ok(current_version) => {
                     info!(
                         logger,
-                        "Versions: cur: {} upd: {}", current_version, updated_version
+                        "Versions: cur: {} upd: {}", current_version, target_version
                     );
-                    if current_version == updated_version {
+                    if current_version == target_version {
                         Ok(())
                     } else {
                         bail!("Expect new version...");
