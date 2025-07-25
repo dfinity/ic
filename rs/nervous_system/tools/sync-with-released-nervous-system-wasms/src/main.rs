@@ -246,31 +246,46 @@ async fn get_mainnet_canister_release(
 ) -> Result<Release> {
     let (client, token) = github_api_client_and_token()?;
 
-    let tags_url = format!("{}/repos/{}/tags", GITHUB_API, canister_repository);
-    let tags: Vec<Tag> = client
-        .get(&tags_url)
-        .bearer_auth(&token)
-        .send()
-        .await?
-        .json()
-        .await?;
+    let tags_per_page = 30; // maximum allowed is 100, but let's save bandwidth since typically we should find the deployed canister WASM early
+    let mut page = 1;
+    loop {
+        let tags_url = format!(
+            "{}/repos/{}/tags?per_page={}&page={}",
+            GITHUB_API, canister_repository, tags_per_page, page
+        );
+        let tags: Vec<Tag> = client
+            .get(&tags_url)
+            .bearer_auth(&token)
+            .send()
+            .await?
+            .json()
+            .await?;
 
-    for tag in tags {
-        match tag
-            .canister_exists(
-                canister_repository.clone(),
-                canister_filename.clone(),
-                expected_module_hash_str.clone(),
-            )
-            .await
-        {
-            Ok(Some(release)) => return Ok(release),
-            Ok(None) => (),
-            Err(e) => eprintln!(
-                "Error while checking the GitHub tag {} for canister {}: {}",
-                tag.name, canister_name, e
-            ),
+        for tag in &tags {
+            match tag
+                .canister_exists(
+                    canister_repository.clone(),
+                    canister_filename.clone(),
+                    expected_module_hash_str.clone(),
+                )
+                .await
+            {
+                Ok(Some(release)) => return Ok(release),
+                Ok(None) => (),
+                Err(e) => eprintln!(
+                    "Error while checking the GitHub tag {} for canister {}: {}",
+                    tag.name, canister_name, e
+                ),
+            }
         }
+
+        // We reached the last page.
+        if tags.len() < tags_per_page {
+            break;
+        }
+
+        // Proceed with the next page.
+        page += 1;
     }
 
     Err(anyhow::anyhow!(
