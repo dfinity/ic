@@ -18,6 +18,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
+use ic_types::batch::CanisterCyclesCostSchedule;
 
 use crate::common::Wasm64;
 
@@ -129,6 +130,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 &no_op_logger(),
                 exec_env.state_changes_error(),
                 &IngressFilterMetrics::new(&MetricsRegistry::new()),
+                CanisterCyclesCostSchedule::Normal,
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

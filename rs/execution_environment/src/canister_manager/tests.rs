@@ -80,6 +80,7 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext, NO_DEADLINE},
     nominal_cycles::NominalCycles,
@@ -419,6 +420,7 @@ fn install_code(
         CompilationCostHandling::CountFullAmount,
         round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
         Config::default().dirty_page_logging,
     );
     // Canister manager tests do not trigger DTS executions.
@@ -747,7 +749,10 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     test.ingress(canister_id, "update", payload).unwrap();
 
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
+    let creation_fee = cycles_account_manager.canister_creation_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    );
     // There's only 2 canisters on the subnet, so the one created from the first one
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
@@ -769,6 +774,49 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         canister.system_state.balance(),
         *INITIAL_CYCLES - creation_fee
     );
+}
+
+#[test]
+fn create_canister_free() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            *INITIAL_CYCLES,
+        )
+        .build();
+
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let creation_fee =
+        cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
+    assert_eq!(creation_fee, Cycles::new(0));
+    // There's only 2 canisters on the subnet, so the one created from the first one
+    // with have the test id corresponding to `1`.
+    let canister = test.canister_state(canister_test_id(1));
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles.get(),
+        0
+    );
+    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
@@ -1272,7 +1320,12 @@ fn get_canister_status_of_stopped_canister() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopped);
@@ -1289,7 +1342,12 @@ fn get_canister_status_of_stopping_canister() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopping);
@@ -3170,7 +3228,11 @@ fn unfreezing_of_frozen_canister() {
     assert_eq!(
         balance_before - balance_after,
         test.cycles_account_manager()
-            .ingress_induction_cost_from_bytes(ingress_bytes, test.subnet_size())
+            .ingress_induction_cost_from_bytes(
+                ingress_bytes,
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
     );
     // Now the canister works again.
     let result = test.ingress(canister_id, "update", wasm().reply().build());
@@ -3642,6 +3704,7 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3662,6 +3725,7 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3702,6 +3766,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3725,6 +3790,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(0),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3783,6 +3849,7 @@ fn cycles_correct_if_upgrade_fails_at_start() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3824,6 +3891,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.cycles_account_manager().execution_cost(
             wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3841,6 +3909,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3896,6 +3965,7 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3936,6 +4006,7 @@ fn cycles_correct_if_install_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(4)
@@ -3983,6 +4054,7 @@ fn cycles_correct_if_install_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(0),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -4025,6 +4097,7 @@ fn cycles_correct_if_install_fails_at_start() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -4064,6 +4137,7 @@ fn cycles_correct_if_install_fails_at_init() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -4246,6 +4320,7 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
                 memory_usage_after,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4340,6 +4415,7 @@ fn install_reserves_cycles_on_memory_grow() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4419,6 +4495,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4530,6 +4607,7 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
                 NumBytes::new(USAGE),
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4601,6 +4679,7 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4735,6 +4814,7 @@ fn resource_saturation_scaling_works_in_create_canister() {
                 CAPACITY / SCALING
             ),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -4810,6 +4890,7 @@ fn resource_saturation_scaling_works_in_install_code() {
                 CAPACITY / SCALING
             ),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -5087,7 +5168,8 @@ fn canister_status_contains_reserved_cycles() {
             .storage_reservation_cycles(
                 NumBytes::new(1_000_000),
                 &ResourceSaturation::new(0, 0, CAPACITY),
-                test.subnet_size()
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
             .get()
     );
@@ -5502,6 +5584,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         + test.cycles_account_manager().execution_cost(
             instructions,
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(canister_id),
         )
         + Cycles::from(1_000_u128);
@@ -5904,6 +5987,7 @@ fn upload_chunk_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
     let _hash = test
@@ -5940,6 +6024,7 @@ fn upload_chunk_charges_if_failing() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 

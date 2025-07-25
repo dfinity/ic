@@ -175,6 +175,7 @@ pub(crate) fn execute_install(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -296,6 +297,7 @@ fn install_stage_2b_continue_install_after_start(
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {

@@ -20,7 +20,7 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
-use ic_types::MemoryAllocation;
+use ic_types::{batch::CanisterCyclesCostSchedule, MemoryAllocation};
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
@@ -85,6 +85,7 @@ fn test_api_for_update(
         Default::default(),
         Some(caller),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;

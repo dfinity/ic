@@ -579,6 +579,7 @@ pub async fn submit_create_application_subnet_proposal(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
@@ -601,7 +602,7 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
-        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+        canister_cycles_cost_schedule: cost_schedule,
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

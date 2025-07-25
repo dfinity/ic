@@ -530,6 +530,11 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(
+        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
+        tag = "22"
+    )]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

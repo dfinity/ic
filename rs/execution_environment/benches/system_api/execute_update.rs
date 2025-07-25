@@ -18,6 +18,7 @@ use ic_execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
@@ -1124,6 +1125,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 network_topology,
                 &mut round_limits,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
             );
             let executed_instructions =
                 as_num_instructions(instructions_before - round_limits.instructions);
