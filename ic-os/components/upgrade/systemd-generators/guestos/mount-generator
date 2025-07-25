@@ -96,6 +96,7 @@ CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
+make_requires boot-grub.mount boot.mount
 
 make_var_cryptsetup "$CURRENT_SYSTEM" >"$UNIT_DIR"/systemd-cryptsetup@var_crypt.service
 make_requires dev-mapper-var_crypt.device systemd-cryptsetup@var_crypt.service

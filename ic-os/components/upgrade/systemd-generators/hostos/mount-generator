@@ -97,6 +97,7 @@ CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
+make_requires boot-grub.mount boot.mount
 
 make_var_setup "$CURRENT_SYSTEM" >"$UNIT_DIR"/var-setup.service
 make_var_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/var.mount
