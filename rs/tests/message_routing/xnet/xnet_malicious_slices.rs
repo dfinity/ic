@@ -38,17 +38,12 @@ use slog::info;
 use std::time::Duration;
 use systest_message_routing_common::{install_canisters, start_all_canisters};
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-
 fn main() -> Result<()> {
     let config = Config::new();
     let test = config.clone().test();
     SystemTestGroup::new()
         .with_setup(config.build())
         .add_test(systest!(test))
-        .with_timeout_per_test(PER_TASK_TIMEOUT) // each task (including the setup function) may take up to `per_task_timeout`.
-        .with_overall_timeout(OVERALL_TIMEOUT) // the entire group may take up to `overall_timeout`.
         .execute_from_args()?;
     Ok(())
 }
@@ -94,22 +89,31 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-    (0..config.subnets)
-        .fold(InternetComputer::new(), |ic, _idx| {
-            ic.add_subnet(
-                Subnet::new(SubnetType::Application)
-                    .add_malicious_nodes(config.nodes_per_subnet, malicious_behavior.clone()),
-            )
-        })
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            PrometheusVm::default()
+                .start(&env)
+                .expect("failed to start prometheus VM");
+        });
+
+        s.spawn(|| {
+            (0..config.subnets)
+                .fold(InternetComputer::new(), |ic, _idx| {
+                    ic.add_subnet(
+                        Subnet::new(SubnetType::Application).add_malicious_nodes(
+                            config.nodes_per_subnet,
+                            malicious_behavior.clone(),
+                        ),
+                    )
+                })
+                .setup_and_start(&env)
+                .expect("failed to setup IC under test");
+            env.topology_snapshot().subnets().for_each(|subnet| {
+                subnet
+                    .nodes()
+                    .for_each(|node| node.await_status_is_healthy().unwrap())
+            });
+        });
     });
     env.sync_with_prometheus();
 }
