@@ -9218,6 +9218,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-error-types 0.2.0",
+ "ic-heap-bytes",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
@@ -9367,6 +9368,25 @@ dependencies = [
  "uuid",
  "x509-parser 0.17.0",
  "zstd",
+]
+
+[[package]]
+name = "ic-heap-bytes"
+version = "0.9.0"
+dependencies = [
+ "ic-heap-bytes-derive",
+ "ic-types",
+ "paste",
+]
+
+[[package]]
+name = "ic-heap-bytes-derive"
+version = "0.9.0"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
