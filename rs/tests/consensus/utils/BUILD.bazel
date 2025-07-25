@@ -19,7 +19,6 @@ rust_library(
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/protobuf",
-        "//rs/recovery",
         "//rs/registry/canister",
         "//rs/registry/keys",
         "//rs/registry/nns_data_provider",

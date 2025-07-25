@@ -1,7 +1,6 @@
-use ic_recovery::get_node_metrics;
 use ic_system_test_driver::{
     driver::test_env_api::{set_var_to_path, HasPublicApiUrl, IcNodeSnapshot},
-    util::block_on,
+    util::{block_on, MetricsFetcher},
 };
 use ic_types::Height;
 use slog::{info, warn, Logger};
@@ -33,7 +32,7 @@ pub fn assert_node_is_making_progress(
     node.await_status_is_healthy()
         .expect("Should become healthy");
 
-    let height = get_certification_height_from_metrics(node, logger);
+    let height = get_certification_height_from_metrics(node);
     let target_height = height + height_delta;
 
     const MAX_RETRIES: u64 = 30;
@@ -46,7 +45,7 @@ pub fn assert_node_is_making_progress(
 
     for retry in 1..=MAX_RETRIES {
         std::thread::sleep(std::time::Duration::from_secs(SLEEP_TIME_SECS));
-        let new_height = get_certification_height_from_metrics(node, logger);
+        let new_height = get_certification_height_from_metrics(node);
 
         if new_height >= target_height {
             info!(
@@ -73,8 +72,22 @@ pub fn assert_node_is_making_progress(
     );
 }
 
-fn get_certification_height_from_metrics(node: &IcNodeSnapshot, logger: &Logger) -> Height {
-    block_on(get_node_metrics(logger, &node.get_ip_addr()))
-        .expect("Should get node metrics")
-        .certification_height
+fn get_certification_height_from_metrics(node: &IcNodeSnapshot) -> Height {
+    const CERT_HEIGHT_METRIC: &str = r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"#;
+
+    let metrics = MetricsFetcher::new(
+        [node.clone()].into_iter(),
+        vec![CERT_HEIGHT_METRIC.to_string()],
+    );
+
+    block_on(async {
+        let height = metrics
+            .fetch::<u64>()
+            .await
+            .unwrap()
+            .get(CERT_HEIGHT_METRIC)
+            .unwrap()[0];
+
+        Height::from(height)
+    })
 }

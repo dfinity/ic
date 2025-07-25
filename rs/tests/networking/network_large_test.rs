@@ -179,7 +179,7 @@ pub fn test(env: TestEnv) {
     ic_consensus_system_test_utils::assert_node_is_making_progress(
         &nodes[FAULTY],
         &log,
-        Height::new(50),
+        Height::new(1),
     );
 
     info!(log, "Storing message '{}' ...", UPDATE_MSG_5);

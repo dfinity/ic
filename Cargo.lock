@@ -15068,7 +15068,6 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-protobuf",
- "ic-recovery",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
