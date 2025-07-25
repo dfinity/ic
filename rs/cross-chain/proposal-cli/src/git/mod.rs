@@ -102,22 +102,31 @@ impl GitRepository {
     }
 
     pub fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
-        let canister_ids: serde_json::Value = {
-            let path = self.dir.path().join(canister.canister_ids_json_file());
-            let canister_ids_file =
-                File::open(&path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
-            let reader = BufReader::new(canister_ids_file);
-            serde_json::from_reader(reader).expect("failed to parse json")
+        let canister_id = match canister {
+            // The cycles-ledger index is defined in the https://github.com/dfinity/cycles-ledger
+            // repository, but the code is in the ic monorepo. Therefore, we hardcode the canister
+            // ID here.
+            TargetCanister::CyclesIndex => "ul4oc-4iaaa-aaaaq-qaabq-cai".to_string(),
+            _ => {
+                let canister_ids: serde_json::Value = {
+                    let path = self.dir.path().join(canister.canister_ids_json_file());
+                    let canister_ids_file =
+                        File::open(&path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
+                    let reader = BufReader::new(canister_ids_file);
+                    serde_json::from_reader(reader).expect("failed to parse json")
+                };
+                canister_ids
+                    .as_object()
+                    .unwrap()
+                    .get(canister.canister_name())
+                    .unwrap()
+                    .get("ic")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            }
         };
-        let canister_id = canister_ids
-            .as_object()
-            .unwrap()
-            .get(canister.canister_name())
-            .unwrap()
-            .get("ic")
-            .unwrap()
-            .as_str()
-            .unwrap();
         Principal::from_text(canister_id).unwrap()
     }
 
