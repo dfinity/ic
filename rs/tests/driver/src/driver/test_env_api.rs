@@ -182,7 +182,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    malicious_behaviour::MaliciousBehaviour,
+    malicious_behavior::MaliciousBehavior,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
     NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
@@ -222,7 +222,7 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
-pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
+pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -786,7 +786,7 @@ impl IcNodeSnapshot {
         self.malicious_behavior().is_some()
     }
 
-    pub fn malicious_behavior(&self) -> Option<MaliciousBehaviour> {
+    pub fn malicious_behavior(&self) -> Option<MaliciousBehavior> {
         let nodes_info: NodesInfo = self
             .env
             .read_json_object(NODES_INFO)
