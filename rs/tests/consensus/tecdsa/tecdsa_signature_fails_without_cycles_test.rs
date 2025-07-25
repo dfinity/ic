@@ -46,7 +46,7 @@ fn test(env: TestEnv) {
 
         // Cycles are only required for application subnets.
         let url =
-            "http://www.randomnumberapi.com/api/v1.0/random?min=100&max=1000&count=1".to_string();
+            "https://www.randomnumberapi.com/api/v1.0/random?min=100&max=1000&count=1".to_string();
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         let response = msg_can
             .agent()
