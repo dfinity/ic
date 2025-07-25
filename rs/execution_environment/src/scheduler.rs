@@ -26,6 +26,7 @@ use ic_management_canister_types_private::{
     CanisterStatusType, MasterPublicKeyId, Method as Ic00Method,
 };
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
@@ -519,6 +520,9 @@ impl SchedulerImpl {
 
             let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;
+            let subnet_available_guaranteed_response_message_memory = self
+                .exec_env
+                .subnet_available_guaranteed_response_message_memory(&state);
             let (
                 active_canisters,
                 executed_canister_ids,
@@ -532,7 +536,9 @@ impl SchedulerImpl {
                 Arc::new(state.metadata.network_topology.clone()),
                 &measurement_scope,
                 &mut round_limits,
+                subnet_available_guaranteed_response_message_memory,
                 registry_settings.subnet_size,
+                state.metadata.own_subnet_type,
                 is_first_iteration,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
@@ -682,7 +688,9 @@ impl SchedulerImpl {
         network_topology: Arc<NetworkTopology>,
         measurement_scope: &MeasurementScope,
         round_limits: &mut RoundLimits,
+        subnet_available_guaranteed_response_message_memory: i64,
         subnet_size: usize,
+        subnet_type: SubnetType,
         is_first_iteration: bool,
     ) -> (
         Vec<CanisterState>,
@@ -723,6 +731,10 @@ impl SchedulerImpl {
             subnet_available_callbacks: round_limits.subnet_available_callbacks,
             compute_allocation_used: round_limits.compute_allocation_used,
         };
+        // Distribute available guaranteed response memory equally among threads.
+        let subnet_available_guaranteed_response_memory_per_thread =
+            subnet_available_guaranteed_response_message_memory
+                / self.config.scheduler_cores as i64;
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
         thread_pool.scoped(|scope| {
             // Zip together the input and the output of each thread.
@@ -755,7 +767,9 @@ impl SchedulerImpl {
                         deterministic_time_slicing,
                         round_limits,
                         subnet_size,
+                        subnet_type,
                         is_first_iteration,
+                        subnet_available_guaranteed_response_memory_per_thread,
                     );
                 });
             }
@@ -1767,7 +1781,9 @@ fn execute_canisters_on_thread(
     deterministic_time_slicing: FlagStatus,
     mut round_limits: RoundLimits,
     subnet_size: usize,
+    subnet_type: SubnetType,
     is_first_iteration: bool,
+    subnet_available_guaranteed_response_memory_per_thread: i64,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1805,6 +1821,8 @@ fn execute_canisters_on_thread(
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
         let mut total_instructions_used = NumInstructions::new(0);
+        let mut subnet_available_guaranteed_response_memory_per_thread =
+            subnet_available_guaranteed_response_memory_per_thread;
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -1903,6 +1921,16 @@ fn execute_canisters_on_thread(
             if canister_had_paused_execution && !canister.has_paused_execution() {
                 // Break the loop, as the canister just finished its long execution
                 break;
+            }
+            // Induct self-messages immediately while respecting the thread's share of
+            // subnet available guaranteed response memory.
+            // TODO: feature flag
+            if true {
+                canister.induct_messages_to_self(
+                    &mut subnet_available_guaranteed_response_memory_per_thread,
+                    subnet_type,
+                );
+                // TODO: metrics
             }
         }
         if let Some(es) = &mut canister.execution_state {
