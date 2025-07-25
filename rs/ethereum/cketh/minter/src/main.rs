@@ -162,8 +162,7 @@ mod sys {
 }
 
 #[cfg(target_family = "wasm")]
-#[query]
-async fn node_ids() -> Vec<candid::Principal> {
+fn subnet_node_ids() -> Vec<candid::Principal> {
     fn subnet_num_nodes() -> usize {
         // SAFETY: ic0.subnet_self_size is always safe to call.
         unsafe { sys::subnet_num_nodes() }
@@ -179,16 +178,19 @@ async fn node_ids() -> Vec<candid::Principal> {
         }
     }
 
-    let subnet_id = ic_cdk::api::subnet_id();
-
     fn get_node_id(node_index: usize) -> candid::Principal {
         let size = subnet_node_id_size(node_index);
         let mut id = vec![0u8; size];
         subnet_node_id_copy(node_index, &mut id);
         candid::Principal::from_slice(&id)
     }
-
     (0..subnet_num_nodes()).map(get_node_id).collect()
+}
+
+#[cfg(target_family = "wasm")]
+#[query]
+async fn node_ids() -> Vec<candid::Principal> {
+    subnet_node_ids()
 }
 
 #[query]

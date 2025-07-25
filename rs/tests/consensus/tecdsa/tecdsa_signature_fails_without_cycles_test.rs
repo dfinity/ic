@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use canister_test::{Canister, Cycles};
 use ic_agent::agent::{RejectCode, RejectResponse};
+use ic_agent::export::Principal;
 use ic_agent::AgentError;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -21,6 +22,8 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use slog::info;
+
+use candid::{Encode, Decode};
 
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` fails when not enough cycles are
 /// sent.
@@ -43,6 +46,17 @@ fn test(env: TestEnv) {
 
         // Cycles are only required for application subnets.
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
+        let response = msg_can.agent().update(&msg_can.canister_id(), "multi_http_request")
+            .with_arg(Encode!("http://www.randomnumberapi.com/api/v1.0/randomredditnumber?min=100&max=1000&count=1"))
+            .call_and_wait();
+
+        let result = Decode!(response.as_slice(), Vec<Result<String, String>>)
+            .expect("Failed to decode response");
+
+        println!("{:?}", result);
+        assert!(false, "Coz I'm a failure");
+
+        /*
         let message_hash = vec![0xabu8; 32];
         for key_id in key_ids {
             info!(
@@ -84,6 +98,7 @@ fn test(env: TestEnv) {
                 _ => panic!("Unexpected error: {:?}", error),
             };
         }
+        */
     });
 }
 

@@ -2739,6 +2739,7 @@ name = "consensus-tecdsa-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
  "canister-test",
  "chrono",
  "futures",
@@ -10606,7 +10607,9 @@ name = "ic-message"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "futures",
  "ic-cdk 0.17.2",
+ "ic-management-canister-types-private",
  "serde",
 ]
 

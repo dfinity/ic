@@ -142,6 +142,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/management_canister_types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
     ],

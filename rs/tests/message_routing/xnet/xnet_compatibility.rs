@@ -11,7 +11,7 @@ Runbook::
 3. Run XNet test between two app subnets (success criteria same as for SLO test).
 4. Upgrade one app subnet to current version.
 5. Run XNet test again.
-6. Downgrade back to mainnet.
+6. Downgrade back to .mainnet.
 7. Run XNet test again.
 8. Tear down XNet test canisters for long running XNet test and check success
    (success conditions for the long running test are more generous, as the main

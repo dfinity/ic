@@ -35,6 +35,7 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+candid = { workspace = true }
 
 [[bin]]
 name = "ic-systest-tecdsa-performance-test"
