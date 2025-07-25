@@ -136,6 +136,7 @@ type InitialChainKeyConfig = record {
   key_configs : vec KeyConfigRequest;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type KeyConfigRequest = record {
@@ -463,6 +464,7 @@ type ChainKeyConfig = record {
   key_configs : vec KeyConfig;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type UpdateUnassignedNodesConfigPayload = record {

@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+RegisterExtension proposals can now be used in the test version of SNS Governance; submitting
+these proposals on mainnet is still disabled until further notice.
+
+
 ## Changed
 
 ## Deprecated
