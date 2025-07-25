@@ -35,13 +35,14 @@ mod tests {
             }
         });
 
-        assert_eq!(result, Ok("success"));
+        assert_eq!(result.unwrap(), "success");
         assert_eq!(attempts, 3);
     }
 
     #[test]
     fn test_retry_if_busy_failure() {
-        let result = retry_if_busy(|| Err(io::Error::new(io::ErrorKind::Other, "fail")));
+        let result: Result<(), _> =
+            retry_if_busy(|| Err(io::Error::new(io::ErrorKind::Other, "fail")));
         assert!(result.is_err());
     }
 }

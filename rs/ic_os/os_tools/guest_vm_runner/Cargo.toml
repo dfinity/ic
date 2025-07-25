@@ -40,7 +40,5 @@ integration_tests = []
 upgrade_device_mapper_test = []
 
 [dev-dependencies]
-partition_tools = { path = "../../build_tools/partition_tools" }
-
 goldenfile = { workspace = true }
 url = { workspace = true }

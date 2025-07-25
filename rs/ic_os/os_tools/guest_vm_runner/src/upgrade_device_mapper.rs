@@ -243,8 +243,6 @@ mod tests {
     fn test_create_mapped_device_for_upgrade() {
         let _lock = DM_MUTEX.lock().unwrap();
 
-        let mapped_devices_before = get_mapped_devices();
-
         let setup = create_test_setup();
 
         let partition3_start_bytes = setup.gpt.partitions().get(&3).unwrap().first_lba * 512;
@@ -314,7 +312,6 @@ mod tests {
     fn test_clean_up_before_creation() {
         let _lock = DM_MUTEX.lock().unwrap();
 
-        let mapped_devices_before = get_mapped_devices();
         let device = create_test_setup().device;
         let device_path = device.path().to_path_buf();
         // Forget the device so it doesn't get cleaned up automatically
