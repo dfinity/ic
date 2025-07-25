@@ -315,8 +315,8 @@ system_test_nns(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
-        "//rs/types/types",
         "//rs/tests/consensus/utils",
+        "//rs/types/types",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
     ],
