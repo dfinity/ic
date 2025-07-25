@@ -107,8 +107,8 @@ pub(crate) fn grouped_shares_meet_divergence_criteria(
     faults_tolerated: usize,
 ) -> bool {
     let mut share_for_content_signers: Vec<BTreeSet<NodeId>> = grouped_shares
-        .iter()
-        .map(|(_, shares)| shares.iter().map(|share| share.signature.signer).collect())
+        .values()
+        .map(|shares| shares.iter().map(|share| share.signature.signer).collect())
         .collect();
     share_for_content_signers.sort_by_key(|b| core::cmp::Reverse(b.len()));
     if let Some(largest_signers) = share_for_content_signers.first() {

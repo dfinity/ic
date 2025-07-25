@@ -108,8 +108,7 @@ impl Service<dns::Name> for DnsResolverWithOverrides {
                 }
             }
         }
-        EitherFut::Right(futures_util::future::ready(Err(io::Error::new(
-            io::ErrorKind::Other,
+        EitherFut::Right(futures_util::future::ready(Err(io::Error::other(
             "unable to resolve dns query",
         ))))
     }

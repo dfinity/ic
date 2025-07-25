@@ -39,8 +39,8 @@ pub(crate) fn update_signature_agreements(
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
 ) {
     let all_random_ids = all_requests
-        .iter()
-        .map(|(_, ctxt)| ctxt.pseudo_random_id)
+        .values()
+        .map(|ctxt| ctxt.pseudo_random_id)
         .collect::<BTreeSet<_>>();
 
     // We first clean up the existing signature_agreements by keeping those

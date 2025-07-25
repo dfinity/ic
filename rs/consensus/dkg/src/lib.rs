@@ -261,6 +261,7 @@ impl DkgImpl {
 }
 
 /// Validate the signature and dealing of the given message against its config
+#[allow(clippy::result_large_err)]
 pub(crate) fn crypto_validate_dealing(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,

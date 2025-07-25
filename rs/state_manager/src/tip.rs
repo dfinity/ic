@@ -73,6 +73,7 @@ pub(crate) struct PageMapToFlush {
 }
 
 /// Request for the Tip directory handling thread.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
     /// Sends the created checkpoint and the ReplicatedState switched to the

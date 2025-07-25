@@ -198,10 +198,7 @@ impl Membership {
         height: Height,
         node_id: NodeId,
     ) -> Result<bool, MembershipError> {
-        Ok(self
-            .get_canister_http_committee(height)?
-            .iter()
-            .any(|id| *id == node_id))
+        Ok(self.get_canister_http_committee(height)?.contains(&node_id))
     }
 
     /// Return true if the given node ID is in the low threshold committee at

@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    io::{self, ErrorKind, Read},
+    io::{self, Read},
     net::SocketAddr,
     sync::Arc,
 };
@@ -72,7 +72,7 @@ async fn handle_version(
     magic: Magic,
 ) -> io::Result<()> {
     if v.version < MINIMUM_PROTOCOL_VERSION {
-        let err = io::Error::new(ErrorKind::Other, "Protocol version too low");
+        let err = io::Error::other("Protocol version too low");
         return Err(err);
     }
     let mut version = v.clone();

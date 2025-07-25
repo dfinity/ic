@@ -151,10 +151,7 @@ impl StableWriter {
     pub fn grow(&mut self, added_pages: u32) -> Result<(), io::Error> {
         let old_page_count = unsafe { ic0::stable_grow(added_pages) };
         if old_page_count < 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Failed to grow stable memory",
-            ));
+            return Err(io::Error::other("Failed to grow stable memory"));
         }
         self.capacity = old_page_count as u32 + added_pages;
         Ok(())
