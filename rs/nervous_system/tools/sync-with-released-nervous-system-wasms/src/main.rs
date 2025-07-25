@@ -125,6 +125,57 @@ struct Tag {
     name: String,
 }
 
+impl Tag {
+    async fn canister_exists(
+        &self,
+        canister_repository: String,
+        canister_filename: String,
+        expected_module_hash_str: String,
+    ) -> Result<Option<Release>> {
+        let release_url = format!(
+            "{}/repos/{}/releases/tags/{}",
+            GITHUB_API, canister_repository, self.name
+        );
+
+        let (client, token) = github_api_client_and_token()?;
+        let res = client.get(&release_url).bearer_auth(&token).send().await?;
+
+        // not every tag must have a release so we do not report an error if it does not
+        if res.status().is_success() {
+            let release: Release = res.json().await?;
+
+            if release.tag_name != self.name {
+                return Err(anyhow!(
+                    "Unexpected release tag {}, expected {}",
+                    release.tag_name,
+                    self.name
+                ));
+            }
+
+            let canister_sha256_filename = format!("{canister_filename}.sha256");
+            if let Some(prod_canister_sha256) = release.asset(&canister_sha256_filename) {
+                // The asset `{canister_filename}.sha256` has the form:
+                // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
+                // so we check if it starts with the expected module hash
+                // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
+                if prod_canister_sha256
+                    .text()
+                    .await?
+                    .starts_with(&expected_module_hash_str)
+                {
+                    return Ok(Some(release));
+                }
+            } else if let Some(prod_canister) = release.asset(&canister_filename) {
+                if prod_canister.sha256().await? == expected_module_hash_str {
+                    return Ok(Some(release));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct ReleaseAsset {
     name: String,
@@ -205,49 +256,14 @@ async fn get_mainnet_canister_release(
         .await?;
 
     for tag in tags {
-        let check_tag = async {
-            let release_url = format!(
-                "{}/repos/{}/releases/tags/{}",
-                GITHUB_API, canister_repository, tag.name
-            );
-            let res = client.get(&release_url).bearer_auth(&token).send().await?;
-
-            // not every tag must have a release so we do not report an error if it does not
-            if res.status().is_success() {
-                let release: Release = res.json().await?;
-
-                if release.tag_name != tag.name {
-                    return Err(anyhow!(
-                        "Unexpected release tag {}, expected {}",
-                        release.tag_name,
-                        tag.name
-                    ));
-                }
-
-                let canister_sha256_filename = format!("{canister_filename}.sha256");
-                if let Some(prod_canister_sha256) = release.asset(&canister_sha256_filename) {
-                    // The asset `{canister_filename}.sha256` has the form:
-                    // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
-                    // so we check if it starts with the expected module hash
-                    // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
-                    if prod_canister_sha256
-                        .text()
-                        .await?
-                        .starts_with(&expected_module_hash_str)
-                    {
-                        return Ok(Some(release));
-                    }
-                } else if let Some(prod_canister) = release.asset(&canister_filename) {
-                    if prod_canister.sha256().await? == expected_module_hash_str {
-                        return Ok(Some(release));
-                    }
-                }
-            }
-
-            Ok(None)
-        };
-
-        match check_tag.await {
+        match tag
+            .canister_exists(
+                canister_repository.clone(),
+                canister_filename.clone(),
+                expected_module_hash_str.clone(),
+            )
+            .await
+        {
             Ok(Some(release)) => return Ok(release),
             Ok(None) => (),
             Err(e) => eprintln!(
