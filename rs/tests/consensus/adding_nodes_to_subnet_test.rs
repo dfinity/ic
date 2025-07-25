@@ -39,7 +39,7 @@ use ic_system_test_driver::{
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::{info, warn, Logger};
+use slog::{info, Logger};
 
 const DKG_INTERVAL: u64 = 9;
 const INITIAL_APP_NODES_COUNT: usize = 1;
@@ -188,7 +188,7 @@ fn verify_node_is_making_progress(node: &IcNodeSnapshot, canister_id: Principal,
     ic_consensus_system_test_utils::assert_node_is_making_progress(
         node,
         logger,
-        3 * (DKG_INTERVAL + 1),
+        (3 * (DKG_INTERVAL + 1)).into(),
     );
 
     assert!(can_read_msg_with_retries(
