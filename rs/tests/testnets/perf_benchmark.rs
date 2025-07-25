@@ -100,13 +100,14 @@ fn switch_to_ssd(host: &str) {
         sudo virsh dumpxml $VMNAME > $CONFIG
         IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
         echo "Moving $VMNAME to /dev/hostlvm/guest"
-        sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
 
         # Patch the config to point to the disk device
-        xmlstarlet --inplace ed -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n discard -v unmap
-        xmlstarlet --inplace ed -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n cache -v none 
-        xmlstarlet --inplace ed -u "//domain/devices/disk[target[@dev='vda']]/@type" -v block
-        xmlstarlet --inplace ed -u "//domain/devices/disk[target[@dev='vda']]/source/@file" -v "/dev/hostlvm/guestos"
+        xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n discard -v unmap "$CONFIG"
+        xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n cache -v none "$CONFIG"
+        xmlstarlet ed --inplace -u "//domain/devices/disk[target[@dev='vda']]/@type" -v block "$CONFIG"
+        xmlstarlet ed --inplace -d "//domain/devices/disk[target[@dev='vda']]/source/@file" "$CONFIG"
+        xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/source" -t attr -n dev -v "/dev/hostlvm/guestos" "$CONFIG"
+        sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
 
         sudo virsh create $CONFIG
         echo "Migration done"
@@ -132,8 +133,7 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+    let vms = InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(VmResources {
@@ -141,13 +141,17 @@ pub fn setup(env: TestEnv) {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
-                .with_required_host_features(vec![HostFeature::Host(PERF_HOST.to_string())])
-                .add_nodes(1),
+                //                .with_required_host_features(vec![HostFeature::IoPerformance])
+                .add_nodes(4),
         )
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .with_api_boundary_nodes(1)
-        .setup_and_start(&env)
+        .setup_and_start_return_vms(&env)
         .expect("Failed to setup IC under test");
-    //switch_to_ssd(PERF_HOST);
+    println!("QQQQQ env: {}", env.topology_snapshot());
+    println!("QQQQQ vms: {:#?}", &vms);
+    return;
+    switch_to_ssd(PERF_HOST);
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),

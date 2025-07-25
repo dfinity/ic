@@ -55,7 +55,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -74,7 +75,8 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -92,7 +94,8 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -111,7 +114,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -130,8 +134,9 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -150,8 +155,9 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -170,7 +176,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -189,7 +196,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -207,8 +215,9 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -227,8 +236,9 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -248,8 +258,8 @@ system_test_nns(
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     test_timeout = "eternal",
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
@@ -268,7 +278,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -292,6 +303,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
+    test_timeout = "eternal",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +

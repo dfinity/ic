@@ -353,7 +353,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             ..Default::default()
         }
     };
-    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    const MOCK_HASH: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
@@ -617,7 +617,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     }
 
     let replica_version_id = ReplicaVersion::default().to_string();
-    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    const MOCK_HASH: &str = "abbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabba";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
