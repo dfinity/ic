@@ -44,6 +44,7 @@ type CanisterStatusResultV2 = record {
   idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
   query_stats : opt QueryStats;
+  memory_metrics : opt MemoryMetrics;
 };
 
 type CanisterStatusType = variant {
