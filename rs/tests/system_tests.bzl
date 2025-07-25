@@ -62,6 +62,7 @@ def _run_system_test(ctx):
               --working-dir "$TEST_TMPDIR" \
               {k8s} \
               --group-base-name {group_base_name} \
+              {logs} \
               {no_summary_report} \
               "$@" run
         """.format(
@@ -69,6 +70,7 @@ def _run_system_test(ctx):
             k8s = "--k8s" if k8s else "",
             group_base_name = ctx.label.name,
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
+            logs = "--logs" if "VECTOR_VM_PATH" in ctx.attr.env else "",
         ),
     )
 
@@ -185,6 +187,7 @@ def system_test(
         env = {},
         env_inherit = [],
         additional_colocate_tags = [],
+        logs = True,
         **kwargs):
     """Declares a system-test.
 
@@ -224,6 +227,7 @@ def system_test(
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
       additional_colocate_tags: additional tags to pass to the colocated test.
+      logs: Specifies if vector vm for scraping logs should not be spawned.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -353,10 +357,21 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
 
+    deps = list(runtime_deps)
+    if logs:
+        env["VECTOR_VM_PATH"] = "$(rootpath //rs/tests:vector_with_log_fetcher_image)"
+        deps = ["//rs/tests:vector_with_log_fetcher_image"]
+
+        for dep in runtime_deps:
+            if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
+                deps.append(dep)
+
+        deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
+
     run_system_test(
         name = name,
         src = test_driver_target,
-        runtime_deps = runtime_deps,
+        runtime_deps = deps,
         env_deps = _env_deps,
         env = env,
         icos_images = icos_images,
@@ -367,11 +382,6 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
     )
-
-    deps = []
-    for dep in runtime_deps:
-        if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
-            deps.append(dep)
 
     env = env | {
         "COLOCATED_TEST": name,
@@ -387,11 +397,16 @@ def system_test(
 
     visibility = kwargs.get("visibility", ["//visibility:public"])
 
+    # Add missing UVM deps if logs are disabled
+    for dep in UNIVERSAL_VM_RUNTIME_DEPS:
+        if dep not in deps:
+            deps.append(dep)
+
     run_system_test(
         name = name + "_colocate",
         src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
-        runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
+        runtime_deps = deps + [
             "//rs/tests:colocate_uvm_config_image",
             test_driver_target,
         ],

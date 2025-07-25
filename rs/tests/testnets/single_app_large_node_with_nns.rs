@@ -56,7 +56,6 @@ use ic_system_test_driver::driver::ic::{
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{HasTopologySnapshot, NnsCustomizations};
-use ic_system_test_driver::driver::vector_vm::VectorVm;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -69,8 +68,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -90,7 +87,4 @@ pub fn setup(env: TestEnv) {
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 }

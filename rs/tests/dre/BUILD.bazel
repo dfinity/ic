@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "VECTOR_ENV", "VECTOR_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -7,7 +7,7 @@ system_test(
     name = "guest_os_qualification",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    } | MAINNET_NNS_CANISTER_ENV | MAINNET_ENV | VECTOR_ENV,
+    } | MAINNET_NNS_CANISTER_ENV | MAINNET_ENV,
     tags = [
         "manual",
     ],
@@ -17,8 +17,7 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_NNS_CANISTER_RUNTIME_DEPS +
         COUNTER_CANISTER_RUNTIME_DEPS +
-        XNET_TEST_CANISTER_RUNTIME_DEPS +
-        VECTOR_RUNTIME_DEPS,
+        XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted
         "//rs/protobuf",

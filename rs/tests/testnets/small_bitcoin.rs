@@ -47,7 +47,6 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder},
-    vector_vm::VectorVm,
 };
 use slog::info;
 use std::time::Duration;
@@ -63,8 +62,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     InternetComputer::new()
         .use_specified_ids_allocation_range()
@@ -89,9 +86,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 }
 
 fn await_nodes_healthy(env: &TestEnv) {
