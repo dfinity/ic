@@ -315,18 +315,36 @@ pub fn test(env: TestEnv) {
     // Verify permissions
     //
 
-    verify_permissions_recursively(
-        &ssh_session,
-        "/var/lib/ic/data/cups",
-        "ic-replica",
-        "nonconfidential",
+    // We retry multiple times because setup-permissions service might still be running
+    retry_with_msg!(
+        "verify cups permissions",
+        log.clone(),
+        secs(30),
+        secs(5),
+        || {
+            verify_permissions_recursively(
+                &ssh_session,
+                "/var/lib/ic/data/cups",
+                "ic-replica",
+                "nonconfidential",
+            )
+        }
     )
     .unwrap();
-    verify_permissions_recursively(
-        &ssh_session,
-        "/var/lib/ic/data/ic_registry_local_store",
-        "ic-replica",
-        "ic-registry-local-store",
+
+    retry_with_msg!(
+        "verify ic_registry_local_store permissions",
+        log.clone(),
+        secs(30),
+        secs(5),
+        || {
+            verify_permissions_recursively(
+                &ssh_session,
+                "/var/lib/ic/data/ic_registry_local_store",
+                "ic-replica",
+                "ic-registry-local-store",
+            )
+        }
     )
     .unwrap();
 }
