@@ -641,7 +641,37 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .signature_request_contexts()
             .iter()
             .flat_map(|(callback_id, context)| match &context.args {
-                ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => {
+                ThresholdArguments::Ecdsa(args) => {
+                    let matched_id = context.matched_pre_signature.map(|(id, _)| id);
+                    let matched_full = args.pre_signature.as_ref().map(|pre_sig| pre_sig.id);
+                    if matched_id != matched_full {
+                        warn!(
+                            every_n_seconds => 15,
+                            self.log,
+                            "ECDSA context {:?}, with different ID {:?} and full pre-sig {:?}",
+                            callback_id,
+                            matched_id,
+                            matched_full
+                        );
+                    }
+                    context.matched_pre_signature.map(|(_, height)| RequestId {
+                        callback_id: *callback_id,
+                        height,
+                    })
+                }
+                ThresholdArguments::Schnorr(args) => {
+                    let matched_id = context.matched_pre_signature.map(|(id, _)| id);
+                    let matched_full = args.pre_signature.as_ref().map(|pre_sig| pre_sig.id);
+                    if matched_id != matched_full {
+                        warn!(
+                            every_n_seconds => 15,
+                            self.log,
+                            "Schnorr context {:?}, with different ID {:?} and full pre-sig {:?}",
+                            callback_id,
+                            matched_id,
+                            matched_full
+                        );
+                    }
                     context.matched_pre_signature.map(|(_, height)| RequestId {
                         callback_id: *callback_id,
                         height,
