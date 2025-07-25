@@ -9240,6 +9240,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-sys",
  "ic-test-utilities",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",

@@ -16,7 +16,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
 };
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
@@ -37,6 +37,7 @@ use ic_replicated_state::{
 };
 use ic_types::{
     batch::CanisterCyclesCostSchedule,
+    batch::ChainKeyData,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
@@ -1530,7 +1531,7 @@ impl Scheduler for SchedulerImpl {
 
             update_signature_request_contexts(
                 current_round,
-                chain_key_data.idkg_pre_signature_ids,
+                chain_key_data.idkg_pre_signatures,
                 contexts,
                 &mut csprng,
                 registry_settings,

@@ -25,8 +25,8 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError,
-    HypervisorResult, IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
+    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
+    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
     SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -53,7 +53,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     batch::CanisterCyclesCostSchedule,
-    consensus::idkg::PreSigId,
+    batch::{AvailablePreSignatures, ChainKeyData},
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -75,7 +75,6 @@ use super::{RoundSchedule, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
-use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
 /// fakes execution of Wasm code for performance, so it can process thousands
@@ -118,8 +117,8 @@ pub(crate) struct SchedulerTest {
     metrics_registry: MetricsRegistry,
     // Chain key subnet public keys.
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    // Pre-signature IDs.
-    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    // Available pre-signatures.
+    idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
     // Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
 }
@@ -527,7 +526,7 @@ impl SchedulerTest {
             Randomness::from([0; 32]),
             ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),
-                idkg_pre_signature_ids: self.idkg_pre_signature_ids.clone(),
+                idkg_pre_signatures: self.idkg_pre_signatures.clone(),
                 nidkg_ids: BTreeMap::new(),
             },
             &self.replica_version,
@@ -659,11 +658,11 @@ impl SchedulerTest {
         )
     }
 
-    pub(crate) fn deliver_pre_signature_ids(
+    pub(crate) fn deliver_pre_signatures(
         &mut self,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
     ) {
-        self.idkg_pre_signature_ids = idkg_pre_signature_ids;
+        self.idkg_pre_signatures = idkg_pre_signatures;
     }
 }
 
@@ -988,7 +987,7 @@ impl SchedulerTestBuilder {
             registry_settings,
             metrics_registry: self.metrics_registry,
             chain_key_subnet_public_keys,
-            idkg_pre_signature_ids: BTreeMap::new(),
+            idkg_pre_signatures: BTreeMap::new(),
             replica_version: self.replica_version,
         }
     }
