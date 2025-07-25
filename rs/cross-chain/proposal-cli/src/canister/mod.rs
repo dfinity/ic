@@ -7,6 +7,15 @@ use std::process::Command;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
+pub enum CanisterIdsJson {
+    /// For cases where the canister_ids.json file is stored in the same git repository as the
+    /// canister code.
+    Local { path: PathBuf },
+    /// For cases where the canister_ids.json file is stored in a location other than the git
+    /// repository of the canister code.
+    Remote { url: String },
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
@@ -308,33 +317,41 @@ impl TargetCanister {
         format!("{:?}", self.build_artifact())
     }
 
-    pub fn canister_ids_json_file(&self) -> PathBuf {
+    pub fn canister_ids_json_file(&self) -> CanisterIdsJson {
         match self {
             TargetCanister::BtcChecker
             | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
-            | TargetCanister::CkBtcMinter => {
-                PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json")
-            }
+            | TargetCanister::CkBtcMinter => CanisterIdsJson::Local {
+                path: PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json"),
+            },
             TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
-            | TargetCanister::LedgerSuiteOrchestrator => {
-                PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json")
-            }
+            | TargetCanister::LedgerSuiteOrchestrator => CanisterIdsJson::Local {
+                path: PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json"),
+            },
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
             | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
-            | TargetCanister::IcpLedger => PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
+            | TargetCanister::IcpLedger => CanisterIdsJson::Local {
+                path: PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
+            },
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
-            | TargetCanister::CyclesIndex
-            | TargetCanister::ExchangeRateCanister => PathBuf::from("canister_ids.json"),
-            TargetCanister::SolRpc => PathBuf::from("canister/prod/canister_ids.json"),
+            | TargetCanister::ExchangeRateCanister => CanisterIdsJson::Local {
+                path: PathBuf::from("canister_ids.json"),
+            },
+            TargetCanister::SolRpc => CanisterIdsJson::Local {
+                path: PathBuf::from("canister/prod/canister_ids.json"),
+            },
+            TargetCanister::CyclesIndex => CanisterIdsJson::Remote {
+                url: "https://raw.githubusercontent.com/dfinity/cycles-ledger/refs/heads/main/canister_ids.json".to_string()
+            },
         }
     }
 
