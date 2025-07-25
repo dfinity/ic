@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -29,7 +29,7 @@ system_test(
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_dev = True,
+    uses_guestos_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -49,7 +49,7 @@ system_test(
         "k8s",
         "long_test",
     ],
-    uses_guestos_dev = True,
+    uses_guestos_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -108,8 +108,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -246,14 +246,43 @@ system_test_nns(
 )
 
 system_test(
+    name = "guestos_recovery_engine_smoke_test",
+    env = {
+        "GUESTOS_RECOVERY_ENGINE_UVM_CONFIG_PATH": "$(rootpath //rs/tests:guestos_recovery_engine_uvm_config_image)",
+        "RECOVERY_HASH_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256)",
+        "RECOVERY_CUP_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:cup.proto.b64)",
+        "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
+        "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
+    },
+    uses_guestos_img = False,
+    uses_guestos_recovery_dev_img = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [
+        "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
+        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
+        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
+        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256",
+        "//rs/tests:guestos_recovery_engine_uvm_config_image",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+    ],
+)
+
+system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
     malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -274,8 +303,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -303,8 +332,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

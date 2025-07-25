@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::{bless_branch_version, upgrade};
+use ic_consensus_system_test_upgrade_common::{bless_target_version, upgrade};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
@@ -12,7 +12,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
-    get_mainnet_nns_revision, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
@@ -29,7 +29,6 @@ fn setup(env: TestEnv) {
         .with_dkg_interval_length(Height::from(DKG_INTERVAL));
 
     InternetComputer::new()
-        .with_mainnet_config()
         .add_subnet(subnet_under_test)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -37,23 +36,23 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-// Tests an upgrade of the NNS subnet to the branch version and a downgrade back to the mainnet version
+// Tests an upgrade of the NNS subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_branch_version(&env, &nns_node);
+    let target_version = bless_target_version(&env, &nns_node);
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
-        &branch_version,
+        &target_version,
         SubnetType::System,
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
-    let mainnet_version = get_mainnet_nns_revision();
+    let initial_version = get_guestos_img_version().expect("Failed to find initial version");
     upgrade(
         &env,
         &nns_node,
-        &mainnet_version,
+        &initial_version,
         SubnetType::System,
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ true,

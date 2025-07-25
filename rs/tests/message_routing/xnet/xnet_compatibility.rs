@@ -27,7 +27,6 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -36,8 +35,8 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url, get_mainnet_nns_revision,
-    read_dependency_from_env_to_string, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
+    get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
@@ -101,7 +100,7 @@ fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to start prometheus VM");
     }
-    let ic = InternetComputer::new().with_mainnet_config();
+    let ic = InternetComputer::new();
     ic.add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
@@ -165,22 +164,24 @@ pub async fn test_async(env: TestEnv) {
         120,
     );
 
-    let mainnet_version = get_mainnet_nns_revision();
-
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
+    // NOTE: For these tests, it is intended they run _from_ the mainnet
+    // version, _to_ the branch version, and back.
+    //
+    // The test definition should specify `uses_guestos_mainnet_img` to choose
+    // the mainnet image as the initial image, and `uses_guestos_update` to
+    // choose the branch image as the upgrade target.
+    let mainnet_version = get_guestos_img_version().expect("initial IC version");
+    let branch_version = get_guestos_update_img_version().expect("target IC version");
 
     let (upgrade_subnet_id, _, upgrade_node) = app_subnets.first().unwrap();
-    let upgrade_version = format!("{}-test", original_branch_version);
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
     bless_replica_version(
         &nns_node,
-        &original_branch_version,
-        UpdateImageType::ImageTest,
+        &branch_version,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],
@@ -213,7 +214,7 @@ pub async fn test_async(env: TestEnv) {
         &nns_node,
         *upgrade_subnet_id,
         upgrade_node,
-        &upgrade_version,
+        &branch_version,
         &logger,
     )
     .await;
