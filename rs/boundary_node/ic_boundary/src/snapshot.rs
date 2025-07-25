@@ -24,7 +24,7 @@ use ic_registry_client_helpers::{
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use tokio::{select, sync::watch};
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 use url::{ParseError, Url};
@@ -486,16 +486,11 @@ pub struct RegistryReplicatorRunner(RegistryReplicator, Vec<Url>, Option<Thresho
 #[async_trait]
 impl Run for RegistryReplicatorRunner {
     async fn run(&self, token: CancellationToken) -> Result<(), Error> {
-        let fut = self
-            .0
-            .start_polling(self.1.clone(), self.2, token.clone())
+        self.0
+            .start_polling(self.1.clone(), self.2, token)
             .await
-            .context("unable to start polling Registry")?;
-
-        select! {
-            _ = token.cancelled() => {}
-            _ = fut => {}
-        }
+            .context("unable to start polling Registry")?
+            .await; // This terminates when `token` is cancelled
 
         Ok(())
     }

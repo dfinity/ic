@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/async_utils",
     "//rs/http_endpoints/metrics",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",

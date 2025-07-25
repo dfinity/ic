@@ -12371,6 +12371,7 @@ dependencies = [
  "clap 4.5.27",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-interfaces-registry",
  "ic-logger",

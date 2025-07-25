@@ -52,7 +52,7 @@ pub struct BackupManager {
 }
 
 impl BackupManager {
-    pub async fn new(log: Logger, args: BackupArgs) -> Self {
+    pub async fn new(log: Logger, args: BackupArgs, cancellation_token: CancellationToken) -> Self {
         let config = Config::load_config(args.config_file).expect("Config file can't be loaded");
         // verification that all is initialized with the init command
         if config.subnets.is_empty() {
@@ -88,7 +88,7 @@ impl BackupManager {
 
         info!(log, "Starting the registry replicator");
         let registry_replicator_future = registry_replicator
-            .start_polling(nns_urls, Some(nns_public_key), CancellationToken::new())
+            .start_polling(nns_urls, Some(nns_public_key), cancellation_token)
             .await
             .expect("Failed to start registry replicator");
 
