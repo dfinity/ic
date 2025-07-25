@@ -23,7 +23,7 @@ use ic_system_test_driver::{
 };
 use slog::info;
 
-use candid::{Encode, Decode};
+use candid::{Decode, Encode};
 
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` fails when not enough cycles are
 /// sent.
@@ -45,16 +45,21 @@ fn test(env: TestEnv) {
         enable_chain_key_signing(&governance, app_subnet.subnet_id, key_ids.clone(), &log).await;
 
         // Cycles are only required for application subnets.
+        let url =
+            "http://www.randomnumberapi.com/api/v1.0/random?min=100&max=1000&count=1".to_string();
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-        let response = msg_can.agent().update(&msg_can.canister_id(), "multi_http_request")
-            .with_arg(Encode!("http://www.randomnumberapi.com/api/v1.0/randomredditnumber?min=100&max=1000&count=1"))
-            .call_and_wait();
+        let response = msg_can
+            .agent()
+            .update(&msg_can.canister_id(), "multi_http_request")
+            .with_arg(Encode!(&url).expect("Failed to encode URL argument"))
+            .call_and_wait()
+            .await
+            .expect("Failed to make the update HTTP request");
 
         let result = Decode!(response.as_slice(), Vec<Result<String, String>>)
             .expect("Failed to decode response");
 
-        println!("{:?}", result);
-        assert!(false, "Coz I'm a failure");
+        assert!(false, "Coz I'm a failure; here the result: {:?}", result);
 
         /*
         let message_hash = vec![0xabu8; 32];
