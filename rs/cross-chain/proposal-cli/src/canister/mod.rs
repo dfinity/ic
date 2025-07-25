@@ -156,8 +156,13 @@ impl TargetCanister {
     pub fn git_log_dirs(&self) -> Vec<PathBuf> {
         match &self {
             TargetCanister::CyclesIndex => {
-                // FIXME: Add the rest
-                vec![PathBuf::from("packages/icrc-ledger-types")]
+                vec![
+                    PathBuf::from("packages/icrc-ledger-types"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_canister_core"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_core"),
+                    PathBuf::from("rs/ledger_suite/icrc1/index-ng"),
+                    PathBuf::from("rs/ledger_suite/icrc1/tokens_u256"),
+                ]
             }
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
