@@ -30,8 +30,7 @@ use ic_cycles_account_manager::{
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
-    SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -67,6 +66,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
+    batch::ChainKeyData,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
