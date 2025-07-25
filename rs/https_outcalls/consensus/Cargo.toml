@@ -36,6 +36,7 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+assert_matches = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
 rand_chacha = { workspace = true }

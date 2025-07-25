@@ -47,7 +47,7 @@ use crate::{
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
-    CanisterId, CountBytes, RegistryVersion, Time,
+    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
 };
 use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -703,6 +703,7 @@ pub struct CanisterHttpResponseMetadata {
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub registry_version: RegistryVersion,
+    pub replica_version: ReplicaVersion,
 }
 
 impl CountBytes for CanisterHttpResponseMetadata {

@@ -4,7 +4,8 @@
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
+    crypto::ConsensusCrypto, is_current_protocol_version, membership::Membership,
+    registry_version_at_height,
 };
 use ic_interfaces::{
     canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
@@ -20,7 +21,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig, Height,
+    replica_config::ReplicaConfig, Height, ReplicaVersion,
 };
 use rand::Rng;
 use std::{
@@ -300,6 +301,7 @@ impl CanisterHttpPoolManagerImpl {
                         timeout: response.timeout,
                         registry_version,
                         content_hash: ic_types::crypto::crypto_hash(&response),
+                        replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
                         .crypto
@@ -371,6 +373,10 @@ impl CanisterHttpPoolManagerImpl {
             // Only consider shares belonging to the requests that we can validate.
             .filter(|share| share.content.id < next_callback_id)
             .filter_map(|share| {
+                if !is_current_protocol_version(&share.content.replica_version) {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                };
+
                 if existing_signed_requests.contains(&key_from_share(share)) {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
@@ -523,6 +529,7 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::crypto::SignVerify;
@@ -542,7 +549,7 @@ pub mod test {
     };
     use mockall::predicate::*;
     use mockall::*;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, str::FromStr};
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {
@@ -635,6 +642,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        replica_version: ReplicaVersion::default(),
                     };
 
                     let signature = crypto
@@ -678,6 +686,103 @@ pub mod test {
 
                 // Make sure the changes are empty (share was filtered out)
                 assert!(changes.is_empty());
+            })
+        });
+    }
+
+    #[test]
+    fn test_invalidation_of_invalid_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
+                };
+
+                // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
+                // artifacts can have a smaller callback_id and be valid
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::from_str("old_version").unwrap(),
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature,
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: share,
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
         });
     }
@@ -727,6 +832,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let mut canister_http_pool =
@@ -852,6 +958,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let signature = crypto
@@ -1029,6 +1136,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let signature = crypto
