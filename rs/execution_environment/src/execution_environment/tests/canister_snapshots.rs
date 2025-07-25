@@ -3139,7 +3139,6 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
         last_full_execution_round: _,
         compute_allocation: _,
         accumulated_priority: _,
-        priority_credit: _,
         long_execution_mode: _,
         heap_delta_debit: _,
         install_code_debit: _,

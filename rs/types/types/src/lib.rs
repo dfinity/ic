@@ -28,40 +28,23 @@
 // Note [Scheduler and AccumulatedPriority]
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Public Specification of IC describes `compute_allocation`. Each canister is
-// initiated with an `accumulated_priority` of 0. The scheduler uses these values
-// while calculating the priority of a canister at each round. The canisters
-// are scheduled at each round in the following way:
+// Public ICP Specification describes `compute_allocation`. Each canister is
+// initialized with an `accumulated_priority` of `compute_allocation`.
+// The scheduler uses these values to calculate the priority of a canister
+// per round. Canisters are scheduled per round in the following way:
 //
-// * For each canister, we compute the `round_priority` of that canister as the
-// sum of its `accumulated_priority` and the multiplication of its
-// `compute_allocation` with the `multiplier` (see the scheduler).
-// * We distribute the free capacity equally to all the canisters.
-// * For new executions:
-//   - We sort the canisters according to their round priorities in
-//     descending order.
-// * For pending long executions:
-//   - Sort the canisters first according to their execution mode,
-//     and then round priorities.
-//   - Calculate how many scheduler cores we dedicate for long executions
-//     in this round using compute allocations of these long executions.
-//   - The first `long_execution_cores` many canisters are given the top
-//     priority in this round and get into the prioritized long execution mode.
-//   - The rest of the long executions are given an opportunity to be executed
-//     by scheduling them at the very end.
-// * The first `scheduler_cores` many canisters are given the top priority in
-// this round. Therefore, they are expected to be executed as the first of
-// their threads.
-// * As the last step, we credit the first `scheduler_cores` canisters
-//   with the sum of compute allocations of all canisters times `multiplier`
-//   divided by the number of canisters that are given top priority in
-//   this round. This `priority_credit` will be subtracted from the
-//   `accumulated_priority` at the end of the execution or at the checkpoint.
+// * Canisters are sorted by execution mode and then by accumulated priority in
+//   descending order.
+// * The number of scheduler cores dedicated to long executions per round
+//   is calculated based on the compute allocations of all long executions.
+// * The first `long_execution_cores` canisters are assigned the highest priority
+//   per round and enter prioritized long execution mode.
+// * The first `scheduler_cores` canisters are assigned the highest priority per round.
+//   Therefore, they are expected to be executed first among their threads.
+// * At the end of each round, every fully executed canister is charged.
+// * The total priority charged is evenly distributed across all canisters.
 //
-// As a result, at each round, the sum of accumulated priorities minus
-// the sum of priority credits remains 0.
-// Similarly, the sum of all round priorities equals to the multiplication of
-// the sum of all compute allocations with the multiplier.
+// As a result, the sum of accumulated priorities remains 0 at the end of each round.
 
 pub mod artifact;
 pub mod batch;

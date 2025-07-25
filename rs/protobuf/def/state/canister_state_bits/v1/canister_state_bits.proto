@@ -471,7 +471,7 @@ message CanisterStateBits {
   // Captures the memory usage of all snapshots associated with a canister.
   uint64 snapshots_memory_usage = 52;
   reserved 47;
-  int64 priority_credit = 48;
+  reserved 48;
   LongExecutionMode long_execution_mode = 49;
   optional uint64 wasm_memory_threshold = 50;
   reserved 53;

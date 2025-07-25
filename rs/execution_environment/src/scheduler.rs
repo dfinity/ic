@@ -1701,7 +1701,7 @@ impl FilteredCanisters {
         rate_limited_ids: &[CanisterId],
     ) {
         self.active_canister_ids
-            .extend(active_round_schedule.iter());
+            .extend(active_round_schedule.ordered_canister_ids.iter());
         self.rate_limited_canister_ids
             .extend(rate_limited_ids.iter());
     }

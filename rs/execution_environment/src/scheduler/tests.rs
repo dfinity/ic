@@ -1866,6 +1866,156 @@ fn max_canisters_per_round() {
     assert_eq!(executed_canisters, 200 + 2 * 5);
 }
 
+fn run_scheduler_test(
+    rounds: usize,
+    scheduler_cores: usize,
+    canisters_with_no_cycles: usize,
+    active_canisters_with_no_cycles: usize,
+    canisters_with_cycles: usize,
+    active_canisters_with_cycles: usize,
+    canisters_with_long_executions: usize,
+    active_canisters_with_long_executions: usize,
+    short_execution_instructions: u64,
+    long_execution_instructions: u64,
+) -> SchedulerTest {
+    let multiplier = scheduler_cores
+        * (canisters_with_no_cycles + canisters_with_cycles + canisters_with_long_executions);
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let mut no_cycles_ids = vec![];
+    for _ in 0..canisters_with_no_cycles {
+        let canister_id = test.create_canister_with(
+            Cycles::new(0),
+            ComputeAllocation::zero(),
+            MemoryAllocation::BestEffort,
+            None,
+            None,
+            None,
+        );
+        no_cycles_ids.push(canister_id);
+    }
+    let mut cycles_ids = vec![];
+    for _ in 0..canisters_with_cycles {
+        let canister_id = test.create_canister();
+        cycles_ids.push(canister_id);
+    }
+    let mut long_ids = vec![];
+    for _ in 0..canisters_with_long_executions {
+        let canister_id = test.create_canister();
+        long_ids.push(canister_id);
+    }
+
+    let mut max_ap = i64::MIN;
+    let mut min_ap = i64::MAX;
+    let mut inv = 0;
+    for _r in 1..=rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        for id in no_cycles_ids.iter().take(active_canisters_with_no_cycles) {
+            test.send_ingress(*id, ingress(short_execution_instructions));
+        }
+        for id in cycles_ids.iter().take(active_canisters_with_cycles) {
+            test.send_ingress(*id, ingress(short_execution_instructions));
+        }
+
+        for id in long_ids.iter().take(active_canisters_with_long_executions) {
+            test.send_ingress(*id, ingress(long_execution_instructions));
+        }
+
+        for canister in test.state().canisters_iter() {
+            min_ap = min_ap.min(canister.scheduler_state.accumulated_priority.get());
+            max_ap = max_ap.max(canister.scheduler_state.accumulated_priority.get());
+            inv += canister.scheduler_state.accumulated_priority.get();
+        }
+        assert_eq!(inv, 0);
+        // Allow up to 20x divergence for long executions (40B/2B = 20).
+        assert!(
+            min_ap / (multiplier as i64) > -100 * 20 * active_canisters_with_long_executions as i64,
+            "Error checking min accumulated priority {} > {} (-100% * 20x * long executions)",
+            min_ap / multiplier as i64,
+            -100 * 20 * active_canisters_with_long_executions as i64
+        );
+        assert!(
+            max_ap / (multiplier as i64) < 100 * 20 * active_canisters_with_long_executions as i64,
+            "Error checking max accumulated priority {} < {} (100% * 20x * long executions)",
+            max_ap / multiplier as i64,
+            100 * 20 * active_canisters_with_long_executions as i64
+        );
+    }
+    test
+}
+
+#[test]
+fn scheduler_accumulated_priority_divergence_many_short_executions() {
+    let scheduler_cores = 4;
+
+    let canisters_with_no_cycles = 0;
+    let active_canisters_with_no_cycles = 0;
+    let canisters_with_cycles = scheduler_cores;
+    let active_canisters_with_cycles = scheduler_cores;
+    let short_execution_instructions = 13_000_000;
+    let canisters_with_long_executions = 1;
+    let active_canisters_with_long_executions = 1;
+    let long_execution_instructions = 40_000_000_000;
+
+    let multiplier = scheduler_cores
+        * (canisters_with_no_cycles + canisters_with_cycles + canisters_with_long_executions);
+    let rounds = multiplier * 100;
+
+    let _test = run_scheduler_test(
+        rounds,
+        scheduler_cores,
+        canisters_with_no_cycles,
+        active_canisters_with_no_cycles,
+        canisters_with_cycles,
+        active_canisters_with_cycles,
+        canisters_with_long_executions,
+        active_canisters_with_long_executions,
+        short_execution_instructions,
+        long_execution_instructions,
+    );
+}
+
+#[test]
+fn scheduler_accumulated_priority_divergence_many_long_executions() {
+    let scheduler_cores = 4;
+
+    let canisters_with_no_cycles = 0;
+    let active_canisters_with_no_cycles = 0;
+    let canisters_with_cycles = 1;
+    let active_canisters_with_cycles = 1;
+    let short_execution_instructions = 13_000_000;
+    let canisters_with_long_executions = scheduler_cores + 1;
+    let active_canisters_with_long_executions = scheduler_cores + 1;
+    let long_execution_instructions = 40_000_000_000;
+
+    let multiplier = scheduler_cores
+        * (canisters_with_no_cycles + canisters_with_cycles + canisters_with_long_executions);
+    let rounds = multiplier * 100;
+
+    let _test = run_scheduler_test(
+        rounds,
+        scheduler_cores,
+        canisters_with_no_cycles,
+        active_canisters_with_no_cycles,
+        canisters_with_cycles,
+        active_canisters_with_cycles,
+        canisters_with_long_executions,
+        active_canisters_with_long_executions,
+        short_execution_instructions,
+        long_execution_instructions,
+    );
+}
+
 #[test]
 fn scheduler_long_execution_progress_across_checkpoints() {
     let scheduler_cores = 2;
@@ -1924,18 +2074,18 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     test.send_ingress(penalized_long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    // Assert the LEM is prioritized.
+    // Assert the LEM is opportunistic, as the canister was penalized.
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
     assert_eq!(
         penalized.scheduler_state.long_execution_mode,
-        LongExecutionMode::Prioritized
+        LongExecutionMode::Opportunistic
     );
 
     // Start a long execution on another non-penalized canister.
     test.send_ingress(other_long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    // Assert the LEM is opportunistic.
+    // Assert the LEM is opportunistic, as there is not enough long execution cores.
     let other = test.state().canister_state(&other_long_id).unwrap();
     assert_eq!(
         other.scheduler_state.long_execution_mode,
@@ -1952,18 +2102,52 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         penalized.scheduler_state.accumulated_priority < other.scheduler_state.accumulated_priority
     );
     let penalized_executed_before = penalized.system_state.canister_metrics.executed;
+    let other_executed_before = other.system_state.canister_metrics.executed;
 
     // Send a bunch of messages.
     for canister_id in &canister_ids {
         test.send_ingress(*canister_id, ingress(slice_instructions));
     }
 
-    // Assert that after the checkpoint the penalized canister continues its long execution.
+    // Assert that after the checkpoint the other canister continues its long execution.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert_eq!(
+        penalized_executed_before,
+        penalized.system_state.canister_metrics.executed
+    );
+    assert_eq!(
+        penalized.scheduler_state.long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+    assert_eq!(
+        other_executed_before,
+        other.system_state.canister_metrics.executed
+    );
+    assert_eq!(
+        other.scheduler_state.long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let other = test.state().canister_state(&other_long_id).unwrap();
     assert_eq!(
         penalized_executed_before + 1,
         penalized.system_state.canister_metrics.executed
+    );
+    assert_eq!(
+        penalized.scheduler_state.long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+    assert_eq!(
+        other_executed_before + 1,
+        other.system_state.canister_metrics.executed
+    );
+    assert_eq!(
+        other.scheduler_state.long_execution_mode,
+        LongExecutionMode::Prioritized
     );
 }
 
@@ -6162,7 +6346,6 @@ fn inner_round_first_execution_is_not_a_full_execution() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
@@ -6178,10 +6361,9 @@ fn inner_round_first_execution_is_not_a_full_execution() {
             assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
         }
         total_accumulated_priority += scheduler_state.accumulated_priority.get();
-        total_priority_credit += scheduler_state.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test]
@@ -6220,7 +6402,6 @@ fn inner_round_long_execution_is_a_full_execution() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
@@ -6236,10 +6417,9 @@ fn inner_round_long_execution_is_a_full_execution() {
         // despite still having messages, executed a full slice of instructions.
         assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
         total_accumulated_priority += scheduler_state.accumulated_priority.get();
-        total_priority_credit += scheduler_state.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
@@ -6277,7 +6457,6 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should finish their messages.
@@ -6294,9 +6473,8 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             prop_assert_eq!(canister.scheduler_state.last_full_execution_round, 0.into());
         }
         total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
-        total_priority_credit += canister.scheduler_state.priority_credit.get();
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(total_accumulated_priority, 0);
 
     // Send one more message for first half of the canisters.
     for (i, canister) in canister_ids.iter().enumerate() {
@@ -6308,7 +6486,6 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         // Now all the canisters should be executed once.
         prop_assert_eq!(canister.system_state.canister_metrics.executed, 1);
@@ -6330,9 +6507,8 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             );
         }
         total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
-        total_priority_credit += canister.scheduler_state.priority_credit.get();
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test]
@@ -6375,7 +6551,6 @@ fn charge_idle_canisters_for_full_execution_round() {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
         let mut total_accumulated_priority = 0;
-        let mut total_priority_credit = 0;
         for canister in test.state().canisters_iter() {
             let scheduler_state = &canister.scheduler_state;
             // Assert that we punished all idle canisters, not just top `scheduler_cores`.
@@ -6384,14 +6559,13 @@ fn charge_idle_canisters_for_full_execution_round() {
                 assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
             }
             // Assert there is no divergency in accumulated priorities.
-            let priority = scheduler_state.accumulated_priority - scheduler_state.priority_credit;
+            let priority = scheduler_state.accumulated_priority;
             assert!(priority.get() <= 100 * multiplier as i64);
             assert!(priority.get() >= -100 * multiplier as i64);
 
             total_accumulated_priority += scheduler_state.accumulated_priority.get();
-            total_priority_credit += scheduler_state.priority_credit.get();
         }
         // The accumulated priority invariant should be respected.
-        assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+        assert_eq!(total_accumulated_priority, 0);
     }
 }
