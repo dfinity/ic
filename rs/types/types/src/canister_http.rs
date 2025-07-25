@@ -375,20 +375,7 @@ impl CanisterHttpRequestContext {
         )?;
 
         let replication = match args.is_replicated {
-            Some(false) => {
-                if node_ids.is_empty() {
-                    return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
-                }
-
-                let random_index = rng.gen_range(0..node_ids.len());
-
-                let delegated_node_id = node_ids
-                    .iter()
-                    .nth(random_index)
-                    .ok_or(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)?; // never panic.
-
-                Replication::NonReplicated(*delegated_node_id)
-            }
+            Some(node_id) => Replication::NonReplicated(node_id.into()),
             _ => Replication::FullyReplicated,
         };
 

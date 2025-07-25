@@ -701,6 +701,10 @@ impl<'a> MessageCanister<'a> {
         self.canister_id
     }
 
+    pub fn agent(&self) -> &Agent {
+        self.agent
+    }
+
     /// Initializes a message canister wrapper from a canister id. Does /NOT/
     /// perform any installation operation on the runtime.
     pub fn from_canister_id(agent: &'a Agent, canister_id: Principal) -> MessageCanister<'a> {

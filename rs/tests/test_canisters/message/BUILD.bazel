@@ -5,7 +5,9 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/types/management_canister_types",
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
 ]

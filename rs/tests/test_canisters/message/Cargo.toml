@@ -10,3 +10,5 @@ documentation.workspace = true
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
+futures = { workspace = true }
