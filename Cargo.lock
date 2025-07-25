@@ -9387,6 +9387,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-heap-bytes"
+version = "0.9.0"
+dependencies = [
+ "ic-heap-bytes-derive",
+ "ic-types",
+ "paste",
+]
+
+[[package]]
+name = "ic-heap-bytes-derive"
+version = "0.9.0"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "ic-hpke"
 version = "0.1.0"
 dependencies = [

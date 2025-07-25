@@ -446,6 +446,8 @@ members = [
     "rs/universal_canister/lib",
     "rs/utils",
     "rs/utils/ensure",
+    "rs/utils/heap_bytes",
+    "rs/utils/heap_bytes_derive",
     "rs/utils/lru_cache",
     "rs/utils/rustfmt",
     "rs/validator",
