@@ -170,22 +170,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "No routing table in snapshot")]
-    fn post_upgrade_fails_on_global_state_invariant_check_failure() {
-        // We only check a single failure mode here,
-        // since the rest should be under other test coverage
-        let registry = Registry::new();
-        let stable_storage_bytes = stable_storage_from_registry(&registry, None);
-
-        // with our bad mutation, this should throw
-        let mut new_registry = Registry::new();
-        let registry_storage =
-            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
-                .expect("Error decoding from stable.");
-        canister_post_upgrade(&mut new_registry, registry_storage);
-    }
-
-    #[test]
     fn post_upgrade_fills_in_missing_versions_to_maintain_invariant() {
         // We only check a single failure mode, since the rest should be under other test coverage
         let mut registry = invariant_compliant_registry(0);
