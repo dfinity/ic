@@ -1078,39 +1078,43 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        if cost_schedule == CanisterCyclesCostSchedule::Free {
-            return Ok(());
-        }
-        let effective_cycles_balance = match use_case {
-            CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
-                // The resource use cases first drain the `reserved_balance` and
-                // after that the main balance.
-                system_state.balance() + system_state.reserved_balance()
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => {}
+            CanisterCyclesCostSchedule::Normal => {
+                let effective_cycles_balance = match use_case {
+                    CyclesUseCase::Memory
+                    | CyclesUseCase::ComputeAllocation
+                    | CyclesUseCase::Uninstall => {
+                        // The resource use cases first drain the `reserved_balance` and
+                        // after that the main balance.
+                        system_state.balance() + system_state.reserved_balance()
+                    }
+                    CyclesUseCase::IngressInduction
+                    | CyclesUseCase::Instructions
+                    | CyclesUseCase::RequestAndResponseTransmission
+                    | CyclesUseCase::CanisterCreation
+                    | CyclesUseCase::ECDSAOutcalls
+                    | CyclesUseCase::SchnorrOutcalls
+                    | CyclesUseCase::VetKd
+                    | CyclesUseCase::HTTPOutcalls
+                    | CyclesUseCase::DeletedCanisters
+                    | CyclesUseCase::NonConsumed
+                    | CyclesUseCase::BurnedCycles
+                    | CyclesUseCase::DroppedMessages => system_state.balance(),
+                };
+
+                self.verify_cycles_balance_with_threshold(
+                    system_state.canister_id,
+                    effective_cycles_balance,
+                    cycles,
+                    threshold,
+                    reveal_top_up,
+                )?;
+
+                debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
+                system_state.remove_cycles(cycles, use_case);
             }
-            CyclesUseCase::IngressInduction
-            | CyclesUseCase::Instructions
-            | CyclesUseCase::RequestAndResponseTransmission
-            | CyclesUseCase::CanisterCreation
-            | CyclesUseCase::ECDSAOutcalls
-            | CyclesUseCase::SchnorrOutcalls
-            | CyclesUseCase::VetKd
-            | CyclesUseCase::HTTPOutcalls
-            | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed
-            | CyclesUseCase::BurnedCycles
-            | CyclesUseCase::DroppedMessages => system_state.balance(),
-        };
-
-        self.verify_cycles_balance_with_threshold(
-            system_state.canister_id,
-            effective_cycles_balance,
-            cycles,
-            threshold,
-            reveal_top_up,
-        )?;
-
-        debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-        system_state.remove_cycles(cycles, use_case);
+        }
         Ok(())
     }
 
@@ -1328,20 +1332,22 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        if cost_schedule == CanisterCyclesCostSchedule::Free {
-            return Cycles::new(0);
-        }
-        let response_size = match response_size_limit {
-            Some(response_size) => response_size.get(),
-            // Defaults to maximum response size.
-            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        };
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                let response_size = match response_size_limit {
+                    Some(response_size) => response_size.get(),
+                    // Defaults to maximum response size.
+                    None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                };
 
-        (self.config.http_request_linear_baseline_fee
-            + self.config.http_request_quadratic_baseline_fee * (subnet_size as u64)
-            + self.config.http_request_per_byte_fee * request_size.get()
-            + self.config.http_response_per_byte_fee * response_size)
-            * (subnet_size as u64)
+                (self.config.http_request_linear_baseline_fee
+                    + self.config.http_request_quadratic_baseline_fee * (subnet_size as u64)
+                    + self.config.http_request_per_byte_fee * request_size.get()
+                    + self.config.http_response_per_byte_fee * response_size)
+                    * (subnet_size as u64)
+            }
+        }
     }
 
     pub fn http_request_fee_beta(
@@ -1352,22 +1358,24 @@ impl CyclesAccountManager {
         cost_schedule: CanisterCyclesCostSchedule,
         payload_size: NumBytes,
     ) -> Cycles {
-        if cost_schedule == CanisterCyclesCostSchedule::Free {
-            return Cycles::new(0);
-        }
-        let max_response_size = match response_size_limit {
-            Some(response_size) => response_size.get(),
-            // Defaults to maximum response size.
-            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        };
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                let max_response_size = match response_size_limit {
+                    Some(response_size) => response_size.get(),
+                    // Defaults to maximum response size.
+                    None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                };
 
-        (Cycles::new(4_000_000)
-            + Cycles::new(50_000) * (subnet_size as u64)
-            + Cycles::new(50) * request_size.get()
-            + Cycles::new(50) * max_response_size
-            + Cycles::new(750) * payload_size.get()
-            + Cycles::new(30) * (subnet_size as u64) * payload_size.get())
-            * (subnet_size as u64)
+                (Cycles::new(4_000_000)
+                    + Cycles::new(50_000) * (subnet_size as u64)
+                    + Cycles::new(50) * request_size.get()
+                    + Cycles::new(50) * max_response_size
+                    + Cycles::new(750) * payload_size.get()
+                    + Cycles::new(30) * (subnet_size as u64) * payload_size.get())
+                    * (subnet_size as u64)
+            }
+        }
     }
 
     /// Returns the default value of the reserved balance limit for the case
