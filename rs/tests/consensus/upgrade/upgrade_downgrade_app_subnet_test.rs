@@ -126,7 +126,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &mainnet_version,
         SubnetType::Application,
         None,
-        /*assert_graceful_orchestrator_tasks_exits=*/ false,
+        /*assert_graceful_orchestrator_tasks_exits=*/ true,
     );
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(
