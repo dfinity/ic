@@ -153,3 +153,27 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )
+
+rust_binary(
+    name = "recovery_upgrader_test_bin",
+    testonly = True,
+    srcs = ["recovery_upgrader_test.rs"],
+    deps = DEPENDENCIES + [":nested"],
+)
+
+# Tests the recovery-upgrader component by upgrading the GuestOS to the mainnet update image
+# Uses the mainnet update image, as this image is hosted at https://download.dfinity.systems/
+system_test_nns(
+    name = "recovery_upgrader_test",
+    env = MAINNET_ENV | VECTOR_ENV,
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["long_test"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":recovery_upgrader_test_bin",
+    test_timeout = "eternal",
+    uses_guestos_mainnet_update = True,
+    uses_setupos_img = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
