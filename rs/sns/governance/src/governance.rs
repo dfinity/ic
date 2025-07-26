@@ -124,6 +124,7 @@ use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
@@ -1202,6 +1203,23 @@ impl Governance {
                     self.env.now(),
                 )
                 .await?;
+
+            // We only update the cached_neuron_stake_e8s and neuron_fees_e8s if we actually
+            // burn fees, otherwise this leads to ledger and governance getting out of sync.
+            let nid = id.to_string();
+            let neuron = self
+                .proto
+                .neurons
+                .get_mut(&nid)
+                .expect("Expected the parent neuron to exist");
+
+            // Update the neuron's stake and management fees to reflect the burning
+            // above.
+            neuron.cached_neuron_stake_e8s = neuron
+                .cached_neuron_stake_e8s
+                .saturating_sub(max_burnable_fee);
+
+            neuron.neuron_fees_e8s = neuron.neuron_fees_e8s.saturating_sub(max_burnable_fee);
         }
 
         let nid = id.to_string();
@@ -1210,15 +1228,6 @@ impl Governance {
             .neurons
             .get_mut(&nid)
             .expect("Expected the parent neuron to exist");
-
-        // Update the neuron's stake and management fees to reflect the burning
-        // above.
-        if neuron.cached_neuron_stake_e8s > max_burnable_fee {
-            neuron.cached_neuron_stake_e8s -= max_burnable_fee;
-        } else {
-            neuron.cached_neuron_stake_e8s = 0;
-        }
-        neuron.neuron_fees_e8s -= max_burnable_fee;
 
         // Transfer 2 - Disburse to the chosen account. This may fail if the
         // user told us to disburse more than they had in their account (but
@@ -1246,11 +1255,9 @@ impl Governance {
     /// ensuring we don't burn fees that could potentially be refunded if those
     /// proposals are accepted.
     fn maximum_burnable_fees_for_neuron(&self, neuron: &Neuron) -> Result<u64, GovernanceError> {
-        let neuron_id = neuron.id.as_ref()
-            .ok_or_else(|| GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "Neuron does not have an ID"
-            ))?;
+        let neuron_id = neuron.id.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(ErrorType::NotFound, "Neuron does not have an ID")
+        })?;
 
         // Calculate the total reject costs from all open proposals submitted by this neuron
         let total_open_proposal_reject_costs = self
@@ -1267,7 +1274,9 @@ impl Governance {
 
         // The maximum burnable amount is the total fees minus any fees that are
         // tied up in open proposals (which could potentially be refunded)
-        let max_burnable = neuron.neuron_fees_e8s.saturating_sub(total_open_proposal_reject_costs);
+        let max_burnable = neuron
+            .neuron_fees_e8s
+            .saturating_sub(total_open_proposal_reject_costs);
 
         Ok(max_burnable)
     }
