@@ -98,6 +98,7 @@ pub(crate) struct CanisterManager {
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     environment_variables_flag: FlagStatus,
+    replicated_query_inter_canister_log_fetch: FlagStatus,
 }
 
 impl CanisterManager {
@@ -109,6 +110,7 @@ impl CanisterManager {
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         environment_variables_flag: FlagStatus,
+        replicated_query_inter_canister_log_fetch: FlagStatus,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -118,6 +120,7 @@ impl CanisterManager {
             ingress_history_writer,
             fd_factory,
             environment_variables_flag,
+            replicated_query_inter_canister_log_fetch,
         }
     }
 
@@ -217,13 +220,20 @@ impl CanisterManager {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} API is only accessible in non-replicated mode",
-                    Ic00Method::FetchCanisterLogs
-                ),
-            )),
+            Ok(Ic00Method::FetchCanisterLogs) => {
+                match self.replicated_query_inter_canister_log_fetch {
+                    FlagStatus::Disabled => Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!(
+                            "{} API is only accessible in BLA1 non-replicated mode",
+                            Ic00Method::FetchCanisterLogs
+                        ),
+                    )),
+                    FlagStatus::Enabled => {
+                        todo!("add implementation");
+                    }
+                }
+            },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::BitcoinGetSuccessors)
