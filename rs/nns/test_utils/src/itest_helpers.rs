@@ -13,7 +13,8 @@ use canister_test::{
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
-use futures::{future::join_all, FutureExt};
+use futures::{executor::block_on, future::join_all, FutureExt};
+use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_management_canister_types_private::CanisterInstallMode;
@@ -39,6 +40,7 @@ use on_wire::{bytes, IntoWire};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use std::{future::Future, path::Path, thread, time::SystemTime};
+use xrc_mock::XrcMockInitPayload;
 
 /// All the NNS canisters that are use in tests, but not all canisters
 /// on NNS mainnet (there are 4 ledger archives, for example and a ledger index that aren't tested
@@ -56,6 +58,10 @@ pub struct NnsCanisters<'a> {
     pub identity: Canister<'a>,
     pub nns_ui: Canister<'a>,
     pub sns_wasms: Canister<'a>,
+
+    // Optional canisters.
+    pub mock_exchange_rate: Option<Canister<'a>>,
+    pub subnet_rental: Option<Canister<'a>>,
 }
 
 impl NnsCanisters<'_> {
@@ -76,6 +82,12 @@ impl NnsCanisters<'_> {
         .into_iter()
         .collect();
 
+        if init_payloads.mock_exchange_rate.is_some() {
+            runtime.create_canister_at_id(PrincipalId::from(EXCHANGE_RATE_CANISTER_ID))
+                .await
+                .unwrap();
+        }
+
         maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
@@ -86,6 +98,8 @@ impl NnsCanisters<'_> {
             .create_canister_max_cycles_with_retries()
             .await
             .expect("Failed creating last canister");
+
+        // Create canisters.
 
         let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
         let mut governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
@@ -98,7 +112,17 @@ impl NnsCanisters<'_> {
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
 
-        // Install all the canisters
+        let mut mock_exchange_rate = init_payloads
+            .mock_exchange_rate
+            .as_ref()
+            .map(|_not_used| Canister::new(runtime, EXCHANGE_RATE_CANISTER_ID));
+        let mut subnet_rental = init_payloads
+            .subnet_rental
+            .as_ref()
+            .map(|_not_used| Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID));
+
+        // Install code into canisters (pass init argument/payload).
+
         // Registry and Governance need to first or the process hangs,
         // Ledger is just added as to avoid Governance spamming the logs.
         futures::join!(
@@ -114,10 +138,32 @@ impl NnsCanisters<'_> {
             ),
             install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
-            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
+        ); // DO NOT MERGE
+
+            // DO NOT MERGE async {
+                if let Some(mock_exchange_rate) = mock_exchange_rate.as_mut() {
+                    install_mock_exchange_rate_canister(
+                        mock_exchange_rate,
+                        init_payloads.mock_exchange_rate.clone().unwrap(),
+                    )
+                    .await
+                }
+            /* DO NOT MERGE
+            },
+            async {
+            */
+                if let Some(subnet_rental) = subnet_rental.as_mut() {
+                    install_subnet_rental_canister(subnet_rental).await
+                }
+            /* DO NOT MERGE
+            },
         );
+        */
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
+
+        // Set controller(s) of canisters.
 
         // We can set all the controllers at once. Several -- or all -- may go
         // into the same block, this makes setup faster.
@@ -138,6 +184,7 @@ impl NnsCanisters<'_> {
 
         eprintln!("NNS canisters set up after {:.1} s", since_start_secs());
 
+        // Finally, bundle canisters.
         NnsCanisters {
             registry,
             governance,
@@ -149,6 +196,8 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
+            mock_exchange_rate,
+            subnet_rental,
         }
     }
 
@@ -205,6 +254,30 @@ impl NnsCanisters<'_> {
             .await
             .unwrap();
 
+        let mut mock_exchange_rate: Option<Canister<'_>> = init_payloads
+            .mock_exchange_rate
+            .as_ref()
+            .map(|_not_used| {
+                block_on(async {
+                    runtime
+                        .create_canister_at_id_max_cycles_with_retries(EXCHANGE_RATE_CANISTER_ID.get())
+                        .await
+                        .unwrap()
+                })
+            });
+        let mut subnet_rental = init_payloads
+            .subnet_rental
+            .as_ref()
+            .map(|_not_used| {
+                block_on(async {
+                    runtime
+                        // DO NOT MERGE - Max cycles probably doesn't work.
+                        .create_canister_at_id_max_cycles_with_retries(SUBNET_RENTAL_CANISTER_ID.get())
+                        .await
+                        .unwrap()
+                })
+            });
+
         // Install all the canisters
         // Registry and Governance need to first or the process hangs,
         // Ledger is just added as to avoid Governance spamming the logs.
@@ -223,7 +296,22 @@ impl NnsCanisters<'_> {
             ),
             install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
-            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
+
+            async {
+                if let Some(mock_exchange_rate) = mock_exchange_rate.as_mut() {
+                    install_mock_exchange_rate_canister(
+                        mock_exchange_rate,
+                        init_payloads.mock_exchange_rate.clone().unwrap(),
+                    )
+                    .await;
+                }
+            },
+            async {
+                if let Some(subnet_rental) = subnet_rental.as_mut() {
+                    install_subnet_rental_canister(subnet_rental).await;
+                }
+            },
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -242,6 +330,21 @@ impl NnsCanisters<'_> {
             identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+
+            async {
+                if let Some(mock_exchange_rate) = mock_exchange_rate.as_mut() {
+                    mock_exchange_rate.set_controller_with_retries(ROOT_CANISTER_ID.get()).await
+                } else {
+                    Ok(())
+                }
+            },
+            async {
+                if let Some(subnet_rental) = subnet_rental.as_mut() {
+                    subnet_rental.set_controller_with_retries(ROOT_CANISTER_ID.get()).await
+                } else {
+                    Ok(())
+                }
+            },
         )
         .unwrap();
 
@@ -258,6 +361,8 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
+            mock_exchange_rate,
+            subnet_rental,
         }
     }
 
@@ -632,6 +737,18 @@ pub async fn install_sns_wasm_canister(
 
 pub async fn install_node_rewards_canister(canister: &mut Canister<'_>) {
     install_rust_canister(canister, "node-rewards-canister", &[], None).await;
+}
+
+pub async fn install_mock_exchange_rate_canister(
+    canister: &mut Canister<'_>,
+    init_payload: XrcMockInitPayload,
+) {
+    let init_payload = Encode!(&init_payload).unwrap();
+    install_rust_canister(canister, "xrc_mock", &[], Some(init_payload)).await;
+}
+
+pub async fn install_subnet_rental_canister(canister: &mut Canister<'_>) {
+    install_rust_canister(canister, "subnet-rental", &[], None).await;
 }
 
 /// Creates and installs the sns_wasm canister.

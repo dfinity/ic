@@ -88,3 +88,7 @@ path = "nns_dapp_test.rs"
 [[bin]]
 name = "ic-systest-bitcoin-set-config-proposal-test"
 path = "bitcoin_set_config_proposal_test.rs"
+
+[[bin]]
+name = "rent_subnet_test"
+path = "rent_subnet_test.rs"
