@@ -39,6 +39,7 @@ use ic_state_manager::{
         StateSync,
     },
     StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+    testing::StateManagerTesting,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
