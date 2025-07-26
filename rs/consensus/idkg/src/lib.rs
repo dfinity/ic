@@ -685,7 +685,7 @@ mod tests {
         // Create some pre-signature stashes
         let mut stashes = BTreeMap::new();
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            stashes.insert(key_id.inner().clone(), fake_pre_signature_stash(&key_id, 5));
+            stashes.insert(key_id.clone(), fake_pre_signature_stash(&key_id, 5));
         }
         let stashed_transcripts = stashes.len() as u64;
         state
