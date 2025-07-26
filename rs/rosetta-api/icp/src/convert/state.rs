@@ -3,9 +3,9 @@ use crate::{
     models::seconds::Seconds,
     request::Request,
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
-        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp,
-        Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
 };
 use ic_types::PrincipalId;
@@ -255,6 +255,24 @@ impl State {
             recipient,
             neuron_index,
         }));
+        Ok(())
+    }
+
+    pub fn disburse_maturity(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        neuron_index: u64,
+        percentage_to_disburse: u32,
+        recipient: Option<icp_ledger::AccountIdentifier>,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions
+            .push(Request::DisburseMaturity(DisburseMaturity {
+                account,
+                percentage_to_disburse,
+                recipient,
+                neuron_index,
+            }));
         Ok(())
     }
 

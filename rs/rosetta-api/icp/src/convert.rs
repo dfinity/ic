@@ -16,10 +16,11 @@ use crate::{
         transaction_results::TransactionResults, Request,
     },
     request_types::{
-        ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-        ListNeuronsMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
-        RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
-        StakeMaturityMetadata, Status, STATUS_COMPLETED,
+        ChangeAutoStakeMaturityMetadata, DisburseMaturityMetadata, DisburseMetadata,
+        FollowMetadata, KeyMetadata, ListNeuronsMetadata, NeuronIdentifierMetadata,
+        NeuronInfoMetadata, PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
+        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
+        STATUS_COMPLETED,
     },
     transaction_id::TransactionIdentifier,
 };
@@ -220,6 +221,20 @@ pub fn operations_to_requests(
                     None
                 };
                 state.disburse(account, neuron_index, amount, recipient)?;
+            }
+            OperationType::DisburseMaturity => {
+                let DisburseMaturityMetadata {
+                    neuron_index,
+                    recipient,
+                    percentage_to_disburse,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.disburse_maturity(
+                    account,
+                    neuron_index,
+                    percentage_to_disburse,
+                    recipient,
+                )?;
             }
             OperationType::Spawn => {
                 let SpawnMetadata {
