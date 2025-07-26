@@ -49,6 +49,7 @@ ic-interfaces = { path = "../interfaces" }
 ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }

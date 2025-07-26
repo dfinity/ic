@@ -12,6 +12,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/registry/mocks",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/tracing",
     "//rs/protobuf",
