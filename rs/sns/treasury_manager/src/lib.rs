@@ -137,6 +137,13 @@ impl BalanceBook {
         }
         self
     }
+
+    pub fn suspense(mut self, amount_decimals: u64) -> Self {
+        if let Some(suspense) = self.suspense.as_mut() {
+            suspense.amount_decimals = Nat::from(amount_decimals)
+        }
+        self
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
