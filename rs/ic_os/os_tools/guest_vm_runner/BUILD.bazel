@@ -8,6 +8,7 @@ DEPENDENCIES = [
     ":build_script",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/device",
     "//rs/ic_os/grub",
     "//rs/ic_os/metrics_tool",
     "//rs/ic_os/sev",
@@ -16,11 +17,9 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:devicemapper",
     "@crate_index//:gpt",
-    "@crate_index//:loopdev-3",
     "@crate_index//:macaddr",
     "@crate_index//:nix",
     "@crate_index//:regex",
-    "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
@@ -38,9 +37,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 cargo_build_script(
     name = "build_script",

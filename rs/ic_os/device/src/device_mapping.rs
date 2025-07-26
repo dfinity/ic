@@ -1,3 +1,4 @@
+use crate::io::retry_if_busy;
 use anyhow::{ensure, Context, Result};
 use devicemapper::{
     devnode_to_devno, Bytes, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
@@ -13,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::{NamedTempFile, TempPath};
 
+#[allow(clippy::len_without_is_empty)]
 pub trait DeviceTrait: Send + Sync {
     fn len(&self) -> Sectors;
     fn device(&self) -> Device;
@@ -158,10 +160,8 @@ impl TempDevice {
 
         let temp_path = temp_file.into_temp_path();
 
-        let loop_device = LoopDeviceWrapper(loopdev::LoopControl::open()?.next_free()?);
-        loop_device
-            .attach_file(&temp_path)
-            .context("Temp loopback attach_file failed")?;
+        let loop_device = LoopDeviceWrapper::attach_to_next_free(&temp_path)
+            .context("Temp loopback creation failed")?;
 
         let minor = loop_device
             .minor()
@@ -191,6 +191,22 @@ impl DeviceTrait for TempDevice {
 
 /// Wrapper around a loop device that automatically detaches it when dropped.
 pub struct LoopDeviceWrapper(pub LoopDevice);
+
+impl LoopDeviceWrapper {
+    /// Opens a loop device and attaches it to the specified file.
+    pub fn attach_to_next_free(path: &Path) -> Result<Self> {
+        // next_free() will return the same loop device until a file is attached to it, so
+        // it can happen that a parallel process gets the same loop device and attaches a file
+        // to it before we do. In this case attach_file will fail with ResourceBusy.
+        // We solve this by retrying the operation.
+        retry_if_busy(|| {
+            let loop_device = Self(loopdev::LoopControl::open()?.next_free()?);
+            loop_device.attach_file(path)?;
+            Ok(loop_device)
+        })
+        .context("Failed to attach loop device")
+    }
+}
 
 impl Drop for LoopDeviceWrapper {
     fn drop(&mut self) {
@@ -230,7 +246,7 @@ impl Deref for LoopDeviceWrapper {
 /// dependencies, these are other devices that the [MappedDevice] depends on and should be cleaned
 /// up when the [MappedDevice] is dropped.
 pub struct MappedDevice {
-    name: &'static str,
+    name: String,
     path: PathBuf,
     len: Sectors,
     device_mapper: Arc<DM>,
@@ -286,7 +302,7 @@ impl MappedDevice {
     /// `source` must stay valid for the lifetime of the snapshot.
     pub fn create_snapshot(
         device_mapper: Arc<DM>,
-        name: &'static str,
+        name: &str,
         source: Box<dyn DeviceTrait>,
         copy_on_write: Box<dyn DeviceTrait>,
     ) -> Result<MappedDevice> {
@@ -307,7 +323,7 @@ impl MappedDevice {
 
     fn create(
         dm: Arc<DM>,
-        name: &'static str,
+        name: &str,
         table: &[(u64, u64, String, String)],
         len: Sectors,
         dependencies: Vec<Box<dyn DeviceTrait>>,
@@ -319,7 +335,7 @@ impl MappedDevice {
         // Wrap the device right away by creating a MappedDevice so it gets detached in the
         // MappedDevice Drop impl if there is an error later.
         let mapped_device = MappedDevice {
-            name,
+            name: name.to_string(),
             path: format!("/dev/mapper/{name}").into(),
             device: device.device(),
             len,
@@ -351,7 +367,7 @@ impl Drop for MappedDevice {
         debug_assert_valid(self);
 
         if let Err(err) = self.device_mapper.device_remove(
-            &DevId::Name(DmName::new(self.name).unwrap()),
+            &DevId::Name(DmName::new(&self.name).unwrap()),
             DmOptions::default(),
         ) {
             debug_panic(&format!("Failed to remove device mapper device: {err}"));

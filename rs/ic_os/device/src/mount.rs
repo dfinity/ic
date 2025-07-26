@@ -1,3 +1,4 @@
+use crate::io::retry_if_busy;
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use gpt::GptDisk;
@@ -151,6 +152,7 @@ impl PartitionProvider for GptPartitionProvider {
         self.mounter
             .mount_range(self.device.clone(), offset_bytes, len_bytes, options)
             .await
+            .context("mount_range failed")
     }
 }
 
@@ -188,12 +190,15 @@ impl Mounter for LoopDeviceMounter {
             let tempdir = TempDir::new()?;
             let mount_point = tempdir.path();
             Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
-                mount: Mount::builder()
-                    .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                    .loopback_offset(offset_bytes)
-                    .flags(MountFlags::empty())
-                    .explicit_loopback()
-                    .mount_autodrop(device, mount_point, UnmountFlags::empty())?,
+                mount: retry_if_busy(|| {
+                    Mount::builder()
+                        .fstype(FilesystemType::Manual(options.file_system.as_str()))
+                        .loopback_offset(offset_bytes)
+                        .flags(MountFlags::empty())
+                        .explicit_loopback()
+                        .mount_autodrop(&device, mount_point, UnmountFlags::empty())
+                })
+                .context("Failed to create mount")?,
                 _tempdir: tempdir,
             })
         })
@@ -202,8 +207,6 @@ impl Mounter for LoopDeviceMounter {
     }
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 pub mod testing {
     use super::*;
     use anyhow::Context;
@@ -264,7 +267,7 @@ pub mod testing {
     ///
     /// The mounter "remembers" the extracted partitions, so extracting the same device/offset/len
     /// always returns the same directory.
-    #[derive(Clone)]
+    #[derive(Clone, Default)]
     pub struct ExtractingFilesystemMounter {
         #[allow(clippy::disallowed_types)] // Using tokio Mutex in testing is fine.
         mounts: Arc<tokio::sync::Mutex<PartitionMap>>,
@@ -301,13 +304,6 @@ pub mod testing {
     }
 
     impl ExtractingFilesystemMounter {
-        #[allow(dead_code)]
-        pub fn new() -> Self {
-            Self {
-                mounts: Default::default(),
-            }
-        }
-
         async fn extract_partition_to_tempdir(
             &self,
             device: PathBuf,
