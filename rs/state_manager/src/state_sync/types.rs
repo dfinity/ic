@@ -439,7 +439,6 @@ pub struct StateSyncMessage {
     pub malicious_flags: MaliciousFlags,
 }
 
-#[cfg(test)]
 #[cfg(feature = "malicious_code")]
 pub(crate) fn maliciously_alter_chunk_payload(mut payload: Vec<u8>) -> Vec<u8> {
     match payload.last_mut() {
@@ -455,7 +454,6 @@ pub(crate) fn maliciously_alter_chunk_payload(mut payload: Vec<u8>) -> Vec<u8> {
     payload
 }
 
-#[cfg(test)]
 #[cfg(feature = "malicious_code")]
 pub(crate) fn maliciously_alter_meta_manifest(mut meta_manifest: MetaManifest) -> Vec<u8> {
     match meta_manifest.sub_manifest_hashes.last_mut() {
