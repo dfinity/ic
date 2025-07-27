@@ -1079,6 +1079,7 @@ impl IncompleteState {
     }
 }
 
+#[cfg(test)]
 #[cfg(feature = "malicious_code")]
 fn maliciously_alter_chunk_data(
     mut chunk: Chunk,

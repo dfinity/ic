@@ -293,8 +293,8 @@ fn uses_chunk_size(manifest: &Manifest, max_chunk_size: u32) -> bool {
     })
 }
 
-// Computes file_table and chunk_table of a manifest using a parallel algorithm.
-// All the parallel work is spawned in the specified thread pool.
+/// Computes file_table and chunk_table of a manifest using a parallel algorithm.
+/// All the parallel work is spawned in the specified thread pool.
 fn build_chunk_table_parallel(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
@@ -1329,6 +1329,7 @@ pub fn filter_out_zero_chunks(manifest: &Manifest) -> HashSet<usize> {
 
 /// Helper function to compute the manifest from a raw path.
 /// This function is intended for tests and external tools only.
+/// HERE
 pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
     let cp_layout = CheckpointLayout::<ReadOnly>::new_untracked(path.to_owned(), Height::new(0))?;
 
