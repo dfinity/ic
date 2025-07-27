@@ -1329,7 +1329,7 @@ pub fn filter_out_zero_chunks(manifest: &Manifest) -> HashSet<usize> {
 
 /// Helper function to compute the manifest from a raw path.
 /// This function is intended for tests and external tools only.
-pub fn testing_only_manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
+pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
     let cp_layout = CheckpointLayout::<ReadOnly>::new_untracked(path.to_owned(), Height::new(0))?;
 
     let metadata = cp_layout.system_metadata().deserialize()?;

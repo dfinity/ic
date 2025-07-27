@@ -29,9 +29,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_state_manager::manifest::{
-    build_meta_manifest, testing_only_manifest_from_path, validate_manifest,
-};
+use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
     state_sync::{
         types::{
@@ -2088,7 +2086,7 @@ fn backup_checkpoint_is_complete() {
         let state_manager = restart_fn(state_manager, Some(height(1)));
 
         // check that the backup checkpoint has the same manifest as before
-        let manifest = testing_only_manifest_from_path(
+        let manifest = manifest_from_path(
             &state_manager
                 .state_layout()
                 .backup_checkpoint_path(height(2)),
@@ -5048,7 +5046,7 @@ fn diverged_checkpoint_is_complete() {
         );
 
         // check that the diverged checkpoint has the same manifest as before
-        let manifest = testing_only_manifest_from_path(
+        let manifest = manifest_from_path(
             &state_manager
                 .state_layout()
                 .diverged_checkpoint_path(height(2)),
