@@ -110,7 +110,7 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
-use ic_state_manager::{StateManagerImpl, testing::StateManagerTesting};
+use ic_state_manager::{testing::StateManagerTesting, StateManagerImpl};
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, FakeConsensusPoolCache};
 use ic_test_utilities_metrics::{

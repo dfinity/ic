@@ -1951,7 +1951,7 @@ impl StateManagerImpl {
         // state machine discover a newer state the next time it calls
         // `take_tip()` and update the tip accordingly.
     }
-    
+
     /// Remove any inmemory state at height h with h < last_height_to_keep
     /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
     /// any checkpoint at height h < last_checkpoint_to_keep
@@ -3728,7 +3728,7 @@ impl PageAllocatorFileDescriptorImpl {
             }
         }
     }
-    
+
     #[cfg(not(target_os = "linux"))]
     fn get_memory_backed_fd(&self) -> RawFd {
         self.create_backing_file_portable()
@@ -3753,10 +3753,10 @@ pub mod testing {
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
-        
+
         /// Testing only: Wait till deallocation queue is empty.
         fn flush_deallocation_channel(&self);
-    
+
         /// Returns the state hash of the latest state, irrespective of whether that state was
         /// certified or not. Primarily used for testing.
         fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)>;
@@ -3783,11 +3783,11 @@ pub mod testing {
             }
             purged
         }
-        
+
         fn flush_deallocation_channel(&self) {
             self.deallocator_thread.flush_deallocation_channel();
         }
-        
+
         fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
             let states = self.states.read();
 
