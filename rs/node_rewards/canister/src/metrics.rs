@@ -108,16 +108,7 @@ where
     /// This function fetches the nodes metrics for the given subnets from the management canisters
     /// updating the local metrics with the fetched metrics.
     pub async fn update_subnets_metrics(&self, subnets: Vec<SubnetId>) {
-        let mut subnets_to_update: HashSet<SubnetId> = subnets.clone().into_iter().collect();
-        let subnets_to_retry: Vec<SubnetId> = self
-            .subnets_to_retry
-            .borrow()
-            .keys()
-            .map(|key| key.into())
-            .collect();
-        subnets_to_update.extend(subnets_to_retry);
-
-        let last_timestamp_per_subnet: BTreeMap<SubnetId, _> = subnets_to_update
+        let last_timestamp_per_subnet: BTreeMap<SubnetId, _> = subnets
             .into_iter()
             .map(|subnet| {
                 let last_timestamp = self.last_timestamp_per_subnet.borrow().get(&subnet.into());

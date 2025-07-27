@@ -79,6 +79,7 @@ fn schedule_metrics_sync() {
             metrics_manager
                 .update_subnets_metrics(latest_subnets_list)
                 .await;
+            metrics_manager.retry_failed_subnets().await;
         });
     });
 }
