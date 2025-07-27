@@ -28,11 +28,11 @@ use std::{iter::once, path::PathBuf, sync::Arc};
 #[cfg(test)]
 mod tests;
 
+
 /// Loads the latest checkpoint under the given root; splits off the state of
 /// `subnet_id`, retaining or dropping the provided canister ID ranges (exactly
 /// one of which must be non-empty); and writes back the split state as a new
 /// checkpoint, under the same root.
-#[cfg(test)]
 pub fn resolve_ranges_and_split(
     root: PathBuf,
     subnet_id: PrincipalId,
@@ -57,7 +57,6 @@ pub fn resolve_ranges_and_split(
 /// Loads the latest checkpoint under the given root; splits off the state of
 /// `subnet_id`, hosting the provided canister ID ranges; and writes back the
 /// split state as a new checkpoint, under the same root.
-#[cfg(test)]
 pub fn split(
     root: PathBuf,
     subnet_id: PrincipalId,
@@ -115,7 +114,6 @@ pub fn split(
 /// not well formed.
 ///
 /// Panics if none or both of the inputs are empty.
-#[cfg(test)]
 fn resolve(
     retain: Vec<CanisterIdRange>,
     drop: Vec<CanisterIdRange>,
@@ -139,7 +137,6 @@ fn resolve(
 }
 
 /// Reads the `ReplicatedState` from the latest checkpoint under `state_layout`.
-#[cfg(test)]
 fn read_checkpoint(
     state_layout: &StateLayout,
     thread_pool: &mut Pool,
@@ -178,7 +175,6 @@ fn read_checkpoint(
 
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
-#[cfg(test)]
 fn write_checkpoint(
     mut state: ReplicatedState,
     state_layout: StateLayout,
