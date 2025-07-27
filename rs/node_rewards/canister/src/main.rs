@@ -4,7 +4,8 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
+use ic_node_rewards_canister::registry_querier::RegistryQuerier;
+use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -44,15 +45,16 @@ fn post_upgrade() {
 
 fn schedule_timers() {
     schedule_registry_sync();
+    schedule_metrics_sync();
 }
 
 // The frequency of regular registry syncs.  This is set to 1 hour to avoid
 // making too many requests.  Before meaningful calculations are made, however, the
-// registry data should be updated.
-const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
+// registry data and metrics should be updated.
+const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 fn schedule_registry_sync() {
-    ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
+    ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
         spawn(async move {
             let store = REGISTRY_STORE.with(|s| s.clone());
             // panicking here is okay because we are using an interval instead of a timer that
@@ -61,6 +63,22 @@ fn schedule_registry_sync() {
                 .sync_registry_stored()
                 .await
                 .expect("Could not sync registry store!");
+        });
+    });
+}
+
+fn schedule_metrics_sync() {
+    ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
+        spawn(async move {
+            let registry_store = REGISTRY_STORE.with(|m| m.clone());
+            let latest_version = registry_store.get_latest_version().await;
+            let registry_querier = RegistryQuerier::new(registry_store.clone());
+            let latest_subnets_list = registry_querier.subnets_list(latest_version);
+
+            let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
+            metrics_manager
+                .update_subnets_metrics(latest_subnets_list)
+                .await;
         });
     });
 }
@@ -87,7 +105,6 @@ async fn get_node_providers_monthly_xdr_rewards(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candid_parser::utils::{service_equal, CandidSource};
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {
