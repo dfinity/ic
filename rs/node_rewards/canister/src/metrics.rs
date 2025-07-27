@@ -10,7 +10,7 @@ use itertools::Itertools;
 use rewards_calculation::rewards_calculator_results::DayUTC;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 pub type RetryCount = u64;
 
