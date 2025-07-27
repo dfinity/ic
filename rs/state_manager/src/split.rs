@@ -28,7 +28,6 @@ use std::{iter::once, path::PathBuf, sync::Arc};
 #[cfg(test)]
 mod tests;
 
-
 /// Loads the latest checkpoint under the given root; splits off the state of
 /// `subnet_id`, retaining or dropping the provided canister ID ranges (exactly
 /// one of which must be non-empty); and writes back the split state as a new
