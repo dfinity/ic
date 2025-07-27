@@ -10,7 +10,7 @@ use itertools::Itertools;
 use rewards_calculation::rewards_calculator_results::DayUTC;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub type RetryCount = u64;
 
@@ -108,7 +108,7 @@ where
     /// This function fetches the nodes metrics for the given subnets from the management canisters
     /// updating the local metrics with the fetched metrics.
     pub async fn update_subnets_metrics(&self, subnets: Vec<SubnetId>) {
-        let mut subnets_to_update = subnets.clone();
+        let mut subnets_to_update: HashSet<SubnetId> = subnets.clone().into_iter().collect();
         let subnets_to_retry: Vec<SubnetId> = self
             .subnets_to_retry
             .borrow()
