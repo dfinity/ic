@@ -17,6 +17,13 @@ def _run_system_test(ctx):
     # whether to use k8s instead of farm
     k8s = ctx.attr._k8s[BuildSettingInfo].value
 
+    logs = False
+    if ctx.executable.colocated_test_bin != None:
+        # The colocated driver has the logic to see if it should spawn vector
+        logs = False
+    elif "VECTOR_VM_PATH" in ctx.attr.env:
+        logs = True
+
     ctx.actions.write(
         output = run_test_script_file,
         is_executable = True,
@@ -70,7 +77,7 @@ def _run_system_test(ctx):
             k8s = "--k8s" if k8s else "",
             group_base_name = ctx.label.name,
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
-            logs = "--logs" if "VECTOR_VM_PATH" in ctx.attr.env else "",
+            logs = "--logs" if logs else "",
         ),
     )
 

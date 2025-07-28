@@ -25,6 +25,7 @@ use crate::{
 use super::{
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
     test_env::TestEnv,
+    test_env_api::get_dependency_path,
     universal_vm::UniversalVm,
 };
 
@@ -62,11 +63,9 @@ impl VectorVm {
     pub fn new() -> Self {
         Self {
             universal_vm: UniversalVm::new("vector".to_string())
-                .with_config_img(
-                    std::env::var("VECTOR_VM_PATH")
-                        .expect("VECTOR_VM_PATH not set")
-                        .into(),
-                )
+                .with_config_img(get_dependency_path(
+                    std::env::var("VECTOR_VM_PATH").expect("VECTOR_VM_PATH not set"),
+                ))
                 .with_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
