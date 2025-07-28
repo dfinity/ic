@@ -4,7 +4,7 @@ use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
-use ic_types::{consensus::idkg::PreSigId, ExecutionRound, Height};
+use ic_types::{batch::AvailablePreSignatures, consensus::idkg::PreSigId, ExecutionRound, Height};
 use rand::RngCore;
 
 use super::SchedulerMetrics;
@@ -12,7 +12,7 @@ use super::SchedulerMetrics;
 /// Update [`SignatureRequestContext`]s by assigning randomness and matching pre-signatures.
 pub(crate) fn update_signature_request_contexts(
     current_round: ExecutionRound,
-    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
     mut contexts: Vec<&mut SignWithThresholdContext>,
     csprng: &mut Csprng,
     registry_settings: &RegistryExecutionSettings,
@@ -40,7 +40,8 @@ pub(crate) fn update_signature_request_contexts(
         }
     }
 
-    for (key_id, pre_sig_ids) in idkg_pre_signature_ids {
+    for (key_id, pre_sigs) in idkg_pre_signatures {
+        let pre_sig_ids: BTreeSet<PreSigId> = pre_sigs.pre_signatures.keys().copied().collect();
         // Match up to the maximum number of contexts per key ID to delivered pre-signatures.
         let max_ongoing_signatures = registry_settings
             .chain_key_settings

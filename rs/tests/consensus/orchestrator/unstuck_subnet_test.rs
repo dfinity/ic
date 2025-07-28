@@ -17,7 +17,6 @@ use anyhow::bail;
 use anyhow::Result;
 use ic_consensus_system_test_utils::upgrade::{
     bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
-    UpdateImageType,
 };
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -78,7 +77,6 @@ fn test(test_env: TestEnv) {
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
-        UpdateImageType::Image,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],
