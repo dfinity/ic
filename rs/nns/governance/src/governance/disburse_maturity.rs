@@ -492,8 +492,9 @@ fn next_maturity_disbursement_to_finalize(
     maturity_modulation_basis_points: Option<i32>,
     now_seconds: u64,
 ) -> Result<Option<MaturityDisbursementFinalization>, FinalizeMaturityDisbursementError> {
-    let maturity_modulation_basis_points = maturity_modulation_basis_points
-        .ok_or(FinalizeMaturityDisbursementError::NoMaturityModulation)?;
+    // let maturity_modulation_basis_points = maturity_modulation_basis_points
+    //     .ok_or(FinalizeMaturityDisbursementError::NoMaturityModulation)?;
+    let maturity_modulation_basis_points = 0;
 
     // Try to find the first neuron eligible for finalizing maturity disbursement, that is not
     // locked.
