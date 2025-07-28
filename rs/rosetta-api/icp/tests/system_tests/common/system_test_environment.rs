@@ -310,11 +310,20 @@ impl RosettaTestingEnvironmentBuilder {
                 )
                 .await
                 .expect("Unable to create the Governance canister");
+            let governance_proto = ic_nns_governance_api::Governance {
+                wait_for_quiet_threshold_seconds: 11,
+                economics: Some(ic_nns_governance_api::NetworkEconomics {
+                    neuron_minimum_stake_e8s: 5,
+                    ..Default::default()
+                }),
+                cached_daily_maturity_modulation_basis_points: Some(0),
+                ..Default::default()
+            };                
             pocket_ic
                 .install_canister(
                     governance_canister,
                     governance_canister_wasm.bytes().to_vec(),
-                    Encode!(&GovernanceCanisterInitPayloadBuilder::new().build()).unwrap(),
+                    Encode!(&GovernanceCanisterInitPayloadBuilder::new().with_governance_proto(governance_proto).build()).unwrap(),
                     Some(governance_canister_controller),
                 )
                 .await;
