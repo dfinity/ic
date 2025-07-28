@@ -1,3 +1,8 @@
+use crate::metrics::MetricsManager;
+use crate::registry_querier::RegistryQuerier;
+use crate::storage::VM;
+use ic_base_types::SubnetId;
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
@@ -12,6 +17,8 @@ use ic_registry_keys::{
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::RegistryVersion;
 use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -23,17 +30,76 @@ mod test;
 /// through arguments and responses with almost no logic.
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
+    metrics_manager: Rc<MetricsManager<VM>>,
 }
 
 /// Internal methods
 impl NodeRewardsCanister {
-    pub fn new(registry_client: Arc<dyn CanisterRegistryClient>) -> Self {
-        Self { registry_client }
+    pub fn new(
+        registry_client: Arc<dyn CanisterRegistryClient>,
+        metrics_manager: Rc<MetricsManager<VM>>,
+    ) -> Self {
+        Self {
+            registry_client,
+            metrics_manager,
+        }
+    }
+
+    pub async fn sync_all(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
+        let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
+
+        let pre_sync_version = registry_client.get_latest_version();
+        let registry_sync_result = registry_client.sync_registry_stored().await;
+        let post_sync_version = registry_client.get_latest_version();
+
+        match registry_sync_result {
+            Ok(_) => {
+                Self::schedule_metrics_sync(canister, pre_sync_version, post_sync_version).await;
+                ic_cdk::println!("Successfully synced subnets metrics and local registry");
+            }
+            Err(e) => {
+                ic_cdk::println!("Failed to sync local registry: {:?}", e)
+            }
+        }
+    }
+
+    async fn schedule_metrics_sync(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+        pre_sync_version: RegistryVersion,
+        post_sync_version: RegistryVersion,
+    ) {
+        let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
+        let metrics_manager = canister.with(|canister| canister.borrow().get_metrics_manager());
+        let registry_querier = RegistryQuerier::new(registry_client.clone());
+
+        let mut subnets_list: HashSet<SubnetId> = HashSet::default();
+        let mut version = if pre_sync_version == ZERO_REGISTRY_VERSION {
+            // If the pre-sync version is 0, we consider all subnets from the post-sync version
+            post_sync_version
+        } else {
+            pre_sync_version
+        };
+        while version <= post_sync_version {
+            subnets_list.extend(registry_querier.subnets_list(version));
+
+            // Increment the version to sync the next one
+            version = version.increment();
+        }
+
+        metrics_manager
+            .update_subnets_metrics(subnets_list.into_iter().collect())
+            .await;
+        metrics_manager.retry_failed_subnets().await;
     }
 
     /// Gets Arc reference to RegistryClient
     pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
         self.registry_client.clone()
+    }
+
+    /// Gets Arc reference to MetricsManager
+    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
+        self.metrics_manager.clone()
     }
 
     // Test only methods
