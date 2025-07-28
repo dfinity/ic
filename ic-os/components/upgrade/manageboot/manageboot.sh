@@ -264,7 +264,8 @@ case "${ACTION}" in
         # Tell boot loader to switch partitions on next boot.
         boot_alternative="${TARGET_ALTERNATIVE}"
         boot_cycle=first_boot
-        write_grubenv "${GRUBENV_FILE}"
+        write_log "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
+        write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "${boot_cycle}"
 
         write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}"
         write_metric_attr "${SYSTEM_TYPE}_boot_action" \
@@ -287,7 +288,7 @@ case "${ACTION}" in
     confirm)
         if [ "$boot_cycle" != "stable" ]; then
             boot_cycle=stable
-            write_grubenv "${GRUBENV_FILE}"
+            write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "$boot_cycle"
             write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \

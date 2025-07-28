@@ -21,12 +21,21 @@ read_grubenv() {
     done <"$GRUBENV_FILE"
 }
 
-# Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
+# Writes "boot_alternative" and "boot_cycle" variables to grubenv file
 #
 # Arguments:
 # $1 - name of grubenv file
+# $2 - boot_alternative value
+# $3 - boot_cycle value
 write_grubenv() {
     local GRUBENV_FILE="$1"
+    local boot_alternative="$2"
+    local boot_cycle="$3"
+
+    if [ -z "$GRUBENV_FILE" ] || [ -z "$boot_alternative" ] || [ -z "$boot_cycle" ]; then
+        echo "Error: write_grubenv requires 3 parameters: grubenv_file, boot_alternative, boot_cycle" >&2
+        return 1
+    fi
 
     TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
     (
