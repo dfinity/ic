@@ -299,6 +299,7 @@ def system_test(
 
         # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
+        env["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "launch-measurements.json"
 
     if uses_guestos_recovery_dev_img:
         # TODO: Until the version can be passed directly in the env variable, pass the file and let the test driver resolve it, instead.
@@ -323,7 +324,7 @@ def system_test(
         mainnet_guestos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = mainnet_guestos_version
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "update-img.tar.zst"
-        ADD MEASUREMENTS
+        env["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_URL"] = base_download_url(mainnet_guestos_version, "guest-os", True, False) + "launch-measurements.json"
 
         # TODO: Until the update hash is stored in the repo, pass the URL and let the test driver resolve it, instead.
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = base_download_url(mainnet_guestos_version, "guest-os", True, False)
