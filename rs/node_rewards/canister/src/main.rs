@@ -2,6 +2,7 @@ use ic_base_types::{RegistryVersion, SubnetId};
 #[cfg(any(feature = "test", test))]
 use ic_cdk::query;
 use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
@@ -80,12 +81,24 @@ async fn schedule_metrics_sync(
     let registry_store = REGISTRY_STORE.with(|m| m.clone());
     let registry_querier = RegistryQuerier::new(registry_store.clone());
 
-    let subnets_list: HashSet<SubnetId> = (pre_sync_version..=post_sync_version)
-        .flat_map(|version| registry_querier.subnets_list(version))
-        .collect();
+    let mut subnets_list: HashSet<SubnetId> = HashSet::default();
+    let mut version = if pre_sync_version == ZERO_REGISTRY_VERSION {
+        // If the pre-sync version is 0, we consider all subnets from the post-sync version
+        post_sync_version
+    } else {
+        pre_sync_version
+    };
+    while version <= post_sync_version {
+        subnets_list.extend(registry_querier.subnets_list(version));
+
+        // Increment the version to sync the next one
+        version.increment();
+    }
 
     let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
-    metrics_manager.update_subnets_metrics(subnets_list).await;
+    metrics_manager
+        .update_subnets_metrics(subnets_list.into_iter().collect())
+        .await;
     metrics_manager.retry_failed_subnets().await;
 }
 
