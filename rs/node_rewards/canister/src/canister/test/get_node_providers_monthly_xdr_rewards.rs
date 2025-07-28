@@ -1,6 +1,9 @@
 use crate::canister::NodeRewardsCanister;
+use crate::metrics::MetricsManager;
 use crate::storage::METRICS_MANAGER;
 use futures_util::FutureExt;
+use ic_cdk::api::call::CallResult;
+use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -27,18 +30,19 @@ use ic_types::PrincipalId;
 use maplit::btreemap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
 thread_local! {
-    static STATE: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>> = RefCell::new({
+    pub(crate) static STATE_TEST: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>> = RefCell::new({
         let mgr = MemoryManager::init(DefaultMemoryImpl::default());
         StableBTreeMap::init(mgr.get(MemoryId::new(0)))
     });
     // Dummy value b/c we can't do direct assignment using values defined above.
-    static CANISTER: RefCell<NodeRewardsCanister> = {
+    pub(crate) static CANISTER_TEST: RefCell<NodeRewardsCanister> = {
         let registry_store = Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default())));
         let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
 
@@ -46,21 +50,27 @@ thread_local! {
     };
 }
 
-test_registry_data_stable_memory_impl!(TestState, STATE);
+test_registry_data_stable_memory_impl!(TestState, STATE_TEST);
 
-fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
+pub(crate) fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
     let fake_registry = Arc::new(FakeRegistry::new());
+    let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history()
+        .return_const(CallResult::Ok(vec![NodeMetricsHistoryRecord {
+            timestamp_nanos: 0,
+            node_metrics: vec![],
+        }]));
     let canister = NodeRewardsCanister::new(
         Arc::new(StableCanisterRegistryClient::<TestState>::new(
             fake_registry.clone(),
         ))
         .clone(),
-        METRICS_MANAGER.with(|m| m.clone()),
+        Rc::new(MetricsManager::new(mock)),
     );
-    CANISTER.with_borrow_mut(|c| *c = canister);
+    CANISTER_TEST.with_borrow_mut(|c| *c = canister);
     // To do thorough tests, this is all we currently need to mock, as everything else
     // interacts through the RegistryClient at present.  Outside of Registry, everything else
-    // is internal state (which at present is just a cache of registry).
+    // is internal state.
     fake_registry
 }
 
@@ -180,10 +190,12 @@ fn test_rewards_calculation() {
     let test_at_version =
         |registry_version: Option<u64>, expected: Result<BTreeMap<&str, u64>, String>| {
             let request = GetNodeProvidersMonthlyXdrRewardsRequest { registry_version };
-            let result =
-                NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request)
-                    .now_or_never()
-                    .unwrap();
+            let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
+                &CANISTER_TEST,
+                request,
+            )
+            .now_or_never()
+            .unwrap();
 
             let expected_result = match expected {
                 Ok(rewards) => {
@@ -334,7 +346,7 @@ fn test_get_node_providers_monthly_xdr_rewards_ignores_deleted_keys() {
 
     assert_eq!(
         NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-            &CANISTER,
+            &CANISTER_TEST,
             GetNodeProvidersMonthlyXdrRewardsRequest {
                 registry_version: None
             }
@@ -389,7 +401,7 @@ fn test_get_node_providers_monthly_xdr_rewards_gen1() {
     // Assert get_node_providers_monthly_xdr_rewards still provides default values
     ///////////////////////////////
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: None,
         },
@@ -424,7 +436,7 @@ fn test_get_node_providers_monthly_xdr_rewards_gen1() {
     update_node_rewards_table(registry.clone(), node_rewards_payload.new_entries);
 
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: None,
         },
@@ -462,7 +474,7 @@ fn test_get_node_providers_monthly_xdr_rewards_gen1() {
     update_node_rewards_table(registry.clone(), node_rewards_payload.new_entries);
 
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: None,
         },
@@ -487,7 +499,7 @@ fn test_get_node_providers_monthly_xdr_rewards_gen1() {
     // Test getting a previous version's rewards works
     ///////////////////////////////
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: Some(version_without_rewards_table),
         },
@@ -552,7 +564,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     update_node_rewards_table(registry.clone(), node_rewards_payload.new_entries);
 
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: None,
         },
@@ -608,7 +620,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     }
 
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: None,
         },
@@ -644,7 +656,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     }
 
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
+        &CANISTER_TEST,
         GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: None,
         },
