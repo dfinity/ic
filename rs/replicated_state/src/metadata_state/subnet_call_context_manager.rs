@@ -1,3 +1,5 @@
+pub mod proto;
+
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
@@ -22,8 +24,6 @@ use std::{
     convert::{From, TryFrom},
     sync::Arc,
 };
-
-pub mod proto;
 
 /// ECDSA message hash size in bytes.
 const MESSAGE_HASH_SIZE: usize = 32;
