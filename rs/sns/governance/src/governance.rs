@@ -3515,6 +3515,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
+        // TODO: return the optional extension spec
         let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
         let nervous_system_parameters = self.nervous_system_parameters_or_panic();
