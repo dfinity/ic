@@ -1,4 +1,5 @@
 use crate::canister::NodeRewardsCanister;
+use crate::storage::METRICS_MANAGER;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
@@ -37,9 +38,12 @@ thread_local! {
         StableBTreeMap::init(mgr.get(MemoryId::new(0)))
     });
     // Dummy value b/c we can't do direct assignment using values defined above.
-    static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(NodeRewardsCanister::new(
-         Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default()))),
-    ));
+    static CANISTER: RefCell<NodeRewardsCanister> = {
+        let registry_store = Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default())));
+        let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
+
+        RefCell::new(NodeRewardsCanister::new(registry_store, metrics_manager))
+    };
 }
 
 test_registry_data_stable_memory_impl!(TestState, STATE);
@@ -51,6 +55,7 @@ fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
             fake_registry.clone(),
         ))
         .clone(),
+        METRICS_MANAGER.with(|m| m.clone()),
     );
     CANISTER.with_borrow_mut(|c| *c = canister);
     // To do thorough tests, this is all we currently need to mock, as everything else
