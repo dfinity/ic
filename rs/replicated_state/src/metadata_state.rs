@@ -20,6 +20,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
@@ -89,6 +90,10 @@ pub struct SystemMetadata {
     pub own_subnet_type: SubnetType,
 
     pub own_subnet_features: SubnetFeatures,
+
+    /// This flag determines whether cycles are charged. The flag is pulled from
+    /// the registry every round.
+    pub cost_schedule: CanisterCyclesCostSchedule,
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
@@ -357,6 +362,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -636,6 +642,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            cost_schedule: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -1622,6 +1629,7 @@ pub(crate) mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,

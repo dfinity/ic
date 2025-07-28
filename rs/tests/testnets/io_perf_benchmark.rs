@@ -10,8 +10,8 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./ci/tools/docker-run
-//   $ PERF_HOSTS="dm1-dll29.dm1.dfinity.network" ict testnet create io_perf_benchmark --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=PERF_HOSTS
+//   $ ./ci/container/container-run.sh
+//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=SSH_AUTH_SOCK --test_env=IMAGE_SIZE_GIB=5120 --test_env NUM_PERF_HOSTS=1
 //
 // The --output-dir=./io_perf_benchmark will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./io_perf_benchmark will store the remaining test output in the specified directory.
@@ -62,7 +62,9 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets, set_icp_xdr_exchange_rate};
-use slog::info;
+use slog::{info, Logger};
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 
 const NUM_IC_GATEWAYS: u64 = 1;
 const DEFAULT_IMAGE_SIZE_GIB: u64 = 5120;
@@ -91,8 +93,78 @@ fn main() -> Result<()> {
 
     SystemTestGroup::new()
         .with_setup(config.build())
+        .with_timeout_per_test(std::time::Duration::MAX) // Switching to SSD takes long time
         .execute_from_args()?;
     Ok(())
+}
+
+fn switch_to_ssd(log: &Logger, hostname: &str) {
+    let script = r##"
+        #!/bin/bash
+        set -e
+        exec 2>&1
+
+        # Get the name of the currently running VM.
+        # virsh prints four lines for a single instance running, two lines of header,
+        # VM info and trailing empty line. The script should fail if the format is
+        # different or there are multiple VMs running. The trailing line is lost when
+        # assigning to a variable.
+        virsh_list=$(sudo virsh list)
+        if [ $(echo "$virsh_list" | wc -l) -ne 3 ]; then
+                echo "Unexpected virsh list output"
+                exit 2
+        fi
+        VMNAME=$(echo "$virsh_list" | awk '{ if (NR==3) print $2 }')
+
+        # Shutdown the VM
+        echo "Shutting down $VMNAME"
+        for i in {1..300}; do
+                if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
+                        break
+                fi
+                echo Waiting for shutdown of $VMNAME: retry $i...
+                sleep 1
+                sudo virsh shutdown $VMNAME || true
+        done
+
+        # Get the file name and dd it to disk device
+        CONFIG=$(mktemp)
+        trap "rm -f $CONFIG" INT TERM EXIT
+        sudo virsh dumpxml $VMNAME > $CONFIG
+        IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
+        echo "Moving $VMNAME to /dev/hostlvm/guest"
+
+        # Patch the config to point to the disk device
+        xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n discard -v unmap "$CONFIG"
+        xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/driver" -t attr -n cache -v none "$CONFIG"
+        xmlstarlet ed --inplace -u "//domain/devices/disk[target[@dev='vda']]/@type" -v block "$CONFIG"
+        xmlstarlet ed --inplace -d "//domain/devices/disk[target[@dev='vda']]/source/@file" "$CONFIG"
+        xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/source" -t attr -n dev -v "/dev/hostlvm/guestos" "$CONFIG"
+        sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
+
+        sudo virsh create $CONFIG
+        echo "Migration done"
+    "##;
+
+    if std::env::var("SSH_AUTH_SOCK") == Err(std::env::VarError::NotPresent) {
+        panic!("No $SSH_AUTH_SOCK vairable provided");
+    }
+    let mut ssh = Command::new("ssh")
+        .arg("-o")
+        .arg("StrictHostKeyChecking=no")
+        .arg("farm@".to_owned() + hostname)
+        .arg(script)
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    for l in BufReader::new(ssh.stdout.as_mut().unwrap()).lines() {
+        info!(&log, "SSH {} out: {}", hostname, l.unwrap());
+    }
+
+    let ssh_status = ssh.wait().unwrap();
+    if !ssh_status.success() {
+        panic!("SSH to {} failed with: {}", hostname, ssh_status);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -169,13 +241,24 @@ pub fn setup(env: TestEnv, config: Config) {
         .expect("Failed to setup IC under test");
 
     let topology_snapshot = env.topology_snapshot();
+    let mut switch_to_ssd_handles = Vec::new();
     for node in topology_snapshot.subnets().next().unwrap().nodes() {
         let node_id = node.node_id.to_string();
-        let vm = vms.get(&node_id).expect("Failed to get VM for node");
+        let hostname = vms
+            .get(&node_id)
+            .expect("Failed to get VM for node")
+            .hostname
+            .clone();
+
         info!(
             env.logger(),
-            "Node {} is allocated to host: {}", node_id, vm.hostname
+            "Node {} is allocated to host: {}", node_id, hostname
         );
+        let log = logger.clone();
+        switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+    }
+    for handle in switch_to_ssd_handles {
+        handle.join().unwrap();
     }
 
     // set up NNS canisters
@@ -188,7 +271,6 @@ pub fn setup(env: TestEnv, config: Config) {
     // sets the exchange rate to 12 XDR per 1 ICP
     set_icp_xdr_exchange_rate(&env, 12_0000);
 
-    // sets the exchange rate to 12 XDR per 1 ICP
     set_authorized_subnets(&env);
 
     // deploys the ic-gateway/s
