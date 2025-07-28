@@ -1,3 +1,4 @@
+use ic_base_types::{RegistryVersion, SubnetId};
 #[cfg(any(feature = "test", test))]
 use ic_cdk::query;
 use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
@@ -12,6 +13,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -43,45 +45,48 @@ fn post_upgrade() {
     schedule_timers();
 }
 
-fn schedule_timers() {
-    schedule_registry_sync();
-    schedule_metrics_sync();
-}
-
 // The frequency of regular registry syncs.  This is set to 1 hour to avoid
 // making too many requests.  Before meaningful calculations are made, however, the
-// registry data and metrics should be updated.
+// registry data should be updated.
 const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 
-fn schedule_registry_sync() {
+fn schedule_timers() {
     ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
-        spawn(async move {
-            let store = REGISTRY_STORE.with(|s| s.clone());
-            // panicking here is okay because we are using an interval instead of a timer that
-            // has to reschedule itself.
-            store
-                .sync_registry_stored()
-                .await
-                .expect("Could not sync registry store!");
-        });
+        spawn(sync_all());
     });
 }
 
-fn schedule_metrics_sync() {
-    ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
-        spawn(async move {
-            let registry_store = REGISTRY_STORE.with(|m| m.clone());
-            let latest_version = registry_store.get_latest_version().await;
-            let registry_querier = RegistryQuerier::new(registry_store.clone());
-            let latest_subnets_list = registry_querier.subnets_list(latest_version);
+async fn sync_all() {
+    let registry_store = REGISTRY_STORE.with(|s| s.clone());
 
-            let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
-            metrics_manager
-                .update_subnets_metrics(latest_subnets_list)
-                .await;
-            metrics_manager.retry_failed_subnets().await;
-        });
-    });
+    let pre_sync_version = registry_store.get_latest_version().await;
+    let registry_sync_result = registry_store.sync_registry_stored().await;
+    let post_sync_version = registry_store.get_latest_version().await;
+
+    match registry_sync_result {
+        Ok(_) => {
+            schedule_metrics_sync(pre_sync_version, post_sync_version).await;
+            ic_cdk::println!("Successfully synced subnets metrics and local registry");
+        }
+        Err(e) => {
+            ic_cdk::println!("Failed to sync local registry: {:?}", e)
+        }
+    }
+}
+async fn schedule_metrics_sync(
+    pre_sync_version: RegistryVersion,
+    post_sync_version: RegistryVersion,
+) {
+    let registry_store = REGISTRY_STORE.with(|m| m.clone());
+    let registry_querier = RegistryQuerier::new(registry_store.clone());
+
+    let subnets_list: HashSet<SubnetId> = (pre_sync_version..=post_sync_version)
+        .flat_map(|version| registry_querier.subnets_list(version))
+        .collect();
+
+    let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
+    metrics_manager.update_subnets_metrics(subnets_list).await;
+    metrics_manager.retry_failed_subnets().await;
 }
 
 fn panic_if_caller_not_governance() {
