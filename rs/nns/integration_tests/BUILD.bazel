@@ -83,6 +83,7 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     # Keep sorted.
     "//rs/nns/governance",
+    "//rs/nns/gtc",
     "//rs/nns/handlers/root/impl:root",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -208,7 +209,7 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES + ["//rs/nns/gtc"],
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
