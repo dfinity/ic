@@ -5372,6 +5372,8 @@ impl Governance {
 
         let mut metrics = self.proto.metrics.clone().unwrap_or_default();
 
+        metrics.timestamp_seconds = now_seconds;
+
         let mut treasury_metrics = vec![];
 
         for TreasuryMetrics {

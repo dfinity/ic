@@ -79,6 +79,7 @@ pub fn execute_call_or_task(
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
+                        round.cost_schedule,
                         reveal_top_up,
                         wasm_execution_mode,
                     ) {
@@ -122,6 +123,7 @@ pub fn execute_call_or_task(
         clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
+        round.cost_schedule,
         clean_canister.system_state.reserved_balance(),
     );
 
@@ -206,6 +208,7 @@ pub fn execute_call_or_task(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -290,6 +293,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        round.cost_schedule,
         wasm_execution_mode,
         round.log,
     );
@@ -641,6 +645,7 @@ impl CallOrTaskHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            round.cost_schedule,
             wasm_execution_mode,
             round.log,
         );

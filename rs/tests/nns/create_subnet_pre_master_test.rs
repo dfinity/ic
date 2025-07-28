@@ -38,6 +38,7 @@ use ic_system_test_driver::util::{
     assert_create_agent, block_on, runtime_from_url, UniversalCanister,
 };
 use ic_types::{Height, RegistryVersion};
+use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use slog::info;
 use std::collections::HashSet;
 use std::iter::FromIterator;
@@ -117,9 +118,13 @@ pub fn test(env: TestEnv) {
                 log,
                 "Submitting proposal to create subnet with nodes: {nodes:?}"
             );
-            let proposal_id =
-                submit_create_application_subnet_proposal(&governance, nodes, version.clone())
-                    .await;
+            let proposal_id = submit_create_application_subnet_proposal(
+                &governance,
+                nodes,
+                version.clone(),
+                Some(CanisterCyclesCostSchedule::Normal),
+            )
+            .await;
             info!(log, "Voting on proposal {proposal_id}");
             vote_on_proposal(&governance, proposal_id).await;
             proposal_ids.push(proposal_id);
