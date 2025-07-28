@@ -185,7 +185,7 @@ fn test_all_topics() {
                 ProposalCriticality::Critical,
             )),
         ),
-        // TODO[NNS1-4002]. Criticality should depends on the topic of the extension.
+        // TODO[NNS1-4002]. Criticality should depend on the topic of the extension.
         (
             pb::proposal::Action::ExecuteExtensionOperation(Default::default()),
             Ok((
