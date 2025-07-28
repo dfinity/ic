@@ -3,15 +3,6 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
 };
-/*
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    registry::subnet::v1 as pb_subnet,
-    state::queues::v1 as pb_queues,
-    state::system_metadata::v1 as pb_metadata,
-    types::v1 as pb_types,
-};
-*/
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     consensus::idkg::{common::PreSignature, PreSigId},
