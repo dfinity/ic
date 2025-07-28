@@ -4,12 +4,10 @@ use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
 };
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_protobuf::{
-    state::{
-        canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
-        canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
-        queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
-    },
+use ic_protobuf::state::{
+    canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
+    canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
+    queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
 };
 use ic_replicated_state::{
     canister_state::{
@@ -46,6 +44,8 @@ use crate::utils::do_copy;
 
 use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_utils_thread::JoinOnDrop;
+
+pub mod proto;
 
 #[cfg(test)]
 mod tests;

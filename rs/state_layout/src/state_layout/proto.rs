@@ -1,12 +1,11 @@
+use super::*;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
-        canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
-        queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
-    },  
+        canister_state_bits::v1 as pb_canister_state_bits,
+    },
 };
-use std::convert::TryInto;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
