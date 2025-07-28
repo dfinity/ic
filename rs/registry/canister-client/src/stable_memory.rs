@@ -3,6 +3,8 @@ use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{BTreeMap as StableBTreeMap, DefaultMemoryImpl, Storable};
 use std::borrow::Cow;
 
+pub type UnixTsNanos = u64;
+
 pub struct StorableRegistryValue(pub Option<Vec<u8>>);
 
 impl Storable for StorableRegistryValue {
