@@ -2,7 +2,7 @@ use crate::common::utils::update_neuron;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
-    utils::{get_custom_agent, get_test_agent, list_neuron, list_neurons, test_identity},
+    utils::{get_custom_agent, get_test_agent, list_neurons, test_identity},
 };
 use core::convert::TryFrom;
 use ic_agent::{identity::BasicIdentity, Identity};
@@ -1501,7 +1501,6 @@ fn test_refresh_voting_power() {
         .unwrap();
 }
 
-use icrc_ledger_types::icrc1::account::Account;
 #[test]
 fn test_disburse_maturity() {
     let rt = Runtime::new().unwrap();
@@ -1516,7 +1515,6 @@ fn test_disburse_maturity() {
                 .into_iter()
                 .collect(),
             )
-            .with_minting_account(Account{owner: ic_nns_constants::GOVERNANCE_CANISTER_ID.into(), subaccount: None })
             .with_governance_canister()
             .build()
             .await;
@@ -1541,17 +1539,20 @@ fn test_disburse_maturity() {
         let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-        let new_maturity = 120_000_000;
+        let new_maturity = 110_000_000;
         neuron.maturity_e8s_equivalent = new_maturity;
         update_neuron(&agent, neuron).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert_eq!(neuron.maturity_e8s_equivalent, new_maturity);
 
+        let neuron = list_neurons_nb(&env.pocket_ic).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_disbursements_in_progress.unwrap().len(), 0);
+
         let receiver = AccountIdentifier::new(PrincipalId::new_user_test_id(100), None);
 
         let balance_before = account_balance_nb(&env.pocket_ic, &receiver).await;
 
-        let _ = env
+        let result = env
             .rosetta_client
             .disburse_maturity(
                 env.network_identifier.clone(),
@@ -1563,22 +1564,105 @@ fn test_disburse_maturity() {
             .await
             .expect("failed to disburse maturity");
 
-        for _ in 0..7 {
+        set_time_warp(&agent, -60 * 60 * 24 * 10).await;
+
+        println!("receiver {}", receiver);
+
+        println!(
+            "current time {}",
+            env.pocket_ic.get_time().await.as_nanos_since_unix_epoch()
+        );
+
+        let transaction_operation_results =
+            TransactionOperationResults::try_from(result.metadata).unwrap();
+        let disburse_maturity_response = DisburseMaturityResponse::try_from(
+            transaction_operation_results
+                .operations
+                .first()
+                .unwrap()
+                .clone()
+                .metadata,
+        )
+        .unwrap();
+        assert_eq!(
+            disburse_maturity_response.amount_disbursed_e8s,
+            new_maturity
+        );
+
+        // use ic_nns_governance_api::MaturityDisbursement;
+        // neuron.maturity_disbursements_in_progress = Some(vec![MaturityDisbursement {
+        //     finalize_disbursement_timestamp_seconds: Some(1),
+        //     ..Default::default()
+        // }]);
+        // update_neuron(&agent, neuron).await;
+
+        let neuron = list_neurons_nb(&env.pocket_ic).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_disbursements_in_progress.unwrap().len(), 1);
+
+        env.pocket_ic
+            .advance_time(std::time::Duration::from_secs(60 * 60 * 24 * 20))
+            .await;
+        // env.pocket_ic.tick().await;
+        for _ in 0..20 {
             env.pocket_ic
-                .advance_time(std::time::Duration::from_secs(60 * 60 * 24))
+                .advance_time(std::time::Duration::from_secs(1))
                 .await;
             env.pocket_ic.tick().await;
         }
-        // for _ in 0..10 {
-        //     env.pocket_ic
-        //         .advance_time(std::time::Duration::from_secs(1))
-        //         .await;
-        //     env.pocket_ic.tick().await;
-        // }
-        
+        println!(
+            "current time 2 {}",
+            env.pocket_ic.get_time().await.as_nanos_since_unix_epoch()
+        );
+
+        for _ in 0..100 {
+            env.pocket_ic
+                .advance_time(std::time::Duration::from_secs(1))
+                .await;
+            env.pocket_ic.tick().await;
+        }
+        let neuron = list_neurons_nb(&env.pocket_ic).await.full_neurons[0].to_owned();
+        let finalization = neuron.maturity_disbursements_in_progress.clone().unwrap()[0]
+            .finalize_disbursement_timestamp_seconds
+            .unwrap();
+        let amount = neuron.maturity_disbursements_in_progress.unwrap()[0]
+            .amount_e8s
+            .unwrap();
+        let curr_time = env.pocket_ic.get_time().await.as_nanos_since_unix_epoch() / 1_000_000_000;
+        println!(
+            "amount {amount} finalization at: {}, currtime {}, should be finalized {}",
+            finalization,
+            curr_time,
+            curr_time > finalization
+        );
+
+        let balance_after_disburse = env
+            .rosetta_client
+            .account_balance(
+                AccountBalanceRequest::builder(env.network_identifier.clone(), receiver.into())
+                    .build(),
+            )
+            .await
+            .unwrap()
+            .balances
+            .first()
+            .unwrap()
+            .clone()
+            .value
+            .parse::<u64>()
+            .unwrap();
+
+        println!("balance_after_disburse {}", balance_after_disburse);
+
+        let balance_test_id = account_balance_nb(
+            &env.pocket_ic,
+            &AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+        )
+        .await;
+        println!("balance of the TEST_IDENTITY: {}", balance_test_id);
+
         let balance_after = account_balance_nb(&env.pocket_ic, &receiver).await;
 
-        println!("balance_after: {}", balance_after.get_e8s());
+        println!("balance_after 2: {}", balance_after);
 
         assert_eq!(
             balance_after.get_e8s(),
