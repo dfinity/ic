@@ -21,4 +21,7 @@ these proposals on mainnet is still disabled until further notice.
 
 ## Fixed
 
+Fixed a bug due to which governance cached metrics could be recomputed once every 10 seconds
+rather than with the intended rate of once per hour.
+
 ## Security
