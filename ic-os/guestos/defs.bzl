@@ -110,6 +110,7 @@ def image_deps(mode, malicious = False):
         deps["component_files"].update({
             recovery_engine_path: "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/ic-replica-recovery.conf"): "/etc/systemd/system/ic-replica.service.d/ic-replica-recovery.conf",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })

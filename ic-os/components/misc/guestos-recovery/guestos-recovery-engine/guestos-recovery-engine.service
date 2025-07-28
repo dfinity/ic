@@ -3,7 +3,6 @@ Description=Recovery Engine
 After=upgrade-shared-data-store.service
 Wants=network-online.target
 After=network-online.target
-Before=ic-replica.service
 
 [Install]
 WantedBy=multi-user.target
