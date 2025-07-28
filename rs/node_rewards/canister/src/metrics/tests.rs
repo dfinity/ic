@@ -48,7 +48,7 @@ impl MetricsManager<VM> {
     }
 }
 
-pub(crate) fn node_metrics_history_gen(days: u64) -> Vec<NodeMetricsHistoryRecord> {
+fn node_metrics_history_gen(days: u64) -> Vec<NodeMetricsHistoryRecord> {
     let mut result = Vec::new();
     for i in 0..days {
         result.push(NodeMetricsHistoryRecord {
