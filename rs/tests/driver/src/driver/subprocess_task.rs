@@ -70,8 +70,8 @@ impl Task for SubprocessTask {
             .arg("--group-base-name")
             .arg(self.group_ctx.group_base_name.clone());
 
-        if self.group_ctx.logs_enabled {
-            child_cmd.arg("--logs");
+        if !self.group_ctx.logs_enabled {
+            child_cmd.arg("--no-logs");
         }
 
         child_cmd

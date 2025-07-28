@@ -237,8 +237,8 @@ fn setup(env: TestEnv) {
     let forward_ssh_agent =
         env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
 
-    let logs_flag = if env::var("VECTOR_VM_PATH").is_ok() {
-        "--logs".to_string()
+    let logs_flag = if env::var("VECTOR_VM_PATH").is_err() {
+        "--no-logs".to_string()
     } else {
         "".to_string()
     };

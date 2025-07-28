@@ -134,8 +134,8 @@ pub struct CliArgs {
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
 
-    #[clap(long = "logs", help = "If set, the vector vm will not be spawned.")]
-    pub logs: bool,
+    #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
+    pub no_logs: bool,
 }
 
 impl CliArgs {
@@ -867,7 +867,7 @@ impl SystemTestGroup {
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             args.k8s,
-            args.logs,
+            !args.no_logs,
         )?;
 
         let with_farm = self.with_farm && !args.k8s;
