@@ -83,8 +83,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
-    pub(crate) max_canister_memory_size_wasm32: NumBytes,
-    pub(crate) max_canister_memory_size_wasm64: NumBytes,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
     pub(crate) rate_limiting_of_heap_delta: FlagStatus,
     pub(crate) heap_delta_rate_limit: NumBytes,
@@ -94,6 +92,9 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
+    pub(crate) max_environment_variables: usize,
+    pub(crate) max_environment_variable_name_length: usize,
+    pub(crate) max_environment_variable_value_length: usize,
 }
 
 impl CanisterMgrConfig {
@@ -106,8 +107,6 @@ impl CanisterMgrConfig {
         own_subnet_type: SubnetType,
         max_controllers: usize,
         compute_capacity: usize,
-        max_canister_memory_size_wasm32: NumBytes,
-        max_canister_memory_size_wasm64: NumBytes,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
         rate_limiting_of_heap_delta: FlagStatus,
@@ -118,6 +117,9 @@ impl CanisterMgrConfig {
         canister_snapshot_data_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
+        max_environment_variables: usize,
+        max_environment_variable_name_length: usize,
+        max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -128,8 +130,6 @@ impl CanisterMgrConfig {
             max_controllers,
             compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
                 as u64,
-            max_canister_memory_size_wasm32,
-            max_canister_memory_size_wasm64,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
@@ -139,6 +139,9 @@ impl CanisterMgrConfig {
             canister_snapshot_data_baseline_instructions,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
+            max_environment_variables,
+            max_environment_variable_name_length,
+            max_environment_variable_value_length,
         }
     }
 }
@@ -484,6 +487,18 @@ pub(crate) enum CanisterManagerError {
     },
     RenameCanisterNotStopped(CanisterId),
     RenameCanisterHasSnapshot(CanisterId),
+    EnvironmentVariablesTooMany {
+        max: usize,
+        count: usize,
+    },
+    EnvironmentVariablesNameTooLong {
+        name: String,
+        max_name_length: usize,
+    },
+    EnvironmentVariablesValueTooLong {
+        value: String,
+        max_value_length: usize,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -693,7 +708,19 @@ impl AsErrorHelp for CanisterManagerError {
                     suggestion: "Delete all snapshots before renaming.".to_string(),
                     doc_link: "".to_string(),
                 }
-            }
+            },
+            CanisterManagerError::EnvironmentVariablesTooMany { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of environment variables.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::EnvironmentVariablesNameTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Shorten the environment variable name to fit within the allowed limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -1062,6 +1089,24 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     message,
+                )
+            }
+            EnvironmentVariablesTooMany { max, count } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Too many environment variables: {} (max: {})", count, max),
+                )
+            }
+            EnvironmentVariablesNameTooLong { name, max_name_length } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Environment variable name \"{}\" exceeds the maximum allowed length of {}.", name, max_name_length),
+                )
+            }
+            EnvironmentVariablesValueTooLong { value, max_value_length } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Environment variable value \"{}\" exceeds the maximum allowed length of {}.", value, max_value_length),
                 )
             }
         }

@@ -1,16 +1,17 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "node_assign_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -30,12 +31,13 @@ system_test_nns(
 
 system_test_nns(
     name = "node_reassignment_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -109,13 +111,14 @@ system_test_nns(
 
 system_test_nns(
     name = "unstuck_subnet_test",
+    env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
         "long_test",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    uses_guestos_test_update = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
@@ -129,12 +132,13 @@ system_test_nns(
 
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/interfaces/registry",
         "//rs/protobuf",

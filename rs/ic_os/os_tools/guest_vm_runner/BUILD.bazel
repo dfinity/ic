@@ -10,14 +10,20 @@ DEPENDENCIES = [
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/grub",
     "//rs/ic_os/metrics_tool",
+    "//rs/ic_os/sev",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
+    "@crate_index//:clap",
+    "@crate_index//:devicemapper",
     "@crate_index//:gpt",
+    "@crate_index//:loopdev-3",
     "@crate_index//:macaddr",
+    "@crate_index//:nix",
     "@crate_index//:regex",
     "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:uuid",
@@ -29,7 +35,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:goldenfile",
-    "@crate_index//:nix",
     "@crate_index//:url",
 ]
 
@@ -78,8 +83,12 @@ rust_test(
 
 rust_test(
     name = "guest_vm_runner_integration_tests",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-04
+    timeout = "long",
     crate = ":guest_vm_runner_dev",
     crate_features = [
+        "skip_default_tests",
         "dev",
         "integration_tests",
     ],
@@ -88,4 +97,18 @@ rust_test(
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "upgrade_device_mapper_test",
+    crate = ":guest_vm_runner_dev",
+    crate_features = [
+        "skip_default_tests",
+        "dev",
+        "upgrade_device_mapper_test",
+    ],
+    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
+    tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

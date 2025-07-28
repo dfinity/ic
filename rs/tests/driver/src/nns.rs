@@ -41,7 +41,7 @@ use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::CreateSubnetPayload,
+    do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
@@ -399,10 +399,7 @@ pub async fn vote_execute_proposal_assert_failed(
     );
 }
 
-pub async fn vote_and_execute_proposal(
-    governance_canister: &Canister<'_>,
-    proposal_id: ProposalId,
-) -> ProposalInfo {
+pub async fn vote_on_proposal(governance_canister: &Canister<'_>, proposal_id: ProposalId) {
     // Cast votes.
     let input = ManageNeuron {
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
@@ -425,6 +422,14 @@ pub async fn vote_and_execute_proposal(
         )
         .await
         .expect("Vote failed");
+}
+
+pub async fn vote_and_execute_proposal(
+    governance_canister: &Canister<'_>,
+    proposal_id: ProposalId,
+) -> ProposalInfo {
+    // Cast votes.
+    vote_on_proposal(governance_canister, proposal_id).await;
     wait_for_final_state(governance_canister, proposal_id).await
 }
 
@@ -574,6 +579,7 @@ pub async fn submit_create_application_subnet_proposal(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
@@ -596,6 +602,8 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: cost_schedule,
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),

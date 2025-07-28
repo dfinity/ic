@@ -69,6 +69,7 @@ DEV_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
@@ -233,7 +234,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
-    with_test = True,
+    test_name = "execute_inspect_message_bench_test",
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -242,7 +243,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
     env = ENV,
-    with_test = True,
+    test_name = "execute_query_bench_test",
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -251,7 +252,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
     env = ENV,
-    with_test = True,
+    test_name = "execute_update_bench_test",
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 

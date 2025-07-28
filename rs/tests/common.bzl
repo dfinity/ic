@@ -170,6 +170,14 @@ UNIVERSAL_CANISTER_ENV = {
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
 }
 
+MESSAGE_CANISTER_RUNTIME_DEPS = [
+    "//rs/tests/test_canisters/message:message.wasm.gz",
+]
+
+MESSAGE_CANISTER_ENV = {
+    "MESSAGE_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/message:message.wasm.gz)",
+}
+
 SIGNER_CANISTER_RUNTIME_DEPS = [
     "//rs/tests/test_canisters/signer:signer.wasm.gz",
 ]
@@ -177,3 +185,11 @@ SIGNER_CANISTER_RUNTIME_DEPS = [
 SIGNER_CANISTER_ENV = {
     "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
 }
+
+VECTOR_ENV = {
+    "VECTOR_VM_PATH": "$(rootpath //rs/tests:vector_with_log_fetcher_image)",
+}
+
+VECTOR_RUNTIME_DEPS = [
+    "//rs/tests:vector_with_log_fetcher_image",
+]

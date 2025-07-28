@@ -27,11 +27,11 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
-    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
+    CallContextAction, CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology,
+    ReplicatedState,
 };
 use ic_types::{
-    batch::QueryStats,
+    batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
@@ -96,8 +96,6 @@ pub(super) struct QueryContext<'a> {
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
     data_certificate: (Vec<u8>, CanisterId),
-    max_canister_memory_size_wasm32: NumBytes,
-    max_canister_memory_size_wasm64: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -131,8 +129,6 @@ impl<'a> QueryContext<'a> {
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
         canister_guaranteed_callback_quota: u64,
-        max_canister_memory_size_wasm32: NumBytes,
-        max_canister_memory_size_wasm64: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
         max_query_call_graph_instructions: NumInstructions,
@@ -159,8 +155,6 @@ impl<'a> QueryContext<'a> {
             state,
             network_topology,
             data_certificate: (data_certificate, canister_id),
-            max_canister_memory_size_wasm32,
-            max_canister_memory_size_wasm64,
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -396,7 +390,7 @@ impl<'a> QueryContext<'a> {
                 );
             }
         }
-
+        let cost_schedule = self.get_cost_schedule();
         let subnet_size = self
             .network_topology
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
@@ -408,6 +402,7 @@ impl<'a> QueryContext<'a> {
             canister.message_memory_usage(),
             canister.scheduler_state.compute_allocation,
             subnet_size,
+            self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
         ) > canister.system_state.balance()
         {
@@ -439,6 +434,7 @@ impl<'a> QueryContext<'a> {
                 self.hypervisor,
                 &mut self.round_limits,
                 self.query_critical_error,
+                cost_schedule,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -646,6 +642,8 @@ impl<'a> QueryContext<'a> {
             ),
         };
 
+        let cost_schedule = self.get_cost_schedule();
+
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -660,6 +658,7 @@ impl<'a> QueryContext<'a> {
             self.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
+            cost_schedule,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -744,6 +743,7 @@ impl<'a> QueryContext<'a> {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
+        let cost_schedule = self.get_cost_schedule();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
@@ -763,6 +763,7 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
+                cost_schedule,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
@@ -1075,19 +1076,8 @@ impl<'a> QueryContext<'a> {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
-        let wasm_execution_mode = canister
-            .execution_state
-            .as_ref()
-            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
-
-        let max_canister_memory_size = match wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => self.max_canister_memory_size_wasm32,
-            WasmExecutionMode::Wasm64 => self.max_canister_memory_size_wasm64,
-        };
-
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
@@ -1120,5 +1110,9 @@ impl<'a> QueryContext<'a> {
     /// Returns a number of transient errors.
     pub fn transient_errors(&self) -> usize {
         self.transient_errors
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.state.get_ref().metadata.cost_schedule
     }
 }

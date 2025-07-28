@@ -42,6 +42,7 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
@@ -147,7 +148,7 @@ fn main() -> Result<()> {
                 ))
                 // This section tests the url and ip scenarios
                 .add_test(systest!(test_non_ascii_url_is_accepted))
-                .add_test(systest!(test_invalid_ip))
+                .add_test(systest!(test_invalid_ip_timeout))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
                 .add_test(systest!(test_max_url_length_exceeded))
@@ -1118,7 +1119,7 @@ fn test_invalid_domain_name(env: TestEnv) {
     );
 }
 
-fn test_invalid_ip(env: TestEnv) {
+fn test_invalid_ip_timeout(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1145,10 +1146,12 @@ fn test_invalid_ip(env: TestEnv) {
 
     assert_matches!(
         response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysTransient,
+        Err(
+            RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            reject_message,
             ..
-        })
+        }) => assert_eq!(reject_message, "Timeout expired")
     );
     assert_ne!(
         refunded_cycles,
@@ -2426,6 +2429,11 @@ fn expected_cycle_cost(
     )
     .unwrap();
     let req_size = dummy_context.variable_parts_size();
-    let cycle_fee = cm.http_request_fee(req_size, Some(NumBytes::from(response_size)), subnet_size);
+    let cycle_fee = cm.http_request_fee(
+        req_size,
+        Some(NumBytes::from(response_size)),
+        subnet_size,
+        CanisterCyclesCostSchedule::Normal,
+    );
     cycle_fee.get().try_into().unwrap()
 }

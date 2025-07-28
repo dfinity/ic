@@ -14,7 +14,8 @@ pub use http::{
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
-    CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -30,7 +31,6 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
-use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use num_traits::cast::ToPrimitive;
@@ -86,7 +86,6 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialIDkgDealings,
     ReshareChainKey,
 
     // Schnorr interface.
@@ -366,7 +365,7 @@ impl CanisterLoadSnapshotRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSettingsChangeRecord {
     controllers: Option<Vec<PrincipalId>>,
-    environment_variables_hash: Option<Vec<u8>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterSettingsChangeRecord {
@@ -374,8 +373,8 @@ impl CanisterSettingsChangeRecord {
         self.controllers.as_deref()
     }
 
-    pub fn environment_variables_hash(&self) -> Option<Vec<u8>> {
-        self.environment_variables_hash.clone()
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
     }
 }
 
@@ -410,6 +409,7 @@ pub struct RenameToRecord {
 /// variant {
 ///   creation : record {
 ///     controllers : vec principal;
+///     environment_variables_hash: opt blob;
 ///   };
 ///   code_uninstall;
 ///   code_deployment : record {
@@ -489,7 +489,7 @@ impl CanisterChangeDetails {
 
     pub fn settings_change(
         controllers: Option<Vec<PrincipalId>>,
-        environment_variables_hash: Option<Vec<u8>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterSettingsChange(CanisterSettingsChangeRecord {
             controllers,
@@ -795,7 +795,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                         ),
                         environment_variables_hash: canister_settings_change
                             .environment_variables_hash
-                            .clone(),
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -903,9 +903,14 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                             .collect::<Result<Vec<PrincipalId>, _>>()?,
                     ),
                 };
+                let environment_variables_hash =
+                    match canister_settings_change.environment_variables_hash {
+                        Some(bytes) => Some(try_decode_hash(bytes)?),
+                        None => None,
+                    };
                 Ok(CanisterChangeDetails::settings_change(
                     controllers,
-                    canister_settings_change.environment_variables_hash.clone(),
+                    environment_variables_hash,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
@@ -1099,6 +1104,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///     log_visibility: log_visibility;
 ///     wasm_memory_limit: nat;
 ///     wasm_memory_threshold: nat;
+///     environment_variables: vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -1111,6 +1117,7 @@ pub struct DefiniteCanisterSettingsArgs {
     log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
+    environment_variables: Vec<EnvironmentVariable>,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -1124,10 +1131,18 @@ impl DefiniteCanisterSettingsArgs {
         log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
+        let environment_variables = environment_variables
+            .iter()
+            .map(|(name, value)| EnvironmentVariable {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect::<Vec<EnvironmentVariable>>();
         Self {
             controller,
             controllers,
@@ -1138,6 +1153,7 @@ impl DefiniteCanisterSettingsArgs {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
+            environment_variables,
         }
     }
 
@@ -1171,6 +1187,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn freezing_threshold(&self) -> candid::Nat {
         self.freezing_threshold.clone()
+    }
+
+    pub fn environment_variables(&self) -> &[EnvironmentVariable] {
+        &self.environment_variables
     }
 }
 
@@ -1271,6 +1291,7 @@ impl CanisterStatusResultV2 {
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         Self {
             status,
@@ -1301,6 +1322,7 @@ impl CanisterStatusResultV2 {
                 log_visibility,
                 wasm_memory_limit,
                 wasm_memory_threshold,
+                environment_variables,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -2016,7 +2038,7 @@ pub struct CanisterSettingsArgsBuilder {
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
-    environment_variables: Option<BTreeMap<String, String>>,
+    environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 #[allow(dead_code)]
@@ -2035,15 +2057,7 @@ impl CanisterSettingsArgsBuilder {
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
-            environment_variables: self.environment_variables.map(|variables| {
-                variables
-                    .iter()
-                    .map(|(name, value)| EnvironmentVariable {
-                        name: name.clone(),
-                        value: value.clone(),
-                    })
-                    .collect::<Vec<_>>()
-            }),
+            environment_variables: self.environment_variables,
         }
     }
 
@@ -2131,7 +2145,7 @@ impl CanisterSettingsArgsBuilder {
 
     pub fn with_environment_variables(
         self,
-        environment_variables: BTreeMap<String, String>,
+        environment_variables: Vec<EnvironmentVariable>,
     ) -> Self {
         Self {
             environment_variables: Some(environment_variables),
@@ -2882,59 +2896,6 @@ const MAX_ALLOWED_NODES_COUNT: usize = 100;
 
 pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
 
-/// Argument of the compute_initial_idkg_dealings API.
-/// `(record {
-///     key_id: master_public_key_id;
-///     subnet_id: principal;
-///     nodes: vec principal;
-///     registry_version: nat64;
-/// })`
-#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct ComputeInitialIDkgDealingsArgs {
-    pub key_id: MasterPublicKeyId,
-    pub subnet_id: SubnetId,
-    nodes: BoundedNodes,
-    registry_version: u64,
-}
-
-impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
-
-impl ComputeInitialIDkgDealingsArgs {
-    pub fn new(
-        key_id: MasterPublicKeyId,
-        subnet_id: SubnetId,
-        nodes: BTreeSet<NodeId>,
-        registry_version: RegistryVersion,
-    ) -> Self {
-        Self {
-            key_id,
-            subnet_id,
-            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
-            registry_version: registry_version.get(),
-        }
-    }
-
-    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
-        let mut set = BTreeSet::<NodeId>::new();
-        for node_id in self.nodes.get().iter() {
-            if !set.insert(NodeId::new(*node_id)) {
-                return Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
-                ));
-            }
-        }
-        Ok(set)
-    }
-
-    pub fn get_registry_version(&self) -> RegistryVersion {
-        RegistryVersion::new(self.registry_version)
-    }
-}
-
 /// Argument of the reshare_chain_key API.
 /// `(record {
 ///     key_id: master_public_key_id;
@@ -3105,39 +3066,7 @@ pub struct SchnorrPublicKeyResponse {
 
 impl Payload<'_> for SchnorrPublicKeyResponse {}
 
-/// Struct used to return the xnet initial dealings.
-#[derive(Debug)]
-pub struct ComputeInitialIDkgDealingsResponse {
-    pub initial_dkg_dealings: InitialIDkgDealings,
-}
-
-impl ComputeInitialIDkgDealingsResponse {
-    pub fn encode(&self) -> Vec<u8> {
-        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
-        Encode!(&serde_encoded_transcript_records).unwrap()
-    }
-
-    fn encode_with_serde_cbor(&self) -> Vec<u8> {
-        let transcript_records = (&self.initial_dkg_dealings,);
-        serde_cbor::to_vec(&transcript_records).unwrap()
-    }
-
-    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records =
-            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
-        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
-            Err(err) => Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
-            )),
-            Ok((initial_dkg_dealings,)) => Ok(Self {
-                initial_dkg_dealings,
-            }),
-        }
-    }
-}
-
-// Represents the argument of the vetkd_derive_key API.
+/// Represents the argument of the vetkd_derive_key API.
 /// ```text
 /// (record {
 ///   input: blob;
@@ -3218,6 +3147,7 @@ pub use ic_btc_replica_types::{
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 

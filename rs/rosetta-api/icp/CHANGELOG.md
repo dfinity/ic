@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+### Removed
+- Removed deprecated `MERGE_MATURITY` neuron management operation.
+
 ## [2.1.6] - 2025-06-27
 ### Added
 - Enhanced transaction search capabilities with database indexing optimizations for improved performance ([#5739](https://github.com/dfinity/ic/pull/5739))
