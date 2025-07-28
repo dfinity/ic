@@ -18,6 +18,7 @@ use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProv
 use ic_types::RegistryVersion;
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -29,14 +30,14 @@ mod test;
 /// through arguments and responses with almost no logic.
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
-    metrics_manager: Arc<MetricsManager<VM>>,
+    metrics_manager: Rc<MetricsManager<VM>>,
 }
 
 /// Internal methods
 impl NodeRewardsCanister {
     pub fn new(
         registry_client: Arc<dyn CanisterRegistryClient>,
-        metrics_manager: Arc<MetricsManager<VM>>,
+        metrics_manager: Rc<MetricsManager<VM>>,
     ) -> Self {
         Self {
             registry_client,
@@ -97,7 +98,7 @@ impl NodeRewardsCanister {
     }
 
     /// Gets Arc reference to MetricsManager
-    pub fn get_metrics_manager(&self) -> Arc<MetricsManager<VM>> {
+    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
         self.metrics_manager.clone()
     }
 

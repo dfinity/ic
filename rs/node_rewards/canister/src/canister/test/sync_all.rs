@@ -18,6 +18,7 @@ use ic_registry_keys::make_subnet_list_record_key;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
@@ -30,7 +31,7 @@ thread_local! {
     // Dummy value b/c we can't do direct assignment using values defined above.
     static CANISTER: RefCell<NodeRewardsCanister> = {
         let registry_store = Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default())));
-        let metrics_manager = Arc::new(MetricsManager::new(crate::metrics::tests::mock::MockCanisterClient::new()));
+        let metrics_manager = Rc::new(MetricsManager::new(crate::metrics::tests::mock::MockCanisterClient::new()));
 
         RefCell::new(NodeRewardsCanister::new(registry_store, metrics_manager))
     };
@@ -51,7 +52,7 @@ fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
             fake_registry.clone(),
         ))
         .clone(),
-        Arc::new(MetricsManager::new(mock)),
+        Rc::new(MetricsManager::new(mock)),
     );
     CANISTER.with_borrow_mut(|c| *c = canister);
     // To do thorough tests, this is all we currently need to mock, as everything else
@@ -152,7 +153,7 @@ fn test_sync_non_zero_registry_version() {
     // From NON ZERO_REGISTRY_VERSION, we expect all subnets to be synced.
     let expected_subnets: Vec<SubnetId> = subnets_first_sync
         .into_iter()
-        .chain(subnets_second_sync.into_iter())
+        .chain(subnets_second_sync)
         .collect();
     let got_subnets = metrics_manager
         .subnets_metrics

@@ -78,6 +78,7 @@ async fn get_node_providers_monthly_xdr_rewards(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use candid_parser::utils::{service_equal, CandidSource};
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {
