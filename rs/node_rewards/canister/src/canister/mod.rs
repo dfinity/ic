@@ -1,6 +1,7 @@
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
+use crate::telemetry;
 use ic_base_types::SubnetId;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -47,20 +48,37 @@ impl NodeRewardsCanister {
 
     pub async fn sync_all(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
         let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
+        let mut instruction_counter = telemetry::InstructionCounter::default();
 
         let pre_sync_version = registry_client.get_latest_version();
+        instruction_counter.lap();
         let registry_sync_result = registry_client.sync_registry_stored().await;
+        let registry_sync_instructions = instruction_counter.lap();
         let post_sync_version = registry_client.get_latest_version();
 
+        let mut update_subnet_metrics_instructions: u64 = 0;
         match registry_sync_result {
             Ok(_) => {
+                instruction_counter.lap();
                 Self::schedule_metrics_sync(canister, pre_sync_version, post_sync_version).await;
+                update_subnet_metrics_instructions = instruction_counter.lap();
+
+                telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_success());
                 ic_cdk::println!("Successfully synced subnets metrics and local registry");
             }
             Err(e) => {
                 ic_cdk::println!("Failed to sync local registry: {:?}", e)
             }
         }
+
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+            m.record_last_sync_instructions(
+                instruction_counter.sum(),
+                registry_sync_instructions,
+                update_subnet_metrics_instructions,
+            )
+        });
     }
 
     async fn schedule_metrics_sync(
