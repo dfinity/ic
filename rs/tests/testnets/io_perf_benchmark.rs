@@ -10,8 +10,8 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./ci/tools/docker-run
-//   $ PERF_HOSTS="dm1-dll29.dm1.dfinity.network" ict testnet create io_perf_benchmark --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=PERF_HOSTS
+//   $ ./ci/container/container-run.sh
+//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=SSH_AUTH_SOCK --test_env=IMAGE_SIZE_GIB=5120 --test_env NUM_PERF_HOSTS=1
 //
 // The --output-dir=./io_perf_benchmark will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./io_perf_benchmark will store the remaining test output in the specified directory.
@@ -62,7 +62,9 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets, set_icp_xdr_exchange_rate};
-use slog::info;
+use slog::{info, Logger};
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 
 const NUM_IC_GATEWAYS: u64 = 1;
 const DEFAULT_IMAGE_SIZE_GIB: u64 = 5120;
@@ -96,7 +98,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn switch_to_ssd(host: &str) {
+fn switch_to_ssd(log: &Logger, hostname: &str) {
     let script = r##"
         #!/bin/bash
         set -e
@@ -148,16 +150,21 @@ fn switch_to_ssd(host: &str) {
         panic!("No $SSH_AUTH_SOCK vairable provided");
     }
     let mut ssh = Command::new("ssh")
-        .arg("farm@".to_owned() + host)
+        .arg("-o")
+        .arg("StrictHostKeyChecking=no")
+        .arg("farm@".to_owned() + hostname)
         .arg(script)
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
     for l in BufReader::new(ssh.stdout.as_mut().unwrap()).lines() {
-        println!("SSH out: {}", l.unwrap());
+        info!(&log, "SSH {} out: {}", hostname, l.unwrap());
     }
 
-    assert!(ssh.wait().unwrap().success());
+    let ssh_status = ssh.wait().unwrap();
+    if !ssh_status.success() {
+        panic!("SSH to {} failed with: {}", hostname, ssh_status);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -237,11 +244,21 @@ pub fn setup(env: TestEnv, config: Config) {
     let mut switch_to_ssd_handles = Vec::new();
     for node in topology_snapshot.subnets().next().unwrap().nodes() {
         let node_id = node.node_id.to_string();
-        let vm = vms.get(&node_id).expect("Failed to get VM for node");
+        let hostname = vms
+            .get(&node_id)
+            .expect("Failed to get VM for node")
+            .hostname
+            .clone();
+
         info!(
             env.logger(),
-            "Node {} is allocated to host: {}", node_id, vm.hostname
+            "Node {} is allocated to host: {}", node_id, hostname
         );
+        let log = logger.clone();
+        switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+    }
+    for handle in switch_to_ssd_handles {
+        handle.join().unwrap();
     }
 
     // set up NNS canisters
@@ -254,7 +271,6 @@ pub fn setup(env: TestEnv, config: Config) {
     // sets the exchange rate to 12 XDR per 1 ICP
     set_icp_xdr_exchange_rate(&env, 12_0000);
 
-    // sets the exchange rate to 12 XDR per 1 ICP
     set_authorized_subnets(&env);
 
     // deploys the ic-gateway/s
