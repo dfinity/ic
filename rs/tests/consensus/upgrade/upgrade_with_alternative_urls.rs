@@ -26,7 +26,7 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version_with_urls,
-    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -86,7 +86,6 @@ fn test(env: TestEnv) {
     block_on(bless_replica_version_with_urls(
         &nns_node,
         &target_version,
-        UpdateImageType::Image,
         release_package_urls,
         get_guestos_update_img_sha256(&env).expect("no SHA256 hash"),
         &logger,
