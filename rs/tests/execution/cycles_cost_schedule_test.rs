@@ -55,7 +55,7 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let log = &env.logger();
 
-    // [Phase I] Prepare NNS
+    info!(log, "[Phase I] Prepare NNS");
     let nns_node = env
         .topology_snapshot()
         .root_subnet()
@@ -76,7 +76,7 @@ pub fn test(env: TestEnv) {
         .unassigned_nodes()
         .map(|node| node.node_id);
 
-    // [Phase II] Execute and validate the testnet changes
+    info!(log, "[Phase II] Execute and validate the testnet changes");
 
     let client = RegistryCanister::new_with_query_timeout(
         vec![endpoint.get_public_url()],
@@ -146,7 +146,7 @@ pub fn test(env: TestEnv) {
         (final_subnets, new_topology_snapshot)
     });
 
-    // [Phase III] install a canister onto ALL subnets and check that they are
+    info!(log, "[Phase III] install a canister without cycles");
     // operational
     for subnet_id in subnet_ids {
         info!(log, "Asserting healthy status of subnet {subnet_id}");
