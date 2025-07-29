@@ -24,8 +24,8 @@ message LogEntry {
   log.ingress_message_log_entry.v1.IngressMessageLogEntry ingress_message = 21;
   log.block_log_entry.v1.BlockLogEntry block = 22;
   log.crypto_log_entry.v1.CryptoLogEntry crypto = 23;
-  log.malicious_behavior_log_entry.v1.MaliciousBehaviorLogEntry malicious_behavior = 25;
-  reserved 17, 19, 24;
+  log.malicious_behavior_log_entry.v1.MaliciousBehaviorLogEntry malicious_behavior = 26;
+  reserved 17, 19, 24, 25;
   reserved "replica_config";
   reserved "p2p";
   reserved "execution";
