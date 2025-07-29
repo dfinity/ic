@@ -1135,18 +1135,11 @@ impl Governance {
         caller: &PrincipalId,
         disburse: &manage_neuron::Disburse,
     ) -> Result<u64, GovernanceError> {
-        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
+        // First check authorized
         let neuron = self.get_neuron_result(id)?;
         neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
 
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: self.env.now(),
-            command: Some(InFlightCommand::Disburse(disburse.clone())),
-        };
-        let _lock = self.lock_neuron_for_command(id, in_flight_command);
-
-        // Re-acquire neuron after the _lock_ is acquired, which required mutable borrow of self.
-        let neuron = self.get_neuron_result(id)?;
+        // Check that the neuron is dissolved.
         let state = neuron.state(self.env.now());
         if state != NeuronState::Dissolved {
             return Err(GovernanceError::new_with_message(
@@ -1154,6 +1147,17 @@ impl Governance {
                 format!("Neuron {} is NOT dissolved. It is in state {:?}", id, state),
             ));
         }
+        // Lock neuron for the disburse command.
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: self.env.now(),
+            command: Some(InFlightCommand::Disburse(disburse.clone())),
+        };
+        let _lock = self.lock_neuron_for_command(id, in_flight_command);
+
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
+
+        // We need to re-acquire neuron ref because of the lock_neuron_for_command call requiring mut.
+        let neuron = self.get_neuron_result(id)?;
 
         let from_subaccount = neuron.subaccount()?;
 
@@ -1173,18 +1177,15 @@ impl Governance {
 
         let max_burnable_fee = self.maximum_burnable_fees_for_neuron(&neuron)?;
 
-        let fees_amount_e8s = neuron.neuron_fees_e8s;
-
         // Calculate the amount to transfer and make sure no matter what the user
         // disburses we still take the neuron management fees into account.
-        //
-        // Note that the implementation of stake_e8s() is effectively:
-        //   neuron.cached_neuron_stake_e8s.saturating_sub(neuron.neuron_fees_e8s)
-        // So there is symmetry here in that we are subtracting
-        // fees_amount_e8s from both sides of this `map_or`.
-        let mut disburse_amount_e8s = disburse.amount.as_ref().map_or(neuron.stake_e8s(), |a| {
-            a.e8s.saturating_sub(fees_amount_e8s)
-        });
+        let mut disburse_amount_e8s = disburse
+            .amount
+            .as_ref()
+            .map_or(neuron.stake_e8s(), |a| a.e8s);
+
+        // You cannot disburse more than the neuron's stake, which includes fees.
+        disburse_amount_e8s = disburse_amount_e8s.min(neuron.stake_e8s());
 
         // Subtract the transaction fee from the amount to disburse since it will
         // be deducted from the source (the neuron's) account.

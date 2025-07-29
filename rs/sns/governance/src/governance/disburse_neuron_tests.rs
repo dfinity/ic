@@ -786,8 +786,8 @@ fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
 
     // Check disburse call (second transfer)
     let disburse_call = &transfer_calls[1];
-    // Partial disburse: 200M requested - 50K fees - 10K tx_fee = 199,940,000
-    assert_eq!(disburse_call.0, 199_940_000); // amount disbursed
+    // Partial disburse: 2 tokens requested - 10K tx_fee = 199,990,000 e8s
+    assert_eq!(disburse_call.0, 199_990_000); // amount disbursed
     assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check final neuron state
@@ -800,9 +800,108 @@ fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
     // Should have 20,000 fees remaining (tied to open proposal)
     assert_eq!(updated_neuron.neuron_fees_e8s, 20_000);
 
-    // Check cached_neuron_stake_e8s: 500M - 30K burned - 199.94M disbursed - 10K tx_fee = 300,020,000
-    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 300_020_000);
+    // Check cached_neuron_stake_e8s: 500M - 30K burned - 199_990_000 disbursed - 10_000 tx_fee = 299,970,000
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 299_970_000);
 
-    // Remaining stake: 300.02M cached - 20K fees = 300M (3 tokens)
-    assert_eq!(updated_neuron.stake_e8s(), 3 * E8);
+    // Remaining stake: 299.97M cached - 20K fees = 299.95M
+    assert_eq!(updated_neuron.stake_e8s(), 299_950_000);
+}
+
+#[test]
+fn test_disburse_neuron_caps_to_maximum_available_stake() {
+    // Test that disburse_neuron disburses maximum possible when requested amount exceeds available
+    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
+
+    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
+    let mut neuron = A_NEURON.clone();
+    neuron.id = Some(neuron_id.clone());
+    neuron.cached_neuron_stake_e8s = 5 * E8; // 5 tokens (500M e8s)
+    neuron.neuron_fees_e8s = 50_000; // 50K e8s in fees
+
+    // Make neuron dissolved
+    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
+
+    governance
+        .proto
+        .neurons
+        .insert(neuron_id.to_string(), neuron.clone());
+
+    // Create an open proposal with reject cost of 30,000 e8s (makes 30K non-burnable)
+    let proposal_data = ProposalData {
+        id: Some(ProposalId { id: 1 }),
+        proposer: Some(neuron_id.clone()),
+        reject_cost_e8s: 30_000,
+        proposal: Some(A_MOTION_PROPOSAL.clone()),
+        proposal_creation_timestamp_seconds: governance.env.now(),
+        ballots: Default::default(),
+        latest_tally: Some(Tally::default()),
+        decided_timestamp_seconds: 0, // 0 means open
+        executed_timestamp_seconds: 0,
+        failed_timestamp_seconds: 0,
+        failure_reason: None,
+        reward_event_round: 0,
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: governance.env.now() + 1000,
+        }),
+        initial_voting_period_seconds: 1000,
+        action: 1, // Motion proposal
+        reward_event_end_timestamp_seconds: None,
+        topic: Some(1), // Topic for Motion
+        minimum_yes_proportion_of_total: None,
+        minimum_yes_proportion_of_exercised: None,
+        ..Default::default()
+    };
+
+    governance.proto.proposals.insert(1, proposal_data);
+
+    // Available for disbursal: stake_e8s = cached_stake - fees = 500M - 50K = 499.95M
+    // Max disburse considering tx fee: 499.95M - 10K = 499.94M
+    // Try to disburse 500M (more than available, should disburse max possible)
+    let disburse = manage_neuron::Disburse {
+        amount: Some(manage_neuron::disburse::Amount {
+            e8s: 500 * E8, // 500M e8s (more than available, should get capped)
+        }),
+        to_account: None,
+    };
+
+    let result = governance
+        .disburse_neuron(&neuron_id, &A_NEURON_PRINCIPAL_ID, &disburse)
+        .now_or_never()
+        .unwrap();
+
+    // Should succeed and disburse the maximum possible amount
+    assert!(result.is_ok());
+    let block_height = result.unwrap();
+    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+
+    // Verify that the ledger calls were made correctly
+    let transfer_calls = ledger.get_transfer_calls();
+    assert_eq!(transfer_calls.len(), 2); // One burn, one disburse
+
+    // Check burn call (first transfer)
+    let burn_call = &transfer_calls[0];
+    assert_eq!(burn_call.0, 20_000); // amount burned (50K - 30K non-burnable)
+    assert_eq!(burn_call.1, 0); // fee for burn (always 0)
+
+    // Check disburse call (second transfer)
+    let disburse_call = &transfer_calls[1];
+    // Max disburse: 499.95M available - 10K tx_fee = 499,940,000
+    assert_eq!(disburse_call.0, 499_940_000); // maximum possible amount disbursed
+    assert_eq!(disburse_call.1, 10_000); // transaction fee
+
+    // Check final neuron state after max disbursal
+    let updated_neuron = governance
+        .proto
+        .neurons
+        .get(&neuron_id.to_string())
+        .unwrap();
+
+    // Should have 30K fees remaining (tied to open proposal)
+    assert_eq!(updated_neuron.neuron_fees_e8s, 30_000);
+
+    // Check cached_neuron_stake_e8s: 500M - 20K burned - 499.94M disbursed - 10K tx_fee = 30K
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 30_000);
+
+    // Remaining stake: 30K cached - 30K fees = 0 (neuron fully disbursed)
+    assert_eq!(updated_neuron.stake_e8s(), 0);
 }
