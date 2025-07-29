@@ -1,9 +1,6 @@
+use crate::canister::test::test_utils::{setup_thread_local_canister_for_test, CANISTER_TEST};
 use crate::canister::NodeRewardsCanister;
-use crate::metrics::MetricsManager;
-use crate::storage::METRICS_MANAGER;
 use futures_util::FutureExt;
-use ic_cdk::api::call::CallResult;
-use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -15,64 +12,14 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardRate, NodeRewardRates, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
-use ic_registry_canister_client::{
-    test_registry_data_stable_memory_impl, StableCanisterRegistryClient,
-};
-use ic_registry_canister_client::{
-    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
-};
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, NODE_REWARDS_TABLE_KEY,
 };
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::PrincipalId;
 use maplit::btreemap;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
-
-pub type VM = VirtualMemory<DefaultMemoryImpl>;
-
-thread_local! {
-    pub(crate) static STATE_TEST: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>> = RefCell::new({
-        let mgr = MemoryManager::init(DefaultMemoryImpl::default());
-        StableBTreeMap::init(mgr.get(MemoryId::new(0)))
-    });
-    // Dummy value b/c we can't do direct assignment using values defined above.
-    pub(crate) static CANISTER_TEST: RefCell<NodeRewardsCanister> = {
-        let registry_store = Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default())));
-        let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
-
-        RefCell::new(NodeRewardsCanister::new(registry_store, metrics_manager))
-    };
-}
-
-test_registry_data_stable_memory_impl!(TestState, STATE_TEST);
-
-pub(crate) fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
-    let fake_registry = Arc::new(FakeRegistry::new());
-    let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
-    mock.expect_node_metrics_history()
-        .return_const(CallResult::Ok(vec![NodeMetricsHistoryRecord {
-            timestamp_nanos: 0,
-            node_metrics: vec![],
-        }]));
-    let canister = NodeRewardsCanister::new(
-        Arc::new(StableCanisterRegistryClient::<TestState>::new(
-            fake_registry.clone(),
-        ))
-        .clone(),
-        Rc::new(MetricsManager::new(mock)),
-    );
-    CANISTER_TEST.with_borrow_mut(|c| *c = canister);
-    // To do thorough tests, this is all we currently need to mock, as everything else
-    // interacts through the RegistryClient at present.  Outside of Registry, everything else
-    // is internal state.
-    fake_registry
-}
 
 fn setup_data_for_test_rewards_calculation(fake_registry: Arc<FakeRegistry>) {
     let version_1_rewards_table = NodeRewardsTable {

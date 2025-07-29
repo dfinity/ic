@@ -51,7 +51,12 @@ const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 fn schedule_timers() {
     ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
-        spawn(NodeRewardsCanister::sync_all(&CANISTER));
+        spawn(async move {
+            NodeRewardsCanister::schedule_registry_sync(&CANISTER)
+                .await
+                .expect("Failed to schedule registry sync");
+            NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await
+        });
     });
 }
 

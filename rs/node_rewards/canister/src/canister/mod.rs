@@ -31,6 +31,7 @@ mod test;
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
     metrics_manager: Rc<MetricsManager<VM>>,
+    last_metrics_update: RegistryVersion,
 }
 
 /// Internal methods
@@ -40,36 +41,46 @@ impl NodeRewardsCanister {
         metrics_manager: Rc<MetricsManager<VM>>,
     ) -> Self {
         Self {
+            last_metrics_update: registry_client.get_latest_version(),
             registry_client,
             metrics_manager,
         }
     }
 
-    pub async fn sync_all(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
-        let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
-
-        let pre_sync_version = registry_client.get_latest_version();
-        let registry_sync_result = registry_client.sync_registry_stored().await;
-        let post_sync_version = registry_client.get_latest_version();
-
-        match registry_sync_result {
-            Ok(_) => {
-                Self::schedule_metrics_sync(canister, pre_sync_version, post_sync_version).await;
-                ic_cdk::println!("Successfully synced subnets metrics and local registry");
-            }
-            Err(e) => {
-                ic_cdk::println!("Failed to sync local registry: {:?}", e)
-            }
-        }
+    /// Gets Arc reference to RegistryClient
+    pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
+        self.registry_client.clone()
     }
 
-    async fn schedule_metrics_sync(
+    /// Gets Arc reference to MetricsManager
+    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
+        self.metrics_manager.clone()
+    }
+
+    // Test only methods
+    pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
+        self.registry_client
+            .get_value(key.as_ref(), self.registry_client.get_latest_version())
+            .map_err(|e| format!("Failed to get registry value: {:?}", e))
+    }
+
+    pub async fn schedule_registry_sync(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-        pre_sync_version: RegistryVersion,
-        post_sync_version: RegistryVersion,
-    ) {
+    ) -> Result<(), String> {
         let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
-        let metrics_manager = canister.with(|canister| canister.borrow().get_metrics_manager());
+        registry_client.sync_registry_stored().await?;
+        Ok(())
+    }
+
+    pub async fn schedule_metrics_sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
+        let (registry_client, metrics_manager, pre_sync_version) = canister.with(|canister| {
+            (
+                canister.borrow().get_registry_client(),
+                canister.borrow().get_metrics_manager(),
+                canister.borrow().last_metrics_update,
+            )
+        });
+        let post_sync_version = registry_client.get_latest_version();
         let registry_querier = RegistryQuerier::new(registry_client.clone());
 
         let mut subnets_list: HashSet<SubnetId> = HashSet::default();
@@ -90,23 +101,9 @@ impl NodeRewardsCanister {
             .update_subnets_metrics(subnets_list.into_iter().collect())
             .await;
         metrics_manager.retry_failed_subnets().await;
-    }
-
-    /// Gets Arc reference to RegistryClient
-    pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
-        self.registry_client.clone()
-    }
-
-    /// Gets Arc reference to MetricsManager
-    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
-        self.metrics_manager.clone()
-    }
-
-    // Test only methods
-    pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
-        self.registry_client
-            .get_value(key.as_ref(), self.registry_client.get_latest_version())
-            .map_err(|e| format!("Failed to get registry value: {:?}", e))
+        canister.with_borrow_mut(|canister| {
+            canister.last_metrics_update = post_sync_version;
+        });
     }
 }
 
