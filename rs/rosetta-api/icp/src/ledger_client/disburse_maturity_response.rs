@@ -22,7 +22,7 @@ impl TryFrom<DisburseMaturityResponse> for ObjectMap {
 impl From<NnsDisburseMaturityResponse> for DisburseMaturityResponse {
     fn from(r: NnsDisburseMaturityResponse) -> Self {
         DisburseMaturityResponse {
-            amount_disbursed_e8s: r.amount_disbursed_e8s.unwrap_or_default(), // TODO: change to option in my response?
+            amount_disbursed_e8s: r.amount_disbursed_e8s.unwrap_or_default(),
         }
     }
 }
