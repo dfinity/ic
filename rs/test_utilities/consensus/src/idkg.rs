@@ -83,6 +83,15 @@ pub fn empty_response() -> ConsensusResponse {
     ConsensusResponse::new(CallbackId::from(0), Payload::Data(vec![]))
 }
 
+pub fn key_transcript_for_tests(key_id: &MasterPublicKeyId) -> IDkgTranscript {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let alg = AlgorithmId::from(key_id);
+    generate_key_transcript(&env, &dealers, &receivers, alg, rng)
+}
+
 pub fn fake_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> PreSignatureStash {
     let rng = &mut reproducible_rng();
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);

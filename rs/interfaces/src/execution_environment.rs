@@ -8,8 +8,8 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
+    batch::CanisterCyclesCostSchedule,
+    batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, ReplicaVersion, Time,
@@ -1381,6 +1381,7 @@ pub struct RegistryExecutionSettings {
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Chain key configuration of execution that comes from the registry.
@@ -1388,13 +1389,6 @@ pub struct RegistryExecutionSettings {
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
     pub pre_signatures_to_create_in_advance: u32,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct ChainKeyData {
-    pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
-    pub nidkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
 }
 
 pub trait Scheduler: Send {

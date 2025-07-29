@@ -278,6 +278,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            round.cost_schedule,
             original.wasm_execution_mode,
             round.log,
         );
@@ -323,6 +324,7 @@ impl InstallCodeHelper {
                 bytes,
                 &original.execution_parameters.subnet_memory_saturation,
                 original.subnet_size,
+                round.cost_schedule,
             );
 
             match self
@@ -367,6 +369,7 @@ impl InstallCodeHelper {
                 self.canister.message_memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
+                round.cost_schedule,
                 self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
@@ -874,6 +877,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        round.cost_schedule,
         original.wasm_execution_mode,
         round.log,
     );

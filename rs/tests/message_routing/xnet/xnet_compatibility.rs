@@ -27,7 +27,6 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -183,7 +182,6 @@ pub async fn test_async(env: TestEnv) {
     bless_replica_version(
         &nns_node,
         &branch_version,
-        UpdateImageType::Image,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],

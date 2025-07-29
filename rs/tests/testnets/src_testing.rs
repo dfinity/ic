@@ -47,7 +47,6 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
-use ic_system_test_driver::driver::vector_vm::VectorVm;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -106,8 +105,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     // set up IC
     let mut ic = InternetComputer::new().with_api_boundary_nodes(1);
@@ -149,9 +146,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 
     // install II, NNS dapp, and Subnet Rental Canister
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
