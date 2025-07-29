@@ -2671,13 +2671,7 @@ impl StateMachine {
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
-        assert_eq!(
-            self.state_manager
-                .latest_state_certification_hash()
-                .unwrap()
-                .0,
-            batch_number
-        );
+        assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
         self.check_critical_errors();
 
