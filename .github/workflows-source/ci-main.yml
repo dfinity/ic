@@ -1,23 +1,25 @@
 name: CI Main
 
 on:
+  pull_request:
+    branches-ignore:
+      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
   push:
     branches:
       - master
       - 'dev-gh-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
-  # Used as reusable workflow within release-testing workflow
-  workflow_call:
+  workflow_call: # Used as reusable workflow within release-testing workflow
+  workflow_dispatch: # Trigger via UI or gh CLI
+  repository_dispatch: # Trigger via API / ChatOps
+    types: [run-ci-main]
 
-# runs for the same workflow are cancelled on PRs but not on master
-# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
+# Runs for the same workflow are cancelled on PRs but not on master (on push to master head_ref is not set - fall back to run_id so it is not cancelled)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: >
+    ${{ github.event_name == 'repository_dispatch'
+        && format('{0}-dispatch-{1}', github.workflow, github.event.client_payload.pr_number || github.run_id)
+        || format('{0}-ci-{1}', github.workflow, github.head_ref || github.ref_name || github.run_id) }}
   cancel-in-progress: true
 
 permissions:
@@ -36,16 +38,14 @@ anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
   dind-large-setup: &dind-large-setup
-    runs-on:
-      labels: dind-large
+    runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
       <<: *image
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
-    runs-on:
-      labels: dind-small
+    runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
       <<: *image
       options: >-
@@ -144,12 +144,11 @@ jobs:
     needs: [ config ]
     <<: *dind-large-setup
     timeout-minutes: 120
-    runs-on:
-      labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
+      FORK_PR: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
     steps:
       - <<: *checkout
       - name: Set BAZEL_EXTRA_ARGS
@@ -168,6 +167,11 @@ jobs:
 
           if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
             EXCLUDED_TEST_TAGS+=(long_test)
+          fi
+
+          # No system tests on forked PR runs
+          if [[ "$FORK_PR" == "true" ]]; then
+            EXCLUDED_TEST_TAGS+=(system_test)
           fi
 
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
@@ -253,6 +257,7 @@ jobs:
     runs-on: namespace-profile-arm64-linux # profile created in namespace console
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
+      # TODO: Set up separate Bazel cache for external PRs
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
@@ -288,6 +293,7 @@ jobs:
     runs-on: namespace-profile-darwin # profile created in namespace console
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
+      # TODO: Set up separate Bazel cache for external PRs
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
@@ -391,7 +397,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    <<: *dind-small-setup
+    runs-on: ubuntu-latest
     steps:
       - <<: *checkout
       - <<: *python-setup
@@ -399,10 +405,18 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
+
+          # Set up virtualenv and activate it
+          python3 -m venv venv
+          source venv/bin/activate
+
+          # Upgrade pip and install requirements
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cd ci/src
+
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
@@ -415,9 +429,6 @@ jobs:
     needs: [ config ]
     name: Build IC
     <<: *dind-large-setup
-    # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
@@ -557,3 +568,59 @@ jobs:
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
+
+  dependencies-check:
+    name: Dependency Scan for PR
+    <<: *dind-small-setup
+    if: >
+      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      || github.event_name == 'repository_dispatch' }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      CI_COMMIT_SHA: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      REPO_NAME: ${{ github.repository }}
+    steps:
+      - <<: *checkout
+        with:
+          fetch-depth: 256
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            depcheck:
+              - '.github/workflows/ci-pr-only.yml'
+              - 'bazel/external_crates.bzl'
+              - '**/*.lock'
+              - '**/*.toml'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        if: steps.filter.outputs.depcheck == 'true'
+        with:
+          python-version: "3.12"
+      - name: Setup python deps
+        id: setup-python-deps
+        if: steps.filter.outputs.depcheck == 'true'
+        shell: bash
+        run: |
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+      - name: Dependency Scan for Pull Request
+        id: dependencies-check
+        if: steps.filter.outputs.depcheck == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
