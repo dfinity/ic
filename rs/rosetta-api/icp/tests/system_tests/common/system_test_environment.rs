@@ -277,7 +277,10 @@ impl RosettaTestingEnvironmentBuilder {
         );
 
         if self.cached_maturity_modulation {
-            assert!(self.governance_canister, "cannot set cached maturity modulation without governance canister installed");
+            assert!(
+                self.governance_canister,
+                "cannot set cached maturity modulation without governance canister installed"
+            );
         }
         if self.governance_canister {
             let nns_root_canister_wasm = build_root_wasm();
@@ -327,8 +330,10 @@ impl RosettaTestingEnvironmentBuilder {
                     }),
                     cached_daily_maturity_modulation_basis_points: Some(0),
                     ..Default::default()
-                };                
-                GovernanceCanisterInitPayloadBuilder::new().with_governance_proto(governance_proto).build()
+                };
+                GovernanceCanisterInitPayloadBuilder::new()
+                    .with_governance_proto(governance_proto)
+                    .build()
             } else {
                 GovernanceCanisterInitPayloadBuilder::new().build()
             };

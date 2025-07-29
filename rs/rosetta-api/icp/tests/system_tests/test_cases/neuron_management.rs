@@ -25,9 +25,9 @@ use ic_rosetta_api::models::AccountBalanceRequest;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
+use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
-use icrc_ledger_types::icrc1::account::Account;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
 use rosetta_core::models::RosettaSupportedKeyPair;
@@ -1514,7 +1514,10 @@ fn test_disburse_maturity() {
                 .into_iter()
                 .collect(),
             )
-            .with_minting_account(Account{owner: ic_nns_constants::GOVERNANCE_CANISTER_ID.into(), subaccount: None })
+            .with_minting_account(Account {
+                owner: ic_nns_constants::GOVERNANCE_CANISTER_ID.into(),
+                subaccount: None,
+            })
             .with_governance_canister()
             .with_cached_maturity_modulation()
             .build()
@@ -1549,7 +1552,9 @@ fn test_disburse_maturity() {
 
         let receiver = AccountIdentifier::new(PrincipalId::new_user_test_id(100), None);
 
-        let test_id_balance_before = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id).await.get_e8s();
+        let test_id_balance_before = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id)
+            .await
+            .get_e8s();
 
         let _ = env
             .rosetta_client
@@ -1569,11 +1574,10 @@ fn test_disburse_maturity() {
             .disburse_maturity(
                 env.network_identifier.clone(),
                 &(*TEST_IDENTITY).clone(),
-                RosettaDisburseMaturityArgs::builder(neuron_index, 100)
-                    .build(),
+                RosettaDisburseMaturityArgs::builder(neuron_index, 100).build(),
             )
             .await
-            .expect("failed to disburse maturity");            
+            .expect("failed to disburse maturity");
 
         // Wait a week for the disbursement to finalize.
         env.pocket_ic
@@ -1591,15 +1595,18 @@ fn test_disburse_maturity() {
 
         println!("balance_after 2: {}", balance_after.get_e8s());
 
-        assert_eq!(balance_after.get_e8s(), new_maturity/2);
+        assert_eq!(balance_after.get_e8s(), new_maturity / 2);
 
-        let test_id_balance_after = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id).await.get_e8s();
-        assert_eq!(test_id_balance_after, test_id_balance_before + new_maturity/2);
-
+        let test_id_balance_after = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id)
+            .await
+            .get_e8s();
+        assert_eq!(
+            test_id_balance_after,
+            test_id_balance_before + new_maturity / 2
+        );
     });
 }
 
-use pocket_ic::nonblocking::PocketIc;
 use candid::CandidType;
 use candid::Decode;
 use candid::Deserialize;
@@ -1608,6 +1615,7 @@ use candid::Principal;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::BinaryAccountBalanceArgs;
 use icp_ledger::Tokens;
+use pocket_ic::nonblocking::PocketIc;
 
 pub async fn account_balance_nb(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
     query_or_panic_nb(
