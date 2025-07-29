@@ -1066,10 +1066,10 @@ fn apply_memory_instructions(
 
     for (i, _) in handled.iter().filter(|(_, v)| !*v) {
         let page_start_addr = tracker.page_start_addr_from(PageIndex::from(*i));
-        println!(
-            "Handling zero page index {}, page_start_addr: {:?}, range_size: {}",
-            i, page_start_addr, PAGE_SIZE
-        );
+        // println!(
+        //     "Handling zero page index {}, page_start_addr: {:?}, range_size: {}",
+        //     i, page_start_addr, PAGE_SIZE
+        // );
         if let Some(uffd) = uffd {
             unsafe {
                 uffd.zeropage(page_start_addr, PAGE_SIZE, false)

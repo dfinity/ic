@@ -23,7 +23,7 @@ use crate::wasmtime_embedder::CanisterMemoryType;
 use crate::OnDiskSerializedModule;
 use crate::{
     wasm_utils::{compile, decoding::decode_wasm, Segments, WasmImportsDetails},
-    wasmtime_embedder::WasmtimeInstance,
+    wasmtime_embedder::{StoreData, WasmtimeInstance},
     CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_config::flag_status::FlagStatus;
@@ -229,9 +229,9 @@ impl WasmExecutor for WasmExecutorImpl {
             slice_execution_output,
             wasm_execution_output,
             wasm_state_changes,
-            instance_or_system_api,
+            store_or_system_api,
         ) = process(
-            func_ref,
+            func_ref.clone(),
             api_type.clone(),
             canister_current_memory_usage,
             canister_current_message_memory_usage,
@@ -261,8 +261,9 @@ impl WasmExecutor for WasmExecutorImpl {
             }),
             None => None,
         };
-        let mut system_api = match instance_or_system_api {
-            Ok(instance) => instance.into_store_data().system_api.unwrap(),
+        println!("Completed execution for func_ref: {:?}", func_ref);
+        let mut system_api = match store_or_system_api {
+            Ok(store) => store.system_api.unwrap(),
             Err(system_api) => system_api,
         };
         let system_state_modifications = system_api.take_system_state_modifications();
@@ -605,7 +606,7 @@ pub fn process(
     SliceExecutionOutput,
     WasmExecutionOutput,
     Option<WasmStateChanges>,
-    Result<WasmtimeInstance, SystemApiImpl>,
+    Result<StoreData, SystemApiImpl>,
 ) {
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
@@ -662,7 +663,7 @@ pub fn process(
     // Execute Wasm code until it finishes or exceeds the message instruction
     // limit. With deterministic time slicing, this call may execute multiple
     // slices before it returns.
-    let run_result = instance.run(func_ref);
+    let run_result = instance.run(func_ref.clone());
 
     // Get the executed/remaining instructions for the message and the slice.
     let instruction_counter = instance.instruction_counter();
@@ -708,7 +709,7 @@ pub fn process(
                         system_api_call_counters,
                     },
                     None,
-                    Ok(instance),
+                    Ok(instance.into_store_data()),
                 );
             }
             // The optimization was performed. The slice instructions have been accounted
@@ -794,6 +795,8 @@ pub fn process(
         ),
     };
 
+    println!("Finished execution for func_ref: {:?}", func_ref);
+
     (
         output_slice,
         WasmExecutionOutput {
@@ -805,7 +808,7 @@ pub fn process(
             system_api_call_counters,
         },
         wasm_state_changes,
-        Ok(instance),
+        Ok(instance.into_store_data()),
     )
 }
 

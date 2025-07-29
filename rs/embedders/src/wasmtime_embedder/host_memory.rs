@@ -211,6 +211,10 @@ impl MmapMemory {
 
 impl Drop for MmapMemory {
     fn drop(&mut self) {
+        println!(
+            "Unmapping memory at address: {:?} size: {}",
+            self.start, self.size_in_bytes
+        );
         let result = unsafe { munmap(self.start, self.size_in_bytes) };
         assert_eq!(result, 0, "munmap failed: {}", Error::last_os_error());
     }

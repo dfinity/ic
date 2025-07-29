@@ -780,7 +780,14 @@ fn sigsegv_memory_tracker<S>(
             RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
         )
         .expect("Failed to register region");
+        println!(
+            "Registering uffd at: {:?} for mem_type {}, size {}",
+            base,
+            mem_type,
+            max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
+        );
 
+        let base = base as usize;
         let handle = stoppable_thread::spawn(move |stopped| {
             while !stopped.get() {
                 let event = uffd.read_event().expect("Failed to read uffd event");
@@ -874,6 +881,15 @@ fn sigsegv_memory_tracker<S>(
                     }
                 }
             }
+            let base = base as *mut libc::c_void;
+            uffd.unregister(base, max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES)
+                .expect("Failed to unregister uffd region");
+            println!(
+                "Unregistered uffd region at {:?} for mem_type: {} size {}",
+                base,
+                mem_type,
+                max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
+            );
         });
 
         result.insert(mem_type, (sigsegv_memory_tracker_clone, handle));
@@ -978,6 +994,7 @@ impl WasmtimeInstance {
         // Big hack incoming. Need to do this here because having a `Drop` conflicts
         // with consuming `self` in this method.
         // Stop the uffd handler threads.
+        println!("Stopping uffd handler threads");
         for (_, handle) in self.memory_trackers.into_values() {
             handle.stop().join().unwrap();
         }
