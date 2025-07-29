@@ -220,6 +220,10 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
+    // Sets the cached maturity modulation to Some(0). It uses the
+    // Governance init args to do that and sets other fields to default
+    // values. The default values might not work in general, so this
+    // approach might not be suitable for all tests.
     pub fn with_cached_maturity_modulation(mut self) -> Self {
         self.cached_maturity_modulation = true;
         self
