@@ -1340,7 +1340,7 @@ impl RosettaClient {
         .await
     }
 
-    /// TODO: add comment
+    /// Disburse the maturity associated with a neuron directly to an account identifier.
     pub async fn disburse_maturity<T>(
         &self,
         network_identifier: NetworkIdentifier,
