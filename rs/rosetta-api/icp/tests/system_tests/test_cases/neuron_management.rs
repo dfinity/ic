@@ -1552,7 +1552,7 @@ fn test_disburse_maturity() {
 
         let receiver = AccountIdentifier::new(PrincipalId::new_user_test_id(100), None);
 
-        let test_id_balance_before = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id)
+        let test_id_balance_before = account_balance_nb(&env.pocket_ic, &test_identity_acc_id)
             .await
             .get_e8s();
 
@@ -1597,7 +1597,7 @@ fn test_disburse_maturity() {
 
         assert_eq!(balance_after.get_e8s(), new_maturity / 2);
 
-        let test_id_balance_after = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id)
+        let test_id_balance_after = account_balance_nb(&env.pocket_ic, &test_identity_acc_id)
             .await
             .get_e8s();
         assert_eq!(
