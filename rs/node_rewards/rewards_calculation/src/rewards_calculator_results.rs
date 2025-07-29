@@ -128,7 +128,7 @@ pub struct NodeResults {
 pub struct NodeProviderResults {
     pub rewards_total: XDRPermyriad,
     pub computation_log: String,
-    pub node_results: BTreeMap<NodeId, NodeResults>,
+    pub results_by_node: BTreeMap<NodeId, NodeResults>,
 }
 
 pub struct RewardsCalculatorResults {

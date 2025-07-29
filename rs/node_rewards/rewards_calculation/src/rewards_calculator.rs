@@ -600,7 +600,7 @@ fn step_6_construct_provider_results(
     NodeProviderResults {
         rewards_total,
         computation_log,
-        node_results,
+        results_by_node: node_results,
     }
 }
 

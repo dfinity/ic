@@ -447,7 +447,7 @@ impl NodeProviderResults {
     fn calculate_daily_summaries(&self) -> BTreeMap<DayUTC, DailyProviderSummary> {
         let mut summaries: BTreeMap<DayUTC, DailyProviderSummary> = BTreeMap::new();
 
-        for (node_id, node_results) in &self.node_results {
+        for (node_id, node_results) in &self.results_by_node {
             for (day, daily_results) in &node_results.daily_results {
                 let summary = summaries.entry(*day).or_insert(DailyProviderSummary {
                     underperforming_nodes: Vec::new(),
@@ -499,7 +499,7 @@ impl RewardsCalculatorResults {
 
             // 4. First, generate tables for each individual node.
             let node_tables: Vec<String> = provider_results
-                .node_results
+                .results_by_node
                 .iter()
                 .map(|(node_id, node_results)| Self::build_node_table(node_id, node_results))
                 .collect();
