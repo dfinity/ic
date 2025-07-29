@@ -65,3 +65,11 @@ pub fn _clear_registry_store() {
             StableBTreeMap::new(mm.get(REGISTRY_STORE_MEMORY_ID));
     });
 }
+
+pub fn _clear_metrics_store() {
+    METRICS_MANAGER.with(|mm| {
+        let _cleared = StableBTreeMap::new(mm.get(SUBNETS_TO_RETRY_MEMORY_ID));
+        let _cleared = StableBTreeMap::new(mm.get(SUBNETS_METRICS_MEMORY_ID));
+        let _cleared = StableBTreeMap::new(mm.get(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID));
+    });
+}
