@@ -1137,9 +1137,16 @@ impl Governance {
     ) -> Result<u64, GovernanceError> {
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
         let neuron = self.get_neuron_result(id)?;
-
         neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
 
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: self.env.now(),
+            command: Some(InFlightCommand::Disburse(disburse.clone())),
+        };
+        let _lock = self.lock_neuron_for_command(id, in_flight_command);
+
+        // Re-acquire neuron after the _lock_ is acquired, which required mutable borrow of self.
+        let neuron = self.get_neuron_result(id)?;
         let state = neuron.state(self.env.now());
         if state != NeuronState::Dissolved {
             return Err(GovernanceError::new_with_message(

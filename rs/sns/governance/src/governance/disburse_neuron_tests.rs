@@ -36,11 +36,11 @@ impl MockLedger {
             transfer_calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
-    
+
     pub fn get_transfer_calls(&self) -> Vec<(u64, u64, Option<[u8; 32]>, Account, u64)> {
         self.transfer_calls.lock().unwrap().clone()
     }
-    
+
     pub fn clear_transfer_calls(&self) {
         self.transfer_calls.lock().unwrap().clear();
     }
@@ -57,7 +57,10 @@ impl ICRC1Ledger for MockLedger {
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
         // Record the call for test verification
-        self.transfer_calls.lock().unwrap().push((amount_e8s, fee_e8s, from_subaccount, to, memo));
+        self.transfer_calls
+            .lock()
+            .unwrap()
+            .push((amount_e8s, fee_e8s, from_subaccount, to, memo));
         // Return a mock block index for successful transfer
         Ok(1)
     }
@@ -102,11 +105,11 @@ fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governanc
 
 fn governance_with_ledger_tracking(governance_proto: GovernanceProto) -> (Governance, MockLedger) {
     let test_governance_canister_id = CanisterId::from_u64(501);
-    
+
     // Create the SNS ledger that we want to track calls to
     // (disburse_neuron uses self.ledger which is the SNS ledger)
     let sns_ledger = MockLedger::new();
-    
+
     let governance = Governance::new(
         governance_proto
             .try_into()
@@ -117,36 +120,14 @@ fn governance_with_ledger_tracking(governance_proto: GovernanceProto) -> (Govern
         Box::new(FakeCmc::new()),
     )
     .enable_test_features();
-    
-    // Return the original SNS ledger instance - it shares the transfer_calls 
+
+    // Return the original SNS ledger instance - it shares the transfer_calls
     // with the cloned instance inside governance due to Arc<Mutex<_>>
     (governance, sns_ledger)
 }
 
 fn test_neuron_id(controller: PrincipalId) -> NeuronId {
     NeuronId::from(compute_neuron_staking_subaccount_bytes(controller, 0))
-}
-
-// =============================================================================
-// Test Arc sharing works in MockLedger
-// =============================================================================
-
-#[test]
-fn test_mock_ledger_sharing_works() {
-    // Verify that MockLedger cloning actually shares the transfer_calls data
-    let ledger1 = MockLedger::new();
-    let ledger2 = ledger1.clone();
-    
-    // Simulate a call on the cloned ledger
-    ledger2.transfer_calls.lock().unwrap().push((100, 0, None, Account {
-        owner: ic_base_types::PrincipalId::new_user_test_id(1).0,
-        subaccount: None,
-    }, 0));
-    
-    // Verify the original ledger sees the call
-    let calls = ledger1.get_transfer_calls();
-    assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].0, 100); // amount
 }
 
 // =============================================================================
@@ -573,24 +554,7 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
         id: Some(ProposalId { id: 1 }),
         proposer: Some(neuron_id.clone()),
         reject_cost_e8s: 30_000,
-        proposal: Some(A_MOTION_PROPOSAL.clone()),
-        proposal_creation_timestamp_seconds: governance.env.now(),
-        ballots: Default::default(),
-        latest_tally: Some(Tally::default()),
         decided_timestamp_seconds: 0, // 0 means open
-        executed_timestamp_seconds: 0,
-        failed_timestamp_seconds: 0,
-        failure_reason: None,
-        reward_event_round: 0,
-        wait_for_quiet_state: Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: governance.env.now() + 1000,
-        }),
-        initial_voting_period_seconds: 1000,
-        action: 1, // Motion proposal
-        reward_event_end_timestamp_seconds: None,
-        topic: Some(1), // Topic for Motion
-        minimum_yes_proportion_of_total: None,
-        minimum_yes_proportion_of_exercised: None,
         ..Default::default()
     };
 
@@ -608,13 +572,23 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
         .unwrap();
 
     assert!(result.is_ok());
+    let block_height = result.unwrap();
+    assert_eq!(block_height, 1); // Mock ledger returns block height 1
 
     // Verify that the ledger burn was called
     let transfer_calls = ledger.get_transfer_calls();
     assert_eq!(transfer_calls.len(), 2); // One burn, one transfer
+
+    // Check burn call (first transfer)
     let burn_call = &transfer_calls[0];
-    assert_eq!(burn_call.0, 70_000); // amount burned
-    assert_eq!(burn_call.1, 0); // fee for burn
+    assert_eq!(burn_call.0, 70_000); // amount burned (100,000 - 30,000)
+    assert_eq!(burn_call.1, 0); // fee for burn (always 0)
+
+    // Check disburse call (second transfer)
+    let disburse_call = &transfer_calls[1];
+    // Disburse: (100M stake - 100K fees) - 10K tx_fee = 99,890,000
+    assert_eq!(disburse_call.0, 99_890_000); // amount disbursed
+    assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check that the neuron fees were reduced by the burnable amount
     let updated_neuron = governance
@@ -624,6 +598,9 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
         .unwrap();
     // Should have 30,000 fees remaining (the amount tied to the open proposal)
     assert_eq!(updated_neuron.neuron_fees_e8s, 30_000);
+
+    // Check cached_neuron_stake_e8s: 100M - 70K burned - 99.89M disbursed - 10K tx_fee = 30K
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 30_000);
 }
 
 #[test]
@@ -657,10 +634,18 @@ fn test_disburse_neuron_small_fees_not_burned() {
         .unwrap();
 
     assert!(result.is_ok());
+    let block_height = result.unwrap();
+    assert_eq!(block_height, 1); // Mock ledger returns block height 1
 
     // Verify that only one transfer was made (no burn), just the disburse transfer
     let transfer_calls = ledger.get_transfer_calls();
     assert_eq!(transfer_calls.len(), 1); // Only one transfer (disburse), no burn
+
+    // Check disburse call
+    let disburse_call = &transfer_calls[0];
+    // Disburse: (100M stake - 1K fees) - 10K tx_fee = 99,989,000
+    assert_eq!(disburse_call.0, 99_989_000); // amount disbursed
+    assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check that the neuron fees were NOT reduced (preserved for future)
     let updated_neuron = governance
@@ -669,7 +654,10 @@ fn test_disburse_neuron_small_fees_not_burned() {
         .get(&neuron_id.to_string())
         .unwrap();
     // Fees should remain unchanged since they were too small to burn
-    assert_eq!(updated_neuron.neuron_fees_e8s, 1000);
+    assert_eq!(updated_neuron.neuron_fees_e8s, 1_000);
+
+    // Check cached_neuron_stake_e8s: 100M - 99.989M disbursed - 10K tx_fee = 1K (equals fees)
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 1_000);
 }
 
 #[test]
@@ -695,25 +683,8 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
     let proposal_data = ProposalData {
         id: Some(ProposalId { id: 1 }),
         proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 500, // More than the 100 available fees
-        proposal: Some(A_MOTION_PROPOSAL.clone()),
-        proposal_creation_timestamp_seconds: governance.env.now(),
-        ballots: Default::default(),
-        latest_tally: Some(Tally::default()),
+        reject_cost_e8s: 500,         // More than the 100 available fees
         decided_timestamp_seconds: 0, // 0 means open
-        executed_timestamp_seconds: 0,
-        failed_timestamp_seconds: 0,
-        failure_reason: None,
-        reward_event_round: 0,
-        wait_for_quiet_state: Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: governance.env.now() + 1000,
-        }),
-        initial_voting_period_seconds: 1000,
-        action: 1, // Motion proposal
-        reward_event_end_timestamp_seconds: None,
-        topic: Some(1), // Topic for Motion
-        minimum_yes_proportion_of_total: None,
-        minimum_yes_proportion_of_exercised: None,
         ..Default::default()
     };
 
@@ -731,10 +702,18 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
         .unwrap();
 
     assert!(result.is_ok());
+    let block_height = result.unwrap();
+    assert_eq!(block_height, 1); // Mock ledger returns block height 1
 
     // Verify that only one transfer was made (no burn), just the disburse transfer
     let transfer_calls = ledger.get_transfer_calls();
     assert_eq!(transfer_calls.len(), 1); // Only one transfer (disburse), no burn
+
+    // Check disburse call
+    let disburse_call = &transfer_calls[0];
+    // Disburse: (100M stake - 100 fees) - 10K tx_fee = 99,989,900
+    assert_eq!(disburse_call.0, 99_989_900); // amount disbursed
+    assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check that no fees were burned (all fees remain to potentially cover the reject cost)
     let updated_neuron = governance
@@ -743,4 +722,87 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
         .get(&neuron_id.to_string())
         .unwrap();
     assert_eq!(updated_neuron.neuron_fees_e8s, 100); // No change
+
+    // Check cached_neuron_stake_e8s: 100M - 99.9899M disbursed - 10K tx_fee = 100 (equals fees)
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 100);
+}
+
+#[test]
+fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
+    // Test partial disbursal when neuron has fees tied up in open proposals
+    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
+
+    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
+    let mut neuron = A_NEURON.clone();
+    neuron.id = Some(neuron_id.clone());
+    neuron.cached_neuron_stake_e8s = 5 * E8; // 5 tokens
+    neuron.neuron_fees_e8s = 50_000; // 50,000 e8s in fees
+
+    // Make neuron dissolved
+    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
+
+    governance
+        .proto
+        .neurons
+        .insert(neuron_id.to_string(), neuron.clone());
+
+    // Create an open proposal with reject cost of 20,000 e8s
+    let proposal_data = ProposalData {
+        id: Some(ProposalId { id: 1 }),
+        proposer: Some(neuron_id.clone()),
+        reject_cost_e8s: 20_000,
+        decided_timestamp_seconds: 0, // 0 means open
+        ..Default::default()
+    };
+
+    governance.proto.proposals.insert(1, proposal_data);
+
+    // Request partial disbursal of 2 tokens (2 * E8 = 200,000,000 e8s)
+    let disburse = manage_neuron::Disburse {
+        amount: Some(manage_neuron::disburse::Amount {
+            e8s: 2 * E8, // 2 tokens
+        }),
+        to_account: None,
+    };
+
+    // This should succeed: burn 30,000 e8s (50,000 - 20,000), disburse 2 tokens - fees - transaction_fee
+    let result = governance
+        .disburse_neuron(&neuron_id, &A_NEURON_PRINCIPAL_ID, &disburse)
+        .now_or_never()
+        .unwrap();
+
+    assert!(result.is_ok());
+    let block_height = result.unwrap();
+    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+
+    // Verify that the ledger burn and disburse were called
+    let transfer_calls = ledger.get_transfer_calls();
+    assert_eq!(transfer_calls.len(), 2); // One burn, one disburse
+
+    // Check burn call (first transfer)
+    let burn_call = &transfer_calls[0];
+    assert_eq!(burn_call.0, 30_000); // amount burned (50,000 - 20,000)
+    assert_eq!(burn_call.1, 0); // fee for burn (always 0)
+
+    // Check disburse call (second transfer)
+    let disburse_call = &transfer_calls[1];
+    // Partial disburse: 200M requested - 50K fees - 10K tx_fee = 199,940,000
+    assert_eq!(disburse_call.0, 199_940_000); // amount disbursed
+    assert_eq!(disburse_call.1, 10_000); // transaction fee
+
+    // Check final neuron state
+    let updated_neuron = governance
+        .proto
+        .neurons
+        .get(&neuron_id.to_string())
+        .unwrap();
+
+    // Should have 20,000 fees remaining (tied to open proposal)
+    assert_eq!(updated_neuron.neuron_fees_e8s, 20_000);
+
+    // Check cached_neuron_stake_e8s: 500M - 30K burned - 199.94M disbursed - 10K tx_fee = 300,020,000
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, 300_020_000);
+
+    // Remaining stake: 300.02M cached - 20K fees = 300M (3 tokens)
+    assert_eq!(updated_neuron.stake_e8s(), 3 * E8);
 }
