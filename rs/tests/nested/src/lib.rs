@@ -302,7 +302,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         let target_version =
             get_guestos_update_img_version().expect("Failed to get target guestos version");
         let target_short_hash =
-            &get_guestos_update_img_sha256(&env).expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
+            &get_guestos_update_img_sha256().expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
 
         info!(
             logger,
