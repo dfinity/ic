@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-          TRIGGERING_WORKFLOW_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          TRIGGERING_WORKFLOW_BRANCH="$HEAD_BRANCH"
           CHANNEL="eng-idx-alerts"
           FULL_MESSAGE="nothing"
 
@@ -75,7 +75,8 @@ jobs:
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
           echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT
         env:
-          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on $HEAD_BRANCH - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
