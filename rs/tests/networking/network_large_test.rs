@@ -176,6 +176,12 @@ pub fn test(env: TestEnv) {
     for n in nodes.iter().skip(FAULTY) {
         n.await_status_is_healthy().unwrap();
     }
+    ic_consensus_system_test_utils::assert_node_is_making_progress(
+        &nodes[FAULTY],
+        &log,
+        Height::new(1),
+    );
+
     info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
     info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
