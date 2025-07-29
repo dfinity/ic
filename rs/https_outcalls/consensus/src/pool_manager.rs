@@ -373,15 +373,14 @@ impl CanisterHttpPoolManagerImpl {
             // Only consider shares belonging to the requests that we can validate.
             .filter(|share| share.content.id < next_callback_id)
             .filter_map(|share| {
-                if !is_current_protocol_version(&share.content.replica_version) {
-                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
-                };
-
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        "Redundant share".into(),
-                    ));
+                    return match is_current_protocol_version(&share.content.replica_version) {
+                            true => Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Redundant share".into(),
+                    )),
+                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
+                    };
                 }
 
                 match active_contexts.get(&share.content.id) {
@@ -737,7 +736,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    replica_version: ReplicaVersion::from_str("old_version").unwrap(),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let mut canister_http_pool =
@@ -751,11 +750,20 @@ pub mod test {
                     )
                     .unwrap();
 
-                let share = Signed {
+                let mut share = Signed {
                     content: response_metadata.clone(),
                     signature,
                 };
 
+                // add a share (plus content) to the validated pool
+                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    empty_canister_http_response(7),
+                )]);
+
+                // add an unvalidated copy of the share, that has an outdated version instead
+                share.content.replica_version =
+                    ReplicaVersion::from_str("outdated_version").unwrap();
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: share,
                     peer_id: replica_config.node_id,
