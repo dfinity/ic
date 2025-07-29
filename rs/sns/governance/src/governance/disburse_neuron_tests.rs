@@ -123,9 +123,11 @@ fn test_neuron_id(controller: PrincipalId) -> NeuronId {
 fn setup_burnable_fee_test() -> (Governance, NeuronId) {
     let governance_proto = basic_governance_proto();
     let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
+
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
     neuron.id = Some(neuron_id.clone());
+    neuron.cached_neuron_stake_e8s = E8;
     neuron.neuron_fees_e8s = 1000;
 
     // Insert the neuron into governance
@@ -155,7 +157,7 @@ fn proposal_data_with_reject_cost(
 #[test]
 fn test_maximum_burnable_fees_per_neuron_no_open_proposals() {
     // Test that when a neuron has no open proposals, all fees can be burned
-    let (mut governance, neuron_id) = setup_burnable_fee_test();
+    let (governance, neuron_id) = setup_burnable_fee_test();
 
     let neuron = governance.get_neuron_result(&neuron_id).unwrap();
     // With no open proposals, all fees should be burnable
@@ -175,9 +177,7 @@ fn test_maximum_burnable_fees_per_neuron_with_open_proposals() {
 
     // Only 1000 - 300 = 700 should be burnable
     let neuron = governance.get_neuron_result(&neuron_id).unwrap();
-    let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(neuron)
-        .unwrap();
+    let max_burnable = governance.maximum_burnable_fees_for_neuron(neuron).unwrap();
     assert_eq!(max_burnable, 700);
 }
 
@@ -197,28 +197,14 @@ fn test_maximum_burnable_fees_per_neuron_multiple_open_proposals() {
 
     // Only 1000 - 200 - 300 = 500 should be burnable
     let neuron = governance.get_neuron_result(&neuron_id).unwrap();
-    let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(neuron)
-        .unwrap();
+    let max_burnable = governance.maximum_burnable_fees_for_neuron(neuron).unwrap();
     assert_eq!(max_burnable, 500);
 }
 
 #[test]
 fn test_maximum_burnable_fees_per_neuron_closed_proposals_ignored() {
     // Test that closed proposals don't affect burnable fees
-    let governance_proto = basic_governance_proto();
-    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.neuron_fees_e8s = 1000;
-
-    // Insert the neuron into governance
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id) = setup_burnable_fee_test();
 
     // Create a closed (decided) proposal with reject cost of 300
     let proposal_data =
@@ -227,30 +213,16 @@ fn test_maximum_burnable_fees_per_neuron_closed_proposals_ignored() {
     governance.proto.proposals.insert(1, proposal_data);
 
     // All fees should be burnable since the proposal is closed
-    let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(&neuron)
-        .unwrap();
+    let neuron = governance.get_neuron_result(&neuron_id).unwrap();
+    let max_burnable = governance.maximum_burnable_fees_for_neuron(neuron).unwrap();
     assert_eq!(max_burnable, 1000);
 }
 
 #[test]
 fn test_maximum_burnable_fees_per_neuron_different_proposer_ignored() {
     // Test that open proposals from other neurons don't affect this neuron's burnable fees
-    let governance_proto = basic_governance_proto();
-    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
+    let (mut governance, neuron_id) = setup_burnable_fee_test();
     let other_neuron_id = test_neuron_id(PrincipalId::new_user_test_id(999));
-
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.neuron_fees_e8s = 1000;
-
-    // Insert the neuron into governance
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
 
     // Create an open proposal from a different neuron
     let proposal_data = ProposalData {
@@ -261,9 +233,8 @@ fn test_maximum_burnable_fees_per_neuron_different_proposer_ignored() {
     governance.proto.proposals.insert(1, proposal_data);
 
     // All fees should be burnable since this neuron didn't propose the open proposal
-    let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(&neuron)
-        .unwrap();
+    let neuron = governance.get_neuron_result(&neuron_id).unwrap();
+    let max_burnable = governance.maximum_burnable_fees_for_neuron(neuron).unwrap();
     assert_eq!(max_burnable, 1000);
 }
 
@@ -290,9 +261,8 @@ fn test_maximum_burnable_fees_per_neuron_fees_exceed_reject_costs() {
     governance.proto.proposals.insert(1, proposal_data);
 
     // Should return 0, not underflow
-    let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(&neuron)
-        .unwrap();
+    let neuron = governance.get_neuron_result(&neuron_id).unwrap();
+    let max_burnable = governance.maximum_burnable_fees_for_neuron(neuron).unwrap();
     assert_eq!(max_burnable, 0);
 }
 
@@ -316,25 +286,33 @@ fn test_maximum_burnable_fees_per_neuron_no_neuron_id() {
 // Tests for disburse_neuron edge cases
 // =============================================================================
 
-#[test]
-fn test_disburse_neuron_with_dissolve_delay_fails() {
-    // Test that disburse_neuron fails when neuron has a dissolve delay (locked)
+fn setup_disburse_neuron_test(
+    dissolve_state: DissolveState,
+    neuron_fees_e8s: u64,
+) -> (Governance, NeuronId, MockLedger) {
     let governance_proto = basic_governance_proto();
-    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
+    let (mut governance, ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
     neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8; // 1 token
-    neuron.neuron_fees_e8s = 1000;
-
-    // Keep neuron locked with dissolve delay
-    neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(1000));
-
+    neuron.cached_neuron_stake_e8s = 5 * E8; // 5 tokens
+    neuron.neuron_fees_e8s = neuron_fees_e8s;
+    neuron.dissolve_state = Some(dissolve_state);
+    // Insert the neuron into governance
     governance
         .proto
         .neurons
         .insert(neuron_id.to_string(), neuron.clone());
+
+    (governance, neuron_id, ledger)
+}
+
+#[test]
+fn test_disburse_neuron_with_dissolve_delay_fails() {
+    // Test that disburse_neuron fails when neuron has a dissolve delay (locked)
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::DissolveDelaySeconds(1000), 1000);
 
     let disburse = manage_neuron::Disburse {
         amount: None,
@@ -345,6 +323,8 @@ fn test_disburse_neuron_with_dissolve_delay_fails() {
         .disburse_neuron(&neuron_id, &A_NEURON_PRINCIPAL_ID, &disburse)
         .now_or_never()
         .unwrap();
+
+    assert!(ledger.get_transfer_calls().is_empty());
 
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -355,25 +335,19 @@ fn test_disburse_neuron_with_dissolve_delay_fails() {
 #[test]
 fn test_disburse_neuron_dissolving_fails() {
     // Test that disburse_neuron fails when neuron is dissolving but not yet dissolved
-    let governance_proto = basic_governance_proto();
-    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::DissolveDelaySeconds(1000), 1000);
 
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8; // 1 token
-    neuron.neuron_fees_e8s = 1000;
-
-    // Set neuron to dissolving state (future timestamp means still dissolving)
+    // Now update the neuron to be dissolving (future timestamp means still dissolving)
     let future_timestamp = governance.env.now() + 3600; // 1 hour from now
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
-        future_timestamp,
-    ));
-
     governance
         .proto
         .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+        .get_mut(&neuron_id.to_string())
+        .unwrap()
+        .dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
+        future_timestamp,
+    ));
 
     let disburse = manage_neuron::Disburse {
         amount: None,
@@ -385,6 +359,8 @@ fn test_disburse_neuron_dissolving_fails() {
         .now_or_never()
         .unwrap();
 
+    assert!(ledger.get_transfer_calls().is_empty());
+
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert_eq!(error.error_type, ErrorType::PreconditionFailed as i32);
@@ -394,22 +370,8 @@ fn test_disburse_neuron_dissolving_fails() {
 #[test]
 fn test_disburse_neuron_unauthorized_caller_fails() {
     // Test that disburse_neuron fails when caller is not authorized
-    let governance_proto = basic_governance_proto();
-    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8;
-    neuron.neuron_fees_e8s = 1000;
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 1000);
 
     let disburse = manage_neuron::Disburse {
         amount: None,
@@ -422,6 +384,8 @@ fn test_disburse_neuron_unauthorized_caller_fails() {
         .disburse_neuron(&neuron_id, &unauthorized_caller, &disburse)
         .now_or_never()
         .unwrap();
+
+    assert!(ledger.get_transfer_calls().is_empty());
 
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -454,22 +418,8 @@ fn test_disburse_neuron_nonexistent_neuron_fails() {
 #[test]
 fn test_disburse_neuron_invalid_subaccount_fails() {
     // Test that disburse_neuron fails when to_account has invalid subaccount
-    let governance_proto = basic_governance_proto();
-    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8;
-    neuron.neuron_fees_e8s = 1000;
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 1000);
 
     let disburse = manage_neuron::Disburse {
         amount: None,
@@ -486,6 +436,8 @@ fn test_disburse_neuron_invalid_subaccount_fails() {
         .now_or_never()
         .unwrap();
 
+    assert!(ledger.get_transfer_calls().is_empty());
+
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert_eq!(error.error_type, ErrorType::InvalidCommand as i32);
@@ -495,21 +447,8 @@ fn test_disburse_neuron_invalid_subaccount_fails() {
 #[test]
 fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
     // Test that disburse_neuron only burns the safe amount when there are open proposals
-    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8; // 1 token
-    neuron.neuron_fees_e8s = 100_000; // 100,000 e8s in fees (large enough to burn)
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 100_000);
 
     // Create an open proposal with reject cost of 30,000 e8s
     let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 30_000, 0);
@@ -542,8 +481,8 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
 
     // Check disburse call (second transfer)
     let disburse_call = &transfer_calls[1];
-    // Disburse: (100M stake - 100K fees) - 10K tx_fee = 99,890,000
-    assert_eq!(disburse_call.0, 99_890_000); // amount disbursed
+    // Disburse: (500M stake - 100K fees) - 10K tx_fee = 499,890,000
+    assert_eq!(disburse_call.0, 499_890_000); // amount disbursed
     assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check that the neuron fees were reduced by the burnable amount
@@ -555,28 +494,15 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
     // Should have 30,000 fees remaining (the amount tied to the open proposal)
     assert_eq!(updated_neuron.neuron_fees_e8s, 30_000);
 
-    // Check cached_neuron_stake_e8s: 100M - 70K burned - 99.89M disbursed - 10K tx_fee = 30K
+    // Check cached_neuron_stake_e8s: 500M - 70K burned - 499.89M disbursed - 10K tx_fee = 30K
     assert_eq!(updated_neuron.cached_neuron_stake_e8s, 30_000);
 }
 
 #[test]
 fn test_disburse_neuron_small_fees_not_burned() {
     // Test that disburse_neuron doesn't burn fees that are too small and preserves accounting
-    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8; // 1 token
-    neuron.neuron_fees_e8s = 1000; // Small fees (less than transaction fee)
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 1000);
 
     let disburse = manage_neuron::Disburse {
         amount: None,
@@ -599,8 +525,8 @@ fn test_disburse_neuron_small_fees_not_burned() {
 
     // Check disburse call
     let disburse_call = &transfer_calls[0];
-    // Disburse: (100M stake - 1K fees) - 10K tx_fee = 99,989,000
-    assert_eq!(disburse_call.0, 99_989_000); // amount disbursed
+    // Disburse: (500M stake - 1K fees) - 10K tx_fee = 499,989,000
+    assert_eq!(disburse_call.0, 499_989_000); // amount disbursed
     assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check that the neuron fees were NOT reduced (preserved for future)
@@ -612,28 +538,15 @@ fn test_disburse_neuron_small_fees_not_burned() {
     // Fees should remain unchanged since they were too small to burn
     assert_eq!(updated_neuron.neuron_fees_e8s, 1_000);
 
-    // Check cached_neuron_stake_e8s: 100M - 99.989M disbursed - 10K tx_fee = 1K (equals fees)
+    // Check cached_neuron_stake_e8s: 500M - 499.989M disbursed - 10K tx_fee = 1K (equals fees)
     assert_eq!(updated_neuron.cached_neuron_stake_e8s, 1_000);
 }
 
 #[test]
 fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
     // Test that disburse_neuron handles case where reject costs exceed total fees
-    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = E8; // 1 token
-    neuron.neuron_fees_e8s = 100; // Only 100 e8s in fees
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 100);
 
     // Create an open proposal with reject cost higher than available fees
     let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 500, 0); // More than the 100 available fees
@@ -661,8 +574,8 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
 
     // Check disburse call
     let disburse_call = &transfer_calls[0];
-    // Disburse: (100M stake - 100 fees) - 10K tx_fee = 99,989,900
-    assert_eq!(disburse_call.0, 99_989_900); // amount disbursed
+    // Disburse: (500M stake - 100 fees) - 10K tx_fee = 499,989,900
+    assert_eq!(disburse_call.0, 499_989_900); // amount disbursed
     assert_eq!(disburse_call.1, 10_000); // transaction fee
 
     // Check that no fees were burned (all fees remain to potentially cover the reject cost)
@@ -673,28 +586,15 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
         .unwrap();
     assert_eq!(updated_neuron.neuron_fees_e8s, 100); // No change
 
-    // Check cached_neuron_stake_e8s: 100M - 99.9899M disbursed - 10K tx_fee = 100 (equals fees)
+    // Check cached_neuron_stake_e8s: 500M - 499.9899M disbursed - 10K tx_fee = 100 (equals fees)
     assert_eq!(updated_neuron.cached_neuron_stake_e8s, 100);
 }
 
 #[test]
 fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
     // Test partial disbursal when neuron has fees tied up in open proposals
-    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = 5 * E8; // 5 tokens
-    neuron.neuron_fees_e8s = 50_000; // 50,000 e8s in fees
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 50_000);
 
     // Create an open proposal with reject cost of 20,000 e8s
     let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 20_000, 0);
@@ -754,47 +654,11 @@ fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
 #[test]
 fn test_disburse_neuron_caps_to_maximum_available_stake() {
     // Test that disburse_neuron disburses maximum possible when requested amount exceeds available
-    let (mut governance, ledger) = governance_with_ledger_tracking(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.cached_neuron_stake_e8s = 5 * E8; // 5 tokens (500M e8s)
-    neuron.neuron_fees_e8s = 50_000; // 50K e8s in fees
-
-    // Make neuron dissolved
-    neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0));
-
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id, ledger) =
+        setup_disburse_neuron_test(DissolveState::WhenDissolvedTimestampSeconds(0), 50_000);
 
     // Create an open proposal with reject cost of 30,000 e8s (makes 30K non-burnable)
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 30_000,
-        proposal: Some(A_MOTION_PROPOSAL.clone()),
-        proposal_creation_timestamp_seconds: governance.env.now(),
-        ballots: Default::default(),
-        latest_tally: Some(Tally::default()),
-        decided_timestamp_seconds: 0, // 0 means open
-        executed_timestamp_seconds: 0,
-        failed_timestamp_seconds: 0,
-        failure_reason: None,
-        reward_event_round: 0,
-        wait_for_quiet_state: Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: governance.env.now() + 1000,
-        }),
-        initial_voting_period_seconds: 1000,
-        action: 1, // Motion proposal
-        reward_event_end_timestamp_seconds: None,
-        topic: Some(1), // Topic for Motion
-        minimum_yes_proportion_of_total: None,
-        minimum_yes_proportion_of_exercised: None,
-        ..Default::default()
-    };
+    let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 30_000, 0);
 
     governance.proto.proposals.insert(1, proposal_data);
 
