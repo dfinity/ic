@@ -5,7 +5,8 @@ use crate::{
 use candid::Decode;
 use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
-use icp_ledger::Tokens;
+use icp_ledger::{AccountIdentifier, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
 use std::convert::{TryFrom, TryInto};
 
 use crate::models::Operation;
@@ -360,20 +361,34 @@ impl TryFrom<&models::Request> for Request {
             RequestType::DisburseMaturity { neuron_index } => {
                 let command = manage_neuron()?;
                 if let Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
-                    to_account: _, // TODO: use it
+                    to_account,
                     percentage_to_disburse,
                     to_account_identifier,
                 })) = command
                 {
-                    let recipient = if let Some(a) = to_account_identifier {
-                        Some((&a).try_into().map_err(|e| {
+                    let recipient = match (to_account, to_account_identifier) {
+                        (None, None) => None,
+                        (Some(account), None) => {
+                            let account = Account {
+                                owner: account
+                                    .owner
+                                    .expect("Invalid Account, owner needs to be specified")
+                                    .0,
+                                subaccount: account.subaccount.map(|sa| {
+                                    sa.try_into().unwrap_or_else(|v: Vec<u8>| {
+                                        panic!("Invalid subaccount length: {}, should be 32", v.len());
+                                    })
+                                }),
+                            };
+                            Some(AccountIdentifier::from(account))
+                        }
+                        (None, Some(a)) => Some((&a).try_into().map_err(|e| {
                             ApiError::invalid_request(format!(
                                 "Could not parse recipient account identifier: {}",
                                 e
                             ))
-                        })?)
-                    } else {
-                        None
+                        })?),
+                        (Some(_), Some(_)) => panic!("Invalid DisburseMaturity command, cannot specify both to_account and to_account_identifier"),
                     };
 
                     Ok(Request::DisburseMaturity(DisburseMaturity {
