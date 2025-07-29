@@ -35,7 +35,7 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
-            echo "::notice::Node Name: ${NODE_NAME}"
+            [ -n "${NODE_NAME:-}" ] && echo "::notice::Node Name: ${NODE_NAME:-}"
 
             diff_only='${{ inputs.diff-only }}'
             stamp_build='${{ inputs.stamp-build }}'
