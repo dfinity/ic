@@ -1147,17 +1147,8 @@ impl Governance {
                 format!("Neuron {} is NOT dissolved. It is in state {:?}", id, state),
             ));
         }
-        // Lock neuron for the disburse command.
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: self.env.now(),
-            command: Some(InFlightCommand::Disburse(disburse.clone())),
-        };
-        let _lock = self.lock_neuron_for_command(id, in_flight_command);
 
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-
-        // We need to re-acquire neuron ref because of the lock_neuron_for_command call requiring mut.
-        let neuron = self.get_neuron_result(id)?;
 
         let from_subaccount = neuron.subaccount()?;
 
