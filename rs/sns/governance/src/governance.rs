@@ -1166,7 +1166,7 @@ impl Governance {
             })?,
         };
 
-        let max_burnable_fee = self.maximum_burnable_fees_for_neuron(&neuron)?;
+        let max_burnable_fee = self.maximum_burnable_fees_for_neuron(neuron)?;
 
         // Calculate the amount to transfer and make sure no matter what the user
         // disburses we still take the neuron management fees into account.
