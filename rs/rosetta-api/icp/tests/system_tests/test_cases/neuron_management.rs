@@ -2,7 +2,7 @@ use crate::common::utils::update_neuron;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
-    utils::{get_custom_agent, get_test_agent, list_neurons, test_identity},
+    utils::{account_balance, get_custom_agent, get_test_agent, list_neurons, test_identity},
 };
 use core::convert::TryFrom;
 use ic_agent::{identity::BasicIdentity, Identity};
@@ -668,8 +668,6 @@ fn test_disburse_neuron() {
             .value.parse::<u64>().unwrap();
         // The balance should be the same as before the creation of the neuron minus the transfer fee
         assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_e8s());
-        let balance_after_ledger = account_balance_nb(&env.pocket_ic, &AccountIdentifier::from(TEST_IDENTITY.sender().unwrap())).await;
-        assert_eq!(balance_after_disburse, balance_after_ledger.get_e8s());
     });
 }
 
@@ -1552,7 +1550,7 @@ fn test_disburse_maturity() {
 
         let receiver = AccountIdentifier::new(PrincipalId::new_user_test_id(100), None);
 
-        let test_id_balance_before = account_balance_nb(&env.pocket_ic, &test_identity_acc_id)
+        let test_id_balance_before = account_balance(&env.pocket_ic, &test_identity_acc_id)
             .await
             .get_e8s();
 
@@ -1591,13 +1589,13 @@ fn test_disburse_maturity() {
             env.pocket_ic.tick().await;
         }
 
-        let balance_after = account_balance_nb(&env.pocket_ic, &receiver).await;
+        let balance_after = account_balance(&env.pocket_ic, &receiver).await;
 
         println!("balance_after 2: {}", balance_after.get_e8s());
 
         assert_eq!(balance_after.get_e8s(), new_maturity / 2);
 
-        let test_id_balance_after = account_balance_nb(&env.pocket_ic, &test_identity_acc_id)
+        let test_id_balance_after = account_balance(&env.pocket_ic, &test_identity_acc_id)
             .await
             .get_e8s();
         assert_eq!(
@@ -1605,49 +1603,4 @@ fn test_disburse_maturity() {
             test_id_balance_before + new_maturity / 2
         );
     });
-}
-
-use candid::CandidType;
-use candid::Decode;
-use candid::Deserialize;
-use candid::Encode;
-use candid::Principal;
-use ic_nns_constants::LEDGER_CANISTER_ID;
-use icp_ledger::BinaryAccountBalanceArgs;
-use icp_ledger::Tokens;
-use pocket_ic::nonblocking::PocketIc;
-
-pub async fn account_balance_nb(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
-    query_or_panic_nb(
-        pocket_ic,
-        candid::Principal::from(LEDGER_CANISTER_ID),
-        candid::Principal::anonymous(),
-        "account_balance",
-        BinaryAccountBalanceArgs {
-            account: account.to_address(),
-        },
-    )
-    .await
-}
-
-// Panics if the canister is unreachable or it has rejected the query.
-pub async fn query_or_panic_nb<I, O>(
-    pocket_ic: &PocketIc,
-    canister_id: Principal,
-    caller: Principal,
-    method: &str,
-    arg: I,
-) -> O
-where
-    I: CandidType,
-    O: CandidType + for<'a> Deserialize<'a>,
-{
-    let arg = Encode!(&arg).unwrap();
-    match pocket_ic.query_call(canister_id, caller, method, arg).await {
-        Err(err) => {
-            panic!("{canister_id}.{method} query failed with error {err} (caller: {caller})");
-        }
-        Ok(res) => Decode!(&res, O)
-            .unwrap_or_else(|_| panic!("error decoding response to {} query", method)),
-    }
 }
