@@ -4,6 +4,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/grub.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
@@ -16,46 +17,6 @@ get_version_noreport() {
         VERSION="unknown"
         VERSION_OK=0
     fi
-}
-
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
-}
-
-# Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
-#
-# Arguments:
-# $1 - name of grubenv file
-write_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
-    (
-        echo "# GRUB Environment Block"
-        echo boot_alternative="$boot_alternative"
-        echo boot_cycle="$boot_cycle"
-        # Fill to make sure we will have 1024 bytes
-        echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
-    ) >"${TMP_FILE}"
-    # Truncate to arrive at precisely 1024 bytes
-    truncate --size=1024 "${TMP_FILE}"
-    cat "${TMP_FILE}" >"${GRUBENV_FILE}"
-    rm "${TMP_FILE}"
 }
 
 # Convert A -> B and B -> A
@@ -303,7 +264,8 @@ case "${ACTION}" in
         # Tell boot loader to switch partitions on next boot.
         boot_alternative="${TARGET_ALTERNATIVE}"
         boot_cycle=first_boot
-        write_grubenv "${GRUBENV_FILE}"
+        write_log "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
+        write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "${boot_cycle}"
 
         write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}"
         write_metric_attr "${SYSTEM_TYPE}_boot_action" \
@@ -326,7 +288,7 @@ case "${ACTION}" in
     confirm)
         if [ "$boot_cycle" != "stable" ]; then
             boot_cycle=stable
-            write_grubenv "${GRUBENV_FILE}"
+            write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "$boot_cycle"
             write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \

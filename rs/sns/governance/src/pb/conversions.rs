@@ -702,6 +702,62 @@ impl From<pb_api::RegisterExtension> for pb::RegisterExtension {
     }
 }
 
+impl From<pb::ExtensionOperationArg> for pb_api::ExtensionOperationArg {
+    fn from(item: pb::ExtensionOperationArg) -> Self {
+        let pb::ExtensionOperationArg { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionOperationArg> for pb::ExtensionOperationArg {
+    fn from(item: pb_api::ExtensionOperationArg) -> Self {
+        let pb_api::ExtensionOperationArg { value } = item;
+
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExecuteExtensionOperation> for pb_api::ExecuteExtensionOperation {
+    fn from(item: pb::ExecuteExtensionOperation) -> Self {
+        let pb::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb_api::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        }
+    }
+}
+
+impl From<pb_api::ExecuteExtensionOperation> for pb::ExecuteExtensionOperation {
+    fn from(item: pb_api::ExecuteExtensionOperation) -> Self {
+        let pb_api::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        }
+    }
+}
+
 impl From<pb::DeregisterDappCanisters> for pb_api::DeregisterDappCanisters {
     fn from(item: pb::DeregisterDappCanisters) -> Self {
         Self {
@@ -859,6 +915,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
             }
+            pb::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb_api::proposal::Action::ExecuteExtensionOperation(v.into())
+            }
             pb::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb_api::proposal::Action::UpgradeSnsToNextVersion(v.into())
             }
@@ -914,6 +973,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
+            }
+            pb_api::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb::proposal::Action::ExecuteExtensionOperation(v.into())
             }
             pb_api::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb::proposal::Action::UpgradeSnsToNextVersion(v.into())

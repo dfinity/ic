@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "VECTOR_ENV", "VECTOR_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -56,7 +56,7 @@ genrule(
 
 system_test_nns(
     name = "registration",
-    env = MAINNET_ENV | VECTOR_ENV,
+    env = MAINNET_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     tags = ["long_test"],  # since it takes longer than 5 minutes.
@@ -64,7 +64,7 @@ system_test_nns(
     uses_guestos_img = False,
     uses_guestos_mainnet_img = True,
     uses_setupos_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -78,7 +78,7 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
-    env = MAINNET_ENV | VECTOR_ENV,
+    env = MAINNET_ENV,
     extra_head_nns_tags = [],
     flaky = True,
     tags = ["long_test"],
@@ -86,7 +86,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -100,7 +100,7 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
-    env = MAINNET_ENV | VECTOR_ENV,
+    env = MAINNET_ENV,
     extra_head_nns_tags = [],
     flaky = True,
     tags = ["long_test"],
@@ -110,14 +110,14 @@ system_test_nns(
     uses_guestos_mainnet_img = True,
     uses_hostos_test_update = True,
     uses_setupos_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    env = MAINNET_ENV | VECTOR_ENV | {
+    env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
     extra_head_nns_tags = [],
@@ -129,7 +129,7 @@ system_test_nns(
     uses_guestos_mainnet_img = True,
     uses_hostos_update = True,
     uses_setupos_mainnet_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -138,7 +138,7 @@ system_test_nns(
 # *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
 system_test_nns(
     name = "hostos_upgrade_from_mainnet_to_mainnet",
-    env = MAINNET_ENV | VECTOR_ENV | {
+    env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
     extra_head_nns_tags = [],
@@ -150,6 +150,30 @@ system_test_nns(
     uses_guestos_mainnet_img = True,
     uses_hostos_mainnet_update = True,
     uses_setupos_mainnet_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + VECTOR_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    deps = RUNNER_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "recovery_upgrader_test_bin",
+    testonly = True,
+    srcs = ["recovery_upgrader_test.rs"],
+    deps = DEPENDENCIES + [":nested"],
+)
+
+# Tests the recovery-upgrader component by upgrading the GuestOS to the mainnet update image
+# Uses the mainnet update image, as this image is hosted at https://download.dfinity.systems/
+system_test_nns(
+    name = "recovery_upgrader_test",
+    env = MAINNET_ENV,
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["long_test"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":recovery_upgrader_test_bin",
+    test_timeout = "eternal",
+    uses_guestos_mainnet_update = True,
+    uses_setupos_img = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )

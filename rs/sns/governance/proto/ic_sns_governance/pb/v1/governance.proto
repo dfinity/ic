@@ -473,6 +473,18 @@ message RegisterExtension {
   optional ExtensionInit extension_init = 2;
 }
 
+message ExtensionOperationArg {
+  optional Precise value = 1;
+}
+
+message ExecuteExtensionOperation {
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  optional string operation_name = 2;
+
+  optional ExtensionOperationArg operation_arg = 3;
+}
+
 // A proposal to remove a list of dapps from the SNS and assign them to new controllers
 message DeregisterDappCanisters {
   // The canister IDs to be deregistered (i.e. removed from the management of the SNS).
@@ -664,6 +676,11 @@ message Proposal {
     //
     // Id = 17.
     RegisterExtension register_extension = 21;
+
+    // Execute an SNS extension's operation.
+    //
+    // Id = 18.
+    ExecuteExtensionOperation execute_extension_operation = 22;
   }
 }
 
@@ -863,6 +880,8 @@ message ProposalData {
   // Id 14 - ManageDappCanisterSettings proposals.
   // Id 15 - AdvanceSnsTargetVersion proposals.
   // Id 16 - SetTopicsForCustomProposals proposals.
+  // Id 17 - RegisterExtension.
+  // Id 18 - ExecuteExtensionOperation.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map

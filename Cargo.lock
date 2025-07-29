@@ -4677,6 +4677,9 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-management-canister-types-private",
  "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-nns-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -4688,6 +4691,7 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "registry-canister",
  "reqwest 0.12.15",
  "serde_cbor",
  "slog",
@@ -9700,6 +9704,7 @@ dependencies = [
 name = "ic-https-outcalls-consensus"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "hex",
  "ic-artifact-pool",
  "ic-consensus-mocks",
