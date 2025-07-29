@@ -10,6 +10,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -120,10 +121,14 @@ fn execute_response_refunds_cycles() {
     // plus the unaccepted cycles (no more the cycles sent via request),
     // the execution cost refund and the refunded transmission fee.
     // Compute the response transmission refund.
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mgr = test.cycles_account_manager();
-    let response_transmission_refund = mgr
-        .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
-    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
+    let response_transmission_refund = mgr.xnet_call_bytes_transmitted_fee(
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        test.subnet_size(),
+        cost_schedule,
+    );
+    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size(), cost_schedule);
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
     let execution_refund = mgr
         .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
@@ -1291,6 +1296,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -1410,6 +1416,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -1552,6 +1559,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -2649,6 +2657,7 @@ fn test_cycles_burn() {
         canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
@@ -2670,6 +2679,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
@@ -2685,6 +2695,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
