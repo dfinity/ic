@@ -7,6 +7,8 @@ use ic_validate_eq_derive::ValidateEq;
 
 use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
+pub mod proto;
+
 /// This is the _maximum_ chunk size. A chunk may take up as little space as
 /// a single OS page. However, the cycles cost of maintaining a chunk in the
 /// store is that of the maximum chunk size. Also, the capacity calculation
