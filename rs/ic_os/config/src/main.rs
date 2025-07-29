@@ -36,6 +36,8 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
+    /// Checks if the tool is config_dev or config
+    CheckBinaryType,
 }
 
 #[derive(Parser)]
@@ -307,6 +309,17 @@ pub fn main() -> Result<()> {
                 &clap_args.guestos_config_json_path,
                 &generate_testnet_config(args)?,
             )
+        }
+        Some(Commands::CheckBinaryType) => {
+            let is_dev_feature = cfg!(feature = "dev");
+
+            if is_dev_feature {
+                println!("dev");
+            } else {
+                println!("prod");
+            }
+
+            Ok(())
         }
         None => {
             println!("No command provided. Use --help for usage information.");
