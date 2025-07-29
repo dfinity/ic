@@ -89,20 +89,6 @@ impl ICRC1Ledger for MockLedger {
     }
 }
 
-fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governance {
-    let test_governance_canister_id = CanisterId::from_u64(501);
-    Governance::new(
-        governance_proto
-            .try_into()
-            .expect("Failed validating governance proto"),
-        Box::new(NativeEnvironment::new(Some(test_governance_canister_id))),
-        Box::new(MockLedger::new()), // Use MockLedger for SNS ledger
-        Box::new(MockLedger::new()), // Use MockLedger for ICP ledger
-        Box::new(FakeCmc::new()),
-    )
-    .enable_test_features()
-}
-
 fn governance_with_ledger_tracking(governance_proto: GovernanceProto) -> (Governance, MockLedger) {
     let test_governance_canister_id = CanisterId::from_u64(501);
 
@@ -134,11 +120,9 @@ fn test_neuron_id(controller: PrincipalId) -> NeuronId {
 // Tests for maximum_burnable_fees_per_neuron
 // =============================================================================
 
-#[test]
-fn test_maximum_burnable_fees_per_neuron_no_open_proposals() {
-    // Test that when a neuron has no open proposals, all fees can be burned
-    let mut governance = default_governance_with_proto(basic_governance_proto());
-
+fn setup_burnable_fee_test() -> (Governance, NeuronId) {
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
     neuron.id = Some(neuron_id.clone());
@@ -150,43 +134,49 @@ fn test_maximum_burnable_fees_per_neuron_no_open_proposals() {
         .neurons
         .insert(neuron_id.to_string(), neuron.clone());
 
+    (governance, neuron_id)
+}
+
+fn proposal_data_with_reject_cost(
+    id: u64,
+    proposer: NeuronId,
+    reject_cost_e8s: u64,
+    decided_timestamp_seconds: u64,
+) -> ProposalData {
+    ProposalData {
+        id: Some(ProposalId { id }),
+        proposer: Some(proposer),
+        reject_cost_e8s,
+        decided_timestamp_seconds,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_maximum_burnable_fees_per_neuron_no_open_proposals() {
+    // Test that when a neuron has no open proposals, all fees can be burned
+    let (mut governance, neuron_id) = setup_burnable_fee_test();
+
+    let neuron = governance.get_neuron_result(&neuron_id).unwrap();
     // With no open proposals, all fees should be burnable
-    let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(&neuron)
-        .unwrap();
+    let max_burnable = governance.maximum_burnable_fees_for_neuron(neuron).unwrap();
     assert_eq!(max_burnable, 1000);
 }
 
 #[test]
 fn test_maximum_burnable_fees_per_neuron_with_open_proposals() {
     // Test that fees tied up in open proposals are not burnable
-    let mut governance = default_governance_with_proto(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.neuron_fees_e8s = 1000;
-
-    // Insert the neuron into governance
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id) = setup_burnable_fee_test();
 
     // Create an open proposal with reject cost of 300
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 300,
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 300, 0);
 
     governance.proto.proposals.insert(1, proposal_data);
 
     // Only 1000 - 300 = 700 should be burnable
+    let neuron = governance.get_neuron_result(&neuron_id).unwrap();
     let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(&neuron)
+        .maximum_burnable_fees_for_neuron(neuron)
         .unwrap();
     assert_eq!(max_burnable, 700);
 }
@@ -194,43 +184,21 @@ fn test_maximum_burnable_fees_per_neuron_with_open_proposals() {
 #[test]
 fn test_maximum_burnable_fees_per_neuron_multiple_open_proposals() {
     // Test that multiple open proposals accumulate their reject costs
-    let mut governance = default_governance_with_proto(basic_governance_proto());
-
-    let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
-    let mut neuron = A_NEURON.clone();
-    neuron.id = Some(neuron_id.clone());
-    neuron.neuron_fees_e8s = 1000;
-
-    // Insert the neuron into governance
-    governance
-        .proto
-        .neurons
-        .insert(neuron_id.to_string(), neuron.clone());
+    let (mut governance, neuron_id) = setup_burnable_fee_test();
 
     // Create first open proposal with reject cost of 200
-    let proposal_data_1 = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 200,
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data_1 = proposal_data_with_reject_cost(1, neuron_id.clone(), 200, 0);
 
     // Create second open proposal with reject cost of 300
-    let proposal_data_2 = ProposalData {
-        id: Some(ProposalId { id: 2 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 300,
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data_2 = proposal_data_with_reject_cost(2, neuron_id.clone(), 300, 0);
 
     governance.proto.proposals.insert(1, proposal_data_1);
     governance.proto.proposals.insert(2, proposal_data_2);
 
     // Only 1000 - 200 - 300 = 500 should be burnable
+    let neuron = governance.get_neuron_result(&neuron_id).unwrap();
     let max_burnable = governance
-        .maximum_burnable_fees_for_neuron(&neuron)
+        .maximum_burnable_fees_for_neuron(neuron)
         .unwrap();
     assert_eq!(max_burnable, 500);
 }
@@ -238,7 +206,8 @@ fn test_maximum_burnable_fees_per_neuron_multiple_open_proposals() {
 #[test]
 fn test_maximum_burnable_fees_per_neuron_closed_proposals_ignored() {
     // Test that closed proposals don't affect burnable fees
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
@@ -252,13 +221,8 @@ fn test_maximum_burnable_fees_per_neuron_closed_proposals_ignored() {
         .insert(neuron_id.to_string(), neuron.clone());
 
     // Create a closed (decided) proposal with reject cost of 300
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 300,
-        decided_timestamp_seconds: governance.env.now(), // Non-zero means decided
-        ..Default::default()
-    };
+    let proposal_data =
+        proposal_data_with_reject_cost(1, neuron_id.clone(), 300, governance.env.now());
 
     governance.proto.proposals.insert(1, proposal_data);
 
@@ -272,7 +236,8 @@ fn test_maximum_burnable_fees_per_neuron_closed_proposals_ignored() {
 #[test]
 fn test_maximum_burnable_fees_per_neuron_different_proposer_ignored() {
     // Test that open proposals from other neurons don't affect this neuron's burnable fees
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let other_neuron_id = test_neuron_id(PrincipalId::new_user_test_id(999));
@@ -289,12 +254,8 @@ fn test_maximum_burnable_fees_per_neuron_different_proposer_ignored() {
 
     // Create an open proposal from a different neuron
     let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(other_neuron_id), // Different proposer
-        reject_cost_e8s: 300,
         proposal: Some(A_MOTION_PROPOSAL.clone()),
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
+        ..proposal_data_with_reject_cost(1, other_neuron_id, 300, 0) // Different proposer
     };
 
     governance.proto.proposals.insert(1, proposal_data);
@@ -309,7 +270,8 @@ fn test_maximum_burnable_fees_per_neuron_different_proposer_ignored() {
 #[test]
 fn test_maximum_burnable_fees_per_neuron_fees_exceed_reject_costs() {
     // Test that when open proposal reject costs exceed available fees, we don't underflow
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
@@ -323,13 +285,7 @@ fn test_maximum_burnable_fees_per_neuron_fees_exceed_reject_costs() {
         .insert(neuron_id.to_string(), neuron.clone());
 
     // Create an open proposal with high reject cost
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 500,         // Higher than available fees
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 500, 0); // Higher than available fees
 
     governance.proto.proposals.insert(1, proposal_data);
 
@@ -343,7 +299,8 @@ fn test_maximum_burnable_fees_per_neuron_fees_exceed_reject_costs() {
 #[test]
 fn test_maximum_burnable_fees_per_neuron_no_neuron_id() {
     // Test error handling when neuron has no ID
-    let governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let mut neuron = A_NEURON.clone();
     neuron.id = None; // No ID
@@ -362,7 +319,8 @@ fn test_maximum_burnable_fees_per_neuron_no_neuron_id() {
 #[test]
 fn test_disburse_neuron_with_dissolve_delay_fails() {
     // Test that disburse_neuron fails when neuron has a dissolve delay (locked)
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
@@ -397,7 +355,8 @@ fn test_disburse_neuron_with_dissolve_delay_fails() {
 #[test]
 fn test_disburse_neuron_dissolving_fails() {
     // Test that disburse_neuron fails when neuron is dissolving but not yet dissolved
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
@@ -435,7 +394,8 @@ fn test_disburse_neuron_dissolving_fails() {
 #[test]
 fn test_disburse_neuron_unauthorized_caller_fails() {
     // Test that disburse_neuron fails when caller is not authorized
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
@@ -471,7 +431,8 @@ fn test_disburse_neuron_unauthorized_caller_fails() {
 #[test]
 fn test_disburse_neuron_nonexistent_neuron_fails() {
     // Test that disburse_neuron fails when neuron doesn't exist
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let nonexistent_neuron_id = test_neuron_id(PrincipalId::new_user_test_id(999));
 
@@ -493,7 +454,8 @@ fn test_disburse_neuron_nonexistent_neuron_fails() {
 #[test]
 fn test_disburse_neuron_invalid_subaccount_fails() {
     // Test that disburse_neuron fails when to_account has invalid subaccount
-    let mut governance = default_governance_with_proto(basic_governance_proto());
+    let governance_proto = basic_governance_proto();
+    let (mut governance, _ledger) = governance_with_ledger_tracking(governance_proto);
 
     let neuron_id = test_neuron_id(*A_NEURON_PRINCIPAL_ID);
     let mut neuron = A_NEURON.clone();
@@ -550,13 +512,7 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
         .insert(neuron_id.to_string(), neuron.clone());
 
     // Create an open proposal with reject cost of 30,000 e8s
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 30_000,
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 30_000, 0);
 
     governance.proto.proposals.insert(1, proposal_data);
 
@@ -680,13 +636,7 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
         .insert(neuron_id.to_string(), neuron.clone());
 
     // Create an open proposal with reject cost higher than available fees
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 500,         // More than the 100 available fees
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 500, 0); // More than the 100 available fees
 
     governance.proto.proposals.insert(1, proposal_data);
 
@@ -747,13 +697,7 @@ fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
         .insert(neuron_id.to_string(), neuron.clone());
 
     // Create an open proposal with reject cost of 20,000 e8s
-    let proposal_data = ProposalData {
-        id: Some(ProposalId { id: 1 }),
-        proposer: Some(neuron_id.clone()),
-        reject_cost_e8s: 20_000,
-        decided_timestamp_seconds: 0, // 0 means open
-        ..Default::default()
-    };
+    let proposal_data = proposal_data_with_reject_cost(1, neuron_id.clone(), 20_000, 0);
 
     governance.proto.proposals.insert(1, proposal_data);
 
