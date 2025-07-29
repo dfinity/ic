@@ -178,6 +178,7 @@ pub struct RosettaTestingEnvironmentBuilder {
     pub minting_account: Option<Account>,
     pub initial_balances: Option<HashMap<AccountIdentifier, icp_ledger::Tokens>>,
     pub governance_canister: bool,
+    pub cached_maturity_modulation: bool,
     pub persistent_storage: bool,
 }
 
@@ -189,6 +190,7 @@ impl RosettaTestingEnvironmentBuilder {
             initial_balances: None,
             governance_canister: false,
             persistent_storage: false,
+            cached_maturity_modulation: false,
         }
     }
 
@@ -215,6 +217,11 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub fn with_governance_canister(mut self) -> Self {
         self.governance_canister = true;
+        self
+    }
+
+    pub fn with_cached_maturity_modulation(mut self) -> Self {
+        self.cached_maturity_modulation = true;
         self
     }
 
@@ -269,6 +276,9 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic.get_subnet(ledger_canister_id).await.unwrap()
         );
 
+        if self.cached_maturity_modulation {
+            assert!(self.governance_canister, "cannot set cached maturity modulation without governance canister installed");
+        }
         if self.governance_canister {
             let nns_root_canister_wasm = build_root_wasm();
             let nns_root_canister_id = Principal::from(ROOT_CANISTER_ID);
@@ -310,20 +320,23 @@ impl RosettaTestingEnvironmentBuilder {
                 )
                 .await
                 .expect("Unable to create the Governance canister");
-            let governance_proto = ic_nns_governance_api::Governance {
-                wait_for_quiet_threshold_seconds: 11,
-                economics: Some(ic_nns_governance_api::NetworkEconomics {
-                    neuron_minimum_stake_e8s: 5,
+            let install_arg = if self.cached_maturity_modulation {
+                let governance_proto = ic_nns_governance_api::Governance {
+                    economics: Some(ic_nns_governance_api::NetworkEconomics {
+                        ..Default::default()
+                    }),
+                    cached_daily_maturity_modulation_basis_points: Some(0),
                     ..Default::default()
-                }),
-                cached_daily_maturity_modulation_basis_points: Some(0),
-                ..Default::default()
-            };                
+                };                
+                GovernanceCanisterInitPayloadBuilder::new().with_governance_proto(governance_proto).build()
+            } else {
+                GovernanceCanisterInitPayloadBuilder::new().build()
+            };
             pocket_ic
                 .install_canister(
                     governance_canister,
                     governance_canister_wasm.bytes().to_vec(),
-                    Encode!(&GovernanceCanisterInitPayloadBuilder::new().with_governance_proto(governance_proto).build()).unwrap(),
+                    Encode!(&install_arg).unwrap(),
                     Some(governance_canister_controller),
                 )
                 .await;

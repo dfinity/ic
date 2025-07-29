@@ -18,13 +18,10 @@ use ic_icp_rosetta_client::{
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
 use ic_nns_governance_api::{neuron::DissolveState, KnownNeuronData};
-// use ic_rosetta_api::ledger_client::disburse_maturity_response;
-use ic_rosetta_api::ledger_client::disburse_maturity_response::DisburseMaturityResponse;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
 use ic_rosetta_api::models::AccountBalanceRequest;
-// use ic_rosetta_api::request::transaction_operation_results;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
@@ -1506,10 +1503,11 @@ fn test_refresh_voting_power() {
 fn test_disburse_maturity() {
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
+        let test_identity_acc_id = AccountIdentifier::from(TEST_IDENTITY.sender().unwrap());
         let env = RosettaTestingEnvironment::builder()
             .with_initial_balances(
                 vec![(
-                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    test_identity_acc_id,
                     // A hundred million ICP should be enough
                     icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
                 )]
@@ -1518,6 +1516,7 @@ fn test_disburse_maturity() {
             )
             .with_minting_account(Account{owner: ic_nns_constants::GOVERNANCE_CANISTER_ID.into(), subaccount: None })
             .with_governance_canister()
+            .with_cached_maturity_modulation()
             .build()
             .await;
 
@@ -1541,7 +1540,8 @@ fn test_disburse_maturity() {
         let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-        let new_maturity = 110_000_000;
+        // Assing maturity to the neuron
+        let new_maturity = 300_000_000;
         neuron.maturity_e8s_equivalent = new_maturity;
         update_neuron(&agent, neuron).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
@@ -1549,22 +1549,38 @@ fn test_disburse_maturity() {
 
         let receiver = AccountIdentifier::new(PrincipalId::new_user_test_id(100), None);
 
+        let test_id_balance_before = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id).await.get_e8s();
+
         let _ = env
             .rosetta_client
             .disburse_maturity(
                 env.network_identifier.clone(),
                 &(*TEST_IDENTITY).clone(),
-                RosettaDisburseMaturityArgs::builder(neuron_index, 100)
+                RosettaDisburseMaturityArgs::builder(neuron_index, 50)
                     .with_recipient(receiver)
                     .build(),
             )
             .await
             .expect("failed to disburse maturity");
 
+        // Disburse the rest to the test id - without specifying the recipient.
+        let _ = env
+            .rosetta_client
+            .disburse_maturity(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaDisburseMaturityArgs::builder(neuron_index, 100)
+                    .build(),
+            )
+            .await
+            .expect("failed to disburse maturity");            
+
+        // Wait a week for the disbursement to finalize.
         env.pocket_ic
             .advance_time(std::time::Duration::from_secs(60 * 60 * 24 * 7))
             .await;
         for _ in 0..10 {
+            // We have to tick a few more times so that inter canister calls get completed.
             env.pocket_ic
                 .advance_time(std::time::Duration::from_secs(1))
                 .await;
@@ -1575,12 +1591,14 @@ fn test_disburse_maturity() {
 
         println!("balance_after 2: {}", balance_after.get_e8s());
 
-        assert_eq!(balance_after.get_e8s(), new_maturity);
+        assert_eq!(balance_after.get_e8s(), new_maturity/2);
+
+        let test_id_balance_after = account_balance_nb(&env.pocket_ic, &&test_identity_acc_id).await.get_e8s();
+        assert_eq!(test_id_balance_after, test_id_balance_before + new_maturity/2);
+
     });
 }
 
-use ic_nns_governance_api::ListNeurons;
-use ic_nns_governance_api::ListNeuronsResponse as NnsListNeuronsResponse;
 use pocket_ic::nonblocking::PocketIc;
 use candid::CandidType;
 use candid::Decode;
