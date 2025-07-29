@@ -1,6 +1,4 @@
-use crate::canister::test::get_node_providers_monthly_xdr_rewards::{
-    setup_thread_local_canister_for_test, CANISTER_TEST,
-};
+use crate::canister::test::test_utils::{setup_thread_local_canister_for_test, CANISTER_TEST};
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::tests::subnet_id;
 use futures_util::FutureExt;
@@ -33,6 +31,16 @@ fn add_subnet_list(fake_registry: Arc<FakeRegistry>, subnets: Vec<SubnetId>) {
     );
 }
 
+fn sync_all() {
+    NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST)
+        .now_or_never()
+        .unwrap();
+}
+
 #[test]
 fn test_sync_zero_registry_version() {
     let fake_registry = setup_thread_local_canister_for_test();
@@ -45,9 +53,7 @@ fn test_sync_zero_registry_version() {
     ];
     add_subnet_list(fake_registry.clone(), subnets[..3].to_vec());
     add_subnet_list(fake_registry, subnets[3..].to_vec());
-    NodeRewardsCanister::sync_all(&CANISTER_TEST)
-        .now_or_never()
-        .unwrap();
+    sync_all();
     let registry_client = CANISTER_TEST.with_borrow(|canister| canister.get_registry_client());
     let metrics_manager = CANISTER_TEST.with_borrow(|canister| canister.get_metrics_manager());
 
@@ -79,9 +85,7 @@ fn test_sync_non_zero_registry_version() {
         subnet_id(4),
     ];
     add_subnet_list(fake_registry.clone(), subnets_first_sync.clone());
-    NodeRewardsCanister::sync_all(&CANISTER_TEST)
-        .now_or_never()
-        .unwrap();
+    sync_all();
 
     let subnets_second_sync: Vec<SubnetId> = vec![
         subnet_id(5),
@@ -92,9 +96,7 @@ fn test_sync_non_zero_registry_version() {
     ];
     add_subnet_list(fake_registry.clone(), subnets_second_sync[..3].to_vec());
     add_subnet_list(fake_registry.clone(), subnets_second_sync[3..].to_vec());
-    NodeRewardsCanister::sync_all(&CANISTER_TEST)
-        .now_or_never()
-        .unwrap();
+    sync_all();
 
     let registry_client = CANISTER_TEST.with_borrow(|canister| canister.get_registry_client());
     let metrics_manager = CANISTER_TEST.with_borrow(|canister| canister.get_metrics_manager());

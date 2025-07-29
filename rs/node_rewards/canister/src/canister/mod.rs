@@ -1,7 +1,6 @@
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
-use crate::telemetry;
 use ic_base_types::SubnetId;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -32,6 +31,7 @@ mod test;
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
     metrics_manager: Rc<MetricsManager<VM>>,
+    last_metrics_update: RegistryVersion,
 }
 
 /// Internal methods
@@ -41,53 +41,46 @@ impl NodeRewardsCanister {
         metrics_manager: Rc<MetricsManager<VM>>,
     ) -> Self {
         Self {
+            last_metrics_update: registry_client.get_latest_version(),
             registry_client,
             metrics_manager,
         }
     }
 
-    pub async fn sync_all(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
-        let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
-        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
-        let mut instruction_counter = telemetry::InstructionCounter::default();
-
-        let pre_sync_version = registry_client.get_latest_version();
-        instruction_counter.lap();
-        let registry_sync_result = registry_client.sync_registry_stored().await;
-        let registry_sync_instructions = instruction_counter.lap();
-        let post_sync_version = registry_client.get_latest_version();
-
-        let mut update_subnet_metrics_instructions: u64 = 0;
-        match registry_sync_result {
-            Ok(_) => {
-                instruction_counter.lap();
-                Self::schedule_metrics_sync(canister, pre_sync_version, post_sync_version).await;
-                update_subnet_metrics_instructions = instruction_counter.lap();
-
-                telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_success());
-                ic_cdk::println!("Successfully synced subnets metrics and local registry");
-            }
-            Err(e) => {
-                ic_cdk::println!("Failed to sync local registry: {:?}", e)
-            }
-        }
-
-        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
-            m.record_last_sync_instructions(
-                instruction_counter.sum(),
-                registry_sync_instructions,
-                update_subnet_metrics_instructions,
-            )
-        });
+    /// Gets Arc reference to RegistryClient
+    pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
+        self.registry_client.clone()
     }
 
-    async fn schedule_metrics_sync(
+    /// Gets Arc reference to MetricsManager
+    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
+        self.metrics_manager.clone()
+    }
+
+    // Test only methods
+    pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
+        self.registry_client
+            .get_value(key.as_ref(), self.registry_client.get_latest_version())
+            .map_err(|e| format!("Failed to get registry value: {:?}", e))
+    }
+
+    pub async fn schedule_registry_sync(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-        pre_sync_version: RegistryVersion,
-        post_sync_version: RegistryVersion,
-    ) {
+    ) -> Result<(), String> {
         let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
-        let metrics_manager = canister.with(|canister| canister.borrow().get_metrics_manager());
+        registry_client.sync_registry_stored().await?;
+        Ok(())
+    }
+
+    pub async fn schedule_metrics_sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
+        let (registry_client, metrics_manager, pre_sync_version) = canister.with(|canister| {
+            (
+                canister.borrow().get_registry_client(),
+                canister.borrow().get_metrics_manager(),
+                canister.borrow().last_metrics_update,
+            )
+        });
+        let post_sync_version = registry_client.get_latest_version();
         let registry_querier = RegistryQuerier::new(registry_client.clone());
 
         let mut subnets_list: HashSet<SubnetId> = HashSet::default();
@@ -108,23 +101,9 @@ impl NodeRewardsCanister {
             .update_subnets_metrics(subnets_list.into_iter().collect())
             .await;
         metrics_manager.retry_failed_subnets().await;
-    }
-
-    /// Gets Arc reference to RegistryClient
-    pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
-        self.registry_client.clone()
-    }
-
-    /// Gets Arc reference to MetricsManager
-    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
-        self.metrics_manager.clone()
-    }
-
-    // Test only methods
-    pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
-        self.registry_client
-            .get_value(key.as_ref(), self.registry_client.get_latest_version())
-            .map_err(|e| format!("Failed to get registry value: {:?}", e))
+        canister.with_borrow_mut(|canister| {
+            canister.last_metrics_update = post_sync_version;
+        });
     }
 }
 
