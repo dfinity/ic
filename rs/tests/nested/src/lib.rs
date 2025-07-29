@@ -302,7 +302,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         let target_version =
             get_guestos_update_img_version().expect("Failed to get target guestos version");
         let target_short_hash =
-            &get_guestos_update_img_sha256(&env).expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
+            &get_guestos_update_img_sha256().expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
 
         info!(
             logger,
@@ -435,7 +435,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
         info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)
