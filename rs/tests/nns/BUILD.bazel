@@ -46,6 +46,7 @@ system_test(
         # Keep sorted.
         "//rs/nns/governance/api",
         "//rs/nns/test_utils",
+        "//rs/registry/canister",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",

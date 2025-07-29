@@ -160,7 +160,7 @@ def get_latest_hostos_version_info() -> (str, str):
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
     """Fetch and update the saved subnet version and hash."""
-    (version, hash) = get_subnet_replica_version_info(nns_subnet_id)
+    (version, hash) = get_subnet_replica_version_info(subnet)
     logger.info("Current subnet (%s) revision: %s hash: %s", subnet, version, hash)
 
     full_path = repo_root / file_path
