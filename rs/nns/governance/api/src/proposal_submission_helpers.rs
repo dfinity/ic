@@ -107,6 +107,9 @@ impl From<ProposalActionRequest> for Action {
             ProposalActionRequest::InstallCode(v) => Action::InstallCode(v.into()),
             ProposalActionRequest::StopOrStartCanister(v) => Action::StopOrStartCanister(v),
             ProposalActionRequest::UpdateCanisterSettings(v) => Action::UpdateCanisterSettings(v),
+            ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
+                Action::FulfillSubnetRentalRequest(v)
+            }
         }
     }
 }
@@ -140,6 +143,7 @@ impl From<ManageNeuronCommandRequest> for Command {
             ManageNeuronCommandRequest::StakeMaturity(v) => Command::StakeMaturity(v),
             ManageNeuronCommandRequest::RefreshVotingPower(v) => Command::RefreshVotingPower(v),
             ManageNeuronCommandRequest::DisburseMaturity(v) => Command::DisburseMaturity(v),
+            ManageNeuronCommandRequest::SetFollowing(v) => Command::SetFollowing(v),
         }
     }
 }

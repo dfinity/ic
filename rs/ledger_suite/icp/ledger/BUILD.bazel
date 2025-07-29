@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:defs.bzl", "rust_ic_test")
 load("ledger_canisters.bzl", "LEDGER_CANISTER_DATA", "LEDGER_CANISTER_RUSTC_ENV", "rust_ledger_canister")
 
@@ -19,7 +20,6 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
-            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
         rustc_env = {
             "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
@@ -38,8 +38,8 @@ package(default_visibility = ["//visibility:public"])
             "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:hex",
+            "@crate_index//:ic-cdk",
             "@crate_index//:ic-stable-structures",
-            "@crate_index//:ic_cdk_0_17_1",
             "@crate_index//:intmap",
             "@crate_index//:lazy_static",
             "@crate_index//:minicbor",
@@ -119,6 +119,7 @@ rust_ic_test(
         ":ledger-canister-wasm",
         ":ledger-canister-wasm-allowance-getter",
         ":ledger-canister-wasm-next-version",
+        ":ledger-canister-wasm-notify-method",
         ":ledger-canister-wasm-prev-version",
         "@mainnet_icp_ledger_canister//file",
     ],
@@ -129,6 +130,7 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath :ledger-canister-wasm-notify-method)",
         "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
     },
     tags = ["cpu:4"],
@@ -165,4 +167,41 @@ sh_binary(
         "//rs/ledger_suite/icp:ledger.did",
     ],
     visibility = ["//visibility:public"],
+)
+
+rust_canbench(
+    name = "ledger_canbench",
+    srcs = glob(["src/**/*.rs"]),
+    add_test = True,
+    crate_features = ["canbench-rs"],
+    proc_macro_deps = [
+        # Keep sorted.
+    ],
+    results_file = "canbench_results/canbench.yml",
+    deps = [
+        # Keep sorted.
+        ":ledger",
+        "//packages/ic-http-types",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1",
+        "//rs/rust_canisters/canister_log",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "@crate_index//:canbench-rs",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde_bytes",
+    ],
 )

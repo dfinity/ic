@@ -1,6 +1,5 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -26,18 +25,20 @@ use ic_sns_governance::{
         log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
     logs::{ERROR, INFO},
-    pb::v1 as sns_gov_pb,
+    pb::v1::{self as sns_gov_pb},
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+use ic_sns_governance_api::pb::v1::GovernanceError;
+use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
     governance::Version,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
+    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
@@ -48,7 +49,7 @@ use ic_sns_governance_api::pb::v1::{
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse,
+    AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
 use prost::Message;
@@ -349,6 +350,60 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
     GetMetadataResponse::from(
         governance().get_metadata(&sns_gov_pb::GetMetadataRequest::from(request)),
     )
+}
+
+async fn get_metrics_common(
+    request: GetMetricsRequest,
+) -> get_metrics_response::GetMetricsResponse {
+    use get_metrics_response::*;
+
+    let request = sns_gov_pb::GetMetricsRequest::try_from(request);
+
+    let time_window_seconds = match request {
+        Ok(request) => request.time_window_seconds,
+        Err(error_message) => {
+            return GetMetricsResponse {
+                get_metrics_result: Some(GetMetricsResult::Err(GovernanceError {
+                    error_type: i32::from(ErrorType::InvalidCommand),
+                    error_message,
+                })),
+            };
+        }
+    };
+
+    let result = governance().get_metrics(time_window_seconds).await;
+
+    let get_metrics_result = match result {
+        Ok(metrics) => {
+            let metrics = Metrics::from(metrics);
+            Some(GetMetricsResult::Ok(metrics))
+        }
+        Err(err) => {
+            let err = GovernanceError::from(err);
+            Some(GetMetricsResult::Err(err))
+        }
+    };
+    GetMetricsResponse { get_metrics_result }
+}
+
+/// Returns statistics of the SNS
+///
+/// Cannot be called by other canisters. See also: [`get_metrics_replicated`].
+#[query(composite = true)]
+async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
+    log!(INFO, "get_metrics");
+    get_metrics_common(request).await
+}
+
+/// Returns statistics of the SNS
+///
+/// Can be called by other canisters. See also: [`get_metrics`].
+#[update]
+async fn get_metrics_replicated(
+    request: GetMetricsRequest,
+) -> get_metrics_response::GetMetricsResponse {
+    log!(INFO, "get_metrics_replicated");
+    get_metrics_common(request).await
 }
 
 /// Returns the initialization parameters used to spawn an SNS

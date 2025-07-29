@@ -17,9 +17,9 @@ jobs:
   bazel-build-pocket-ic:
     name: Bazel Build PocketIC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+        -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     runs-on:
       labels: dind-large
@@ -62,7 +62,7 @@ jobs:
       - name: Linting
         run: |
           cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
-          
+
   pocket-ic-tests-on-windows:
     name: PocketIC Tests on Windows
     needs: [bazel-build-pocket-ic]

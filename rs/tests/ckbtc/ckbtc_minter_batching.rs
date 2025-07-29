@@ -1,5 +1,4 @@
 use anyhow::Result;
-
 use bitcoincore_rpc::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
@@ -19,14 +18,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
-    install_ledger, install_minter, setup, subnet_app, subnet_sys,
+    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
+    install_minter, subnet_app, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
         send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
         wait_for_update_balance,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -106,8 +105,6 @@ pub fn test_batching(env: TestEnv) {
 
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
-
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),
@@ -321,7 +318,7 @@ pub fn test_batching(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_batching))
         .execute_from_args()?;
     Ok(())

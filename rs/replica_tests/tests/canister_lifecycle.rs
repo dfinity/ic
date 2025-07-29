@@ -732,6 +732,7 @@ fn can_get_canister_information() {
                 0u128,
                 Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                 0u64,
+                Default::default(),
             )
         );
 
@@ -748,8 +749,6 @@ fn can_get_canister_information() {
                         canister_b,
                         UNIVERSAL_CANISTER_WASM.to_vec(),
                         vec![],
-                        None,
-                        None,
                     )
                     .encode(),
                 ),
@@ -799,6 +798,7 @@ fn can_get_canister_information() {
                     0u128,
                     Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                     0u64,
+                    Default::default(),
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,
@@ -822,130 +822,6 @@ fn cannot_run_method_on_empty_canister() {
             rest => panic!("Unexpected behaviour {:?}", rest),
         }
     })
-}
-
-#[test]
-fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
-    utils::canister_test(|test| {
-        let num_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-        let canister_id = test.create_canister_with_cycles(num_cycles.get()).unwrap();
-
-        // Install code to canister_id with low memory allocation.
-        assert_matches!(
-            test.ingress(
-                ic00::IC_00,
-                Method::InstallCode,
-                InstallCodeArgs::new(
-                    CanisterInstallMode::Install,
-                    canister_id,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    None,
-                    // Set memory allocation to 42 bytes (i.e. something ridiculously small).
-                    Some(42),
-                )
-                .encode(),
-            ),
-            Err(err) if err.code() == ErrorCode::InsufficientMemoryAllocation
-        );
-
-        // Install code to canister_id with enough memory allocation.
-        test.ingress(
-            ic00::IC_00,
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Install,
-                canister_id,
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                vec![],
-                None,
-                None,
-            )
-            .encode(),
-        )
-        .unwrap();
-
-        // Re-install code to canister_id with low memory allocation.
-        assert_matches!(
-            test.ingress(
-                ic00::IC_00,
-                Method::InstallCode,
-                InstallCodeArgs::new(
-                    CanisterInstallMode::Reinstall,
-                    canister_id,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    None,
-                    // Set memory allocation to 10 bytes.
-                    Some(10),
-                )
-                .encode(),
-            ),
-            Err(err) if err.code() == ErrorCode::InsufficientMemoryAllocation
-        );
-
-        // Canister is still callable.
-        assert_matches!(
-            test.ingress(
-                canister_id,
-                "update",
-                wasm().reply_data(b"Hello").build(),
-            ),
-            Ok(WasmResult::Reply(res)) if std::str::from_utf8(&res).unwrap() == "Hello"
-        );
-    });
-}
-
-#[test]
-fn upgrading_a_canister_with_lower_memory_allocation_than_it_needs_fails() {
-    utils::canister_test(|test| {
-        let num_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-        let canister_id = test.create_canister_with_cycles(num_cycles.get()).unwrap();
-
-        // Install code to canister_id.
-        test.ingress(
-            ic00::IC_00,
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Install,
-                canister_id,
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                vec![],
-                None,
-                None,
-            )
-            .encode(),
-        )
-        .unwrap();
-
-        // Attempt to upgrade the canister with a very low memory allocation.
-        assert_matches!(
-            test.ingress(
-                ic00::IC_00,
-                Method::InstallCode,
-                InstallCodeArgs::new(
-                    CanisterInstallMode::Upgrade,
-                    canister_id,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    None,
-                    Some(10),
-                )
-                .encode(),
-            ),
-            Err(err) if err.code() == ErrorCode::InsufficientMemoryAllocation
-        );
-
-        // Canister is still callable.
-        assert_matches!(
-            test.ingress(
-                canister_id,
-                "update",
-                wasm().reply_data(b"Hello").build(),
-            ),
-            Ok(WasmResult::Reply(res)) if std::str::from_utf8(&res).unwrap() == "Hello"
-        );
-    });
 }
 
 // Asserts that two `CanisterStatusResult`s are almost equal. Because

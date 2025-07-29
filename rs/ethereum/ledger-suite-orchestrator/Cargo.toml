@@ -19,8 +19,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = "0.2.0"
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }
 ic-http-types = { path = "../../../packages/ic-http-types" }

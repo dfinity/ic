@@ -733,7 +733,7 @@ impl ReplicatedState {
     }
 
     /// Canister migrations require that a canister is stopped, has no guaranteed responses
-    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
+    /// in any outgoing stream, and nothing in the input or output queue (guaranteed or otherwise).
     pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
         let streams_flushed = || {
             self.metadata
@@ -749,7 +749,7 @@ impl ReplicatedState {
 
         let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
 
-        stopped && !canister_state.has_output() && streams_flushed()
+        stopped && !canister_state.has_input() && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.
@@ -1261,6 +1261,25 @@ impl ReplicatedState {
             .unflushed_checkpoint_ops
             .take_snapshot(snapshot.canister_id(), snapshot_id);
         self.canister_snapshots.push(snapshot_id, snapshot)
+    }
+
+    /// Adds a new snapshot to the list of snapshots.
+    pub fn create_snapshot_from_metadata(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<CanisterSnapshot>,
+    ) {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .create_snapshot_from_metadata(snapshot_id);
+        self.canister_snapshots.push(snapshot_id, snapshot);
+    }
+
+    /// This records a data upload event such that the data can be flushed to disk before a checkpoint.
+    pub fn record_snapshot_data_upload(&mut self, snapshot_id: SnapshotId) {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .upload_data(snapshot_id);
     }
 
     /// Delete a snapshot from the list of snapshots.

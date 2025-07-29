@@ -32,17 +32,11 @@ const EXCLUDED: &[&str] = &[
 ];
 
 pub fn group_all() -> Vec<&'static str> {
-    [group_01(), group_02(), group_03()].concat()
+    [group_01(), group_02()].concat()
 }
 
 pub fn group_01() -> Vec<&'static str> {
-    vec![
-        "($0 ~ /canister history/)",
-        "($0 ~ /canister version/)",
-        "($0 ~ /canister global timer/)",
-        "($0 ~ /canister http/)",
-        "($0 ~ /WebAssembly module validation/)",
-    ]
+    vec!["($0 ~ /canister global timer/)", "($0 ~ /canister http/)"]
 }
 
 pub fn group_02() -> Vec<&'static str> {
@@ -53,10 +47,6 @@ pub fn group_02() -> Vec<&'static str> {
         "($0 ~ /read state/)",
         "($0 ~ /cycles/)",
     ]
-}
-
-pub fn group_03() -> Vec<&'static str> {
-    vec!["($0 ~ /NNS canisters/)"]
 }
 
 pub fn setup_impl(env: TestEnv, deploy_nns_canisters: bool, http_requests: bool) {

@@ -10,10 +10,10 @@ documentation.workspace = true
 assert_matches = { workspace = true }
 candid = { workspace = true }
 ethers-core = "2.0.8"
-evm_rpc_types = "1.3.0"
+evm_rpc_types = "1.4.0"
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-cketh-minter = { path = "../minter" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }

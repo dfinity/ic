@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:futures",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:mockall",
     "@crate_index//:num-traits",
     "@crate_index//:rust_decimal",

@@ -12,6 +12,8 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
+  RegisterExtension : RegisterExtension;
+  ExecuteExtensionOperation : ExecuteExtensionOperation;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -49,9 +51,21 @@ type By = variant {
   NeuronId : record {};
 };
 
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
+};
+
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
   memory_size : nat;
+  memory_metrics : opt MemoryMetrics;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
@@ -248,6 +262,58 @@ type GetMetadataResponse = record {
   description : opt text;
 };
 
+type GetMetricsRequest = record {
+  time_window_seconds : opt nat64;
+};
+
+type TreasuryMetrics = record {
+  // Same as, e.g., `TransferSnsTreasuryFunds.from_treasury`.
+  treasury : int32;
+
+  // A human-readable identified for this treasury, e.g., "ICP".
+  name : opt text;
+  
+  // The source of truth for the treasury balance is this ledger canister / account.
+  ledger_canister_id : opt principal;
+  account : opt Account;
+
+  // The regularly updated amount of tokens in this treasury.
+  amount_e8s : opt nat64;
+  // The amount of tokens in this treasury at the end of swap finalization.
+  original_amount_e8s : opt nat64;
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
+};
+
+type VotingPowerMetrics = record {
+  governance_total_potential_voting_power : opt nat64; 
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
+};
+
+type Metrics = record {
+  num_recently_submitted_proposals : opt nat64;
+  num_recently_executed_proposals: opt nat64;
+
+  last_ledger_block_timestamp : opt nat64;
+
+  // The metrics below are cached (albeit this is an implementation detail).
+  treasury_metrics : opt vec TreasuryMetrics;
+  voting_power_metrics : opt VotingPowerMetrics;
+  genesis_timestamp_seconds : opt nat64;
+};
+
+type GetMetricsResult = variant {
+  Ok : Metrics;
+  Err : GovernanceError;
+};
+
+type GetMetricsResponse = record {
+  get_metrics_result : opt GetMetricsResult;
+};
+
 type GetModeResponse = record {
   mode : opt int32;
 };
@@ -339,6 +405,8 @@ type GovernanceCachedMetrics = record {
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   timestamp_seconds : nat64;
+  treasury_metrics : vec TreasuryMetrics;
+  voting_power_metrics : opt VotingPowerMetrics;
 };
 
 type GovernanceError = record {
@@ -645,6 +713,52 @@ type RegisterDappCanisters = record {
   canister_ids : vec principal;
 };
 
+// This type is equivalant to `ICRC3Value`, but we give it another name since it is used here not
+// in the context of the ICRC-3 ledger standard. The justification is the same: The candid format
+// supports sharing information even when the client and the server involved do not have the same
+// schema (see the Upgrading and subtyping section of the candid spec). While this mechanism allows
+// to evolve services and clients independently without breaking them, it also means that a client
+// may not receive all the information that the server is sending, e.g. in case the client schema
+// lacks some fields that the server schema has.
+//
+// This loss of information is not an option for SNS voters deciding if an extension with particular
+// init args should be installed or if an extension function with particular arguments should be
+// called. The client must receive the same exact data the server sent in order to verify it.
+//
+// Verification of a priorly installed extension is done by hashing the extension's init arg data
+// and checking that the result is consistent with what has been certified by the SNS.
+type PreciseValue = variant {
+  Bool : bool;
+  Blob : blob;
+  Text : text;
+  Nat : nat64;
+  Int : int64;
+  Array : vec PreciseValue;
+  Map : vec record { text; PreciseValue };
+};
+
+type ExtensionInit = record {
+  value : opt PreciseValue;
+};
+
+type RegisterExtension = record {
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
+
+  extension_init : opt ExtensionInit;
+};
+
+type ExtensionOperationArg = record {
+  value : opt PreciseValue;
+};
+
+type ExecuteExtensionOperation = record {
+  extension_canister_id : opt principal;
+
+  operation_name : opt text;
+
+  operation_arg : opt ExtensionOperationArg;
+};
+
 type RegisterVote = record {
   vote : int32;
   proposal : opt ProposalId;
@@ -894,6 +1008,8 @@ service : (Governance) -> {
   get_latest_reward_event : () -> (RewardEvent) query;
   get_maturity_modulation : (record {}) -> (GetMaturityModulationResponse);
   get_metadata : (record {}) -> (GetMetadataResponse) query;
+  get_metrics : (GetMetricsRequest) -> (GetMetricsResponse) composite_query;
+  get_metrics_replicated : (GetMetricsRequest) -> (GetMetricsResponse);
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;

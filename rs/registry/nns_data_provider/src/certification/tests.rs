@@ -6,7 +6,7 @@ use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
     WitnessGenerator,
 };
-use ic_interfaces_registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
     delete,
     pb::v1::{
@@ -47,7 +47,7 @@ fn decode_certified_deltas_no_chunks(
     canister_id: &CanisterId,
     nns_pk: &ThresholdSigPublicKey,
     payload: &[u8],
-) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), CertificationError> {
+) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
     decode_certified_deltas(
         since_version,
         canister_id,
@@ -145,16 +145,16 @@ where
     (cid, pk, encoded_response)
 }
 
-fn set_key(version: u64, k: impl ToString, v: impl AsRef<[u8]>) -> RegistryTransportRecord {
-    RegistryTransportRecord {
+fn set_key(version: u64, k: impl ToString, v: impl AsRef<[u8]>) -> RegistryRecord {
+    RegistryRecord {
         version: RegistryVersion::from(version),
         key: k.to_string(),
         value: Some(v.as_ref().to_vec()),
     }
 }
 
-fn rem_key(version: u64, k: impl ToString) -> RegistryTransportRecord {
-    RegistryTransportRecord {
+fn rem_key(version: u64, k: impl ToString) -> RegistryRecord {
+    RegistryRecord {
         version: RegistryVersion::from(version),
         key: k.to_string(),
         value: None,
@@ -378,7 +378,7 @@ fn test_honest_chunked() {
                 ),
             }],
             preconditions: vec![],
-            timestamp_seconds: 1735689600, // Jan 1, 2025 midnight UTC
+            timestamp_nanoseconds: 1735689600000000000, // Jan 1, 2025 midnight UTC
         }],
         1..=1,
         GarbleResponse::LeaveAsIs,
@@ -436,7 +436,7 @@ fn test_evil_chunked() {
                 ),
             }],
             preconditions: vec![],
-            timestamp_seconds: 1735689600, // Jan 1, 2025 midnight UTC
+            timestamp_nanoseconds: 1735689600000000000, // Jan 1, 2025 midnight UTC
         }],
         1..=1,
         GarbleResponse::LeaveAsIs,

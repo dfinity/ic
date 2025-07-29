@@ -3,14 +3,14 @@ use super::*;
 use crate::{
     governance::Environment,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-    pb::v1::{Governance as GovernanceProto, Subaccount},
-    temporarily_enable_disburse_maturity,
+    pb::v1::Subaccount,
     test_utils::{MockEnvironment, MockRandomness},
 };
 
 use futures::FutureExt;
 use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nervous_system_common::NervousSystemError;
+use ic_nns_governance_api::Governance as GovernanceApi;
 use icp_ledger::AccountIdentifier;
 use mockall::Sequence;
 use std::{collections::BTreeMap, sync::Arc};
@@ -46,6 +46,7 @@ fn test_initiate_maturity_disbursement_to_caller_successful() {
             &DisburseMaturity {
                 percentage_to_disburse: 50,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -62,10 +63,10 @@ fn test_initiate_maturity_disbursement_to_caller_successful() {
         *maturity_disbursement,
         MaturityDisbursement {
             amount_e8s: 50_000_000_000,
-            account_to_disburse_to: Some(Account {
+            destination: Some(Destination::AccountToDisburseTo(Account {
                 owner: Some(CONTROLLER),
                 subaccount: None,
-            }),
+            })),
             timestamp_of_disbursement_seconds: NOW_SECONDS,
             finalize_disbursement_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS * 7,
         }
@@ -91,6 +92,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
                         subaccount: vec![2u8; 32]
                     }),
                 }),
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -107,15 +109,142 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
         *maturity_disbursement,
         MaturityDisbursement {
             amount_e8s: 50_000_000_000,
-            account_to_disburse_to: Some(Account {
+            destination: Some(Destination::AccountToDisburseTo(Account {
                 owner: Some(PrincipalId::new_user_test_id(2)),
                 subaccount: Some(Subaccount {
                     subaccount: vec![2u8; 32]
                 }),
-            }),
+            })),
             timestamp_of_disbursement_seconds: NOW_SECONDS,
             finalize_disbursement_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS * 7,
         }
+    );
+    // Since the correctness of the account identifier is outside the scope of governance, we simply
+    // verify that the length is expected.
+    assert_eq!(
+        maturity_disbursement
+            .destination
+            .as_ref()
+            .unwrap()
+            .into_account_identifier_proto()
+            .unwrap()
+            .hash
+            .len(),
+        32,
+    )
+}
+
+#[test]
+fn test_initiate_maturity_disbursement_to_account_identifier_successful() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = create_neuron_builder().build();
+    neuron_store.add_neuron(neuron).unwrap();
+
+    let account_identifier_proto: AccountIdentifierProto = AccountIdentifierProto {
+        hash: [
+            128, 112, 119, 233, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .to_vec(),
+    };
+
+    assert_eq!(
+        initiate_maturity_disbursement(
+            &mut neuron_store,
+            &CONTROLLER,
+            &NeuronId { id: 1 },
+            &DisburseMaturity {
+                percentage_to_disburse: 50,
+                to_account: None,
+                to_account_identifier: Some(account_identifier_proto.clone()),
+            },
+            NOW_SECONDS,
+        ),
+        Ok(50_000_000_000)
+    );
+    let maturity_disbursements: Vec<_> = neuron_store
+        .with_neuron(&NeuronId { id: 1 }, |neuron| {
+            neuron.maturity_disbursements_in_progress().to_vec()
+        })
+        .unwrap();
+    assert_eq!(maturity_disbursements.len(), 1);
+    let maturity_disbursement = maturity_disbursements.first().unwrap();
+    assert_eq!(
+        *maturity_disbursement,
+        MaturityDisbursement {
+            amount_e8s: 50_000_000_000,
+            destination: Some(Destination::AccountIdentifierToDisburseTo(
+                account_identifier_proto.clone()
+            )),
+            timestamp_of_disbursement_seconds: NOW_SECONDS,
+            finalize_disbursement_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS * 7,
+        }
+    );
+    assert_eq!(
+        maturity_disbursement
+            .destination
+            .as_ref()
+            .unwrap()
+            .into_account_identifier_proto()
+            .unwrap(),
+        account_identifier_proto
+    );
+}
+
+#[test]
+fn test_initiate_maturity_disbursement_account_identifier_invalid() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = create_neuron_builder().build();
+    neuron_store.add_neuron(neuron).unwrap();
+
+    assert_eq!(
+        initiate_maturity_disbursement(
+            &mut neuron_store,
+            &CONTROLLER,
+            &NeuronId { id: 1 },
+            &DisburseMaturity {
+                percentage_to_disburse: 50,
+                to_account: None,
+                to_account_identifier: Some(AccountIdentifierProto {
+                    hash: vec![1u8; 1000],
+                }),
+            },
+            NOW_SECONDS,
+        ),
+        Err(InitiateMaturityDisbursementError::InvalidDestination {
+            reason: "Invalid account identifier".to_string()
+        })
+    );
+}
+
+#[test]
+fn test_initiate_maturity_disbursement_both_account_and_account_identifier_invalid() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = create_neuron_builder().build();
+    neuron_store.add_neuron(neuron).unwrap();
+
+    assert_eq!(
+        initiate_maturity_disbursement(
+            &mut neuron_store,
+            &CONTROLLER,
+            &NeuronId { id: 1 },
+            &DisburseMaturity {
+                percentage_to_disburse: 50,
+                to_account: Some(Account {
+                    owner: Some(PrincipalId::new_user_test_id(2)),
+                    subaccount: Some(Subaccount {
+                        subaccount: vec![2u8; 32]
+                    }),
+                }),
+                to_account_identifier: Some(AccountIdentifierProto {
+                    hash: vec![3u8; 32],
+                }),
+            },
+            NOW_SECONDS,
+        ),
+        Err(InitiateMaturityDisbursementError::InvalidDestination {
+            reason: "Cannot provide both to_account and to_account_identifier".to_string()
+        })
     );
 }
 
@@ -133,6 +262,7 @@ fn test_initiate_maturity_disbursement_neuron_not_found() {
             &DisburseMaturity {
                 percentage_to_disburse: 50,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -154,6 +284,7 @@ fn test_initiate_maturity_disbursement_invalid_percentage() {
             &DisburseMaturity {
                 percentage_to_disburse: 101,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -167,6 +298,7 @@ fn test_initiate_maturity_disbursement_invalid_percentage() {
             &DisburseMaturity {
                 percentage_to_disburse: 0,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -191,6 +323,7 @@ fn test_initiate_maturity_disbursement_neuron_invalid_destination() {
                     owner: None,
                     subaccount: None,
                 }),
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -212,6 +345,7 @@ fn test_initiate_maturity_disbursement_neuron_invalid_destination() {
                         subaccount: vec![1u8; 33],
                     }),
                 }),
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -237,6 +371,7 @@ fn test_initiate_maturity_disbursement_neuron_spawning() {
             &DisburseMaturity {
                 percentage_to_disburse: 50,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -258,6 +393,7 @@ fn test_initiate_maturity_disbursement_not_controller() {
             &DisburseMaturity {
                 percentage_to_disburse: 50,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -279,6 +415,7 @@ fn test_initiate_maturity_disbursement_too_many_disbursements() {
             &DisburseMaturity {
                 percentage_to_disburse: 1,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         )
@@ -293,6 +430,7 @@ fn test_initiate_maturity_disbursement_too_many_disbursements() {
             &DisburseMaturity {
                 percentage_to_disburse: 1,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -318,6 +456,7 @@ fn test_initiate_maturity_disbursement_disbursement_too_small() {
             &DisburseMaturity {
                 percentage_to_disburse: 1,
                 to_account: None,
+                to_account_identifier: None,
             },
             NOW_SECONDS,
         ),
@@ -401,7 +540,7 @@ fn set_governance_for_test(
     maturity_modulation: i32,
 ) {
     let mut governance = Governance::new(
-        GovernanceProto {
+        GovernanceApi {
             cached_daily_maturity_modulation_basis_points: Some(maturity_modulation),
             ..Default::default()
         },
@@ -420,7 +559,6 @@ fn set_governance_for_test(
 #[tokio::test]
 async fn test_finalize_maturity_disbursement_successful() {
     // Step 1: Set up the test environment
-    let _t = temporarily_enable_disburse_maturity();
     set_governance_for_test(
         vec![create_neuron_builder().build()],
         mock_ledger(vec![MintIcpExpectation {
@@ -441,6 +579,7 @@ async fn test_finalize_maturity_disbursement_successful() {
                 &DisburseMaturity {
                     percentage_to_disburse: 1,
                     to_account: None,
+                    to_account_identifier: None,
                 },
                 NOW_SECONDS,
             )
@@ -475,7 +614,6 @@ async fn test_finalize_maturity_disbursement_successful() {
 #[tokio::test]
 async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
     // Step 1: Set up the test environment without maturity modulation.
-    let _t = temporarily_enable_disburse_maturity();
     set_governance_for_test(
         vec![create_neuron_builder().build()],
         MockIcpLedger::default(),
@@ -497,6 +635,7 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
                 &DisburseMaturity {
                     percentage_to_disburse: 1,
                     to_account: None,
+                    to_account_identifier: None,
                 },
                 NOW_SECONDS,
             )
@@ -519,7 +658,6 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
 async fn test_finalize_maturity_disbursement_ledger_failure() {
     // Step 1: Set up the test environment with a ledger which will fail the first minting attempt
     // but will succeed on the second.
-    let _t = temporarily_enable_disburse_maturity();
     set_governance_for_test(
         vec![create_neuron_builder().build()],
         mock_ledger(vec![
@@ -547,6 +685,7 @@ async fn test_finalize_maturity_disbursement_ledger_failure() {
                 &DisburseMaturity {
                     percentage_to_disburse: 1,
                     to_account: None,
+                    to_account_identifier: None,
                 },
                 NOW_SECONDS,
             )

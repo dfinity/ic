@@ -13,7 +13,6 @@ canister_http = { path = "../../networking/canister_http" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canister-client = { path = "../../../canister_client" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
@@ -59,29 +58,29 @@ name = "ic-systest-subnet-recovery-app-no-upgrade-local"
 path = "sr_app_no_upgrade_local_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
-path = "sr_app_same_nodes_enable_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-same-nodes-enable-chain-keys"
+path = "sr_app_same_nodes_enable_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes-enable-tecdsa"
-path = "sr_app_failover_nodes_enable_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-failover-nodes-enable-chain-keys"
+path = "sr_app_failover_nodes_enable_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-enable-tecdsa"
-path = "sr_app_no_upgrade_enable_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-no-upgrade-enable-chain-keys"
+path = "sr_app_no_upgrade_enable_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-with-tecdsa"
-path = "sr_app_same_nodes_with_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-same-nodes-with-chain-keys"
+path = "sr_app_same_nodes_with_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes-with-tecdsa"
-path = "sr_app_failover_nodes_with_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-failover-nodes-with-chain-keys"
+path = "sr_app_failover_nodes_with_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
-path = "sr_app_no_upgrade_with_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-no-upgrade-with-chain-keys"
+path = "sr_app_no_upgrade_with_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-large-with-tecdsa"
-path = "sr_app_large_with_tecdsa_test.rs"
+name = "ic-systest-subnet-recovery-app-large-with-chain-keys"
+path = "sr_app_large_with_chain_keys_test.rs"

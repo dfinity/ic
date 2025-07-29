@@ -11,6 +11,40 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-18: Proposal 137501
+
+http://dashboard.internetcomputer.org/proposal/137501
+
+## Added
+
+SNS Root now has a function called `register_extension` that is similar to `register_dapp_canister`,
+but different in the following ways:
+
+* The controllers of an SNS extension are the Root and the Governance canisters of the SNS (as
+  opposed to just Root). This allows SNS Governance to call functions of the extension that can
+  be called only by an extension's controller.
+* Extensions are listed separately in the respone of `list_sns_canisters`.
+
+Similar to `register_dapp_canister` and `register_dapp_canisters`, `register_extension` can be
+called only by the SNS Governance.
+
+
+# 2025-05-16: Proposal 136895
+
+http://dashboard.internetcomputer.org/proposal/136895
+
+* This ensures that this canister will be ready for chunked registry records/mutations.
+
+
+# 2025-05-16: Proposal 136697
+
+http://dashboard.internetcomputer.org/proposal/136697
+
+## Removed
+- The fields `compute_allocation` and `memory_allocation` in the input type `ChangeCanisterRequest`
+  of the endpoint `change_canister`.
+
+
 # 2025-02-07: Proposal 135209
 
 http://dashboard.internetcomputer.org/proposal/135209

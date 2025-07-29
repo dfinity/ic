@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Hash, Quantity};
+use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
@@ -9,6 +9,7 @@ use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
 use ethnum::u256;
+use evm_rpc_client::{BlockTag, FeeHistory, FeeHistoryArgs};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
@@ -648,10 +649,10 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
 
     async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         read_state(EthRpcClient::from_state)
-            .eth_fee_history(FeeHistoryParams {
-                block_count: Quantity::from(5_u8),
-                highest_block: BlockSpec::Tag(BlockTag::Latest),
-                reward_percentiles: vec![20],
+            .eth_fee_history(FeeHistoryArgs {
+                block_count: 5_u8.into(),
+                newest_block: BlockTag::Latest,
+                reward_percentiles: Some(vec![20]),
             })
             .await
     }
@@ -684,22 +685,29 @@ pub fn estimate_transaction_fee(
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
-    let base_fee_per_gas_next_block = *fee_history.base_fee_per_gas.last().ok_or(
-        TransactionFeeEstimationError::InvalidFeeHistory(
+    let base_fee_per_gas_next_block = fee_history
+        .base_fee_per_gas
+        .last()
+        .ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
             "base_fee_per_gas should not be empty to be able to evaluate transaction price"
                 .to_string(),
-        ),
-    )?;
+        ))?
+        .clone();
     let max_priority_fee_per_gas = {
-        let mut rewards: Vec<&WeiPerGas> = fee_history.reward.iter().flatten().collect();
+        let mut rewards: Vec<WeiPerGas> = fee_history
+            .reward
+            .iter()
+            .flatten()
+            .map(|nat| WeiPerGas::from(nat.clone()))
+            .collect();
         let historic_max_priority_fee_per_gas =
-            **median(&mut rewards).ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
+            *median(&mut rewards).ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
                 "should be non-empty with rewards of the last 5 blocks".to_string(),
             ))?;
         historic_max_priority_fee_per_gas.max(MIN_MAX_PRIORITY_FEE_PER_GAS)
     };
     let gas_fee_estimate = GasFeeEstimate {
-        base_fee_per_gas: base_fee_per_gas_next_block,
+        base_fee_per_gas: base_fee_per_gas_next_block.into(),
         max_priority_fee_per_gas,
     };
     if gas_fee_estimate

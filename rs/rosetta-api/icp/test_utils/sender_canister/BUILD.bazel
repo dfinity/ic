@@ -7,7 +7,7 @@ DEPS = [
     # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:futures",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
 ]
 
@@ -22,7 +22,6 @@ rust_canister(
     srcs = ["src/main.rs"],
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:ic_cdk_macros_0_17_1",
     ],
     service_file = ":sender.did",
     deps = DEPS + [":ic_sender_canister_lib"],

@@ -1,6 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -148,4 +149,38 @@ genrule(
     srcs = ["@pocket-ic-mainnet-gz//file"],
     outs = ["pocket-ic"],
     cmd = "gunzip -c $< > $@",
+)
+
+# Upload artifacts to the CDN
+upload_artifacts(
+    name = "upload-artifacts",
+    testonly = True,
+    inputs = [
+        "//publish/binaries:bundle",
+    ] + select({
+        "@platforms//os:osx": [],
+        "//conditions:default": [
+            "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
+            "//publish/canisters:bundle",
+            "//ic-os/guestos/envs/dev:bundle-disk",  # used by icos_deploy testnet script
+            "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/hostos/envs/prod:bundle-update",
+            "//ic-os/setupos/envs/prod:bundle",
+        ],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+# Artifact uploader that can be run with `bazel run ... -- BUNDLE...`
+upload_artifacts(
+    name = "artifact-uploader",
+)
+
+# Test suite for super-fast tests (should only take a couple seconds to run).
+test_suite(
+    name = "insta_tests",
+    tests = [
+        "//bazel:buildifier_test",
+        "//bazel:gazelle_test",
+    ],
 )

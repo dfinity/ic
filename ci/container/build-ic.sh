@@ -136,8 +136,8 @@ rm -rf "$DISK_DIR_FULL"
 if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:bundle"); fi
 if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:bundle"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
-    "//ic-os/guestos/envs/prod:bundle"
-    "//ic-os/hostos/envs/prod:bundle"
+    "//ic-os/guestos/envs/prod:bundle-update"
+    "//ic-os/hostos/envs/prod:bundle-update"
     "//ic-os/setupos/envs/prod:bundle"
 ); fi
 
@@ -150,11 +150,17 @@ query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
     target_dir=
     case "$artifact" in
-        *guestos*)
-            target_dir="$DISK_DIR/guestos"
+        *guestos*disk)
+            target_dir="$DISK_DIR/guestos/disk"
             ;;
-        *hostos*)
-            target_dir="$DISK_DIR/hostos"
+        *guestos*update)
+            target_dir="$DISK_DIR/guestos/update"
+            ;;
+        *hostos*disk)
+            target_dir="$DISK_DIR/hostos/disk"
+            ;;
+        *hostos*update)
+            target_dir="$DISK_DIR/hostos/update"
             ;;
         *setupos*)
             target_dir="$DISK_DIR/setupos"
@@ -172,7 +178,10 @@ for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"
     esac
 
     mkdir -p "$target_dir"
-    cp "$artifact" "$target_dir"
+
+    # We use -L so that find dereferences symlinks (artifacts are not
+    # necessarily duplicated in the build)
+    find -L "$artifact" -type f -exec cp {} "$target_dir" \;
 done
 
 if "$BUILD_BIN"; then
@@ -191,11 +200,11 @@ fi
 
 if "$BUILD_IMG"; then
     echo_green "##### GUESTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/guestos" >/dev/null
+    pushd "$DISK_DIR_FULL/guestos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### HOSTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/hostos" >/dev/null
+    pushd "$DISK_DIR_FULL/hostos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### SETUPOS SHA256SUMS #####"

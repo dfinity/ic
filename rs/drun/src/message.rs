@@ -281,8 +281,7 @@ fn parse_install(
         .canister_id(ic00::IC_00)
         .method_name(ic00::Method::InstallCode)
         .method_payload(
-            ic00::InstallCodeArgsV2::new(install_mode, canister_id, wasm_data, payload, None, None)
-                .encode(),
+            ic00::InstallCodeArgsV2::new(install_mode, canister_id, wasm_data, payload).encode(),
         )
         .nonce(nonce)
         .build();

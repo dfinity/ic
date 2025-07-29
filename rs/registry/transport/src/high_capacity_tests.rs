@@ -43,6 +43,24 @@ fn new_get_chunk() -> MockGetChunk {
 }
 
 #[tokio::test]
+async fn test_dechunkify_get_value_content() {
+    // Step 1: Prepare the world. Actually, this is done in the lazy_static +
+    // new_get_chunk fixture, so our job here is trivial.
+
+    // Step 2: Run the code under test.
+    let dechunkified = dechunkify_get_value_response_content(
+        high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(
+            LARGE_VALUE_CHUNK_KEYS.clone(),
+        ),
+        &new_get_chunk(),
+    )
+    .await;
+
+    // Step 3: Verify result(s).
+    assert_eq!(dechunkified, Ok(RECONSTITUTED_MONOLITHIC_BLOB.clone()));
+}
+
+#[tokio::test]
 async fn test_dechunkify_mutation_value() {
     // Step 1: Prepare the world. Actually, this is done in the lazy_static +
     // new_get_chunk fixture, so our job here is trivial.
@@ -107,19 +125,19 @@ async fn test_dechunkify_delta() {
                 content: Some(high_capacity_registry_value::Content::Value(
                     b"inline".to_vec(),
                 )),
-                timestamp_seconds: 0,
+                timestamp_nanoseconds: 0,
             },
             HighCapacityRegistryValue {
                 version: 8,
                 content: Some(high_capacity_registry_value::Content::LargeValueChunkKeys(
                     LARGE_VALUE_CHUNK_KEYS.clone(),
                 )),
-                timestamp_seconds: 0,
+                timestamp_nanoseconds: 0,
             },
             HighCapacityRegistryValue {
                 version: 9,
                 content: Some(high_capacity_registry_value::Content::DeletionMarker(true)),
-                timestamp_seconds: 0,
+                timestamp_nanoseconds: 0,
             },
         ],
     };
@@ -138,6 +156,7 @@ async fn test_dechunkify_delta() {
                     version: 7,
                     value: b"inline".to_vec(),
                     deletion_marker: false,
+                    timestamp_nanoseconds: 0,
                 },
                 // This is the most interesting element; nevertheless, the other
                 // cases are included in this test, because ofc, even though a
@@ -146,11 +165,13 @@ async fn test_dechunkify_delta() {
                     version: 8,
                     value: RECONSTITUTED_MONOLITHIC_BLOB.clone(),
                     deletion_marker: false,
+                    timestamp_nanoseconds: 0,
                 },
                 RegistryValue {
                     version: 9,
                     value: vec![],
                     deletion_marker: true,
+                    timestamp_nanoseconds: 0,
                 },
             ],
         },
@@ -208,7 +229,7 @@ fn test_convert_to_high_capacity_registry_atomic_mutate_request() {
                 },
             ],
             preconditions,
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         }
     );
 }

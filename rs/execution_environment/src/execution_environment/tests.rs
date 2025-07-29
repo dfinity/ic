@@ -4,7 +4,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
+    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
     OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
@@ -22,10 +22,12 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status, expect_canister_did_not_reply, get_reply, ExecutionTest,
+    ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -291,21 +293,19 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         .with_manual_execution()
         .build();
 
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
-    test.install_canister_with_allocation(
-        canister_id,
-        wat::parse_str(CALL_SIMPLE_WAT).unwrap(),
-        None,
-        Some(canister_memory as u64),
-    )
-    .unwrap();
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000),
+            None,
+            Some(canister_memory as u64),
+        )
+        .unwrap();
+    test.install_canister(canister_id, wat::parse_str(CALL_SIMPLE_WAT).unwrap())
+        .unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
 
-    assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        (size_of::<CanisterChange>() + size_of::<PrincipalId>()) as i64
-    );
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(
         test.subnet_available_memory()
             .get_guaranteed_response_message_memory(),
@@ -797,10 +797,15 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(450);
-    test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
+    let canister = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(memory_allocation.get()),
+        )
         .unwrap();
+    test.install_canister(canister, binary).unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
     let get_canister_status = wasm()
         .call_simple(
@@ -821,7 +826,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee(test.subnet_size())
+                .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
                 .get())
             / one_gib
     );
@@ -1855,6 +1860,7 @@ fn http_request_bound_holds() {
             }),
             context: transform_context.clone(),
         }),
+        is_replicated: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2092,40 +2098,6 @@ fn metrics_are_observed_for_subnet_messages() {
             test.metrics_registry(),
             "execution_subnet_message_duration_seconds"
         )
-    );
-}
-
-#[test]
-fn metrics_are_observed_for_using_deprecated_fields() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-
-    let payload = ic00::InstallCodeArgsV2::new(
-        ic00::CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-        Some(1),
-        Some(100 * 1024 * 1024),
-    );
-
-    test.subnet_message(Method::InstallCode, payload.encode())
-        .unwrap();
-
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_compute_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_memory_allocation_in_install_code_total"
-        ),
-        Some(1),
     );
 }
 
@@ -2406,7 +2378,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         ONE_GIB - memory_after_create + canister_history_memory as i64
     );
     let result = test.ingress(id, "test_without_trap", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
     let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
     let memory = test.subnet_available_memory();
@@ -2446,6 +2418,7 @@ fn execute_canister_http_request() {
             }),
             context: transform_context.clone(),
         }),
+        is_replicated: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2525,6 +2498,7 @@ fn execute_canister_http_request_disabled() {
             }),
             context: vec![0, 1, 2],
         }),
+        is_replicated: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2547,6 +2521,13 @@ fn get_reject_message(response: RequestOrResponse) -> String {
             Payload::Reject(reject) => reject.message().clone(),
         },
     }
+}
+
+fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    })
 }
 
 fn make_ed25519_key(name: &str) -> MasterPublicKeyId {
@@ -2821,6 +2802,20 @@ fn can_create_canister_with_specified_id() {
         create_canister_with_specified_id(&mut test, &canister, Some(specified_id.get()));
 
     assert_eq!(specified_id, new_canister.get_canister_id());
+
+    // creating a canister with the same `specified_id` again is an error
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'
@@ -2877,6 +2872,58 @@ fn create_multiple_canisters_with_specified_id() {
         inc(first_canister_without_specified_id.get_canister_id()),
         second_canister_without_specified_id.get_canister_id()
     );
+}
+
+#[test]
+fn create_canister_with_invalid_specified_id() {
+    // First determine an invalid `specified_id` by creating a canister on a test instance
+    // whose canister ID belongs to the canister allocation ranges of the test instance.
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build_with_routing_table_for_specified_ids();
+    let _proxy_canister_id = test.universal_canister().unwrap();
+    let specified_id = test.universal_canister().unwrap();
+    drop(test);
+
+    // Now create a fresh test instance with the same topology.
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build_with_routing_table_for_specified_ids();
+
+    // Using the invalid `specified_id` should result in an error.
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+
+    // Both in an ingress message to create a canister
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args.clone())
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
+    assert_eq!(err.description(), expected_err,);
+
+    // as well as in an inter-canister call to create a canister.
+    let create_canister = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::ProvisionalCreateCanisterWithCycles,
+            call_args()
+                .other_side(args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let proxy_canister_id = test.universal_canister().unwrap();
+    let result = test
+        .ingress(proxy_canister_id, "update", create_canister)
+        .unwrap();
+    match result {
+        WasmResult::Reply(bytes) => panic!("Unexpected reply: {:?}", bytes),
+        WasmResult::Reject(err) => assert_eq!(err, expected_err),
+    };
 }
 
 #[test]
@@ -3609,6 +3656,126 @@ fn test_sign_with_schnorr_api_is_enabled() {
 }
 
 #[test]
+fn test_ecdsa_public_key_api_is_enabled() {
+    let key_id = make_ecdsa_key("correct_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+
+    let nonexistent_key_id = into_inner_ecdsa(make_ecdsa_key("nonexistent_key_id"));
+    test.inject_call_to_ic00(
+        Method::ECDSAPublicKey,
+        ic00::ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::default(),
+            key_id: nonexistent_key_id.clone(),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.inject_call_to_ic00(
+        Method::ECDSAPublicKey,
+        ic00::ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::default(),
+            key_id: into_inner_ecdsa(key_id),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+
+    // Check, that call fails for a key that doesn't exist
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        format!(
+            "Subnet {} does not hold threshold key ecdsa:{}.",
+            own_subnet, nonexistent_key_id
+        ),
+    );
+
+    let response = test.xnet_messages()[1].clone();
+    let RequestOrResponse::Response(response) = response else {
+        panic!("expected a response");
+    };
+    assert_eq!(response.originator, nns_canister);
+    assert_eq!(response.respondent, own_subnet.into());
+}
+
+#[test]
+fn test_schnorr_public_key_api_is_enabled() {
+    let test_cases = [
+        (
+            make_bip340_key("correct_key"),
+            make_bip340_key("nonexistent_key_id"),
+        ),
+        (
+            make_ed25519_key("correct_key"),
+            make_ed25519_key("nonexistent_key_id"),
+        ),
+    ];
+
+    for (key_id, nonexistent_key_id) in test_cases {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_chain_key(key_id.clone())
+            .build();
+
+        let nonexistent_key_id = into_inner_schnorr(nonexistent_key_id);
+        test.inject_call_to_ic00(
+            Method::SchnorrPublicKey,
+            ic00::SchnorrPublicKeyArgs {
+                canister_id: None,
+                derivation_path: DerivationPath::default(),
+                key_id: nonexistent_key_id.clone(),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+        test.inject_call_to_ic00(
+            Method::SchnorrPublicKey,
+            ic00::SchnorrPublicKeyArgs {
+                canister_id: None,
+                derivation_path: DerivationPath::default(),
+                key_id: into_inner_schnorr(key_id),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+        test.execute_all();
+
+        // Check, that call fails for a key that doesn't exist
+        let response = test.xnet_messages()[0].clone();
+        assert_eq!(
+            get_reject_message(response),
+            format!(
+                "Subnet {} does not hold threshold key schnorr:{}.",
+                own_subnet, nonexistent_key_id
+            ),
+        );
+
+        let response = test.xnet_messages()[1].clone();
+        let RequestOrResponse::Response(response) = response else {
+            panic!("expected a response");
+        };
+        assert_eq!(response.originator, nns_canister);
+        assert_eq!(response.respondent, own_subnet.into());
+    }
+}
+
+#[test]
 fn test_vetkd_public_key_api_is_enabled() {
     let key_id = make_vetkd_key("correct_key");
     let own_subnet = subnet_test_id(1);
@@ -3654,15 +3821,12 @@ fn test_vetkd_public_key_api_is_enabled() {
         ),
     );
 
-    // NOTE: Since the public keys delivered to execution by the test framework
-    // are not well formed Bls G2 points, the deserialization of this function will
-    // fail. However, the fact that we get this error message indicates, that we
-    // requested a key that actually exists.
     let response = test.xnet_messages()[1].clone();
-    assert_eq!(
-        get_reject_message(response),
-        "Invalid VetKD subnet key: InvalidPublicKey",
-    )
+    let RequestOrResponse::Response(response) = response else {
+        panic!("expected a response");
+    };
+    assert_eq!(response.originator, nns_canister);
+    assert_eq!(response.respondent, own_subnet.into());
 }
 
 #[test]

@@ -37,7 +37,7 @@ use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -79,7 +79,9 @@ use ic_protobuf::registry::{
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::{CanisterMigrations, RoutingTable},
+    routing_table::v1::{
+        routing_table::Entry as RoutingTableEntry, CanisterMigrations, RoutingTable,
+    },
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -95,20 +97,17 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
-    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_unassigned_nodes_config_record_key, FirewallRulesScope,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CANISTER_RANGES_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_nns_data_provider_wrappers::{CertifiedNnsDataProvider, NnsDataProvider};
-use ic_registry_routing_table::{
-    CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
-    RoutingTable as OtherRoutingTable,
-};
+use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations as OtherCanisterMigrations};
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
 use ic_sns_wasm::pb::v1::{
@@ -117,7 +116,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    subnet_id_try_from_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -449,6 +448,9 @@ enum SubCommand {
 
     /// Submits a proposal to express the interest in renting a subnet.
     ProposeToRentSubnet(ProposeToRentSubnetCmd),
+
+    /// Propose to fulfill a subnet rental request
+    ProposeToFulfillSubnetRentalRequest(ProposeToFulfillSubnetRentalRequestCmd),
 
     /// Propose to modify the routing table. Step 2 of canister migration.
     ProposeToRerouteCanisterRanges(ProposeToRerouteCanisterRangesCmd),
@@ -1017,15 +1019,6 @@ struct ProposeToChangeNnsCanisterCmd {
     /// The sha256 of the arg binary file.
     #[clap(long)]
     arg_sha256: Option<String>,
-
-    #[clap(long)]
-    /// If set, it will update the canister's compute allocation to this value.
-    /// See `ComputeAllocation` for the semantics of this field.
-    compute_allocation: Option<u64>,
-    #[clap(long)]
-    /// If set, it will update the canister's memory allocation to this value.
-    /// See `MemoryAllocation` for the semantics of this field.
-    memory_allocation: Option<u64>,
 }
 
 #[async_trait]
@@ -1075,8 +1068,6 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             canister_id: self.canister_id,
             wasm_module,
             arg,
-            compute_allocation: self.compute_allocation.map(candid::Nat::from),
-            memory_allocation: self.memory_allocation.map(candid::Nat::from),
             chunked_canister_wasm: None,
         }
     }
@@ -1225,6 +1216,47 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
         }
+    }
+}
+/// Sub-command to submit a subnet rental request proposal.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToFulfillSubnetRentalRequestCmd {
+    /// The principal ID of the user whose rental request should be fulfilled
+    #[clap(long)]
+    user: PrincipalId,
+
+    /// Node IDs that will be members of the subnet
+    #[clap(long, num_args(1..))]
+    node_ids: Vec<PrincipalId>,
+
+    /// Replica version ID (40 character hexadecimal git commit ID)
+    #[clap(long)]
+    replica_version_id: String,
+}
+
+impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Fulfill Subnet Rental Request for {}",
+                self.user.to_string().split('-').next().unwrap_or("")
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        ProposalActionRequest::FulfillSubnetRentalRequest(
+            ic_nns_governance_api::FulfillSubnetRentalRequest {
+                user: Some(self.user),
+                node_ids: Some(self.node_ids.clone()),
+                replica_version_id: Some(self.replica_version_id.clone()),
+            },
+        )
     }
 }
 
@@ -1957,6 +1989,14 @@ struct ProposeToAddNodeOperatorCmd {
     /// The ipv6 address.
     #[clap(long)]
     ipv6: Option<String>,
+
+    /// A JSON map from node type to the maximum number of nodes of that type that the
+    /// given Node Operator can be rewarded for.
+    ///
+    /// Example:
+    /// '{ "type1.1": 10, "type3.1": 24 }'
+    #[clap(long)]
+    max_rewardable_nodes: Option<String>,
 }
 
 impl ProposalTitle for ProposeToAddNodeOperatorCmd {
@@ -1981,6 +2021,11 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        let max_rewardable_nodes = self
+            .max_rewardable_nodes
+            .as_ref()
+            .map(|s| parse_rewardable_nodes(s));
+
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
             node_allowance: self.node_allowance,
@@ -1992,6 +2037,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
                 .unwrap_or_default(),
             rewardable_nodes,
             ipv6: self.ipv6.clone(),
+            max_rewardable_nodes,
         }
     }
 }
@@ -2033,6 +2079,14 @@ struct ProposeToUpdateNodeOperatorConfigCmd {
     /// This field is for the case when we want to update the value to be None.
     #[clap(long)]
     pub set_ipv6_to_none: Option<bool>,
+
+    /// A JSON map from node type to the maximum number of nodes of that type that the
+    /// given Node Operator can be rewarded for.
+    ///
+    /// Example:
+    /// '{ "type1.1": 10, "type3.1": 24 }'
+    #[clap(long)]
+    max_rewardable_nodes: Option<String>,
 }
 
 impl ProposalTitle for ProposeToUpdateNodeOperatorConfigCmd {
@@ -2056,6 +2110,11 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        let max_rewardable_nodes = self
+            .max_rewardable_nodes
+            .as_ref()
+            .map(|s| parse_rewardable_nodes(s));
+
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
             node_allowance: self.node_allowance,
@@ -2064,6 +2123,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
             node_provider_id: self.node_provider_id,
             ipv6: self.ipv6.clone(),
             set_ipv6_to_none: self.set_ipv6_to_none,
+            max_rewardable_nodes,
         }
     }
 }
@@ -3681,6 +3741,7 @@ async fn main() {
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
             SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToFulfillSubnetRentalRequest(_) => (),
             SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToReviseElectedHostosVersions(_) => (),
@@ -3888,7 +3949,7 @@ async fn main() {
             let mut success = true;
 
             eprintln!("Download IC-OS .. ");
-            let tmp_dir = tempfile::tempdir().unwrap().into_path();
+            let tmp_dir = tempfile::tempdir().unwrap().keep();
             let mut tmp_file = tmp_dir.clone();
             tmp_file.push("temp-image");
 
@@ -3949,12 +4010,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetRoutingTable => {
-            print_and_get_last_value::<RoutingTable>(
-                make_routing_table_record_key().as_bytes().to_vec(),
-                &registry_canister,
-                opts.json,
-            )
-            .await;
+            print_routing_table(reachable_nns_urls);
         }
         SubCommand::GetEcdsaSigningSubnets => {
             let registry_client = make_registry_client(
@@ -4916,6 +4972,16 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToFulfillSubnetRentalRequest(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
         SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             let canister_client = make_canister_client(
@@ -5012,25 +5078,6 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 registry.records.push(record);
 
                 println!("{}", serde_json::to_string_pretty(&registry).unwrap());
-            } else if key == b"routing_table" {
-                let value = OtherRoutingTable::try_from(
-                    RoutingTable::decode(&bytes[..]).expect("Error decoding value from registry."),
-                )
-                .unwrap();
-                println!("Routing table. Most recent version is {:?}.\n", version);
-                for (range, subnet) in value.into_iter() {
-                    println!("Subnet: {}", subnet);
-                    println!(
-                        "    Range start: {} (0x{})",
-                        range.start,
-                        hex::encode(range.start.get_ref().as_slice())
-                    );
-                    println!(
-                        "    Range end:   {} (0x{})",
-                        range.end,
-                        hex::encode(range.end.get_ref().as_slice())
-                    );
-                }
             } else if key == b"canister_migrations" {
                 let value = OtherCanisterMigrations::try_from(
                     CanisterMigrations::decode(&bytes[..])
@@ -5070,6 +5117,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     pub dc_id: String,
                     pub rewardable_nodes: std::collections::BTreeMap<String, u32>,
                     pub ipv6: Option<String>,
+                    pub max_rewardable_nodes: std::collections::BTreeMap<String, u32>,
                 }
                 let record = NodeOperatorRecord::decode(&bytes[..])
                     .expect("Error decoding value from registry.");
@@ -5086,6 +5134,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     dc_id: record.dc_id,
                     rewardable_nodes: record.rewardable_nodes,
                     ipv6: record.ipv6,
+                    max_rewardable_nodes: record.max_rewardable_nodes,
                 };
                 print_value(
                     &std::str::from_utf8(&key)
@@ -5618,7 +5667,7 @@ async fn download_wasm_module(url: &Url) -> PathBuf {
         panic!("Wasm module urls must use https");
     }
 
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+    let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("wasm_module.tar.gz");
 
@@ -5683,6 +5732,82 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         })
         .collect::<Vec<_>>();
     records
+}
+
+fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
+    let registry_client = RegistryClientImpl::new(
+        Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            nns_urls,
+        )),
+        None,
+    );
+
+    registry_client
+        .try_polling_latest_version(usize::MAX)
+        .unwrap();
+
+    let latest_version = registry_client.get_latest_version();
+
+    println!("Routing table. Most recent version is {}", latest_version);
+
+    let keys = registry_client
+        .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
+        .unwrap();
+
+    for routing_table_key in keys.iter() {
+        let routing_table_value = registry_client
+            .get_versioned_value(routing_table_key, latest_version)
+            .unwrap()
+            .value
+            .unwrap();
+        let routing_table = RoutingTable::decode(&routing_table_value[..]).unwrap();
+
+        for RoutingTableEntry { range, subnet_id } in routing_table.entries {
+            let subnet_id = subnet_id_try_from_protobuf(
+                subnet_id.expect("subnet_id is missing from routing table entry"),
+            )
+            .unwrap();
+            println!("Subnet: {}", subnet_id);
+            let range = CanisterIdRange::try_from(
+                range.expect("range is missing from routing table entry"),
+            )
+            .expect("failed to parse range");
+            println!(
+                "    Range start: {} (0x{})",
+                range.start,
+                hex::encode(range.start.get_ref().as_slice())
+            );
+            println!(
+                "    Range end:   {} (0x{})",
+                range.end,
+                hex::encode(range.end.get_ref().as_slice())
+            );
+        }
+    }
+
+    keys.iter()
+        .flat_map(|key| {
+            let value = registry_client
+                .get_versioned_value(key, latest_version)
+                .unwrap()
+                .value
+                .unwrap();
+            let routing_table = RoutingTable::decode(&value[..]).unwrap();
+            routing_table.entries
+        })
+        .map(|RoutingTableEntry { range, subnet_id }| {
+            let subnet_id = subnet_id_try_from_protobuf(
+                subnet_id.expect("subnet_id is missing from routing table entry"),
+            )
+            .unwrap();
+            let range = CanisterIdRange::try_from(
+                range.expect("range is missing from routing table entry"),
+            )
+            .expect("failed to parse range");
+            (subnet_id, range)
+        })
+        .collect()
 }
 
 /// Writes a threshold signing public key to the given path.
@@ -5812,7 +5937,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
             let throw_err = |err| panic!("Error retrieving registry records: {:?}", err);
             if cmd.disable_certificate_validation {
                 remote_canister
-                    .get_changes_since_as_transport_records(latest_version.get())
+                    .get_changes_since_as_registry_records(latest_version.get())
                     .await
                     .unwrap_or_else(throw_err)
             } else {
@@ -6188,7 +6313,6 @@ impl RootCanisterClient {
         .await;
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
                 .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();

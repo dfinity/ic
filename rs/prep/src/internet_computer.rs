@@ -23,9 +23,7 @@ use url::Url;
 use x509_cert::der; // re-export of der crate
 use x509_cert::spki; // re-export of spki crate
 
-use ic_interfaces_registry::{
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
-};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION};
 
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
@@ -44,7 +42,7 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+    make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_canister_ranges_key,
     make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
     make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
@@ -223,6 +221,7 @@ pub struct NodeOperatorEntry {
     dc_id: String,
     rewardable_nodes: BTreeMap<String, u32>,
     ipv6: Option<String>,
+    max_rewardable_nodes: BTreeMap<String, u32>,
 }
 
 // We must be able to inject a values of type NodeOperatorEntry into the
@@ -239,6 +238,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
             dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
+            max_rewardable_nodes: item.max_rewardable_nodes,
         }
     }
 }
@@ -298,8 +298,7 @@ pub struct IcConfig {
     ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
-    /// By default, it has the value 'false', but it can be set to true when ic-starter is
-    /// run with --use_specified_ids_allocation_range flag.
+    /// By default, it has the value 'false'.
     use_specified_ids_allocation_range: bool,
 
     /// Whitelisted firewall prefixes for initial registry state, separated by
@@ -483,6 +482,7 @@ impl IcConfig {
                     dc_id: "".into(),
                     rewardable_nodes: BTreeMap::new(),
                     ipv6: None,
+                    max_rewardable_nodes: BTreeMap::new(),
                 });
         }
 
@@ -587,6 +587,17 @@ impl IcConfig {
             );
         }
 
+        write_registry_entry(
+            &data_provider,
+            self.target_dir.as_path(),
+            // The ranges can safely be written into a single entry, and Registry will shard the entry
+            // as needed on the next change.  This works up to the maximum size of a registry entry.
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            version,
+            routing_table_record.clone(),
+        );
+
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
@@ -695,7 +706,7 @@ impl IcConfig {
         let changelog = updates.iter().fold(
             Changelog::default(),
             |mut cl,
-             RegistryTransportRecord {
+             RegistryRecord {
                  version,
                  key,
                  value,
@@ -928,6 +939,7 @@ impl IcConfig {
                 dc_id: name.into(),
                 rewardable_nodes: BTreeMap::new(),
                 ipv6: None,
+                max_rewardable_nodes: BTreeMap::new(),
             });
         }
 

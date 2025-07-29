@@ -27,6 +27,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
+    "//rs/registry/canister",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
@@ -35,8 +36,8 @@ BASE_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:prost",
@@ -53,7 +54,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -79,7 +79,6 @@ DEV_DEPENDENCIES = [
         "//rs/types/types",
         "//rs/test_utilities",
         "//rs/test_utilities/compare_dirs",
-        "//rs/registry/canister",
         "@crate_index//:tempfile",
         "@crate_index//:assert_matches",
         "@crate_index//:hex",

@@ -35,6 +35,7 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -56,7 +57,6 @@ use std::str::FromStr;
 use std::time::Instant;
 use std::{
     path::PathBuf,
-    process::Command,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -92,29 +92,14 @@ fn rosetta_client_bin() -> PathBuf {
     path_from_env("ROSETTA_CLIENT_BIN_PATH")
 }
 
-fn rosetta_cli() -> String {
-    match std::env::var("ROSETTA_CLI").ok() {
-        Some(binary) => binary,
-        None => String::from("rosetta-cli"),
-    }
-}
-
-fn local(file: &str) -> String {
-    match std::env::var("CARGO_MANIFEST_DIR") {
-        Ok(path) => std::path::PathBuf::from(path)
-            .join(file)
-            .into_os_string()
-            .into_string()
-            .unwrap(),
-        Err(_) => String::from(file),
-    }
-}
-
 /// Represents an ICRC-1 ledger canister with its configuration and agent
 #[derive(Clone, Debug)]
 struct Icrc1Ledger {
     canister_id: Principal,
     init_args: InitArgs,
+    /// If true, after canister installation, the ledger will be configured to have an infinite
+    /// freezing threshold.
+    infinite_freezing_threshold: bool,
     agent: Arc<Icrc1Agent>,
 }
 
@@ -128,6 +113,7 @@ impl Icrc1Ledger {
 struct Icrc1LedgerBuilder {
     canister_id: Principal,
     init_args_builder: InitArgsBuilder,
+    infinite_freezing_threshold: bool,
 }
 
 impl Icrc1LedgerBuilder {
@@ -135,6 +121,7 @@ impl Icrc1LedgerBuilder {
         Self {
             canister_id,
             init_args_builder: local_replica::icrc_ledger_default_args_builder(),
+            infinite_freezing_threshold: false,
         }
     }
 
@@ -158,10 +145,16 @@ impl Icrc1LedgerBuilder {
         self
     }
 
+    fn with_infinite_freezing_threshold(mut self) -> Self {
+        self.infinite_freezing_threshold = true;
+        self
+    }
+
     fn build(self, agent: Arc<Icrc1Agent>) -> Icrc1Ledger {
         Icrc1Ledger {
             canister_id: self.canister_id,
             init_args: self.init_args_builder.build(),
+            infinite_freezing_threshold: self.infinite_freezing_threshold,
             agent: agent.clone(),
         }
     }
@@ -225,6 +218,20 @@ impl SetupBuilder {
                 icrc1_ledger.init_args.clone(),
                 Some(icrc1_ledger.canister_id),
             );
+            if icrc1_ledger.infinite_freezing_threshold {
+                // If configured, set the freezing threshold to a very high value so that any calls
+                // to the ledger will return an out-of-cycles error.
+                pocket_ic
+                    .update_canister_settings(
+                        ic_management_canister_types::CanisterId::from(icrc1_ledger.canister_id),
+                        None,
+                        ic_management_canister_types::CanisterSettings {
+                            freezing_threshold: Some(Nat::from(u64::MAX - 2)),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
             let subnet_id = pocket_ic.get_subnet(icrc1_ledger.canister_id).unwrap();
             assert_eq!(
                 subnet_id, sns_subnet_id,
@@ -449,6 +456,14 @@ async fn generate_block_indices(
                     .0
                     .to_u64()
                     .unwrap(),
+                LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                    .transfer_from(transfer_from_arg.clone())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .0
+                    .to_u64()
+                    .unwrap(),
             };
 
             block_idxes.push(idx);
@@ -593,6 +608,147 @@ fn test_multi_tokens_mode() {
             },
         )
         .unwrap();
+}
+
+#[test]
+fn test_multi_tokens_mode_with_one_ledger_out_of_cycles() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                *MAX_NUM_GENERATED_BLOCKS,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+                    .with_symbol("SYM1")
+                    .with_decimals(6);
+
+                let icrc1_ledger_2_builder =
+                    Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER)
+                        .with_symbol("SYM2")
+                        .with_decimals(6)
+                        // After canister installation, set an infinite freezing threshold, so that
+                        // any calls to the ledger will return an out of cycles error.
+                        .with_infinite_freezing_threshold();
+
+                let setup = Setup::builder()
+                    .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+                    .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
+                    .build(&rt);
+
+                let rosetta_ledger_setup_1_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[0],
+                    setup.port,
+                )
+                .with_args_with_caller(args_with_caller.clone())
+                .with_icrc1_symbol("SYM1".to_string());
+
+                let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[1],
+                    setup.port,
+                )
+                .with_icrc1_symbol("SYM2".to_string());
+
+                // Initialize the Rosetta testing environment with the two ledgers should succeed.
+                let rosetta_env = rt.block_on(
+                    RosettaTestingEnvironmentBuilder::new(false, setup.port)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
+                        .build(),
+                );
+
+                let rosetta_client = rosetta_env.rosetta_client.clone();
+
+                // Call /network/list endpoint.
+                let network_list = rt
+                    .block_on(rosetta_client.network_list())
+                    .expect("unable to call network_list")
+                    .network_identifiers;
+                // Expect two network identifiers.
+                let network_id1 = NetworkIdentifier::new(
+                    "Internet Computer".to_string(),
+                    TEST_LEDGER_CANISTER_ID.to_string(),
+                );
+                let network_id2 = NetworkIdentifier::new(
+                    "Internet Computer".to_string(),
+                    TEST_LEDGER_CANISTER_ID_OTHER.to_string(),
+                );
+                // Since the second ledger is out of cycles, it should not be listed.
+                assert_eq!(network_list.len(), 1);
+                assert!(network_list.contains(&network_id1));
+                assert!(!network_list.contains(&network_id2));
+
+                for net in network_list {
+                    let status = rt
+                        .block_on(rosetta_client.network_status(net.clone()))
+                        .expect("unable to call network_status");
+                    // We must have a valid current block identifier.
+                    assert_eq!(
+                        status.current_block_identifier.index,
+                        *MAX_NUM_GENERATED_BLOCKS as u64
+                    );
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[should_panic = "Error: No metadata loaded for any token."]
+#[test]
+fn test_multi_tokens_mode_with_all_ledgers_out_of_cycles() {
+    let rt = Runtime::new().unwrap();
+    let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+        .with_symbol("SYM1")
+        .with_decimals(6)
+        .with_infinite_freezing_threshold();
+
+    let icrc1_ledger_2_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER)
+        .with_symbol("SYM2")
+        .with_decimals(6)
+        // After canister installation, set an infinite freezing threshold, so that
+        // any calls to the ledger will return an out of cycles error.
+        .with_infinite_freezing_threshold();
+
+    let setup = Setup::builder()
+        .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+        .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
+        .build(&rt);
+
+    let rosetta_ledger_setup_1_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
+            .with_icrc1_symbol("SYM1".to_string());
+
+    let rosetta_ledger_setup_2_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[1], setup.port)
+            .with_icrc1_symbol("SYM2".to_string());
+
+    let rosetta_testing_env_builder = RosettaTestingEnvironmentBuilder::new(false, setup.port)
+        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
+        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder);
+
+    let replica_url = format!("http://localhost:{}", setup.port);
+    let _ = rt.block_on(start_rosetta(
+        &rosetta_bin(),
+        RosettaOptions {
+            multi_tokens: Some(rosetta_testing_env_builder.multitoken_param_value()),
+            network_url: Some(replica_url),
+            offline: false,
+            symbol: None,
+            decimals: None,
+            ..RosettaOptions::default()
+        },
+    ));
 }
 
 #[test]
@@ -1398,6 +1554,29 @@ fn test_account_balance() {
                                     involved_accounts.push(*to);
                                 }
                             }
+                            LedgerEndpointArg::TransferFromArg(TransferFromArgs {
+                                from,
+                                to,
+                                amount,
+                                ..
+                            }) => {
+                                // For TransferFrom we always deduct the transfer fee. TransferFrom
+                                // from or to the minter account is not allowed, so we do not need
+                                // to check for it.
+                                accounts_balances.entry(*from).and_modify(|balance| {
+                                    *balance -= amount.0.to_u64().unwrap();
+                                    *balance -= DEFAULT_TRANSFER_FEE;
+                                });
+                                involved_accounts.push(*from);
+
+                                accounts_balances
+                                    .entry(*to)
+                                    .and_modify(|balance| {
+                                        *balance += amount.0.to_u64().unwrap();
+                                    })
+                                    .or_insert(amount.0.to_u64().unwrap());
+                                involved_accounts.push(*to);
+                            }
                         };
 
                         for account in involved_accounts {
@@ -2111,8 +2290,27 @@ fn test_search_transactions() {
         .unwrap()
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_cli_data() {
+    fn rosetta_cli() -> String {
+        match std::env::var("ROSETTA_CLI").ok() {
+            Some(binary) => binary,
+            None => String::from("rosetta-cli"),
+        }
+    }
+
+    fn local(file: &str) -> String {
+        match std::env::var("CARGO_MANIFEST_DIR") {
+            Ok(path) => std::path::PathBuf::from(path)
+                .join(file)
+                .into_os_string()
+                .into_string()
+                .unwrap(),
+            Err(_) => String::from(file),
+        }
+    }
+
     let mut runner = TestRunner::new(TestRunnerConfig {
         max_shrink_iters: 0,
         cases: *NUM_TEST_CASES,
@@ -2154,7 +2352,7 @@ fn test_cli_data() {
                         0,
                     )
                     .await;
-                    let output = Command::new(rosetta_cli())
+                    let output = std::process::Command::new(rosetta_cli())
                         .args([
                             "check:data",
                             "--configuration-file",

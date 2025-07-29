@@ -9,7 +9,6 @@ load("//ic-os/setupos:defs.bzl", "image_deps")
 icos_build(
     name = "dev",
     image_deps_func = image_deps,
-    installable = True,
     upgrades = False,
     visibility = [
         "//rs:ic-os-pkg",

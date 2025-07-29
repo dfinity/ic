@@ -10,7 +10,7 @@ StartLimitIntervalSec=0
 [Service]
 User=ic-http-adapter
 Environment=RUST_BACKTRACE=1
-ExecStartPre=+/opt/ic/bin/generate-https-outcalls-adapter-config.sh -s /boot/config/socks_proxy.conf -o /run/ic-node/config/ic-https-outcalls-adapter.json
+ExecStartPre=+/opt/ic/bin/generate-https-outcalls-adapter-config.sh -o /run/ic-node/config/ic-https-outcalls-adapter.json
 ExecStart=/opt/ic/bin/ic-https-outcalls-adapter /run/ic-node/config/ic-https-outcalls-adapter.json
 Restart=always
 

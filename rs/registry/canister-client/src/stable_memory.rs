@@ -3,6 +3,8 @@ use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{BTreeMap as StableBTreeMap, DefaultMemoryImpl, Storable};
 use std::borrow::Cow;
 
+pub type UnixTsNanos = u64;
+
 pub struct StorableRegistryValue(pub Option<Vec<u8>>);
 
 impl Storable for StorableRegistryValue {
@@ -21,11 +23,16 @@ impl Storable for StorableRegistryValue {
 pub struct StorableRegistryKey {
     pub key: String,
     pub version: u64,
+    pub timestamp_nanoseconds: u64,
 }
 
 impl StorableRegistryKey {
-    pub fn new(key: String, version: u64) -> Self {
-        Self { key, version }
+    pub fn new(key: String, version: u64, timestamp_nanoseconds: u64) -> Self {
+        Self {
+            key,
+            version,
+            timestamp_nanoseconds,
+        }
     }
 }
 
@@ -37,9 +44,11 @@ impl Storable for StorableRegistryKey {
         let mut storable_key = vec![];
         let key_b = self.key.as_bytes().to_vec();
         let version_b = self.version.to_be_bytes().to_vec();
+        let timestamp_b = self.timestamp_nanoseconds.to_be_bytes().to_vec();
 
         storable_key.extend_from_slice(&key_b);
         storable_key.extend_from_slice(&version_b);
+        storable_key.extend_from_slice(&timestamp_b);
 
         Cow::Owned(storable_key)
     }
@@ -47,12 +56,19 @@ impl Storable for StorableRegistryKey {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         let bytes = bytes.as_ref();
         let len = bytes.len();
-        let (key_bytes, version_bytes) = bytes.split_at(len - 8);
+        let (remaining_bytes, timestamp_bytes) = bytes.split_at(len - 8);
+        let (key_bytes, version_bytes) = remaining_bytes.split_at(len - 16);
 
         let key = String::from_utf8(key_bytes.to_vec()).expect("Invalid UTF-8 in key");
         let version = u64::from_be_bytes(version_bytes.try_into().expect("Invalid version bytes"));
+        let timestamp_nanoseconds =
+            u64::from_be_bytes(timestamp_bytes.try_into().expect("Invalid timestamp bytes"));
 
-        Self { key, version }
+        Self {
+            key,
+            version,
+            timestamp_nanoseconds,
+        }
     }
     const BOUND: Bound = Bound::Bounded {
         max_size: MAX_REGISTRY_KEY_SIZE + size_of::<u64>() as u32,

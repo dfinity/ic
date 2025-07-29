@@ -10,7 +10,7 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata, Version},
+        governance::{GovernanceCachedMetrics, MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
             self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
@@ -27,7 +27,11 @@ use ic_sns_governance::{
     },
     types::Environment,
 };
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::{
+    icrc1::account::{Account, Subaccount},
+    icrc3::blocks::GetBlocksResult,
+};
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{
@@ -139,6 +143,15 @@ impl ICRC1Ledger for LedgerFixture {
             .try_lock()
             .unwrap()
             .target_canister_id
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -437,6 +450,19 @@ impl GovernanceCanisterFixture {
     /// orthogonal to this test scenario, as they would require setting up mock responses.
     pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
         assert!(self.governance.acquire_upgrade_periodic_task_lock());
+        self
+    }
+
+    /// Ensures that the cached metrics are not updated during the test. Siuable for tests that
+    /// do not care about the cached metrics. Only needs to be called once per test.
+    pub fn disable_update_cached_metrics(&mut self) -> &mut Self {
+        self.governance
+            .proto
+            .metrics
+            .replace(GovernanceCachedMetrics {
+                timestamp_seconds: u64::MAX,
+                ..Default::default()
+            });
         self
     }
 

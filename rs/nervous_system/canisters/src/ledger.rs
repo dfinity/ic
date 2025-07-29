@@ -9,6 +9,7 @@ use icp_ledger::{
     TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use mockall::automock;
 use std::marker::PhantomData;
 
@@ -61,6 +62,15 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
 
     fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -155,6 +165,15 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
     fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
@@ -187,6 +206,12 @@ pub trait ICRC1Ledger: Send + Sync {
 
     /// Returns the CanisterId of the Ledger being accessed.
     fn canister_id(&self) -> CanisterId;
+
+    /// Returns an array of blocks for the ranges specified in args.
+    async fn icrc3_get_blocks(
+        &self,
+        args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError>;
 }
 
 /// A trait defining common patterns for accessing the Ledger canister.
@@ -218,4 +243,10 @@ pub trait IcpLedger: Send + Sync {
 
     /// Returns the CanisterId of the Ledger being accessed.
     fn canister_id(&self) -> CanisterId;
+
+    /// Returns an array of blocks for the ranges specified in args.
+    async fn icrc3_get_blocks(
+        &self,
+        args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError>;
 }

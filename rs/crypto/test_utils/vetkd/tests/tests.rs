@@ -1,5 +1,5 @@
 use ic_crypto_test_utils_vetkd::*;
-use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+use ic_vetkeys::{EncryptedVetKey, MasterPublicKey, TransportSecretKey};
 use rand::Rng;
 use rand_chacha::rand_core::SeedableRng;
 
@@ -25,9 +25,9 @@ fn should_generate_valid_bls_signature() {
 
     let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();
 
-    let dpk = DerivedPublicKey::deserialize(&pk.public_key_bytes())
+    let dpk = MasterPublicKey::deserialize(&pk.public_key_bytes())
         .unwrap()
-        .derive_sub_key(&canister_id)
+        .derive_canister_key(&canister_id)
         .derive_sub_key(&context);
 
     assert!(ek.decrypt_and_verify(&tsk, &dpk, &input).is_ok());

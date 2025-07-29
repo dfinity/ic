@@ -178,6 +178,21 @@ fn test_all_topics() {
                 ProposalCriticality::Critical,
             )),
         ),
+        (
+            pb::proposal::Action::RegisterExtension(Default::default()),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
+        ),
+        // TODO[NNS1-4002]. Criticality should depend on the topic of the extension.
+        (
+            pb::proposal::Action::ExecuteExtensionOperation(Default::default()),
+            Ok((
+                Some(pb::Topic::TreasuryAssetManagement),
+                ProposalCriticality::Critical,
+            )),
+        ),
     ];
 
     // Smoke test

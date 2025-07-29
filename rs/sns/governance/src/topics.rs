@@ -1,3 +1,4 @@
+use crate::extensions;
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
@@ -43,14 +44,14 @@ pub struct ListTopicsResponse {
 }
 
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
-/// Topics may be nested within other topics, and each topic may have a list of built-in functions that are categorized within that topic.
+/// Each topic may have a list of built-in functions that are categorized within that topic.
 pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
     use crate::types::native_action_ids::{
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
-        MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
-        MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION, REGISTER_DAPP_CANISTERS,
-        REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS,
-        UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
+        EXECUTE_EXTENSION_OPERATION, MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS,
+        MANAGE_NERVOUS_SYSTEM_PARAMETERS, MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION,
+        REGISTER_DAPP_CANISTERS, REGISTER_EXTENSION, REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+        TRANSFER_SNS_TREASURY_FUNDS, UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
     };
 
     [
@@ -118,6 +119,8 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                 native_functions: vec![
                     TRANSFER_SNS_TREASURY_FUNDS,
                     MINT_SNS_TOKENS,
+                    // TODO[NNS1-4002]. Support extensions in different topics.
+                    EXECUTE_EXTENSION_OPERATION,
                 ],
             },
             is_critical: true,
@@ -132,6 +135,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+                    REGISTER_EXTENSION,
                 ],
             },
             is_critical: true,
@@ -322,11 +326,18 @@ impl pb::Governance {
 
 impl pb::Topic {
     pub fn is_critical(&self) -> bool {
-        // Fall back to default proposal criticality (if a topic isn't defined).
-        //
         // Handled explicitly to avoid any doubts.
+        //
+        // We used to fall back to non-critical proposal criticality for backward compatibility,
+        // since when custom proposals were introduced, they were not categorized into topics
+        // and were all considered non-critical. Since the SNS now enforces that all newly submitted
+        // proposals are have topics, their criticality is guaranteed to be explicitly defined
+        // (by the topic). Note that for native proposals, the criticality needs to be defined
+        // via the topic assigned statically in `Governance::topic_descriptions`. We take
+        // some measures to enforce that all native functions have topics. If this assumption
+        // is still somehow violated, we now err on the side of caution.
         if *self == Self::Unspecified {
-            return false;
+            return true;
         }
 
         topic_descriptions()
@@ -362,6 +373,26 @@ impl pb::Topic {
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
+        // Check if the action is to execute an extension operation.
+        // TODO[NNS1-4002]. Topic should depend on the topic of the extension that is being called.
+        if let pb::proposal::Action::ExecuteExtensionOperation(_) = action {
+            return Some(pb::Topic::TreasuryAssetManagement);
+        }
+
+        // Check if the topic comes from the extension spec.
+        if let pb::proposal::Action::RegisterExtension(pb::RegisterExtension {
+            chunked_canister_wasm:
+                Some(pb::ChunkedCanisterWasm {
+                    wasm_module_hash, ..
+                }),
+            ..
+        }) = action
+        {
+            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
+                return Some(extension_spec.topic);
+            }
+        }
+
         let action_code = u64::from(action);
 
         topic_descriptions()

@@ -7,8 +7,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_log",
     "@crate_index//:by_address",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:maplit",
     "@crate_index//:priority-queue",
     "@crate_index//:serde",
@@ -21,7 +21,6 @@ rust_library(
         "src/lib.rs",
     ],
     crate_name = "ic_canister_serve",
-    proc_macro_deps = ["@crate_index//:ic_cdk_macros_0_17_1"],
     version = "0.1.0",
     deps = DEPENDENCIES,
 )

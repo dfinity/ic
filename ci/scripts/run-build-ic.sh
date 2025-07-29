@@ -17,7 +17,7 @@ fi
 
 # otherwise, infer targets to build
 targets=$(mktemp)
-ci/bazel-scripts/diff.sh "${MERGE_BASE_SHA:-HEAD}..${BRANCH_HEAD_SHA:-}" >"$targets"
+ci/bazel-scripts/diff.sh build "${MERGE_BASE_SHA:-HEAD}..${BRANCH_HEAD_SHA:-}" >"$targets"
 
 ARGS=()
 

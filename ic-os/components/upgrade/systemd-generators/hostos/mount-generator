@@ -20,14 +20,7 @@
 
 UNIT_DIR="$1"
 
-function get_boot_arg_value() {
-    local ARGNAME="$1"
-    for ARG in $(cat /proc/cmdline); do
-        echo "$ARG" | while IFS='=' read KEY VALUE; do
-            if [ "$ARGNAME" == "$KEY" ]; then echo "$VALUE"; fi
-        done
-    done
-}
+source /opt/ic/bin/grub.sh
 
 function make_requires() {
     mkdir -p "${UNIT_DIR}"/$1.requires
@@ -92,12 +85,15 @@ function make_var_mount() {
     echo "Options=defaults"
 }
 
-CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
+# Read current state
+mount /grub
+read_grubenv "/grub/grubenv"
+umount /grub
+CURRENT_SYSTEM="${boot_alternative}"
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
-make_requires boot-grub.mount boot.mount
 
 make_var_setup "$CURRENT_SYSTEM" >"$UNIT_DIR"/var-setup.service
 make_var_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/var.mount

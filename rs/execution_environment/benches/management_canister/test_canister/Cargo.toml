@@ -14,5 +14,5 @@ crate-type = ["cdylib"]
 [dependencies]
 candid = "0.9.6"
 futures = { workspace = true }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 serde = { workspace = true }

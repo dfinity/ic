@@ -37,6 +37,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
+use std::cmp;
 use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
@@ -59,12 +60,13 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
 
-    let ic_version = env.get_initial_replica_version().unwrap();
+    let ic_version = get_guestos_img_version().unwrap();
+    let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
 
     // identifies the version of the replica after the recovery
     let working_version =
-        ReplicaVersion::try_from(format!("{}-test", ic_version.as_ref())).unwrap();
+        ReplicaVersion::try_from(get_guestos_update_img_version().unwrap()).unwrap();
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     info!(
         logger,
@@ -124,9 +126,9 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
-        replay_until_height: None,
-        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
+        replay_until_height: None, // We will set this after breaking the subnet, see below
+        upgrade_image_url: get_guestos_update_img_url().ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256(&env).ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         next_step: None,
@@ -177,13 +179,21 @@ pub fn test(env: TestEnv) {
         .expect("Missing metrics for upload node");
     let dn_node_metrics = block_on(get_node_metrics(&logger, &download_node.get_ip_addr()))
         .expect("Missing metrics for download node");
-    if dn_node_metrics.finalization_height < up_node_metrics.finalization_height {
+    if dn_node_metrics.certification_height < up_node_metrics.certification_height {
         // swap the two nodes, so that download one has highest height in the subnet
         subnet_recovery.params.download_node = Some(upload_node.get_ip_addr());
         subnet_recovery.params.upload_method =
             Some(DataLocation::Remote(download_node.get_ip_addr()));
         subnet_recovery.recovery.admin_helper.nns_url = download_node.get_public_url();
     }
+
+    subnet_recovery.params.replay_until_height = Some(
+        cmp::max(
+            dn_node_metrics.certification_height,
+            up_node_metrics.certification_height,
+        )
+        .get(),
+    );
 
     info!(
         logger,

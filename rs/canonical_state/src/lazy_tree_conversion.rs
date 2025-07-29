@@ -19,7 +19,7 @@ use ic_replicated_state::{
         SystemMetadata,
     },
     replicated_state::ReplicatedStateMessageRouting,
-    ExecutionState, ReplicatedState,
+    ExecutionState, ReplicatedState, Stream,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -27,11 +27,15 @@ use ic_types::{
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, NodeId, PrincipalId, SubnetId,
 };
-use std::collections::BTreeMap;
 use std::convert::{AsRef, TryFrom, TryInto};
 use std::iter::once;
 use std::sync::Arc;
+use std::{collections::BTreeMap, marker::PhantomData};
 use LazyTree::Blob;
+
+/// The maximum number of disjoint ranges a single leaf of the routing table can contain.
+/// Changes to this constant require a new certification version.
+const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
 
 /// A simple map from a label to a tree. It should be mostly used for static
 /// subtrees where all the labels are known in advance.
@@ -188,46 +192,88 @@ impl LabelLike for CanisterId {
     }
 }
 
+/// A filter for use with `MapTransformFork`, to optionally filter out specific
+/// map entries (e.g. the loopback stream)
+trait MapFilter<K, V> {
+    /// Returns true if the entry with key `k` should be output.
+    fn should_output(&self, k: &K) -> bool;
+
+    /// Returns the adjusted map length, after filtering.
+    ///
+    /// This must be consistent with `should_output()`.
+    fn filtered_len(&self, map: &BTreeMap<K, V>) -> usize;
+}
+
+/// Default no-op `MapFilter` that outputs all entries.
+struct NoFilter;
+impl<K, V> MapFilter<K, V> for NoFilter {
+    #[inline]
+    fn should_output(&self, _k: &K) -> bool {
+        true
+    }
+
+    #[inline]
+    fn filtered_len(&self, map: &BTreeMap<K, V>) -> usize {
+        map.len()
+    }
+}
+
 /// A type of fork that constructs a lazy tree view of a typed Map without
 /// copying the underlying data.
 #[derive(Clone)]
-struct MapTransformFork<'a, K, V, F>
+struct MapTransformFork<'a, K, V, MF, F>
 where
     F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a>,
+    MF: MapFilter<K, V>,
 {
     map: &'a BTreeMap<K, V>,
+    map_filter: MF,
     certification_version: CertificationVersion,
     mk_tree: F,
 }
 
-impl<'a, K, V, F> LazyFork<'a> for MapTransformFork<'a, K, V, F>
+impl<'a, K, V, MF, F> LazyFork<'a> for MapTransformFork<'a, K, V, MF, F>
 where
     K: Ord + LabelLike + Clone + Send + Sync,
-    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
     V: Send + Sync,
+    MF: MapFilter<K, V> + Send + Sync,
+    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
 {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let k = K::from_label(label.as_bytes())?;
+        if !self.map_filter.should_output(&k) {
+            return None;
+        }
         self.map
             .get(&k)
             .map(move |v| (self.mk_tree)(k, v, self.certification_version))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
-        Box::new(self.map.keys().map(|l| l.to_label()))
+        Box::new(
+            self.map
+                .keys()
+                .filter(|&k| self.map_filter.should_output(k))
+                .map(|l| l.to_label()),
+        )
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
-        Box::new(self.map.iter().map(move |(k, v)| {
-            (
-                k.to_label(),
-                (self.mk_tree)(k.clone(), v, self.certification_version),
-            )
-        }))
+        Box::new(
+            self.map
+                .iter()
+                .filter(|(k, _)| self.map_filter.should_output(k))
+                .map(move |(k, v)| {
+                    (
+                        k.to_label(),
+                        (self.mk_tree)(k.clone(), v, self.certification_version),
+                    )
+                }),
+        )
     }
 
     fn len(&self) -> usize {
-        self.map.len()
+        self.map_filter.filtered_len(self.map)
     }
 }
 
@@ -268,6 +314,68 @@ impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
     }
 }
 
+/// The subtree under /canister_ranges/<subnet_id>/, consisting of any number of leaves, each encoding a small number of canister ranges
+/// and labelled by the smallest canister id contained.
+struct CanisterRangesFork<'a> {
+    /// List of ranges to represent in a tree.
+    /// If None, then the list of ranges is empty. This case can happen if a subnet exists but has no canisters assigned to it. Also see `EMTPY_RANGES_LABEL`.
+    split_ranges: Option<Arc<SplitRanges>>,
+    /// This `PhantomData` is necessary so that the compiler knows that 'a from `LazyFork<'a>` always outlives this struct.
+    phantom: PhantomData<&'a ()>,
+}
+
+/// Subnets with no assigned ranges are represented by a single child with label `EMPTY_RANGES_LABEL` and a value encoding an empty set.
+const EMPTY_RANGES_LABEL: CanisterId = CanisterId::from_u64(0);
+
+impl<'a> LazyFork<'a> for CanisterRangesFork<'a> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let idx = CanisterId::from_label(label.as_bytes())?;
+        match &self.split_ranges {
+            Some(split_ranges) => split_ranges.get(&idx).map(|ranges| {
+                blob({
+                    let ranges = Arc::clone(ranges);
+                    move || encode_subnet_canister_ranges(Some(&ranges))
+                })
+            }),
+            None => {
+                // For subnets with no canister ranges we create a single entry at label CanisterId(0) encoding empty ranges.
+                if idx == EMPTY_RANGES_LABEL {
+                    Some(blob(move || encode_subnet_canister_ranges(None)))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        match &self.split_ranges {
+            Some(split_ranges) => Box::new(split_ranges.keys().map(|idx| idx.to_label())),
+            None => Box::new(std::iter::once(EMPTY_RANGES_LABEL.to_label())),
+        }
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        match &self.split_ranges {
+            Some(split_ranges) => Box::new(split_ranges.iter().map(|(idx, ranges)| {
+                let idx = idx.to_owned();
+                let ranges = Arc::clone(ranges);
+                (idx.to_label(), {
+                    blob(move || encode_subnet_canister_ranges(Some(&ranges)))
+                })
+            })),
+            None => Box::new(std::iter::once((
+                EMPTY_RANGES_LABEL.to_label(),
+                blob(move || encode_subnet_canister_ranges(None)),
+            ))),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.split_ranges.as_ref().map_or(1, |r| r.len())
+    }
+}
+
 fn invert_routing_table(
     routing_table: &RoutingTable,
 ) -> BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>> {
@@ -281,6 +389,33 @@ fn invert_routing_table(
     inverse_map
 }
 
+/// The canister ranges of a single subnet, split into multiple chunks.
+type SplitRanges = BTreeMap<CanisterId, Arc<Vec<(PrincipalId, PrincipalId)>>>;
+/// The entire routing table in the format required for the /canister_ranges subtree.
+type SplitRoutingTable = BTreeMap<SubnetId, Arc<SplitRanges>>;
+
+/// Split the inverted routing table into multiple chunks such that no chunk is larger than `max_ranges_per_leaf` ranges.
+fn split_inverted_routing_table(
+    inverted_routing_table: &BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>,
+    max_ranges_per_leaf: usize,
+) -> SplitRoutingTable {
+    inverted_routing_table
+        .iter()
+        .map(|(k, v)| {
+            let splits: BTreeMap<_, _> = v
+                .chunks(max_ranges_per_leaf)
+                .map(|v| {
+                    (
+                        CanisterId::unchecked_from_principal(v[0].0),
+                        Arc::new(v.to_owned()),
+                    )
+                })
+                .collect();
+            (*k, Arc::new(splits))
+        })
+        .collect()
+}
+
 /// Converts replicated state into a lazy tree.
 pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
@@ -291,6 +426,14 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
         MIN_SUPPORTED_CERTIFICATION_VERSION,
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     );
+    let own_subnet_id = state.metadata.own_subnet_id;
+    let inverted_routing_table = Arc::new(invert_routing_table(
+        &state.metadata.network_topology.routing_table,
+    ));
+    let split_routing_table = Arc::new(split_inverted_routing_table(
+        &inverted_routing_table,
+        MAX_RANGES_PER_ROUTING_TABLE_LEAF,
+    ));
 
     fork(
         FiniteMap::default()
@@ -304,7 +447,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 system_metadata_as_tree(&state.metadata, certification_version)
             })
             .with("streams", move || {
-                streams_as_tree(state.streams(), certification_version)
+                streams_as_tree(state.streams(), own_subnet_id, certification_version)
             })
             .with("canister", move || {
                 canisters_as_tree(&state.canister_states, certification_version)
@@ -314,15 +457,11 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 fork(IngressHistoryFork(&state.metadata.ingress_history)),
             )
             .with("subnet", move || {
-                let inverted_routing_table = Arc::new(invert_routing_table(
-                    &state.metadata.network_topology.routing_table,
-                ));
-                let own_subnet_id = state.metadata.own_subnet_id;
                 subnets_as_tree(
                     &state.metadata.network_topology.subnets,
                     own_subnet_id,
                     &state.metadata.node_public_keys,
-                    inverted_routing_table,
+                    inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
                     certification_version,
                 )
@@ -330,40 +469,87 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
             .with_tree(
                 "time",
                 num(state.metadata.batch_time.as_nanos_since_unix_epoch()),
+            )
+            .with_if(
+                certification_version >= CertificationVersion::V21,
+                "canister_ranges",
+                move || {
+                    canister_ranges_as_tree(
+                        &state.metadata.network_topology.subnets,
+                        Arc::clone(&split_routing_table),
+                        certification_version,
+                    )
+                },
             ),
     )
 }
 
-fn streams_as_tree(
-    streams: &StreamMap,
+/// A filter for the streams map, to filter out the loopback stream.
+struct StreamsFilter {
+    own_subnet_id: SubnetId,
+}
+
+impl MapFilter<SubnetId, Stream> for StreamsFilter {
+    #[inline]
+    fn should_output(&self, k: &SubnetId) -> bool {
+        *k != self.own_subnet_id
+    }
+
+    #[inline]
+    fn filtered_len(&self, streams: &StreamMap) -> usize {
+        if streams.contains_key(&self.own_subnet_id) {
+            streams.len() - 1
+        } else {
+            streams.len()
+        }
+    }
+}
+
+fn streams_as_tree<'a>(
+    streams: &'a StreamMap,
+    own_subnet_id: SubnetId,
     certification_version: CertificationVersion,
-) -> LazyTree<'_> {
-    fork(MapTransformFork {
-        map: streams,
-        certification_version,
-        mk_tree: |_subnet_id, stream, certification_version| {
-            fork(
-                FiniteMap::default()
-                    .with_tree(
-                        "header",
-                        blob(move || {
-                            let stream_header: StreamHeader = stream.header();
-                            encode_stream_header(&stream_header, certification_version)
-                        }),
-                    )
-                    .with_tree(
-                        "messages",
-                        fork(StreamQueueFork {
-                            queue: stream.messages(),
-                            certification_version,
-                            mk_tree: |_idx, msg, certification_version| {
-                                blob(move || encode_message(msg, certification_version))
-                            },
-                        }),
-                    ),
-            )
-        },
-    })
+) -> LazyTree<'a> {
+    let mk_tree = |_subnet_id, stream: &'a Stream, certification_version| {
+        fork(
+            FiniteMap::default()
+                .with_tree(
+                    "header",
+                    blob(move || {
+                        let stream_header: StreamHeader = stream.header();
+                        encode_stream_header(&stream_header, certification_version)
+                    }),
+                )
+                .with_tree(
+                    "messages",
+                    fork(StreamQueueFork {
+                        queue: stream.messages(),
+                        certification_version,
+                        mk_tree: |_idx, msg, certification_version| {
+                            blob(move || encode_message(msg, certification_version))
+                        },
+                    }),
+                ),
+        )
+    };
+
+    if certification_version >= CertificationVersion::V20 {
+        // Starting with `V20`, filter out the loopback stream.
+        fork(MapTransformFork {
+            map: streams,
+            map_filter: StreamsFilter { own_subnet_id },
+            certification_version,
+            mk_tree,
+        })
+    } else {
+        // Before `V20`, output all streams.
+        fork(MapTransformFork {
+            map: streams,
+            map_filter: NoFilter,
+            certification_version,
+            mk_tree,
+        })
+    }
 }
 
 fn system_metadata_as_tree(
@@ -609,6 +795,7 @@ fn api_boundary_nodes_as_tree(
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
         map: api_boundary_nodes,
+        map_filter: NoFilter,
         certification_version,
         mk_tree: |_api_boundary_node_id, api_boundary_node, _certification_version| {
             fork(
@@ -631,6 +818,7 @@ fn canisters_as_tree(
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
         map: canisters,
+        map_filter: NoFilter,
         certification_version,
         mk_tree: |_canister_id, canister, certification_version| {
             fork(CanisterFork {
@@ -651,6 +839,7 @@ fn subnets_as_tree<'a>(
 ) -> LazyTree<'a> {
     fork(MapTransformFork {
         map: subnets,
+        map_filter: NoFilter,
         certification_version,
         mk_tree: move |subnet_id, subnet_topology, certification_version| {
             fork(
@@ -680,12 +869,33 @@ fn subnets_as_tree<'a>(
     })
 }
 
+fn canister_ranges_as_tree(
+    subnets: &BTreeMap<SubnetId, SubnetTopology>,
+    split_routing_table: Arc<SplitRoutingTable>,
+    certification_version: CertificationVersion,
+) -> LazyTree {
+    let split_routing_table = Arc::clone(&split_routing_table);
+    fork(MapTransformFork {
+        map: subnets,
+        map_filter: NoFilter,
+        certification_version,
+        mk_tree: move |subnet_id, _subnet_topology, _certification_version| {
+            let split_ranges = split_routing_table.get(&subnet_id).map(Arc::clone);
+            fork(CanisterRangesFork {
+                split_ranges,
+                phantom: PhantomData,
+            })
+        },
+    })
+}
+
 fn nodes_as_tree(
     own_subnet_node_public_keys: &BTreeMap<NodeId, Vec<u8>>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
         map: own_subnet_node_public_keys,
+        map_filter: NoFilter,
         certification_version,
         mk_tree: |_node_id, public_key, _version| {
             fork(FiniteMap::default().with_tree("public_key", Blob(&public_key[..], None)))
@@ -699,6 +909,7 @@ fn canister_metadata_as_tree(
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
         map: execution_state.metadata.custom_sections(),
+        map_filter: NoFilter,
         certification_version,
         mk_tree: |_name, section, _version| Blob(section.content(), Some(section.hash())),
     })

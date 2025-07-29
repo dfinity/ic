@@ -9,7 +9,6 @@ rust_library(
     crate_name = "ic_consensus_threshold_sig_system_test_utils",
     deps = [
         # Keep sorted.
-        "//packages/ic-vetkd-utils",
         "//rs/canister_client",
         "//rs/config",
         "//rs/limits",
@@ -26,6 +25,7 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/test_canisters/message:lib",
+        "//rs/tests/test_canisters/signer:lib",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
@@ -34,6 +34,9 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-vetkeys",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:k256",
         "@crate_index//:serde",

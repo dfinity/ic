@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -22,6 +23,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/string",
     "//rs/nervous_system/temporary",
+    "//rs/nervous_system/time_helpers",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
@@ -44,10 +46,11 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:idna",
     "@crate_index//:ipnet",
     "@crate_index//:lazy_static",
@@ -127,6 +130,22 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "canister--canbench_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["canbench-rs"],
+    crate_name = "registry_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        "@crate_index//:canbench-rs",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )
 
 rust_library(
@@ -246,5 +265,38 @@ generated_files_check(
         "//rs/registry/canister/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+# Usage
+# =====
+#
+# For benchmarking (see `canbench/canbench_results.yml`):
+# ```
+# bazel run //rs/registry/canister:registry-canbench
+# ```
+#
+# For updating the results file:
+# ```
+# bazel run //rs/registry/canister:registry-canbench_update
+# ```
+#
+# To run the test:
+# ```
+# bazel test //rs/registry/canister:registry-canbench_test
+# ```
+#
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part
+# of an investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark.
+rust_canbench(
+    name = "registry-canbench",
+    srcs = ["canbench/main.rs"],
+    add_test = True,
+    results_file = "canbench/canbench_results.yml",
+    deps = [
+        # Keep sorted.
+        ":canister--canbench_feature",
     ],
 )

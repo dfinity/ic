@@ -14,7 +14,7 @@ edition.workspace = true
 [dependencies]
 by_address = "1.1.0"
 ic-canister-log = { path = "../canister_log", version = "0.2.0" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-metrics-encoder = "1.1.0"
 maplit = "1.0.2"
 priority-queue = "1.3.1"

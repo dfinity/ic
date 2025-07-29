@@ -5,7 +5,7 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    dkg::{ChangeAction, DkgPool, Mutations},
+    dkg::{ChangeAction, DkgPayloadValidationError, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
 };
@@ -15,14 +15,13 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_types::{
-    consensus::dkg::{DealingContent, DkgMessageId, Message},
+    consensus::dkg::{DealingContent, DkgMessageId, InvalidDkgPayloadReason, Message},
     crypto::{
         threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTargetSubnet},
         Signed,
     },
     Height, NodeId, ReplicaVersion,
 };
-use payload_validator::PayloadValidationError;
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
@@ -34,19 +33,14 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
-pub use crate::{
-    payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
-    utils::get_vetkey_public_keys,
-};
+pub use crate::utils::get_vetkey_public_keys;
 
 #[cfg(test)]
 mod test_utils;
 mod utils;
 
 pub use dkg_key_manager::DkgKeyManager;
-pub use payload_builder::{
-    create_payload, get_dkg_summary_from_cup_contents, PayloadCreationError,
-};
+pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -248,12 +242,14 @@ impl DkgImpl {
         // reject, if it was rejected, or skip, if there was an error.
         match crypto_validate_dealing(&*self.crypto, config, message) {
             Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
-            Err(PayloadValidationError::InvalidArtifact(err)) => get_handle_invalid_change_action(
-                message,
-                format!("Dealing verification failed: {:?}", err),
-            )
-            .into(),
-            Err(PayloadValidationError::ValidationFailed(err)) => {
+            Err(DkgPayloadValidationError::InvalidArtifact(err)) => {
+                get_handle_invalid_change_action(
+                    message,
+                    format!("Dealing verification failed: {:?}", err),
+                )
+                .into()
+            }
+            Err(DkgPayloadValidationError::ValidationFailed(err)) => {
                 error!(
                     self.logger,
                     "Couldn't verify a DKG dealing from the pool: {:?}", err
@@ -269,7 +265,7 @@ pub(crate) fn crypto_validate_dealing(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,
     message: &Message,
-) -> ValidationResult<PayloadValidationError> {
+) -> ValidationResult<DkgPayloadValidationError> {
     let dealer = message.signature.signer;
     if !config.dealers().get().contains(&dealer) {
         return Err(InvalidDkgPayloadReason::InvalidDealer(dealer).into());
@@ -1580,6 +1576,7 @@ mod tests {
                             }],
                             signature_request_timeout_ns: None,
                             idkg_key_rotation_period_ms: None,
+                            max_parallel_pre_signature_transcripts_in_creation: None,
                         })
                         .build(),
                 )],
@@ -2071,6 +2068,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }
     }
 

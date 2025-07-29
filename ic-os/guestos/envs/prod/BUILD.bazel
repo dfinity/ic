@@ -1,5 +1,4 @@
 load("//bazel:defs.bzl", "file_size_check")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 load("//publish:defs.bzl", "artifact_bundle")
@@ -32,19 +31,17 @@ file_size_check(
 file_size_check(
     name = "update_img_test_size_check",
     file = icos_images.update_image_test,
-    max_file_size = 450 * 1000 * 1000,  # 416 MB on 2025-03-21
+    max_file_size = 450 * 1000 * 1000,  # 417 MB on 2025-06-26
 )
 
 # Export checksums & build artifacts
+# (image is used for GuestOS upgrades)
 artifact_bundle(
-    name = "bundle",
-    inputs = [":prod"],
-)
-
-# This image is used for GuestOS upgrades
-upload_artifacts(
-    name = "upload_update-img",
-    inputs = [icos_images.update_image],
-    remote_subdir = "guestos-os/update-img",
-    visibility = ["//visibility:public"],  # testnet deploy tools use this
+    name = "bundle-update",
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
+    prefix = "guest-os/update-img",
+    visibility = ["//visibility:public"],
 )

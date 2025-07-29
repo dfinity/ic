@@ -16,7 +16,7 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:evm_rpc_types",
         "@crate_index//:ic-canister-log",
-        "@crate_index//:ic_cdk_0_17_1",
+        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
         "@crate_index//:thiserror",
     ],
@@ -29,6 +29,7 @@ rust_test(
         # Keep sorted.
         ":evm-rpc-client",
         "@crate_index//:mockall",
+        "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
 )

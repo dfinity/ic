@@ -82,7 +82,7 @@ pub(crate) fn execute_install(
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+    if let Err(err) = helper.validate_input(&original) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -129,7 +129,6 @@ pub(crate) fn execute_install(
             stable_memory_handling: MemoryHandling::Replace,
             main_memory_handling: MemoryHandling::Replace,
         },
-        &original,
     ) {
         let instructions_left = helper.instructions_left();
         return finish_err(
@@ -176,6 +175,7 @@ pub(crate) fn execute_install(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -297,6 +297,7 @@ fn install_stage_2b_continue_install_after_start(
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -394,7 +395,6 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -497,7 +497,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

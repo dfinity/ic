@@ -18,6 +18,12 @@ use pocket_ic::{
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
     PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
 };
+#[cfg(not(windows))]
+use pocket_ic::{
+    common::rest::{CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig},
+    nonblocking::PocketIc as PocketIcAsync,
+    start_server, StartServerParams,
+};
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
@@ -25,7 +31,16 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::{io::Read, sync::OnceLock, time::SystemTime};
+#[cfg(not(windows))]
+use std::time::Instant;
+use std::{
+    io::Read,
+    sync::OnceLock,
+    time::{Duration, SystemTime},
+};
+use tempfile::{NamedTempFile, TempDir};
+#[cfg(windows)]
+use wslpath::windows_to_wsl;
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -421,6 +436,152 @@ fn set_time_into_past() {
     pic.set_time(future.into());
 
     pic.set_time(now.into());
+}
+
+#[test]
+fn time_on_resumed_instance() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+
+    let now = SystemTime::now();
+    pic.set_certified_time(now.into());
+
+    let time = pic.get_time();
+    assert_eq!(time, now.into());
+    let state = pic.drop_and_take_state().unwrap();
+
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    // The time on the resumed instances increases by 2ns:
+    // - 1ns due to executing a checkpointed round before dropping the original instance;
+    // - 1ns due to bumping time when creating a new instance to ensure strict time monotonicity.
+    let resumed_time = pic.get_time();
+    assert_eq!(resumed_time, time + Duration::from_nanos(2));
+}
+
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
+async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Result<(), String> {
+    let (mut server, server_url) = start_server(StartServerParams::default()).await;
+    let temp_dir = TempDir::new().unwrap();
+
+    let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .with_state(state)
+        .build_async()
+        .await;
+
+    let canister_id = pic.create_canister().await;
+
+    // Execute sufficiently many rounds to trigger a checkpoint.
+    let expected_checkpoint_height = 500;
+    for _ in 0..expected_checkpoint_height {
+        pic.tick().await;
+    }
+
+    // Wait until the checkpoint is written to disk.
+    let topology = pic.topology().await;
+    let subnet_id = topology.get_app_subnets()[0];
+    let subnet_seed = hex::encode(topology.subnet_configs.get(&subnet_id).unwrap().subnet_seed);
+    let expected_checkpoint_dir = temp_dir
+        .path()
+        .join(subnet_seed)
+        .join("checkpoints")
+        .join(format!("{:016x}", expected_checkpoint_height));
+    let start = Instant::now();
+    loop {
+        if start.elapsed() > Duration::from_secs(300) {
+            panic!("Timed out waiting for a checkpoint to be written to disk.");
+        }
+        // Check if the expected checkpoint dir exists and does not contain the "unverified checkpoint marker".
+        if std::fs::read_dir(&expected_checkpoint_dir).is_ok() {
+            let unverified_checkpoint_marker =
+                expected_checkpoint_dir.join("unverified_checkpoint_marker");
+            if !unverified_checkpoint_marker.is_file() {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // The following (most recent) changes will be lost after killing the instance.
+    let now = SystemTime::now();
+    pic.set_certified_time(now.into()).await;
+    let another_canister_id = pic.create_canister().await;
+
+    assert!(pic.canister_exists(canister_id).await);
+    assert!(pic.canister_exists(another_canister_id).await);
+    let time = pic.get_time().await;
+    assert!(time >= now.into());
+
+    server.kill().unwrap();
+
+    let (_, server_url) = start_server(StartServerParams::default()).await;
+    let client = reqwest::Client::new();
+    let instance_config = InstanceConfig {
+        subnet_config_set: ExtendedSubnetConfigSet::default(),
+        state_dir: Some(temp_dir.path().to_path_buf()),
+        nonmainnet_features: false,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state,
+    };
+    let response = client
+        .post(server_url.join("instances").unwrap())
+        .json(&instance_config)
+        .send()
+        .await
+        .unwrap();
+    if !response.status().is_success() {
+        return Err(response.text().await.unwrap());
+    }
+    let instance_id = match response.json::<CreateInstanceResponse>().await.unwrap() {
+        CreateInstanceResponse::Created { instance_id, .. } => instance_id,
+        CreateInstanceResponse::Error { message } => panic!("Unexpected error: {}", message),
+    };
+    let pic = PocketIcAsync::new_from_existing_instance(server_url, instance_id, None);
+
+    // Only the first canister (created before the last checkpoint) is preserved,
+    // the other canister and time change are lost.
+    assert!(pic.canister_exists(canister_id).await);
+    assert!(!pic.canister_exists(another_canister_id).await);
+    let resumed_time = pic.get_time().await;
+    assert!(resumed_time < now.into());
+
+    // Drop instance explicitly to prevent data races in the StateManager.
+    pic.drop().await;
+
+    Ok(())
+}
+
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
+#[tokio::test]
+async fn resume_killed_instance_default() {
+    let err = resume_killed_instance_impl(None).await.unwrap_err();
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
+}
+
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
+#[tokio::test]
+async fn resume_killed_instance_strict() {
+    let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
+}
+
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
+#[tokio::test]
+async fn resume_killed_instance() {
+    resume_killed_instance_impl(Some(true)).await.unwrap();
 }
 
 #[test]
@@ -1141,7 +1302,7 @@ fn test_ecdsa_disabled() {
 
 #[test]
 fn test_vetkd() {
-    use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+    use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
@@ -1592,7 +1753,7 @@ fn test_raw_gateway() {
     for (host, expected) in [
         (
             format!("{}.{}", canister, gateway_host),
-            "Response verification failed: Certification values not found",
+            "The response from the canister failed verification and cannot be trusted.",
         ),
         (
             format!("{}.raw.{}", canister, gateway_host),
@@ -2740,4 +2901,92 @@ fn stack_overflow() {
     assert!(err
         .reject_message
         .contains("Canister trapped: stack overflow"));
+}
+
+fn test_specified_id(pic: &PocketIc) {
+    // We define a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+
+    let canister_id = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap();
+    assert_eq!(canister_id, specified_id);
+}
+
+#[test]
+fn test_specified_id_on_fresh_instance() {
+    // create a fresh PocketIC instance
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    test_specified_id(&pic);
+}
+
+#[test]
+fn test_specified_id_on_resumed_state() {
+    // create an empty PocketIC state to be set up later
+    let state = PocketIcState::new();
+    // create a PocketIC instance used to set up the state
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+    // serialize the state
+    let state = pic.drop_and_take_state().unwrap();
+
+    // create a PocketIC instance resuming from the existing state
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    test_specified_id(&pic);
+}
+
+#[test]
+#[should_panic(expected = "is not a (subnet state) directory")]
+fn with_subnet_state_file() {
+    let state_file = NamedTempFile::new().unwrap();
+    #[cfg(not(windows))]
+    let state_file_path_buf = state_file.path().to_path_buf();
+    #[cfg(windows)]
+    let state_file_path_buf = windows_to_wsl(state_file.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
+
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, state_file_path_buf)
+        .build();
+}
+
+#[test]
+#[should_panic(expected = "Provided an empty state directory at path")]
+fn with_empty_subnet_state() {
+    let state_dir = TempDir::new().unwrap();
+    #[cfg(not(windows))]
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+    #[cfg(windows)]
+    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
+
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
+        .build();
+}
+
+#[test]
+fn test_invalid_specified_id() {
+    // First determine an invalid `specified_id` by creating a canister on a PocketIC instance
+    // whose canister ID belongs to the canister allocation ranges of the PocketIC instance.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+    let specified_id = pic.create_canister();
+    drop(pic);
+
+    // Now create a fresh PocketIC instance with the same topology.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // Using the invalid `specified_id` should result in an error.
+    let err = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap_err();
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+    assert!(err.contains(&expected_err));
 }

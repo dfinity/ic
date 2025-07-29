@@ -13,20 +13,18 @@ To build a GuestOS image, refer to the link:../README.adoc[IC-OS README]
 
 This requires QEMU with qemu-system and qemu-kvm installed on the machine.
 
-Bazel can be used to boot a local VM with a GuestOS like this:
-
-    bazel run //ic-os/guestos/envs/dev:launch-local-vm
-
-In a VM or container without KVM support, use:
-
-    bazel run //ic-os/guestos/envs/dev:launch-local-vm-no-kvm
-
 The GuestOS image (`disk.img`) can booted directly in QEMU using the following command:
 
     qemu-system-x86_64 \
-    -nographic -m 4G \
-    -bios /usr/share/OVMF/OVMF_CODE.fd \
-    -drive file=disk.img,format=raw,if=virtio
+    -machine type=q35,accel=kvm \
+    -enable-kvm \
+    -nographic \
+    -m 4G \
+    -bios /usr/share/ovmf/OVMF.fd \
+    -device vhost-vsock-pci,guest-cid=\\$$CID \
+    -drive file=disk.img,format=raw,if=virtio \
+    -netdev user,id=user.0,hostfwd=tcp::2222-:22 \
+    -device virtio-net,netdev=user.0
 
 * Note: Press `Ctrl-A` followed by `x` to exit the QEMU console.
 

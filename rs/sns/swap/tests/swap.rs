@@ -146,7 +146,15 @@ fn init() -> Init {
 }
 
 fn init_with_neurons_fund_funding() -> Init {
-    init_with_confirmation_text(None)
+    let mut init = init_with_confirmation_text(None);
+    init.neurons_fund_participation = Some(true);
+    init
+}
+
+fn init_without_neurons_fund_funding() -> Init {
+    let mut init = init_with_confirmation_text(None);
+    init.neurons_fund_participation = Some(false);
+    init
 }
 
 pub fn params() -> Params {
@@ -4366,6 +4374,45 @@ async fn test_settle_neurons_fund_participation_handles_invalid_governance_respo
 
     // Assert the call to nns governance has been made
     assert_eq!(spy_nns_governance_client.calls.len(), 1);
+    assert_eq!(swap.cf_participants.len(), 0);
+}
+
+#[tokio::test]
+async fn test_settle_neurons_fund_participation_without_requesting_nf_participation() {
+    // Step 1: Prepare the world
+
+    let mut swap = Swap {
+        init: Some(init_without_neurons_fund_funding()),
+        lifecycle: Committed as i32,
+        direct_participation_icp_e8s: Some(100 * E8),
+        ..Default::default()
+    };
+
+    let mut spy_nns_governance_client = SpyNnsGovernanceClient::new(vec![
+        NnsGovernanceClientReply::SettleNeuronsFundParticipation(
+            SettleNeuronsFundParticipationResponse { result: None },
+        ),
+    ]);
+    // Step 2: Call settle_neurons_fund_participation
+    let result = swap
+        .settle_neurons_fund_participation(&mut spy_nns_governance_client)
+        .await;
+
+    // Step 3: Inspect results
+    let expected_result = SettleNeuronsFundParticipationResult {
+        possibility: Some(settle_neurons_fund_participation_result::Possibility::Ok(
+            settle_neurons_fund_participation_result::Ok {
+                neurons_fund_participation_icp_e8s: Some(0),
+                neurons_fund_neurons_count: Some(0),
+            },
+        )),
+    };
+
+    assert_eq!(result, expected_result);
+
+    // Assert the call to nns governance has NOT been made. This is unlike the scenario
+    // in `test_settle_neurons_fund_participation_handles_corrupted_governance_response`.
+    assert_eq!(spy_nns_governance_client.calls.len(), 0);
     assert_eq!(swap.cf_participants.len(), 0);
 }
 

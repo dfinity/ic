@@ -136,8 +136,7 @@ pub enum HypervisorError {
     /// An attempt was made to execute a message on a canister that does not
     /// contain a Wasm module.
     WasmModuleNotFound,
-    /// An attempt was made to grow the canister's memory above its memory
-    /// allocation.
+    /// The canister cannot grow its memory usage.
     OutOfMemory,
     /// The principal ID specified by the canister is invalid.
     InvalidPrincipalId(PrincipalIdBlobParseError),
@@ -188,6 +187,13 @@ pub enum HypervisorError {
     WasmMemoryLimitExceeded {
         bytes: NumBytes,
         limit: NumBytes,
+    },
+    EnvironmentVariableIndexOutOfBounds {
+        index: usize,
+        length: usize,
+    },
+    EnvironmentVariableNotFound {
+        name: String,
     },
 }
 
@@ -278,7 +284,7 @@ impl std::fmt::Display for HypervisorError {
                 f,
                 "Attempted to execute a message, but the canister contains no Wasm module.",
             ),
-            Self::OutOfMemory => write!(f, "Canister exceeded its allowed memory allocation.",),
+            Self::OutOfMemory => write!(f, "Canister cannot grow its memory usage.",),
             Self::InvalidPrincipalId(_) => {
                 write!(f, "Canister provided invalid principal id")
             }
@@ -383,6 +389,16 @@ impl std::fmt::Display for HypervisorError {
                         the Wasm memory limit in the canister settings.",
                         limit.get(), bytes.get()
                 )
+            }
+            Self::EnvironmentVariableIndexOutOfBounds { index, length } => {
+                write!(
+                    f,
+                    "Environment variable index {} is out of bounds. The number of environment variables is {}.",
+                    index, length
+                )
+            }
+            Self::EnvironmentVariableNotFound { name } => {
+                write!(f, "Environment variable {} not found.", name)
             }
         }
     }
@@ -503,6 +519,14 @@ impl AsErrorHelp for HypervisorError {
             },
             Self::InvalidWasm(inner) => inner.error_help(),
             Self::InstrumentationFailed(inner) => inner.error_help(),
+            Self::EnvironmentVariableIndexOutOfBounds { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::EnvironmentVariableNotFound { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -552,6 +576,8 @@ impl HypervisorError {
                 E::InsufficientCyclesInMessageMemoryGrow
             }
             Self::WasmMemoryLimitExceeded { .. } => E::CanisterWasmMemoryLimitExceeded,
+            Self::EnvironmentVariableIndexOutOfBounds { .. } => E::CanisterContractViolation,
+            Self::EnvironmentVariableNotFound { .. } => E::CanisterContractViolation,
         };
         UserError::new(code, description)
     }
@@ -590,6 +616,10 @@ impl HypervisorError {
                 "InsufficientCyclesInMessageMemoryGrow"
             }
             HypervisorError::WasmMemoryLimitExceeded { .. } => "WasmMemoryLimitExceeded",
+            HypervisorError::EnvironmentVariableIndexOutOfBounds { .. } => {
+                "EnvironmentVariableIndexOutOfBounds"
+            }
+            HypervisorError::EnvironmentVariableNotFound { .. } => "EnvironmentVariableNotFound",
         }
     }
 }

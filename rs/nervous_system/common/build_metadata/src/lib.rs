@@ -60,7 +60,7 @@ pub fn define_get_build_metadata_candid_method_cdk(_: TokenStream) -> TokenStrea
     format!(
         r#"
             #[candid::candid_method(query)]
-            #[ic_cdk_macros::query]
+            #[ic_cdk::query]
             fn get_build_metadata() -> &'static str {{
                 {}
             }}

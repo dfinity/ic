@@ -170,6 +170,13 @@ pub fn create_summary_payload(
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, IDkgPayloadError> {
+    let _time = idkg_payload_metrics.map(|metrics| {
+        metrics
+            .payload_duration
+            .with_label_values(&["summary"])
+            .start_timer()
+    });
+
     let height = parent_block.height().increment();
     let prev_summary_block = pool_reader
         .dkg_summary_block(parent_block)
@@ -461,6 +468,11 @@ pub fn create_data_payload(
     idkg_payload_metrics: &IDkgPayloadMetrics,
     log: &ReplicaLogger,
 ) -> Result<idkg::Payload, IDkgPayloadError> {
+    let _time = idkg_payload_metrics
+        .payload_duration
+        .with_label_values(&["data"])
+        .start_timer();
+
     // Return None if parent block does not have IDKG payload.
     if parent_block.payload.as_ref().as_idkg().is_none() {
         return Ok(None);
@@ -740,10 +752,7 @@ mod tests {
     use super::*;
     use crate::{
         test_utils::*,
-        utils::{
-            algorithm_for_key_id, block_chain_reader,
-            generate_responses_to_signature_request_contexts,
-        },
+        utils::{block_chain_reader, generate_responses_to_signature_request_contexts},
     };
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -768,7 +777,7 @@ mod tests {
     use ic_types::{
         batch::BatchPayload,
         consensus::{
-            dkg::{DkgDataPayload, Summary},
+            dkg::{DkgDataPayload, DkgSummary},
             idkg::{
                 IDkgPayload, PreSigId, ReshareOfUnmaskedParams, TranscriptRef, UnmaskedTranscript,
                 UnmaskedTranscriptWithAttributes,
@@ -780,7 +789,7 @@ mod tests {
                 idkg::IDkgTranscript, ThresholdEcdsaCombinedSignature,
                 ThresholdSchnorrCombinedSignature,
             },
-            CryptoHash, CryptoHashOf, ExtendedDerivationPath,
+            AlgorithmId, CryptoHash, CryptoHashOf, ExtendedDerivationPath,
         },
         messages::CallbackId,
         time::UNIX_EPOCH,
@@ -814,7 +823,7 @@ mod tests {
             }
         }
         BlockPayload::Summary(SummaryPayload {
-            dkg: Summary::new(
+            dkg: DkgSummary::new(
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -1411,7 +1420,7 @@ mod tests {
                 assert_eq!(request.key_id(), key_id.clone());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id.clone())
+                    AlgorithmId::from(key_id.inner())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
@@ -1463,7 +1472,7 @@ mod tests {
                 assert_eq!(request.key_id(), key_id.clone());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id.clone())
+                    AlgorithmId::from(key_id.inner())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
@@ -1474,7 +1483,7 @@ mod tests {
             // have been resolved/copied into the summary block
             assert_eq!(summary.idkg_transcripts.len(), expected_transcripts.len());
             for (id, transcript) in &summary.idkg_transcripts {
-                assert_eq!(transcript.algorithm_id, algorithm_for_key_id(&key_id));
+                assert_eq!(transcript.algorithm_id, AlgorithmId::from(key_id.inner()));
                 assert!(expected_transcripts.contains(id));
             }
         })
@@ -1710,7 +1719,7 @@ mod tests {
             assert!(unreported > 0);
 
             let pl = BlockPayload::Summary(SummaryPayload {
-                dkg: Summary::fake(),
+                dkg: DkgSummary::fake(),
                 idkg: Some(summary.clone()),
             });
             let b = Block::new(
@@ -1984,7 +1993,7 @@ mod tests {
                 caller: user_test_id(1).get(),
                 derivation_path: vec![],
             };
-            let algorithm = algorithm_for_key_id(&key_id);
+            let algorithm = AlgorithmId::from(key_id.inner());
             let test_inputs = match key_id.inner() {
                 MasterPublicKeyId::Ecdsa(_) => {
                     TestSigInputs::from(&generate_tecdsa_protocol_inputs(
@@ -2450,7 +2459,7 @@ mod tests {
 
             // Generate initial dealings
             let initial_dealings =
-                dummy_initial_idkg_dealing_for_tests(algorithm_for_key_id(&key_id), &mut rng);
+                dummy_initial_idkg_dealing_for_tests(AlgorithmId::from(key_id.inner()), &mut rng);
             let init_tid = initial_dealings.params().transcript_id();
 
             // Step 1: initial bootstrap payload should be created successfully

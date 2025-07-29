@@ -11,7 +11,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
 ]
 
 LIB_SRCS = glob(

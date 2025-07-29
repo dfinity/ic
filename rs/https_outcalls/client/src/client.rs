@@ -133,6 +133,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
         // Once final response is available send the response over to the channel making it available to the client.
         self.rt_handle.spawn(async move {
+            let request_size = canister_http_request.context.variable_parts_size();
             // Destruct canister http request to avoid partial moves of the canister http request.
             let CanisterHttpRequest {
                 id: request_id,
@@ -156,12 +157,15 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             } = canister_http_request;
 
             let adapter_req_timer = Instant::now();
-            let max_response_size_bytes = request_max_response_bytes.unwrap_or(NumBytes::new(MAX_CANISTER_HTTP_RESPONSE_BYTES)).get();
+            let max_response_size_bytes = request_max_response_bytes
+                .unwrap_or(NumBytes::new(MAX_CANISTER_HTTP_RESPONSE_BYTES))
+                .get();
+
             // Build future that sends and transforms request.
             let adapter_canister_http_response = http_adapter_client
                 .https_outcall(HttpsOutcallRequest {
                     url: request_url,
-                    method: match request_http_method{
+                    method: match request_http_method {
                         CanisterHttpMethod::GET => HttpMethod::Get.into(),
                         CanisterHttpMethod::POST => HttpMethod::Post.into(),
                         CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
@@ -186,22 +190,51 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     )
                 })
                 .and_then(|adapter_response| async move {
+                    //TODO: We should also log the downloaded bytes when the adapter returns an error.
+                    let HttpsOutcallResponse {
+                        status,
+                        headers,
+                        content: body,
+                    } = adapter_response.into_inner();
 
-                    let HttpsOutcallResponse { status, headers, content: body} = adapter_response.into_inner();
+                    let headers_size: usize = headers.iter().map(|h| h.name.len() + h.value.len()).sum();
 
-                    let canister_http_payload = CanisterHttpResponsePayload{
+                    info!(
+                        log,
+                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, request_id {}, process_id: {}",
+                        request_size,
+                        adapter_req_timer.elapsed().as_millis(),
+                        body.len() + headers_size,
+                        request_id,
+                        std::process::id(),
+                    );
+
+                    let canister_http_payload = CanisterHttpResponsePayload {
                         status: status as u128,
-                        headers: headers.into_iter().map(|HttpHeader { name, value }| {
-                                    ic_management_canister_types_private::HttpHeader { name, value }
-                                }).collect(),
+                        headers: headers
+                            .into_iter()
+                            .map(|HttpHeader { name, value }| {
+                                ic_management_canister_types_private::HttpHeader { name, value }
+                            })
+                            .collect(),
                         body,
                     };
 
-                    metrics.http_request_duration
-                        .with_label_values(&[&status.to_string()])
+                    metrics
+                        .http_request_duration
+                        .with_label_values(&[&status.to_string(), request_http_method.as_str()])
                         .observe(adapter_req_timer.elapsed().as_secs_f64());
 
-                    validate_http_headers_and_body(&canister_http_payload.headers, &canister_http_payload.body).map_err(|e| (RejectCode::SysFatal, UserError::from(e).description().to_string()))?;
+                    validate_http_headers_and_body(
+                        &canister_http_payload.headers,
+                        &canister_http_payload.body,
+                    )
+                    .map_err(|e| {
+                        (
+                            RejectCode::SysFatal,
+                            UserError::from(e).description().to_string(),
+                        )
+                    })?;
 
                     // Only apply the transform if a function name is specified
                     let transform_timer = metrics.transform_execution_duration.start_timer();
@@ -216,45 +249,43 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             )
                             .await;
                             let transform_result_size = match &transform_result {
-                              Ok(data) => data.len(),
-                              Err((_, msg)) => msg.len(),
+                                Ok(data) => data.len(),
+                                Err((_, msg)) => msg.len(),
                             };
+
                             if transform_result_size as u64 > max_response_size_bytes {
-                              info!(log, "Canister http transform result size {} on canister {} exceeds the `max_response_size` of {}.", transform_result_size, request_sender, max_response_size_bytes);
+                                info!(
+                                    log,
+                                    "Canister http transform result size {} on canister {} \
+                                    exceeds the `max_response_size` of {}.",
+                                    transform_result_size,
+                                    request_sender,
+                                    max_response_size_bytes
+                                );
+                                let err_msg = format!(
+                                    "Transformed http response exceeds limit: {}",
+                                    max_response_size_bytes
+                                );
+                                return Err((RejectCode::SysFatal, err_msg));
                             }
-                            transform_result?
+
+                            transform_result
                         }
-                        None => Encode!(&canister_http_payload)
-                        .map_err(|encode_error| {
+                        None => Encode!(&canister_http_payload).map_err(|encode_error| {
                             (
                                 RejectCode::SysFatal,
                                 format!(
-                                    "Failed to parse adapter http response to 'http_response' candid: {}",
+                                    "Failed to parse adapter http response \
+                                    to 'http_response' candid: {}",
                                     encode_error
                                 ),
                             )
-                        })?,
+                        }),
                     };
 
                     transform_timer.observe_duration();
-                    if transform_response.len() > (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) {
-                        let err_msg = match request_transform {
-                            Some(_) => format!(
-                                "Transformed http response exceeds limit: {}", MAX_CANISTER_HTTP_RESPONSE_BYTES
-                            ),
-                            None => format!(
-                                "Http response exceeds limit: {}. Apply a transform function to the http response.", MAX_CANISTER_HTTP_RESPONSE_BYTES
-                            ),
-                        };
-                        return Err(
-                            (
-                                RejectCode::SysFatal,
-                                err_msg
-                            )
-                        );
-                    }
 
-                    Ok(transform_response)
+                    transform_response
                 });
 
             // Drive created future to completion and make response available on the channel.
@@ -264,16 +295,26 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 canister_id: request_sender,
                 content: match adapter_canister_http_response.await {
                     Ok(resp) => {
-                        metrics.request_total.with_label_values(&["success"]).inc();
+                        metrics
+                            .request_total
+                            .with_label_values(&["success", request_http_method.as_str()])
+                            .inc();
                         CanisterHttpResponseContent::Success(resp)
-                    },
+                    }
                     Err((reject_code, message)) => {
-                        metrics.request_total.with_label_values(&[&reject_code.to_string()]).inc();
+                        metrics
+                            .request_total
+                            .with_label_values(&[
+                                reject_code.as_str(),
+                                request_http_method.as_str(),
+                            ])
+                            .inc();
                         CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code,
-                        message,
-                    })},
-                }
+                            reject_code,
+                            message,
+                        })
+                    }
+                },
             });
         });
         Ok(())
@@ -367,7 +408,7 @@ mod tests {
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::Transform;
+    use ic_types::canister_http::{Replication, Transform};
     use ic_types::{
         canister_http::CanisterHttpMethod,
         messages::{CallbackId, CertificateDelegation},
@@ -464,6 +505,7 @@ mod tests {
                     context: vec![],
                 }),
                 time: UNIX_EPOCH,
+                replication: Replication::FullyReplicated,
             },
             socks_proxy_addrs: vec![],
         }

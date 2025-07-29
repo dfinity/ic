@@ -1,5 +1,5 @@
 use candid::{candid_method, Principal};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -306,6 +306,11 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
                 .to_string(),
         },
         SupportedBlockType {
+            block_type: "1xfer".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
             block_type: "2approve".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
@@ -403,6 +408,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

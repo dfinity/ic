@@ -18,7 +18,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, 
 use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationContext, VetKdEncryptedKeyShare};
 use ic_types::{NodeId, NumberOfNodes};
 use ic_types_test_utils::ids::canister_test_id;
-use ic_vetkd_utils::TransportSecretKey;
+use ic_vetkeys::TransportSecretKey;
 use rand::prelude::*;
 use rand::{CryptoRng, Rng};
 use rand_chacha::ChaCha20Rng;
@@ -296,7 +296,7 @@ fn n_random_nodes_in<R: Rng + CryptoRng>(
 }
 
 fn random_transports_secret_key<R: Rng + CryptoRng>(rng: &mut R) -> TransportSecretKey {
-    ic_vetkd_utils::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
         .expect("failed to create transport secret key")
 }
 

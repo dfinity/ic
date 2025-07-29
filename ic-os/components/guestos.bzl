@@ -6,7 +6,7 @@ component_files = {
     # early-boot
     Label("early-boot/relabel-machine-id/guestos/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
-    Label("early-boot/setup-hostname/guestos/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
+    Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
     Label("early-boot/setup-hostname/guestos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
     Label("early-boot/setup-hostname/hostname-empty"): "/etc/hostname",
     Label("early-boot/save-machine-id/save-machine-id.sh"): "/opt/ic/bin/save-machine-id.sh",
@@ -52,6 +52,7 @@ component_files = {
     Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
+    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
@@ -95,6 +96,10 @@ component_files = {
     Label("monitoring/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
     Label("monitoring/custom-metrics/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
     Label("monitoring/custom-metrics/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
+    Label("ic/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
+    Label("ic/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
+    Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
+    Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
 
     # networking
     Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
@@ -142,7 +147,7 @@ component_files = {
     Label("ssh/provision-ssh-keys.sh"): "/opt/ic/bin/provision-ssh-keys.sh",
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
-    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-guestos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
     Label("ssh/read-ssh-keys.sh"): "/opt/ic/bin/read-ssh-keys.sh",
 
@@ -160,10 +165,8 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
+    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
-
-    # TODO(NODE-1518): delete update-config.service after switch to new icos config
-    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

@@ -2,7 +2,6 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-
 use super::test_helpers::{
     basic_governance_proto, canister_status_for_test,
     canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
@@ -51,6 +50,8 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
@@ -84,6 +85,15 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -161,6 +171,13 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -289,6 +306,13 @@ async fn test_neuron_operations_exclude_one_another() {
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -1520,8 +1544,6 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None, // local const in install_code()
                     sender_canister_version: None,
                 })
                 .unwrap(),
@@ -4895,6 +4917,19 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 18,
+                        name: "Execute SNS extension operation".to_string(),
+                        description: Some(
+                            "Proposal to execute an operation on a registered SNS extension."
+                                .to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },
@@ -4947,6 +4982,18 @@ fn test_list_topics() {
                         name: "Set topics for custom proposals".to_string(),
                         description: Some(
                             "Proposal to set the topics for custom SNS proposals.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 17,
+                        name: "Register SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to register a new SNS extension.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(

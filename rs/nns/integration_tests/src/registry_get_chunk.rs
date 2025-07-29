@@ -21,9 +21,33 @@ use ic_registry_transport::pb::v1::{
     RegistryError,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use ic_state_machine_tests::StateMachine;
 use pretty_assertions::assert_eq;
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, time::SystemTime};
+
+fn get_state_machine_time_nanoseconds(machine: &StateMachine) -> u64 {
+    machine
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .try_into()
+        .unwrap()
+}
+
+macro_rules! assert_timestamp {
+    ($lower:expr, $timestamp:expr, $upper:expr) => {
+        if !($lower <= $timestamp && $timestamp <= $upper) {
+            panic!(
+                "Timestamp assertion doesn't hold. Expected {} to be within range: [{}, {}]",
+                stringify!($timestamp),
+                stringify!($lower),
+                stringify!($upper)
+            );
+        }
+    };
+}
 
 #[test]
 fn test_large_records() {
@@ -39,6 +63,7 @@ fn test_large_records() {
 
     // Step 2: Run the code that is under test.
 
+    let before_new_version = get_state_machine_time_nanoseconds(&state_machine);
     let new_version = registry_mutate_test_high_capacity_records(
         &state_machine,
         mutate_test_high_capacity_records::Request {
@@ -46,6 +71,7 @@ fn test_large_records() {
             operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
+    let after_new_version = get_state_machine_time_nanoseconds(&state_machine);
 
     // Step 3: Verify result(s).
 
@@ -65,9 +91,16 @@ fn test_large_records() {
                 )
             ),
             version: new_version,
-            timestamp_seconds: get_value_response.timestamp_seconds,
+            // Since the assertion expects the exact equality we are
+            // unable to test timestamps here.
+            timestamp_nanoseconds: get_value_response.timestamp_nanoseconds,
             error: None,
         },
+    );
+    assert_timestamp!(
+        before_new_version,
+        get_value_response.timestamp_nanoseconds,
+        after_new_version
     );
 
     // Step 3.3: Reconstituted blob, and inspect it.
@@ -114,6 +147,7 @@ fn test_mutate_test_high_capacity_records() {
 
     const RED_HERRING_ID: u64 = 999;
 
+    let before_prior_small_version = get_state_machine_time_nanoseconds(&state_machine);
     let prior_small_version = registry_mutate_test_high_capacity_records(
         &state_machine,
         mutate_test_high_capacity_records::Request {
@@ -121,8 +155,15 @@ fn test_mutate_test_high_capacity_records() {
             operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
+    let after_prior_small_version = get_state_machine_time_nanoseconds(&state_machine);
     let prior_small_response = registry_get_value(&state_machine, b"daniel_wong_42");
+    assert_timestamp!(
+        before_prior_small_version,
+        prior_small_response.timestamp_nanoseconds,
+        after_prior_small_version
+    );
 
+    let before_small_version = get_state_machine_time_nanoseconds(&state_machine);
     let small_version = registry_mutate_test_high_capacity_records(
         &state_machine,
         mutate_test_high_capacity_records::Request {
@@ -130,6 +171,9 @@ fn test_mutate_test_high_capacity_records() {
             operation: mutate_test_high_capacity_records::Operation::UpsertSmall,
         },
     );
+    let after_small_version = get_state_machine_time_nanoseconds(&state_machine);
+
+    let before_prior_red_herring_version = get_state_machine_time_nanoseconds(&state_machine);
     let prior_red_herring_version = registry_mutate_test_high_capacity_records(
         &state_machine,
         mutate_test_high_capacity_records::Request {
@@ -137,10 +181,22 @@ fn test_mutate_test_high_capacity_records() {
             operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
+    let after_prior_red_herring_version = get_state_machine_time_nanoseconds(&state_machine);
     let prior_red_herring_get_value_response =
         registry_get_value(&state_machine, b"daniel_wong_999");
 
+    assert_timestamp!(
+        before_prior_red_herring_version,
+        prior_red_herring_get_value_response.timestamp_nanoseconds,
+        after_prior_red_herring_version
+    );
+
     let small_get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
+    assert_timestamp!(
+        before_small_version,
+        small_get_value_response.timestamp_nanoseconds,
+        after_small_version
+    );
 
     let final_red_herring_version = registry_mutate_test_high_capacity_records(
         &state_machine,
@@ -173,7 +229,7 @@ fn test_mutate_test_high_capacity_records() {
             )),
             version: small_version,
             // Will be checked later.
-            timestamp_seconds: small_get_value_response.timestamp_seconds,
+            timestamp_nanoseconds: small_get_value_response.timestamp_nanoseconds,
             error: None,
         },
     );
@@ -188,7 +244,7 @@ fn test_mutate_test_high_capacity_records() {
             }),
             content: None,
             version: delete_version,
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         },
     );
 
@@ -200,7 +256,8 @@ fn test_mutate_test_high_capacity_records() {
                 b"small value".to_vec()
             )),
             version: final_red_herring_version,
-            timestamp_seconds: red_herring_get_value_response.timestamp_seconds,
+            // Will be checked later.
+            timestamp_nanoseconds: red_herring_get_value_response.timestamp_nanoseconds,
             error: None,
         },
     );
@@ -224,15 +281,17 @@ fn test_mutate_test_high_capacity_records() {
                             content: Some(high_capacity_registry_value::Content::DeletionMarker(
                                 true
                             )),
-                            // Cannot get the timestamp when it was deleted
-                            timestamp_seconds: changes.deltas[0].values[0].timestamp_seconds,
+                            // Will be tested later.
+                            timestamp_nanoseconds: changes.deltas[0].values[0]
+                                .timestamp_nanoseconds,
                         },
                         HighCapacityRegistryValue {
                             version: small_version,
                             content: Some(high_capacity_registry_value::Content::Value(
                                 b"small value".to_vec(),
                             )),
-                            timestamp_seconds: small_get_value_response.timestamp_seconds,
+                            // Will be tested later.
+                            timestamp_nanoseconds: small_get_value_response.timestamp_nanoseconds,
                         },
                         HighCapacityRegistryValue {
                             version: prior_small_version,
@@ -243,7 +302,8 @@ fn test_mutate_test_high_capacity_records() {
                                     }
                                 )
                             ),
-                            timestamp_seconds: prior_small_response.timestamp_seconds,
+                            // Will be tested later.
+                            timestamp_nanoseconds: prior_small_response.timestamp_nanoseconds,
                         },
                     ],
                 },
@@ -255,7 +315,9 @@ fn test_mutate_test_high_capacity_records() {
                             content: Some(high_capacity_registry_value::Content::Value(
                                 b"small value".to_vec(),
                             )),
-                            timestamp_seconds: red_herring_get_value_response.timestamp_seconds,
+                            // Will be tested later.
+                            timestamp_nanoseconds: red_herring_get_value_response
+                                .timestamp_nanoseconds,
                         },
                         HighCapacityRegistryValue {
                             version: prior_red_herring_version,
@@ -266,8 +328,9 @@ fn test_mutate_test_high_capacity_records() {
                                     }
                                 )
                             ),
-                            timestamp_seconds: prior_red_herring_get_value_response
-                                .timestamp_seconds,
+                            // Will be tested later.
+                            timestamp_nanoseconds: prior_red_herring_get_value_response
+                                .timestamp_nanoseconds,
                         },
                     ],
                 },

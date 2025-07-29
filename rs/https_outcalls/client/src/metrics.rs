@@ -1,6 +1,11 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use prometheus::{Histogram, HistogramVec, IntCounterVec};
 
+// Constants for metric label names
+const LABEL_STATUS_CODE: &str = "status_code";
+const LABEL_HTTP_METHOD: &str = "http_method";
+const LABEL_STATUS: &str = "status";
+
 #[derive(Clone)]
 pub struct Metrics {
     /// Execution time of transform function.
@@ -25,12 +30,12 @@ impl Metrics {
                 "Execution time of remote http call by adapter.",
                 // 100ms, 200ms, 500ms, …, 10s, 20s, 50s
                 decimal_buckets(-1, 1),
-                &["status_code"],
+                &[LABEL_STATUS_CODE, LABEL_HTTP_METHOD],
             ),
             request_total: metrics_registry.int_counter_vec(
                 "canister_http_requests_total",
                 "Canister http request results returned to consensus.",
-                &["status"],
+                &[LABEL_STATUS, LABEL_HTTP_METHOD],
             ),
         }
     }

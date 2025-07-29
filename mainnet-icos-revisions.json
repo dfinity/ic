@@ -1,14 +1,14 @@
 {
   "guestos": {
     "subnets": {
-      "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": "f195ba756bc3bf170a2888699e5e74101fdac6ba",
-      "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": "2f52f298de53944209f550774505aa72a1a3ed17"
+      "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": "143a635e2af0f574e1ea0f795f8754dfbd86c0c0",
+      "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": "615045e039c57ed842c689e49a07ab3de3a8a781"
     }
   },
   "hostos": {
     "latest_release": {
-      "version": "2f52f298de53944209f550774505aa72a1a3ed17",
-      "update_img_hash": "e258e74394cf557a625b77bd0bb81bab16eddbfc5a2a43bc149a90258243ae87"
+      "version": "615045e039c57ed842c689e49a07ab3de3a8a781",
+      "update_img_hash": "f13003a45552ce62e0524a1ba58b28771b41e828086357261622c17f4011697e"
     }
   }
 }

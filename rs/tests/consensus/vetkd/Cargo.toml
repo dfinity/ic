@@ -17,7 +17,7 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
-ic-vetkd-utils = { path = "../../../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 anyhow = { workspace = true }
 futures = { workspace = true }
 rand = { workspace = true }

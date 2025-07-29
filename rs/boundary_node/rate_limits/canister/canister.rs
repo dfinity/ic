@@ -15,7 +15,7 @@ use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
+use ic_cdk::{init, inspect_message, post_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{

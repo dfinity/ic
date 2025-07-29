@@ -1,6 +1,7 @@
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//bazel:defs.bzl", "file_size_check")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "artifact_bundle")
 
 # The macro contains several targets.
 # Check
@@ -16,17 +17,29 @@ icos_images = icos_build(
     ],
 )
 
-# The icos_deploy testnet script needs these
-upload_artifacts(
-    name = "upload_disk-img",
-    inputs = [icos_images.disk_image],
-    remote_subdir = "guest-os/disk-img",
-    visibility = ["//testnet/tools:__pkg__"],
+file_size_check(
+    name = "disk_img_size_check",
+    file = icos_images.disk_image,
+    max_file_size = 600 * 1000 * 1000,  # 580 MB on 2025-06-26
 )
 
-upload_artifacts(
-    name = "upload_update-img",
-    inputs = [icos_images.update_image],
-    remote_subdir = "guest-os/update-img",
-    visibility = ["//testnet/tools:__pkg__"],
+file_size_check(
+    name = "update_img_size_check",
+    file = icos_images.update_image,
+    max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
+)
+
+file_size_check(
+    name = "update_img_test_size_check",
+    file = icos_images.update_image_test,
+    max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
+)
+
+# The icos_deploy testnet script needs this
+artifact_bundle(
+    name = "bundle-disk",
+    testonly = True,
+    inputs = [icos_images.disk_image],
+    prefix = "guest-os/disk-img-dev",
+    visibility = ["//visibility:public"],
 )

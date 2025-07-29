@@ -15,8 +15,10 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
 ic_bls12_381 = { workspace = true }
 ic-canister-client = { path = "../../../../canister_client" }
+ic-cdk = { workspace = true }
 ic-config = { path = "../../../../config" }
 ic-limits = { path = "../../../../limits" }
+ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../../../types/management_canister_types" }
 ic-message = { path = "../../../test_canisters/message" }
 ic-nervous-system-common-test-keys = { path = "../../../../nervous_system/common/test_keys" }
@@ -26,10 +28,11 @@ ic-nns-test-utils = { path = "../../../../nns/test_utils" }
 ic-prep = { path = "../../../../prep" }
 ic-registry-subnet-features = { path = "../../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
+ic-signer = { path = "../../../test_canisters/signer/" }
 ic-system-test-driver = { path = "../../../driver" }
 ic-types = { path = "../../../../types/types" }
 ic-types-test-utils = { path = "../../../../types/types_test_utils" }
-ic-vetkd-utils = { path = "../../../../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 k256 = { workspace = true }
 registry-canister = { path = "../../../../registry/canister" }
 serde = { workspace = true }

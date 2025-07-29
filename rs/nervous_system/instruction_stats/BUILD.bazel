@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/nervous_system/histogram",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",

@@ -1,11 +1,17 @@
-use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
+use crate::{
+    flags::is_routing_table_single_entry_obsolete,
+    invariants::common::{InvariantCheckError, RegistrySnapshot},
+};
 
 use std::convert::TryFrom;
 
+use ic_base_types::CanisterId;
 use ic_protobuf::registry::routing_table::v1::{
     CanisterMigrations as pbCanisterMigrations, RoutingTable as pbRoutingTable,
 };
-use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
+use ic_registry_keys::{
+    make_canister_migrations_record_key, make_canister_ranges_key, make_routing_table_record_key,
+};
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use prost::Message;
 
@@ -19,14 +25,40 @@ pub(crate) fn check_routing_table_invariants(
 
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
-    match snapshot.get(make_routing_table_record_key().as_bytes()) {
-        Some(routing_table_bytes) => {
-            let routing_table_proto =
-                pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
-            RoutingTable::try_from(routing_table_proto).unwrap()
-        }
-        None => panic!("No routing table in snapshot"),
+    // If there are shards, they should match the routing table record.
+    let shards = get_routing_table_shards(snapshot);
+    let rt_from_shards = RoutingTable::try_from(shards).unwrap();
+
+    if !is_routing_table_single_entry_obsolete() {
+        // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients.
+        let rt_from_routing_table_record =
+            match snapshot.get(make_routing_table_record_key().as_bytes()) {
+                Some(routing_table_bytes) => {
+                    let routing_table_proto =
+                        pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
+                    RoutingTable::try_from(routing_table_proto).unwrap()
+                }
+                None => panic!("No routing table in snapshot"),
+            };
+        assert_eq!(
+            rt_from_shards, rt_from_routing_table_record,
+            "Routing tables from shards and routing table record do not match."
+        );
     }
+
+    rt_from_shards
+}
+
+fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
+    let start = make_canister_ranges_key(CanisterId::from_u64(0)).into_bytes();
+    let end = make_canister_ranges_key(CanisterId::from_u64(u64::MAX)).into_bytes();
+    let mut shards = vec![];
+    for (_, value) in snapshot.range(start..=end) {
+        let routing_table_proto = pbRoutingTable::decode(value.as_slice()).unwrap();
+        shards.push(routing_table_proto);
+    }
+
+    shards
 }
 
 /// Iff `canister_migrations` is present, check that its invariants hold if reading and conversion succeed.
@@ -98,20 +130,32 @@ mod tests {
     use prost::Message;
     use std::convert::TryFrom;
 
+    fn insert_routing_table_to_snapshot(
+        routing_table: RoutingTable,
+        snapshot: &mut RegistrySnapshot,
+    ) {
+        let routing_table = PbRoutingTable::from(routing_table);
+        snapshot.insert(
+            make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            routing_table.encode_to_vec(),
+        );
+        // TODO(NNS1-3781): Remove this once we have sharded table supported by all clients, and
+        // inline the function after removal.
+        snapshot.insert(
+            make_routing_table_record_key().into_bytes(),
+            routing_table.encode_to_vec(),
+        );
+    }
+
     #[test]
     fn nonexistent_canister_migrations_can_pass_invariants_check() {
         let mut snapshot = RegistrySnapshot::new();
 
         let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-    }).unwrap();
-
-        let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
-
-        snapshot.insert(key1.into_bytes(), value1);
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        }).unwrap();
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
@@ -122,19 +166,14 @@ mod tests {
         let mut snapshot = RegistrySnapshot::new();
 
         let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-    }).unwrap();
-
-        let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
-
-        let key2 = make_canister_migrations_record_key();
-        let value2 = PbCanisterMigrations { entries: vec![] }.encode_to_vec();
-
-        snapshot.insert(key1.into_bytes(), value1);
-        snapshot.insert(key2.into_bytes(), value2);
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        }).unwrap();
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
+        snapshot.insert(
+            make_canister_migrations_record_key().into_bytes(),
+            PbCanisterMigrations { entries: vec![] }.encode_to_vec(),
+        );
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
@@ -146,15 +185,10 @@ mod tests {
 
         // The routing table before canister migration.
         let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-    }).unwrap();
-
-        let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
-
-        snapshot.insert(key1.into_bytes(), value1);
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        }).unwrap();
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
 
@@ -164,31 +198,28 @@ mod tests {
     }).unwrap();
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
-        let key2 = make_canister_migrations_record_key();
-        let value2 = canister_migrations.encode_to_vec();
-
-        snapshot.insert(key2.into_bytes(), value2);
+        snapshot.insert(
+            make_canister_migrations_record_key().into_bytes(),
+            canister_migrations.encode_to_vec(),
+        );
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
 
         // Reassign ranges in routing table.
         let routing_table = RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xf) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x10), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-    }).unwrap();
+            CanisterIdRange{ start: CanisterId::from(0x10), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        }).unwrap();
 
-        let routing_table = PbRoutingTable::from(routing_table);
-        let key3 = make_routing_table_record_key();
-        let value3 = routing_table.encode_to_vec();
-        snapshot.insert(key3.into_bytes(), value3);
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
 
         // Complete canister migrations by removing entries.
-        let key4 = make_canister_migrations_record_key();
-        let value4 = PbCanisterMigrations { entries: vec![] }.encode_to_vec();
-
-        snapshot.insert(key4.into_bytes(), value4);
+        snapshot.insert(
+            make_canister_migrations_record_key().into_bytes(),
+            PbCanisterMigrations { entries: vec![] }.encode_to_vec(),
+        );
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
     }
@@ -199,16 +230,12 @@ mod tests {
 
         // The routing table before canister migration.
         let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-        CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
-    }).unwrap();
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+            CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
+        }).unwrap();
 
-        let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
-
-        snapshot.insert(key1.into_bytes(), value1);
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
 
@@ -220,10 +247,10 @@ mod tests {
     }).unwrap();
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
-        let key2 = make_canister_migrations_record_key();
-        let value2 = canister_migrations.encode_to_vec();
-
-        snapshot.insert(key2.into_bytes(), value2);
+        snapshot.insert(
+            make_canister_migrations_record_key().into_bytes(),
+            canister_migrations.encode_to_vec(),
+        );
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_err());
@@ -240,55 +267,87 @@ mod tests {
         CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
     }).unwrap();
 
-        let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
-
         // The canister migrations after preparation.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => vec![subnet_test_id(1), subnet_test_id(2)],
     }).unwrap();
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
-        let key2 = make_canister_migrations_record_key();
-        let value2 = canister_migrations.encode_to_vec();
 
-        snapshot.insert(key1.into_bytes(), value1);
-        snapshot.insert(key2.into_bytes(), value2);
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
+        snapshot.insert(
+            make_canister_migrations_record_key().into_bytes(),
+            canister_migrations.encode_to_vec(),
+        );
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
 
         // The new routing table after reassigning ranges.
 
         // Case 1: cannot find the entry containing `range.start` of canister migrations when looking up entries in the routing table,
-        let mut new_snapshot = snapshot.clone();
         let new_routing_table_1 = RoutingTable::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0x1), end: CanisterId::from(0xff) } => subnet_test_id(1),
         CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
         CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
     }).unwrap();
 
-        let routing_table = PbRoutingTable::from(new_routing_table_1);
-        let key3 = make_routing_table_record_key();
-        let value3 = routing_table.encode_to_vec();
-        new_snapshot.insert(key3.into_bytes(), value3);
-
-        assert!(check_routing_table_invariants(&new_snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&new_snapshot).is_err());
-
-        // Case 2: find the entry containing `range.start` but the entry cannot fully cover the canister migration range {0x0:0xff}.
-        let new_routing_table_2 = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0x1) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-        CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
-    }).unwrap();
-
-        let routing_table = PbRoutingTable::from(new_routing_table_2);
-        let key4 = make_routing_table_record_key();
-        let value4 = routing_table.encode_to_vec();
-        snapshot.insert(key4.into_bytes(), value4);
+        insert_routing_table_to_snapshot(new_routing_table_1, &mut snapshot);
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_err());
+
+        // Case 2: find the entry containing `range.start` but the entry cannot fully cover the canister migration range {0x0:0xff}.
+        let new_routing_table_2 = RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0x1) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+            CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
+        }).unwrap();
+
+        let routing_table = PbRoutingTable::from(new_routing_table_2);
+        snapshot.insert(
+            make_routing_table_record_key().into_bytes(),
+            routing_table.encode_to_vec(),
+        );
+        snapshot.insert(
+            make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            routing_table.encode_to_vec(),
+        );
+
+        assert!(check_routing_table_invariants(&snapshot).is_ok());
+        assert!(check_canister_migrations_invariants(&snapshot).is_err());
+    }
+
+    // TODO(NNS1-3781): Remove this test once we have sharded table supported by all clients.
+    #[test]
+    #[should_panic(expected = "Routing tables from shards and routing table record do not match.")]
+    fn sharded_ranges_must_match_original_routing_table() {
+        let mut snapshot = RegistrySnapshot::new();
+
+        // The routing table before canister migration.
+        let routing_table = RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+            CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
+         }).unwrap();
+
+        let routing_table = PbRoutingTable::from(routing_table);
+
+        let rt_shard = RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        }).unwrap();
+
+        let rt_shard = PbRoutingTable::from(rt_shard);
+
+        snapshot.insert(
+            make_routing_table_record_key().into_bytes(),
+            routing_table.encode_to_vec(),
+        );
+        snapshot.insert(
+            make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            rt_shard.encode_to_vec(),
+        );
+
+        check_routing_table_invariants(&snapshot).unwrap();
     }
 }

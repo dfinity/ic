@@ -10,8 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 ciborium = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1 = { path = "../" }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }

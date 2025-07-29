@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-xrc-types = "1.1.0"
 serde = { workspace = true }

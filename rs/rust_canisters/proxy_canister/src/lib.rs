@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use candid::{CandidType, Deserialize};
+use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
 };
@@ -36,6 +37,7 @@ pub struct UnvalidatedCanisterHttpRequestArgs {
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
+    pub is_replicated: Option<bool>,
 }
 impl Payload<'_> for UnvalidatedCanisterHttpRequestArgs {}
 
@@ -50,6 +52,7 @@ impl From<UnvalidatedCanisterHttpRequestArgs>
             body: args.body,
             method: args.method,
             transform: args.transform,
+            is_replicated: None,
         }
     }
 }
@@ -59,6 +62,12 @@ pub struct RemoteHttpResponse {
     pub status: u128,
     pub headers: Vec<(String, String)>,
     pub body: String,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct ResponseWithRefundedCycles {
+    pub result: Result<RemoteHttpResponse, (RejectionCode, String)>,
+    pub refunded_cycles: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

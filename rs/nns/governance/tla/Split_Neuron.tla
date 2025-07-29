@@ -74,7 +74,7 @@ process ( Split_Neuron \in Split_Neuron_Process_Ids )
             \* as the locks are taken sequentially there; here, we're sure that these neuron IDs differ,
             \* so we omit the extra check.
             locks := locks \union {sn_parent_neuron_id, sn_child_neuron_id};
-            neuron := sn_child_neuron_id :> [ cached_stake |-> 0, account |-> sn_child_account_id, fees |-> 0, maturity |-> 0, state |-> NOT_SPAWNING ] @@
+            neuron := sn_child_neuron_id :> [ cached_stake |-> 0, account |-> sn_child_account_id, fees |-> 0, maturity |-> 0, state |-> NOT_SPAWNING, maturity_disbursements_in_progress |-> <<>> ] @@
                 [neuron EXCEPT ![sn_parent_neuron_id] = [@ EXCEPT !.cached_stake = @ - sn_amount ] ];
             neuron_id_by_account := sn_child_account_id :> sn_child_neuron_id @@ neuron_id_by_account;
 
@@ -106,13 +106,13 @@ process ( Split_Neuron \in Split_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "3e616a65" /\ chksum(tla) = "b4c96114")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-          ledger_to_governance, spawning_neurons, sn_parent_neuron_id,
+\* BEGIN TRANSLATION (chksum(pcal) = "f51464f" /\ chksum(tla) = "71a70f42")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons, sn_parent_neuron_id, 
           sn_amount, sn_child_neuron_id, sn_child_account_id
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-           ledger_to_governance, spawning_neurons, sn_parent_neuron_id,
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons, sn_parent_neuron_id, 
            sn_amount, sn_child_neuron_id, sn_child_account_id >>
 
 ProcSet == (Split_Neuron_Process_Ids)
@@ -141,11 +141,11 @@ SplitNeuron1(self) == /\ pc[self] = "SplitNeuron1"
                                      /\ sn_amount' = [sn_amount EXCEPT ![self] = amt]
                                      /\ sn_child_account_id' = [sn_child_account_id EXCEPT ![self] = fresh_account_id]
                                      /\ sn_child_neuron_id' = [sn_child_neuron_id EXCEPT ![self] = FRESH_NEURON_ID(DOMAIN(neuron))]
-                                     /\ Assert(sn_child_neuron_id'[self] \notin locks,
+                                     /\ Assert(sn_child_neuron_id'[self] \notin locks, 
                                                "Failure of assertion at line 69, column 13.")
                                      /\ (sn_amount'[self] >= MIN_STAKE + TRANSACTION_FEE /\ neuron[sn_parent_neuron_id'[self]].cached_stake - neuron[sn_parent_neuron_id'[self]].fees >= MIN_STAKE + sn_amount'[self])
                                      /\ locks' = (locks \union {sn_parent_neuron_id'[self], sn_child_neuron_id'[self]})
-                                     /\ neuron' = (      sn_child_neuron_id'[self] :> [ cached_stake |-> 0, account |-> sn_child_account_id'[self], fees |-> 0, maturity |-> 0, state |-> NOT_SPAWNING ] @@
+                                     /\ neuron' = (      sn_child_neuron_id'[self] :> [ cached_stake |-> 0, account |-> sn_child_account_id'[self], fees |-> 0, maturity |-> 0, state |-> NOT_SPAWNING, maturity_disbursements_in_progress |-> <<>> ] @@
                                                    [neuron EXCEPT ![sn_parent_neuron_id'[self]] = [@ EXCEPT !.cached_stake = @ - sn_amount'[self] ] ])
                                      /\ neuron_id_by_account' = (sn_child_account_id'[self] :> sn_child_neuron_id'[self] @@ neuron_id_by_account)
                                      /\ governance_to_ledger' =                     Append(governance_to_ledger,
@@ -171,7 +171,7 @@ SplitNeuron1_WaitForTransfer(self) == /\ pc[self] = "SplitNeuron1_WaitForTransfe
                                       /\ sn_child_neuron_id' = [sn_child_neuron_id EXCEPT ![self] = 0]
                                       /\ sn_child_account_id' = [sn_child_account_id EXCEPT ![self] = DUMMY_ACCOUNT]
                                       /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                      /\ UNCHANGED << governance_to_ledger,
+                                      /\ UNCHANGED << governance_to_ledger, 
                                                       spawning_neurons >>
 
 Split_Neuron(self) == SplitNeuron1(self)

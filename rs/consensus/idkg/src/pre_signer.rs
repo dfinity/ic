@@ -1061,34 +1061,38 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
             || {
                 let mut transcript_state = TranscriptState::new();
                 // Walk the dealings to get the dealings belonging to the transcript
-                for (id, signed_dealing) in self.idkg_pool.validated().signed_dealings() {
-                    if signed_dealing.idkg_dealing().transcript_id == transcript_id {
-                        if let Some(dealing_hash) = id.dealing_hash() {
-                            transcript_state.init_dealing_state(dealing_hash, signed_dealing);
-                        } else {
-                            self.metrics
-                                .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
-                            warn!(
-                                self.log,
-                                "build_transcript(): Failed to get dealing hash: {:?}", id
-                            );
-                        }
+                for (id, signed_dealing) in self
+                    .idkg_pool
+                    .validated()
+                    .signed_dealings_by_transcript_id(&transcript_id)
+                {
+                    if let Some(dealing_hash) = id.dealing_hash() {
+                        transcript_state.init_dealing_state(dealing_hash, signed_dealing);
+                    } else {
+                        self.metrics
+                            .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
+                        warn!(
+                            self.log,
+                            "build_transcript(): Failed to get dealing hash: {:?}", id
+                        );
                     }
                 }
 
                 // Walk the support shares and assign to the corresponding dealing
-                for (_, support) in self.idkg_pool.validated().dealing_support() {
-                    if support.transcript_id == transcript_id {
-                        if let Err(err) = transcript_state.add_dealing_support(support) {
-                            warn!(
-                                self.log,
-                                "Failed to add support: transcript_id = {:?}, error = {:?}",
-                                transcript_id,
-                                err
-                            );
-                            self.metrics
-                                .transcript_builder_errors_inc("add_dealing_support");
-                        }
+                for (_, support) in self
+                    .idkg_pool
+                    .validated()
+                    .dealing_support_by_transcript_id(&transcript_id)
+                {
+                    if let Err(err) = transcript_state.add_dealing_support(support) {
+                        warn!(
+                            self.log,
+                            "Failed to add support: transcript_id = {:?}, error = {:?}",
+                            transcript_id,
+                            err
+                        );
+                        self.metrics
+                            .transcript_builder_errors_inc("add_dealing_support");
                     }
                 }
 
@@ -1356,7 +1360,7 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -1368,7 +1372,7 @@ mod tests {
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject},
-        crypto::{BasicSig, BasicSigOf, CryptoHash},
+        crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash},
         time::UNIX_EPOCH,
         Height, RegistryVersion,
     };
@@ -2766,7 +2770,7 @@ mod tests {
         );
         let params = setup_masked_random_params(
             &env,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &dealers,
             &receivers,
             &mut rng,

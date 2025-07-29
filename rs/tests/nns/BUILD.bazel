@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,35 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 exports_files([
     "secret_key.pem",
 ])
-
-# nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
-system_test(
-    name = "nns_upgrade_test",
-    colocated_test_driver_vm_forward_ssh_agent = True,
-    colocated_test_driver_vm_required_host_features = ["dc=zh1"],
-    colocated_test_driver_vm_resources = {
-        "vcpus": 16,
-        "boot_image_minimal_size_gibibytes": 100,
-    },
-    env = NNS_CANISTER_ENV | MAINNET_ENV,
-    env_inherit = ["SSH_AUTH_SOCK"],
-    # TODO: replace 'experimental_system_test_colocation' with 'k8s' once everything is on k8s
-    tags = [
-        "experimental_system_test_colocation",
-        "no-cache",
-        "no-sandbox",
-        "system_test_nightly_nns",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    runtime_deps = IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nns/ic_mainnet_nns_recovery",
-        "@crate_index//:anyhow",
-    ],
-)
 
 system_test_nns(
     name = "nns_dapp_test",
@@ -44,8 +15,7 @@ system_test_nns(
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -61,6 +31,7 @@ system_test_nns(
         "@crate_index//:candid",
         "@crate_index//:libflate",
         "@crate_index//:reqwest",
+        "@crate_index//:url",
     ],
 )
 
@@ -70,10 +41,12 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -90,7 +63,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -119,7 +91,6 @@ system_test(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -163,7 +134,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -193,7 +163,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -218,7 +187,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["@btc_canister//file"],
     deps = [
         # Keep sorted.
@@ -248,7 +216,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/crypto/utils/threshold_sig_der",

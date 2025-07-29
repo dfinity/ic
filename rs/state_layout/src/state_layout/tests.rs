@@ -60,6 +60,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
+        environment_variables: BTreeMap::new(),
     }
 }
 
@@ -143,10 +144,10 @@ fn test_encode_decode_non_empty_history() {
         42,
         0,
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
-        CanisterChangeDetails::canister_creation(vec![
-            canister_test_id(777).get(),
-            user_test_id(42).get(),
-        ]),
+        CanisterChangeDetails::canister_creation(
+            vec![canister_test_id(777).get(), user_test_id(42).get()],
+            Some([4; 32]),
+        ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         123,
@@ -187,6 +188,33 @@ fn test_encode_decode_non_empty_history() {
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
         CanisterChangeDetails::controllers_change(vec![]),
     ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(None, Some([1; 32])),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(Some(vec![]), Some([1; 32])),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(
+            Some(vec![canister_test_id(123).into()]),
+            Some([1; 32]),
+        ),
+    ));
+    canister_history.add_canister_change(CanisterChange::new(
+        555,
+        7,
+        CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+        CanisterChangeDetails::settings_change(Some(vec![canister_test_id(123).into()]), None),
+    ));
 
     // A canister state with non-empty history.
     let canister_state_bits = CanisterStateBits {
@@ -225,6 +253,41 @@ fn test_canister_snapshots_decode() {
     let new_canister_snapshot_bits = CanisterSnapshotBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_snapshot_bits, new_canister_snapshot_bits);
+}
+
+#[test]
+fn test_encode_decode_empty_environment_variables() {
+    // A canister state with empty environment variables.
+    let canister_state_bits = CanisterStateBits {
+        environment_variables: BTreeMap::new(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.environment_variables,
+        BTreeMap::new()
+    );
+}
+
+#[test]
+fn test_encode_decode_non_empty_environment_variables() {
+    let mut environment_variables = BTreeMap::new();
+    environment_variables.insert("KEY1".to_string(), "VALUE1".to_string());
+    environment_variables.insert("KEY2".to_string(), "VALUE2".to_string());
+
+    // A canister state with non-empty environment variables.
+    let canister_state_bits = CanisterStateBits {
+        environment_variables: environment_variables.clone(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.environment_variables,
+        environment_variables
+    );
 }
 
 #[test]
@@ -290,7 +353,8 @@ fn test_removal_when_last_dropped() {
                 .unwrap(),
                 Height::new(1),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp1.finalize_and_remove_unverified_marker(None).unwrap();
         let cp2 = state_layout
             .promote_scratchpad_to_unverified_checkpoint(
@@ -301,7 +365,8 @@ fn test_removal_when_last_dropped() {
                 .unwrap(),
                 Height::new(2),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp2.finalize_and_remove_unverified_marker(None).unwrap();
         // Add one checkpoint so that we never remove the last one and crash
         let cp3 = state_layout
@@ -313,7 +378,8 @@ fn test_removal_when_last_dropped() {
                 .unwrap(),
                 Height::new(3),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp3.finalize_and_remove_unverified_marker(None).unwrap();
         assert_eq!(
             vec![Height::new(1), Height::new(2), Height::new(3)],
@@ -362,7 +428,8 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             }
             let cp = state_layout
                 .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, h)
-                .unwrap();
+                .unwrap()
+                .as_readonly();
             cp.finalize_and_remove_unverified_marker(None).unwrap();
             cp
         };
@@ -411,7 +478,8 @@ fn test_last_removal_panics_in_debug() {
                 .unwrap(),
                 Height::new(1),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp1.finalize_and_remove_unverified_marker(None).unwrap();
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         std::mem::drop(cp1);
@@ -451,7 +519,8 @@ fn test_can_remove_unverified_marker_file_twice() {
 
         let checkpoint = state_layout
             .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         checkpoint
             .finalize_and_remove_unverified_marker(None)
             .unwrap();
@@ -759,7 +828,9 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
 
         let cp1 = state_layout
             .promote_scratchpad_to_unverified_checkpoint(scratchpad, Height::new(1))
-            .unwrap();
+            .unwrap()
+            .as_readonly();
+
         cp1.finalize_and_remove_unverified_marker(None).unwrap();
 
         // Create another checkpoint at height 2 so that we can remove the first one.
@@ -772,7 +843,8 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
                 .unwrap(),
                 Height::new(2),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp2.finalize_and_remove_unverified_marker(None).unwrap();
 
         // Create a `CanisterModule` that holds the checkpoint layout at height 1.

@@ -443,6 +443,48 @@ message RegisterDappCanisters {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
+message Precise {
+  oneof value {
+    bool bool = 1;
+    bytes blob = 2;
+    string text = 3;
+    uint64 nat = 4;
+    int64 int = 5;
+    PreciseArray array = 6;
+    PreciseMap map = 7;
+  }
+}
+
+message PreciseArray {
+  repeated Precise array = 1;
+}
+
+message PreciseMap {
+  map<string, Precise> map = 1;
+}
+
+message ExtensionInit {
+  optional Precise value = 1;
+}
+
+message RegisterExtension {
+  optional ChunkedCanisterWasm chunked_canister_wasm = 1;
+
+  optional ExtensionInit extension_init = 2;
+}
+
+message ExtensionOperationArg {
+  optional Precise value = 1;
+}
+
+message ExecuteExtensionOperation {
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  optional string operation_name = 2;
+
+  optional ExtensionOperationArg operation_arg = 3;
+}
+
 // A proposal to remove a list of dapps from the SNS and assign them to new controllers
 message DeregisterDappCanisters {
   // The canister IDs to be deregistered (i.e. removed from the management of the SNS).
@@ -627,8 +669,18 @@ message Proposal {
 
     // Change the mapping from custom proposal types to topics.
     //
-    // Id = 16;
+    // Id = 16.
     SetTopicsForCustomProposals set_topics_for_custom_proposals = 20;
+
+    // Register an SNS extension canister.
+    //
+    // Id = 17.
+    RegisterExtension register_extension = 21;
+
+    // Execute an SNS extension's operation.
+    //
+    // Id = 18.
+    ExecuteExtensionOperation execute_extension_operation = 22;
   }
 }
 
@@ -828,6 +880,8 @@ message ProposalData {
   // Id 14 - ManageDappCanisterSettings proposals.
   // Id 15 - AdvanceSnsTargetVersion proposals.
   // Id 16 - SetTopicsForCustomProposals proposals.
+  // Id 17 - RegisterExtension.
+  // Id 18 - ExecuteExtensionOperation.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
@@ -1444,6 +1498,12 @@ message Governance {
     // The number of governance tokens in neurons with a dissolve delay of
     // less than six months.
     uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
+
+    // Metrics related to the treasury assets of this SNS.
+    repeated TreasuryMetrics treasury_metrics = 17;
+
+    // Metrics related to the voting power in this SNS.
+    optional VotingPowerMetrics voting_power_metrics = 18;
   }
 
   GovernanceCachedMetrics metrics = 13;
@@ -1592,6 +1652,39 @@ message GetMetadataResponse {
   optional string url = 2;
   optional string name = 3;
   optional string description = 4;
+}
+
+// Request message for 'get_sns_status'
+message GetMetricsRequest {
+  uint64 time_window_seconds = 1;
+}
+
+message TreasuryMetrics {
+  Valuation.Token treasury = 1;
+  optional string name = 2;
+
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 3;
+  Account account = 4;
+
+  uint64 amount_e8s = 5;
+  uint64 original_amount_e8s = 6;
+
+  uint64 timestamp_seconds = 7;
+}
+
+message VotingPowerMetrics {
+  uint64 governance_total_potential_voting_power = 1;
+  uint64 timestamp_seconds = 2;
+}
+
+// Response message for 'get_sns_status'
+message Metrics {
+  uint64 num_recently_submitted_proposals = 1;
+  uint64 last_ledger_block_timestamp = 2;
+  uint64 num_recently_executed_proposals = 3;
+  repeated TreasuryMetrics treasury_metrics = 4;
+  optional VotingPowerMetrics voting_power_metrics = 5;
+  uint64 genesis_timestamp_seconds = 6;
 }
 
 // Request message for 'get_sns_initialization_parameters'

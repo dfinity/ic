@@ -510,6 +510,18 @@ impl ExecutionState {
             + self.custom_sections_memory_size()
     }
 
+    /// Returns the `ExecutionState`'s contribution to the memory of a snapshot.
+    /// The difference to `memory_usage` is that the custom wasm section is not
+    /// stored explicitly in a snapshot, only implicitly in the wasm module,
+    /// whereas for the running canister, it's explicit and takes additional
+    /// memory.
+    pub fn memory_usage_in_snapshot(&self) -> NumBytes {
+        self.wasm_memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
+    }
+
     /// Returns the number of global variables in the Wasm module.
     pub fn num_wasm_globals(&self) -> usize {
         self.exported_globals.len()
@@ -521,6 +533,10 @@ impl ExecutionState {
         let delta_pages = self.wasm_memory.page_map.num_delta_pages()
             + self.stable_memory.page_map.num_delta_pages();
         NumBytes::from((delta_pages * PAGE_SIZE) as u64)
+    }
+
+    pub(crate) fn wasm_execution_mode(&self) -> WasmExecutionMode {
+        self.wasm_execution_mode
     }
 }
 

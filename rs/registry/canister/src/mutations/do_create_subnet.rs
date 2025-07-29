@@ -11,8 +11,8 @@ use ic_management_canister_types_private::{
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb,
-        SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+        ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
 };
 use ic_registry_keys::{
@@ -40,7 +40,10 @@ impl Registry {
     /// parameters populated by caller into registry. It is expected that
     /// the rest of the system will take the information from the registry
     /// to actually start the subnet.
-    pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) {
+    ///
+    /// Returns the ID of the new subnet. The subnet probably isn't ready for
+    /// immediate use shortly after this returns.
+    pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) -> NewSubnet {
         println!("{}do_create_subnet: {:?}", LOG_PREFIX, payload);
 
         self.validate_create_subnet_payload(&payload);
@@ -157,19 +160,22 @@ impl Registry {
             value: subnet_record.encode_to_vec(),
         };
 
-        let routing_table_mutation =
+        let mut routing_table_mutations =
             self.add_subnet_to_routing_table(self.latest_version(), subnet_id);
 
-        let mutations = vec![
+        let mut mutations = vec![
             subnet_list_mutation,
             new_subnet,
             new_subnet_dkg,
             new_subnet_threshold_signing_pubkey,
-            routing_table_mutation,
         ];
+        mutations.append(&mut routing_table_mutations);
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        let new_subnet_id = Some(subnet_id);
+        NewSubnet { new_subnet_id }
     }
 
     /// Validates runtime payload values that aren't checked by invariants.
@@ -189,6 +195,7 @@ impl Registry {
                     value,
                     version: _,
                     deletion_marker: _,
+                    timestamp_nanoseconds: _,
                 }) => assert_ne!(
                     NodeRecord::decode(value.as_slice()).unwrap(),
                     NodeRecord::default()
@@ -282,6 +289,10 @@ pub struct CreateSubnetPayload {
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
 
+    /// None is treated the same as Some(Normal). Some(Normal) should be
+    /// preferred over None though, because explicit is better than implicit.
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub gossip_max_artifact_streams_per_peer: u32,
@@ -295,10 +306,16 @@ pub struct CreateSubnetPayload {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct NewSubnet {
+    pub new_subnet_id: Option<SubnetId>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
@@ -307,6 +324,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -318,6 +336,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -330,6 +349,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let mut key_config_validation_errors = vec![];
@@ -356,6 +376,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -464,6 +485,32 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
     }
 }
 
+/// How much (in cycles) does it cost a canister to consume computational
+/// resources? Examples of such resources, which generally require cycles:
+///
+///     1. Execute instructions.
+///     2. Store Data - In normal memory, and stable memory.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub enum CanisterCyclesCostSchedule {
+    /// Use the cost schedule associate with the subnet's type.
+    #[default]
+    Normal,
+
+    /// This is used by rented subnets. This is because rented subnets get paid
+    /// for in a different way.
+    Free,
+}
+
+impl From<CanisterCyclesCostSchedule> for CanisterCyclesCostSchedulePb {
+    fn from(src: CanisterCyclesCostSchedule) -> Self {
+        type Src = CanisterCyclesCostSchedule;
+        match src {
+            Src::Normal => Self::Normal,
+            Src::Free => Self::Free,
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
@@ -516,6 +563,12 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
+
+            canister_cycles_cost_schedule: val
+                .canister_cycles_cost_schedule
+                .map(CanisterCyclesCostSchedulePb::from)
+                .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
+                as i32,
         }
     }
 }
@@ -556,6 +609,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -591,6 +645,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
@@ -616,6 +671,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -653,6 +709,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
@@ -678,6 +735,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -713,6 +771,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
 
         let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
@@ -741,6 +800,7 @@ mod test {
                 key_configs: vec![key_config_request; 2],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };

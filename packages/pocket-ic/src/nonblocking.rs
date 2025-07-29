@@ -1,7 +1,7 @@
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
@@ -11,8 +11,8 @@ use crate::common::rest::{
 use crate::wsl_path;
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse, Time,
+    copy_dir, start_server, IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse,
+    StartServerParams, Time,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -139,14 +139,23 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
         } else {
-            start_or_reuse_server(server_binary).await
+            let (_, server_url) = start_server(StartServerParams {
+                server_binary,
+                reuse: true,
+            })
+            .await;
+            server_url
         };
 
-        let subnet_config_set = subnet_config_set.into();
+        let subnet_config_set = subnet_config_set
+            .into()
+            .try_with_icp_features(&icp_features)
+            .unwrap();
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
@@ -195,6 +204,8 @@ impl PocketIc {
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            icp_features: Some(icp_features),
+            allow_incomplete_state: Some(false),
         };
 
         let test_driver_pid = std::process::id();
@@ -309,7 +320,12 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = start_or_reuse_server(None).await.join("instances").unwrap();
+        let (_, server_url) = start_server(StartServerParams {
+            reuse: true,
+            ..Default::default()
+        })
+        .await;
+        let url = server_url.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()
@@ -367,12 +383,10 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
-        let now = std::time::SystemTime::now();
-        self.set_certified_time(now.into()).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -402,7 +416,7 @@ impl PocketIc {
         self.post::<(), _>(endpoint, "").await;
     }
 
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made if the HTTP
     /// gateway has been started.
     pub fn url(&self) -> Option<Url> {
@@ -417,7 +431,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
@@ -433,7 +447,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live_with_params(
@@ -1567,7 +1581,8 @@ impl PocketIc {
                             }
                         }
                         if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
+                            if start.elapsed().unwrap_or_default()
+                                > Duration::from_millis(max_request_time_ms)
                             {
                                 panic!("request to PocketIC server timed out.");
                             }
@@ -1576,7 +1591,8 @@ impl PocketIc {
                 }
             }
             if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                if start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+                {
                     panic!("request to PocketIC server timed out.");
                 }
             }

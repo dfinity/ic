@@ -79,9 +79,7 @@ mod downgrade_get_changes_since_response {
             let HighCapacityRegistryValue {
                 version,
                 content,
-
-                // This gets dropped.
-                timestamp_seconds: _,
+                timestamp_nanoseconds,
             } = original;
 
             let (value, deletion_marker) = match content {
@@ -103,6 +101,7 @@ mod downgrade_get_changes_since_response {
                 version,
                 value,
                 deletion_marker,
+                timestamp_nanoseconds,
             })
         }
     }
@@ -120,12 +119,12 @@ impl From<RegistryAtomicMutateRequest> for HighCapacityRegistryAtomicMutateReque
             .map(HighCapacityRegistryMutation::from)
             .collect::<Vec<_>>();
 
-        let timestamp_seconds = 0;
+        let timestamp_nanoseconds = 0;
 
         HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions,
-            timestamp_seconds,
+            timestamp_nanoseconds,
         }
     }
 }
@@ -272,6 +271,8 @@ pub async fn dechunkify_mutation_value(
 
 /// Smartly converts from HighCapacityRegistryDelta to (non-high-capacity)
 /// RegistryDelta.
+///
+/// It is often useful to call this right after calling deserialize_get_changes_since_response.
 pub async fn dechunkify_delta(
     delta: HighCapacityRegistryDelta,
     get_chunk: &(impl GetChunk + Sync),
@@ -289,6 +290,23 @@ pub async fn dechunkify_delta(
     Ok(RegistryDelta { key, values })
 }
 
+pub async fn dechunkify_get_value_response_content(
+    content: high_capacity_registry_get_value_response::Content,
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<Vec<u8>, Error> {
+    match content {
+        high_capacity_registry_get_value_response::Content::Value(value) => Ok(value),
+
+        high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(
+            large_value_chunk_keys,
+        ) => dechunkify(get_chunk, &large_value_chunk_keys)
+            .await
+            .map_err(|err| {
+                Error::UnknownError(format!("Unable to dechunkify get_value response: {}", err,))
+            }),
+    }
+}
+
 // Privates
 
 async fn dechunkify_value(
@@ -298,8 +316,7 @@ async fn dechunkify_value(
     let HighCapacityRegistryValue {
         version,
         content,
-        // Ignored.
-        timestamp_seconds: _,
+        timestamp_nanoseconds,
     } = value;
 
     let value = match content {
@@ -315,6 +332,7 @@ async fn dechunkify_value(
         value,
         version,
         deletion_marker,
+        timestamp_nanoseconds,
     })
 }
 

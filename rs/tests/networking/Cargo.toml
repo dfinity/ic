@@ -16,12 +16,13 @@ cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-http-endpoints-test-agent = { path = "../../http_endpoints/test_agent" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-message = { path = "../test_canisters/message" }
 ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
@@ -47,7 +48,6 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-wabt-tests = { path = "../idx/wabt-tests" }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
@@ -56,6 +56,10 @@ path = "canister_http_correctness_test.rs"
 [[bin]]
 name = "ic-systest-canister-http-fault-tolerance"
 path = "canister_http_fault_tolerance_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-non-replicated"
+path = "canister_http_non_replicated_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-socks"
@@ -88,7 +92,6 @@ path = "firewall_max_connections_test.rs"
 [[bin]]
 name = "ic-systest-firewall-priority-test"
 path = "firewall_priority_test.rs"
-
 
 [[bin]]
 name = "ic-systest-http-endpoints-public-spec-test"

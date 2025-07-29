@@ -1,9 +1,7 @@
 use crate::driver::port_allocator::AddrType;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::get_ssh_session_from_env;
 use crate::driver::test_env_api::*;
-use crate::retry_with_msg;
 use crate::util::create_agent;
 use ic_agent::{Agent, AgentError};
 
@@ -12,7 +10,7 @@ use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
@@ -20,12 +18,11 @@ use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::info;
-use ssh2::Session;
 use url::Url;
 
 pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
-pub const NESTED_CONFIGURED_IMAGE_PATH: &str = "config.img.zst";
+pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img.zst";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
 
 pub struct NestedNode {
@@ -51,24 +48,39 @@ pub struct NestedVm {
 
 impl NestedVm {
     pub fn get_vm(&self) -> Result<AllocatedVm> {
-        let rel_dir: PathBuf = [NESTED_VMS_DIR, &self.name].iter().collect();
-        let vm_path = rel_dir.join(NESTED_VM_PATH);
+        let vm_path: PathBuf = [NESTED_VMS_DIR, &self.name, NESTED_VM_PATH]
+            .iter()
+            .collect();
 
         self.env.read_json_object(vm_path)
     }
 
-    pub fn get_configured_setupos_image_path(&self) -> Result<PathBuf> {
-        let rel_dir: PathBuf = [NESTED_VMS_DIR, &self.name].iter().collect();
-        let image_path = rel_dir.join(NESTED_CONFIGURED_IMAGE_PATH);
+    pub fn get_setupos_config_image_path(&self) -> Result<PathBuf> {
+        let image_path: PathBuf = [NESTED_VMS_DIR, &self.name, NESTED_CONFIG_IMAGE_PATH]
+            .iter()
+            .collect();
 
         Ok(self.env.get_path(image_path))
     }
 
     pub fn get_nested_network(&self) -> Result<NestedNetwork> {
-        let rel_dir: PathBuf = [NESTED_VMS_DIR, &self.name].iter().collect();
-        let ip_path = rel_dir.join(NESTED_NETWORK_PATH);
+        let ip_path: PathBuf = [NESTED_VMS_DIR, &self.name, NESTED_NETWORK_PATH]
+            .iter()
+            .collect();
 
         self.env.read_json_object(ip_path)
+    }
+
+    /// Returns a handle that allows to SSH into the guest OS of the nested VM.
+    pub fn get_guest_ssh(&self) -> Result<GuestSsh> {
+        let guest_ip = self
+            .get_nested_network()
+            .context("Failed to get nested network")?
+            .guest_ip;
+        Ok(GuestSsh {
+            env: self.env.clone(),
+            ip: guest_ip,
+        })
     }
 }
 
@@ -173,20 +185,8 @@ impl NestedVms for TestEnv {
 }
 
 impl SshSession for NestedVm {
-    fn get_ssh_session(&self) -> Result<Session> {
-        let vm = self.get_vm()?;
-        get_ssh_session_from_env(&self.env, IpAddr::V6(vm.ipv6))
-    }
-
-    fn block_on_ssh_session(&self) -> Result<Session> {
-        let vm = self.get_vm()?;
-        retry_with_msg!(
-            format!("get_ssh_session to {}", vm.ipv6.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session() }
-        )
+    fn get_host_ip(&self) -> Result<IpAddr> {
+        Ok(self.get_vm()?.ipv6.into())
     }
 }
 
@@ -207,5 +207,22 @@ impl HasPublicApiUrl for NestedVm {
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
         let url = self.get_public_url().to_string();
         create_agent(&url).await
+    }
+}
+
+pub struct GuestSsh {
+    env: TestEnv,
+    ip: Ipv6Addr,
+}
+
+impl HasTestEnv for GuestSsh {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl SshSession for GuestSsh {
+    fn get_host_ip(&self) -> Result<IpAddr> {
+        Ok(self.ip.into())
     }
 }

@@ -6,8 +6,10 @@ use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
-use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
+use ic_cdk::{
+    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
+    heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn, update,
+};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -20,7 +22,9 @@ use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
     IC_00,
 };
-use ic_nervous_system_common::{serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID};
+use ic_nervous_system_common::{
+    serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -28,6 +32,7 @@ use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
@@ -39,6 +44,7 @@ use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 use std::{
     cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
@@ -76,6 +82,9 @@ const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 /// into this. At that time, prices had recently gone up, so we resolved to
 /// increase this by 3x.
 const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
+
+/// The limit for the number of cycles that can be minted by the Subnet Rental Canister in a month.
+const SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT: u128 = 500e15 as u128;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
@@ -185,8 +194,9 @@ struct StateVersion(u64);
 ///
 /// * Optionally remove older State types (StateVm where m < n)
 ///   because they are no longer needed.
-type State = StateV1;
+type State = StateV2;
 
+// TODO(NNS1-3980): remove this code when we no longer support version 1.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
@@ -271,9 +281,100 @@ pub struct StateV1 {
     pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
-impl StateV1 {
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct StateV2 {
+    pub ledger_canister_id: CanisterId,
+
+    pub governance_canister_id: CanisterId,
+
+    /// An ID that provides an interface to a canister that provides exchange
+    /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
+    pub exchange_rate_canister_id: Option<CanisterId>,
+
+    pub cycles_ledger_canister_id: Option<CanisterId>,
+
+    /// Account used to burn funds.
+    pub minting_account_id: Option<AccountIdentifier>,
+
+    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
+
+    pub default_subnets: Vec<SubnetId>,
+
+    /// How many XDR 1 ICP is worth, along with a timestamp.
+    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+
+    /// The average ICP/XDR rate over `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days. The
+    /// timestamp is the UNIX epoch time in seconds at the start of the last
+    /// considered day, which should correspond to midnight of the current
+    /// day.
+    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+
+    /// The recent ICP/XDR rates used to compute the average rate.
+    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
+
+    /// How many cycles 1 XDR is worth.
+    pub cycles_per_xdr: Cycles,
+
+    /// How many cycles are allowed to be minted in an hour.
+    pub base_cycles_limit: Cycles,
+
+    /// How many cycles are allowed to be minted by the Subnet Rental Canister in a month.
+    pub subnet_rental_cycles_limit: Cycles,
+
+    /// Maintain a count of how many cycles have been minted in the last hour.
+    pub base_limiter: limiter::Limiter,
+
+    /// Maintain a count of how many cycles have been minted by the Subnet Rental Canister
+    /// in the last month.
+    pub subnet_rental_canister_limiter: limiter::Limiter,
+
+    pub total_cycles_minted: Cycles,
+
+    // We use this for synchronization.
+    //
+    // Because our operations (e.g. minting cycles) require calling other
+    // canister(s), in particular ledger, it is possible for duplicate requests
+    // to interleave. In such cases, we want subsequent operations to see that
+    // an operation is already in flight. Therefore, before making any canister
+    // calls, we check that the block does not already have a status. If it
+    // already has a status, do not proceed. If it dos not already have a
+    // status, set it to Processing. Then, we can proceed with calling the other
+    // canister (i.e. ledger). Once that comes back, we update the block's
+    // status. This avoids using the same ICP to perform multiple operations.
+    pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
+    // The status of blocks not new than this is ambiguous. This is because we
+    // must bound how much memory we use; in particular, blocks_notified must
+    // not grow without bound.
+    pub last_purged_notification: BlockIndex,
+
+    /// The current maturity modulation in basis points (permyriad), i.e.,
+    /// a value of 123 corresponds to 1.23%.
+    pub maturity_modulation_permyriad: Option<i32>,
+
+    /// Maintains the mapping of subnet types to subnet ids. Users can choose to
+    /// deploy their canisters on subnets with specific characteristics by
+    /// selecting one of these types.
+    ///
+    ///
+    /// These user facing subnet types capture common useful characteristics of
+    /// the subnets and should not be confused with the existing concept of
+    /// subnet types that exists in the registry (system/verified/application).
+    /// The idea is that these types provide an easy way for users to set their
+    /// preferences during canister creation. If no subnet type is provided
+    /// during canister creation, a subnet without a special type will be picked
+    /// at random as no special requirements were provided.
+    ///
+    /// Each subnet can be assigned to at most one type and cannot be a default
+    /// or an authorized subnet.
+    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
+
+    /// This is used to ensure that only one exchange rate update is being performed at a time from heartbeat.
+    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
+}
+
+impl StateV2 {
     fn state_version() -> StateVersion {
-        StateVersion(1)
+        StateVersion(2)
     }
 }
 
@@ -287,6 +388,7 @@ impl State {
         let stored_state_version: StateVersion =
             deserializer.get_value().expect("state version is missing");
         let current_state_version: StateVersion = Self::state_version();
+
         match stored_state_version.cmp(&current_state_version) {
             Ordering::Greater => {
                 return Err(format!(
@@ -300,6 +402,12 @@ impl State {
                 // Since the version 1 is the latest version and also the first one encoded along
                 // with the state version, this should never happen. When we have a higher version
                 // than 1, we should add migration code here.
+                // TODO(NNS1-3980): remove this code when we no longer support version 1.
+                if stored_state_version == StateVersion(1) {
+                    let state = deserializer.get_value::<StateV1>().unwrap();
+                    deserializer.done().unwrap();
+                    return Ok(migrate_v1_to_v2(state));
+                }
                 return Err(format!(
                     "[cycles] ERROR: stored state version {:?} is lesser than the current state \
                      version {:?}! Did you forget to migrate the old to the current type?",
@@ -336,6 +444,62 @@ impl State {
     }
 }
 
+// TODO(NNS1-3980): remove this code when we no longer support version 1.
+fn migrate_v1_to_v2(p0: StateV1) -> State {
+    let StateV1 {
+        ledger_canister_id,
+        governance_canister_id,
+        exchange_rate_canister_id,
+        cycles_ledger_canister_id,
+        minting_account_id,
+        authorized_subnets,
+        default_subnets,
+        icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate,
+        recent_icp_xdr_rates,
+        cycles_per_xdr,
+        cycles_limit,
+        limiter,
+        total_cycles_minted,
+        blocks_notified,
+        last_purged_notification,
+        maturity_modulation_permyriad,
+        subnet_types_to_subnets,
+        update_exchange_rate_canister_state,
+    } = p0;
+
+    // new fields with default value
+    let subnet_rental_cycles_limit = Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT);
+    let subnet_rental_canister_limiter = limiter::Limiter::new(
+        Duration::from_secs(ONE_HOUR_SECONDS),
+        Duration::from_secs(ONE_MONTH_SECONDS),
+    );
+
+    StateV2 {
+        ledger_canister_id,
+        governance_canister_id,
+        exchange_rate_canister_id,
+        cycles_ledger_canister_id,
+        minting_account_id,
+        authorized_subnets,
+        default_subnets,
+        icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate,
+        recent_icp_xdr_rates,
+        cycles_per_xdr,
+        base_cycles_limit: cycles_limit, // renamed
+        subnet_rental_cycles_limit,
+        base_limiter: limiter, // renamed                                                     //renamed
+        subnet_rental_canister_limiter,
+        total_cycles_minted,
+        blocks_notified,
+        last_purged_notification,
+        maturity_modulation_permyriad,
+        subnet_types_to_subnets,
+        update_exchange_rate_canister_state,
+    }
+}
+
 impl Default for State {
     fn default() -> Self {
         let resolution = Duration::from_secs(60);
@@ -360,14 +524,44 @@ impl Default for State {
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
-            limiter: limiter::Limiter::new(resolution, max_age),
+            base_cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
+            subnet_rental_cycles_limit: Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT),
+            base_limiter: limiter::Limiter::new(resolution, max_age),
+            subnet_rental_canister_limiter: limiter::Limiter::new(
+                Duration::from_secs(ONE_HOUR_SECONDS),
+                Duration::from_secs(ONE_MONTH_SECONDS),
+            ),
             total_cycles_minted: Cycles::zero(),
             blocks_notified: BTreeMap::new(),
             last_purged_notification: 0,
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
             update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
+        }
+    }
+}
+
+enum CyclesMintingLimiterSelector {
+    BaseLimit,
+    SubnetRentalLimit,
+}
+
+impl CyclesMintingLimiterSelector {
+    fn check_and_add_cycles(
+        &self,
+        state: &mut State,
+        now: SystemTime,
+        cycles_to_mint: Cycles,
+    ) -> Result<(), String> {
+        match self {
+            CyclesMintingLimiterSelector::BaseLimit => state.base_limiter.check_and_add_cycles(
+                now,
+                cycles_to_mint,
+                state.base_cycles_limit,
+            ),
+            CyclesMintingLimiterSelector::SubnetRentalLimit => state
+                .subnet_rental_canister_limiter
+                .check_and_add_cycles(now, cycles_to_mint, state.subnet_rental_cycles_limit),
         }
     }
 }
@@ -866,8 +1060,7 @@ fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRat
     let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
 
     let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
-        IcpXdrConversionRate::default(
-        );
+        IcpXdrConversionRate::default();
         ICP_XDR_CONVERSION_RATE_CACHE_SIZE
     ]);
 
@@ -1119,6 +1312,17 @@ async fn notify_top_up(
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
+    let caller = caller();
+
+    let src_canister_principal = SUBNET_RENTAL_CANISTER_ID.get();
+    let limiter_to_use =
+        if caller == src_canister_principal && canister_id.get() == src_canister_principal {
+            // caller and destination needs to be src_canister_principal to get alternate limiter
+            CyclesMintingLimiterSelector::SubnetRentalLimit
+        } else {
+            CyclesMintingLimiterSelector::BaseLimit
+        };
+
     let (amount, from) = fetch_transaction(
         block_index,
         Subaccount::from(&canister_id),
@@ -1174,7 +1378,7 @@ async fn notify_top_up(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_top_up(canister_id, from, amount).await;
+            let result = process_top_up(canister_id, from, amount, limiter_to_use).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1944,7 +2148,18 @@ async fn do_transaction_notification(
             .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_top_up(canister_id, from, tn.amount).await {
+
+        // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
+        // doesn't call this endpoint.
+        let process_top_up_result = process_top_up(
+            canister_id,
+            from,
+            tn.amount,
+            CyclesMintingLimiterSelector::BaseLimit,
+        )
+        .await;
+
+        match process_top_up_result {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
@@ -2120,6 +2335,7 @@ async fn process_top_up(
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2130,7 +2346,7 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles, true).await {
+    match deposit_cycles(canister_id, cycles, true, limiter_to_use).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
@@ -2249,16 +2465,17 @@ async fn deposit_cycles(
     canister_id: CanisterId,
     cycles: Cycles,
     mint_cycles: bool,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<(), String> {
     if mint_cycles {
-        ensure_balance(cycles)?;
+        ensure_balance(cycles, limiter_to_use)?;
     }
 
-    let res: CallResult<()> = ic_cdk::api::call::call_with_payment(
+    let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
         IC_00.get().0,
         &Method::DepositCycles.to_string(),
         (CanisterIdRecord::from(canister_id),),
-        u128::from(cycles) as u64,
+        u128::from(cycles),
     )
     .await;
 
@@ -2281,19 +2498,20 @@ async fn do_mint_cycles(
     else {
         return Err("No cycles ledger canister id configured.".to_string());
     };
-
-    ensure_balance(cycles)?;
+    // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
+    // doesn't call endpoints using this function.
+    ensure_balance(cycles, CyclesMintingLimiterSelector::BaseLimit)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
         memo: deposit_memo,
     };
 
-    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment(
+    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment128(
         cycles_ledger_canister_id.get().0,
         "deposit",
         (arg,),
-        u128::from(cycles) as u64,
+        u128::from(cycles),
     )
     .await;
 
@@ -2378,7 +2596,10 @@ async fn do_create_canister(
     }
 
     // We have subnets available, so we can now mint the cycles and create the canister.
-    ensure_balance(cycles)?;
+
+    // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
+    // doesn't call endpoints using this function.
+    ensure_balance(cycles, CyclesMintingLimiterSelector::BaseLimit)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -2396,14 +2617,14 @@ async fn do_create_canister(
         });
 
     for subnet_id in subnets {
-        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
             subnet_id.get().0,
             &Method::CreateCanister.to_string(),
             (CreateCanisterArgs {
                 settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
             },),
-            cycles.get().try_into().unwrap(),
+            u128::from(cycles),
         )
         .await;
 
@@ -2431,40 +2652,27 @@ async fn do_create_canister(
     Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
-fn ensure_balance(cycles: Cycles) -> Result<(), String> {
+/// Ensure the Cycles Minting canister has at least `cycles` balance of cycles, otherwise, mint more
+/// so that the balance of this canister is at least `cycles`.  If the `check_minting_limit` is true,
+/// the minting limit is checked and enforced before minting, otherwise, the minting limit is ignored.
+fn ensure_balance(
+    cycles: Cycles,
+    limiter_to_use: CyclesMintingLimiterSelector,
+) -> Result<(), String> {
     let now = now_system_time();
 
-    let current_balance = Cycles::from(ic_cdk::api::canister_balance());
+    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
-        state.limiter.purge_old(now);
-        let count = state.limiter.get_count();
-
-        if count + cycles_to_mint > state.cycles_limit {
-            LIMITER_REJECT_COUNT.with(|count| {
-                count.set(count.get().saturating_add(1));
-            });
-
-            return Err(format!(
-                "More than {} cycles have been minted in the last {} seconds, please try again later.",
-                state.cycles_limit,
-                state.limiter.get_max_age().as_secs(),
-            ));
-        }
-
-        state.limiter.add(now, cycles_to_mint);
+        limiter_to_use.check_and_add_cycles(state, now, cycles_to_mint)?;
         state.total_cycles_minted += cycles_to_mint;
-        Ok(())
+        Ok::<_, String>(())
     })?;
 
-    ic0_mint_cycles(
-        cycles_to_mint
-            .get()
-            .try_into()
-            .map_err(|_| "Cycles u64 overflow".to_owned())?,
-    );
-    assert!(u128::from(ic_cdk::api::canister_balance()) >= cycles.get());
+    // unused because of check above
+    let _minted_cycles = ic0_mint_cycles128(cycles_to_mint);
+    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
     Ok(())
 }
 
@@ -2532,9 +2740,6 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
-
-    // Delete after release.
-    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
@@ -2656,17 +2861,32 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         )?;
         w.encode_gauge(
             "cmc_limiter_cycles",
-            state.limiter.get_count().get() as f64,
+            state.base_limiter.get_count().get() as f64,
             "The amount of cycles minted in the recent past. If someone tries \
              to mint N cycles, but N + the value of this metric exceeds \
              cmc_cycles_limit, then the request will be rejected.",
         )?;
         w.encode_gauge(
             "cmc_cycles_limit",
-            state.cycles_limit.get() as f64,
+            state.base_cycles_limit.get() as f64,
             "The maximum amount of cycles that can be minted in the recent past. \
              More precisely, if someone tries to mint N cycles, and \
              N + cmc_limiter_cycles > cmc_cycles_limit, then the request will \
+             be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_subnet_rental_limiter_cycles",
+            state.subnet_rental_canister_limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past for the Subnet Rental Canister. \
+             If someone tries to mint N cycles, but N + the value of this metric exceeds \
+             cmc_subnet_rental_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_subnet_rental_cycles_limit",
+            state.subnet_rental_cycles_limit.get() as f64,
+            "The maximum amount of cycles that can be minted in the recent past for the Subnet \
+             Rental Canister. 1GMore precisely, if someone tries to mint N cycles, and \
+             N + cmc_limiter_cycles > cmc_subnet_rental_cycles_limit, then the request will \
              be rejected.",
         )?;
 
@@ -3728,6 +3948,111 @@ mod tests {
         assert_eq!(
             with_state(|state| state.blocks_notified.clone()),
             original_blocks_notified,
+        );
+    }
+
+    /// TODO(NNS1-3980): Remove this test once the migration is no longer needed.
+    #[test]
+    fn test_migrate_v1_to_v2() {
+        // Create a StateV1 with some test data
+        let v1_state = StateV1 {
+            ledger_canister_id: CanisterId::from_u64(123),
+            governance_canister_id: CanisterId::from_u64(456),
+            exchange_rate_canister_id: Some(CanisterId::from_u64(789)),
+            cycles_ledger_canister_id: Some(CanisterId::from_u64(101112)),
+            minting_account_id: Some(AccountIdentifier::new(
+                PrincipalId::new_user_test_id(1),
+                None,
+            )),
+            authorized_subnets: btreemap! {
+                PrincipalId::new_user_test_id(2) => vec![SubnetId::from(PrincipalId::new_subnet_test_id(3))],
+            },
+            default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(4))],
+            icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
+                timestamp_seconds: 1000,
+                xdr_permyriad_per_icp: 2000,
+            }),
+            average_icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
+                timestamp_seconds: 1100,
+                xdr_permyriad_per_icp: 2100,
+            }),
+            recent_icp_xdr_rates: Some(vec![IcpXdrConversionRate::default(); 5]),
+            cycles_per_xdr: Cycles::new(3000),
+            cycles_limit: Cycles::new(4000),
+            limiter: limiter::Limiter::new(Duration::from_secs(60), Duration::from_secs(3600)),
+            total_cycles_minted: Cycles::new(5000),
+            blocks_notified: btreemap! {
+                100 => NotificationStatus::NotifiedTopUp(Ok(Cycles::new(1000))),
+            },
+            last_purged_notification: 99,
+            maturity_modulation_permyriad: Some(42),
+            subnet_types_to_subnets: Some(btreemap! {
+                "test_type".to_string() => BTreeSet::from([SubnetId::from(PrincipalId::new_subnet_test_id(5))]),
+            }),
+            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
+        };
+
+        // Perform migration
+        let v2_state = migrate_v1_to_v2(v1_state.clone());
+
+        // Verify all existing fields are preserved
+        assert_eq!(v2_state.ledger_canister_id, v1_state.ledger_canister_id);
+        assert_eq!(
+            v2_state.governance_canister_id,
+            v1_state.governance_canister_id
+        );
+        assert_eq!(
+            v2_state.exchange_rate_canister_id,
+            v1_state.exchange_rate_canister_id
+        );
+        assert_eq!(
+            v2_state.cycles_ledger_canister_id,
+            v1_state.cycles_ledger_canister_id
+        );
+        assert_eq!(v2_state.minting_account_id, v1_state.minting_account_id);
+        assert_eq!(v2_state.authorized_subnets, v1_state.authorized_subnets);
+        assert_eq!(v2_state.default_subnets, v1_state.default_subnets);
+        assert_eq!(
+            v2_state.icp_xdr_conversion_rate,
+            v1_state.icp_xdr_conversion_rate
+        );
+        assert_eq!(
+            v2_state.average_icp_xdr_conversion_rate,
+            v1_state.average_icp_xdr_conversion_rate
+        );
+        assert_eq!(v2_state.recent_icp_xdr_rates, v1_state.recent_icp_xdr_rates);
+        assert_eq!(v2_state.cycles_per_xdr, v1_state.cycles_per_xdr);
+        assert_eq!(v2_state.base_cycles_limit, v1_state.cycles_limit); // renamed field
+        assert_eq!(v2_state.base_limiter, v1_state.limiter);
+        assert_eq!(v2_state.total_cycles_minted, v1_state.total_cycles_minted);
+        assert_eq!(v2_state.blocks_notified, v1_state.blocks_notified);
+        assert_eq!(
+            v2_state.last_purged_notification,
+            v1_state.last_purged_notification
+        );
+        assert_eq!(
+            v2_state.maturity_modulation_permyriad,
+            v1_state.maturity_modulation_permyriad
+        );
+        assert_eq!(
+            v2_state.subnet_types_to_subnets,
+            v1_state.subnet_types_to_subnets
+        );
+        assert_eq!(
+            v2_state.update_exchange_rate_canister_state,
+            v1_state.update_exchange_rate_canister_state
+        );
+
+        // Verify new fields are initialized correctly
+        assert_eq!(
+            v2_state.subnet_rental_cycles_limit,
+            Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT)
+        );
+
+        // Verify the new limiter is initialized with correct parameters
+        assert_eq!(
+            v2_state.subnet_rental_canister_limiter.get_count(),
+            Cycles::zero()
         );
     }
 }

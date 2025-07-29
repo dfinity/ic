@@ -1,4 +1,5 @@
 #![allow(clippy::test_attr_in_doctest)]
+#![doc = include_str!("../README.md")]
 /// # PocketIC: A Canister Testing Platform
 ///
 /// PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
@@ -55,8 +56,8 @@
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
-        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-        SubnetKind, SubnetSpec, Topology,
+        IcpFeatures, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -81,14 +82,14 @@ use std::{
     fs::OpenOptions,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    process::Command,
+    process::{Child, Command},
     sync::{mpsc::channel, Arc},
     thread,
     thread::JoinHandle,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use strum_macros::EnumIter;
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
@@ -98,7 +99,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.1";
+pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -138,7 +139,7 @@ impl PocketIcState {
     pub fn into_path(self) -> PathBuf {
         match self.state {
             PocketIcStateKind::StateDir(state_dir) => state_dir,
-            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.keep(),
         }
     }
 
@@ -160,6 +161,7 @@ pub struct PocketIcBuilder {
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    icp_features: IcpFeatures,
 }
 
 #[allow(clippy::new_without_default)]
@@ -175,6 +177,7 @@ impl PocketIcBuilder {
             nonmainnet_features: false,
             log_level: None,
             bitcoind_addr: None,
+            icp_features: IcpFeatures::default(),
         }
     }
 
@@ -195,6 +198,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
     }
 
@@ -209,6 +213,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
         .await
     }
@@ -402,6 +407,13 @@ impl PocketIcBuilder {
         self.config = Some(config);
         self
     }
+
+    /// Enables all ICP features supported by PocketIC and implemented by system canisters
+    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
+    pub fn with_all_icp_features(mut self) -> Self {
+        self.icp_features = IcpFeatures::all_icp_features();
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -514,6 +526,7 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -536,6 +549,7 @@ impl PocketIc {
                 nonmainnet_features,
                 log_level,
                 bitcoind_addr,
+                icp_features,
             )
             .await
         });
@@ -604,8 +618,14 @@ impl PocketIc {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap();
-        let url = runtime
-            .block_on(async { start_or_reuse_server(None).await.join("instances").unwrap() });
+        let url = runtime.block_on(async {
+            let (_, server_url) = start_server(StartServerParams {
+                reuse: true,
+                ..Default::default()
+            })
+            .await;
+            server_url.join("instances").unwrap()
+        });
         let instances: Vec<String> = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -653,7 +673,7 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn auto_progress(&self) -> Url {
@@ -675,7 +695,7 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.stop_progress().await })
     }
 
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made if the HTTP
     /// gateway has been started.
     pub fn url(&self) -> Option<Url> {
@@ -688,7 +708,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
@@ -704,7 +724,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub async fn make_live_with_params(
@@ -1554,6 +1574,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -1623,6 +1644,7 @@ impl TryFrom<u64> for ErrorCode {
             406 => Ok(ErrorCode::CanisterRejectedMessage),
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
+            409 => Ok(ErrorCode::CanisterSnapshotImmutable),
             // 5xx -- `RejectCode::CanisterError`
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
@@ -1804,12 +1826,19 @@ async fn download_pocketic_server(
     Ok(())
 }
 
-/// Attempt to start a new PocketIC server if it's not already running.
-pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+#[derive(Default)]
+pub struct StartServerParams {
+    pub server_binary: Option<PathBuf>,
+    /// Reuse an existing PocketIC server spawned by this process.
+    pub reuse: bool,
+}
+
+/// Attempt to start a new PocketIC server.
+pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     let default_bin_dir =
         std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
     let default_bin_path = default_bin_dir.join("pocket-ic");
-    let mut bin_path: PathBuf = server_binary.unwrap_or_else(|| {
+    let mut bin_path: PathBuf = params.server_binary.unwrap_or_else(|| {
         std::env::var_os("POCKET_IC_BIN")
             .unwrap_or_else(|| default_bin_path.clone().into())
             .into()
@@ -1828,9 +1857,13 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
             let os = "darwin";
             #[cfg(not(target_os = "macos"))]
             let os = "linux";
+            #[cfg(target_arch = "aarch64")]
+            let arch = "arm64";
+            #[cfg(not(target_arch = "aarch64"))]
+            let arch = "x86_64";
             let server_url = format!(
-                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-x86_64-{}.gz",
-                EXPECTED_SERVER_VERSION, os
+                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
+                EXPECTED_SERVER_VERSION, arch, os
             );
             println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
             if let Err(e) = download_pocketic_server(server_url, out).await {
@@ -1853,10 +1886,14 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
         }
     }
 
-    // We use the test driver's process ID to share the PocketIC server between multiple tests
-    // launched by the same test driver.
-    let test_driver_pid = std::process::id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
+    let port_file_path = if params.reuse {
+        // We use the test driver's process ID to share the PocketIC server between multiple tests
+        // launched by the same test driver.
+        let test_driver_pid = std::process::id();
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
+    } else {
+        NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
+    };
     let mut cmd = pocket_ic_server_cmd(&bin_path);
     cmd.arg("--port-file");
     #[cfg(windows)]
@@ -1880,7 +1917,8 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
 
     // TODO: SDK-1936
     #[allow(clippy::zombie_processes)]
-    cmd.spawn()
+    let child = cmd
+        .spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
 
     loop {
@@ -1890,7 +1928,10 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
                     .trim_end()
                     .parse()
                     .expect("Failed to parse port to number");
-                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+                break (
+                    child,
+                    Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
+                );
             }
         }
         std::thread::sleep(Duration::from_millis(20));

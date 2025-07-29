@@ -60,13 +60,18 @@ pub fn get_subnet_holding_chain_keys(
         key_configs: key_ids
             .into_iter()
             .map(|key_id| KeyConfig {
-                key_id,
-                pre_signatures_to_create_in_advance: 1,
+                key_id: key_id.clone(),
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    1
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             })
             .collect(),
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
+        max_parallel_pre_signature_transcripts_in_creation: None,
     }));
 
     subnet_record

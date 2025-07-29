@@ -1,7 +1,9 @@
 //! Utilities to initialize and mutate the registry, for tests.
 
 use assert_matches::assert_matches;
+use async_trait::async_trait;
 use canister_test::Canister;
+use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -27,9 +29,10 @@ use ic_protobuf::registry::{
         SubnetRecord,
     },
 };
-use ic_registry_canister_api::AddNodePayload;
+use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
+    make_blessed_replica_versions_key, make_canister_ranges_key,
+    make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
@@ -38,12 +41,12 @@ use ic_registry_keys::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_value_response, insert,
+    dechunkify_get_value_response_content, deserialize_get_value_response, insert,
     pb::v1::{
-        registry_mutation::Type, RegistryAtomicMutateRequest, RegistryAtomicMutateResponse,
-        RegistryMutation,
+        registry_mutation::Type, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryMutation,
     },
-    serialize_get_value_request, Error,
+    serialize_get_value_request, Error, GetChunk,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
@@ -93,27 +96,87 @@ pub fn invariant_compliant_mutation_as_atomic_req(mutation_id: u8) -> RegistryAt
         preconditions: vec![],
     }
 }
+
+// This could be pub, but for now, that's not needed.
+struct GetChunkImpl<'a> {
+    registry: &'a Canister<'a>,
+}
+
+#[async_trait]
+impl GetChunk for GetChunkImpl<'_> {
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        // Construct request.
+        let request = GetChunkRequest {
+            content_sha256: Some(content_sha256.to_vec()),
+        };
+
+        // Send request.
+        let chunk = self
+            .registry
+            .query_("get_chunk", candid_one, request)
+            .await
+            .map_err(|err| {
+                format!(
+                    "Registry canister received our get_chunk request (key={:?}), \
+                     but found it lacking in some way: {}",
+                    content_sha256, err,
+                )
+            })?;
+
+        // Unpack result (and handle errors).
+        let Chunk {
+            content: Some(content),
+        } = chunk
+        else {
+            return Err(format!(
+                "Registry replied to our get_chunk request (key={:?}), \
+                 but the reply did not have a populated `content` field.",
+                content_sha256,
+            ));
+        };
+
+        // Success!
+        Ok(content)
+    }
+}
+
 /// Returns a Result with either an Option(T) or a ic_registry_transport::Error
 pub async fn get_value_result<T: Message + Default>(
     registry: &Canister<'_>,
     key: &[u8],
 ) -> Result<Option<T>, Error> {
-    match deserialize_get_value_response(
-        registry
-            .query_(
-                "get_value",
-                bytes,
-                serialize_get_value_request(key.to_vec(), None).unwrap(),
-            )
-            .await
-            .unwrap(),
-    ) {
-        Ok((encoded_value, _version)) => Ok(Some(T::decode(encoded_value.as_slice()).unwrap())),
-        Err(error) => match error {
-            Error::KeyNotPresent(_) => Ok(None),
-            _ => Err(error),
-        },
-    }
+    let result: Vec<u8> = registry
+        .query_(
+            "get_value",
+            bytes,
+            serialize_get_value_request(key.to_vec(), None).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let result: HighCapacityRegistryGetValueResponse = match deserialize_get_value_response(result)
+    {
+        Ok(ok) => ok,
+        Err(error) => {
+            return match error {
+                Error::KeyNotPresent(_) => Ok(None),
+                _ => Err(error),
+            };
+        }
+    };
+
+    let Some(content) = result.content else {
+        return Err(Error::MalformedMessage(format!(
+            "Registry replied to get_value call, but no content field \
+             was populated. key={:?}",
+            key,
+        )));
+    };
+
+    let result: Vec<u8> =
+        dechunkify_get_value_response_content(content, &GetChunkImpl { registry }).await?;
+
+    Ok(Some(T::decode(result.as_slice()).unwrap()))
 }
 
 /// Gets the latest value for the given key and decode it, assuming it
@@ -223,17 +286,29 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
     );
 }
 
-pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
+/// Returns a list of mutations that set the initial state of the routing table.
+///
+/// Note that it's undefined behavior if they are used to modify an existing
+/// routing table.
+pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutation> {
     use ic_protobuf::registry::routing_table::v1 as pb;
 
     let rt_pb = pb::RoutingTable::from(rt);
     let mut buf = vec![];
     rt_pb.encode(&mut buf).unwrap();
-    RegistryMutation {
-        mutation_type: Type::Upsert as i32,
-        key: make_routing_table_record_key().into_bytes(),
-        value: buf,
-    }
+    vec![
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key: make_routing_table_record_key().into_bytes(),
+            value: buf.clone(),
+        },
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            value: buf,
+        },
+    ]
 }
 
 /// Returns a mutation that sets the initial state of the registry to be
@@ -278,7 +353,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             ..Default::default()
         }
     };
-    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    const MOCK_HASH: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
@@ -311,7 +386,6 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             make_subnet_record_key(subnet_pid).as_bytes(),
             system_subnet.encode_to_vec(),
         ),
-        routing_table_mutation(&RoutingTable::default()),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
@@ -327,6 +401,9 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         valid_pks,
     ));
     mutations.append(&mut threshold_pk_and_cup_mutations);
+    mutations.append(&mut initial_routing_table_mutations(
+        &RoutingTable::default(),
+    ));
     mutations
 }
 
@@ -540,7 +617,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     }
 
     let replica_version_id = ReplicaVersion::default().to_string();
-    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    const MOCK_HASH: &str = "abbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabba";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
@@ -578,8 +655,13 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             make_subnet_record_key(nns_subnet_id).as_bytes(),
             system_subnet.encode_to_vec(),
         ),
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         insert(
             make_routing_table_record_key().as_bytes(),
+            RoutingTablePB::from(routing_table.clone()).encode_to_vec(),
+        ),
+        insert(
+            make_canister_ranges_key(CanisterId::from_u64(0)).as_bytes(),
             RoutingTablePB::from(routing_table).encode_to_vec(),
         ),
         insert(

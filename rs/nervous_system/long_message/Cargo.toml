@@ -8,7 +8,7 @@ name = "long-message-canister"
 path = "tests/test_canisters/long_message_canister.rs"
 
 [dependencies]
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }
 

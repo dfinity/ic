@@ -91,7 +91,7 @@ mod tests {
         nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
-        CryptoHashOfPartialState, Cycles, Time,
+        CanisterId, CryptoHashOfPartialState, Cycles, Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -165,8 +165,9 @@ mod tests {
     #[test]
     fn test_backward_compatibility() {
         fn state_fixture(certification_version: CertificationVersion) -> ReplicatedState {
-            let subnet_id = subnet_test_id(1);
-            let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
+            let own_subnet_id = subnet_test_id(1);
+            let other_subnet_id = subnet_test_id(5);
+            let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
 
             let canister_id = canister_test_id(2);
             let controller = user_test_id(24);
@@ -240,8 +241,13 @@ mod tests {
                 stream.push_reject_signal(RejectReason::Unknown);
                 stream.push_reject_signal(RejectReason::CanisterStopping);
             }
+            let loopback_stream = Stream::new(
+                StreamIndexedQueue::with_begin(StreamIndex::from(13)),
+                StreamIndex::new(13),
+            );
             state.modify_streams(|streams| {
-                streams.insert(subnet_test_id(5), stream);
+                streams.insert(own_subnet_id, loopback_stream.clone());
+                streams.insert(other_subnet_id, stream);
             });
 
             for i in 1..6 {
@@ -286,18 +292,28 @@ mod tests {
                 },
             };
 
-            let mut routing_table = RoutingTable::new();
-            routing_table
-                .insert(
-                    CanisterIdRange {
-                        start: canister_id,
-                        end: canister_id,
-                    },
-                    subnet_id,
-                )
-                .unwrap();
+            fn id_range(from: u64, to: u64) -> CanisterIdRange {
+                CanisterIdRange {
+                    start: CanisterId::from_u64(from),
+                    end: CanisterId::from_u64(to),
+                }
+            }
+
+            // More than 5 ranges for the same subnet to capture sharding of the routing table.
+            let routing_table = RoutingTable::try_from(btreemap! {
+                CanisterIdRange {start: canister_id, end: canister_id} => own_subnet_id,
+                id_range(1000, 2000) => own_subnet_id,
+                id_range(3000, 3001) => own_subnet_id,
+                id_range(4000, 4010) => own_subnet_id,
+                id_range(4100, 5000) => own_subnet_id,
+                id_range(5002, 5002) => other_subnet_id,
+                id_range(6000, 7000) => own_subnet_id,
+            })
+            .unwrap();
+
             state.metadata.network_topology.subnets = btreemap! {
-                subnet_id => Default::default(),
+                own_subnet_id => Default::default(),
+                other_subnet_id => Default::default(),
             };
             state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.prev_state_hash =
@@ -357,10 +373,12 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes: [&str; 3] = [
-            "0BD567305B9828C7BDE2A03E25871C382742A2598308761A47745BAA9E3495FF",
-            "28BCC63FA7C215C8308EE8201CDEBDC06B62AFB2E9F4C2AB31452A4DBBD73B90",
-            "4677DFA14CC8B349B1F0D88651CD961FE8DF2E905C3C886B9116972D798B1C1E",
+        let expected_hashes: [&str; 5] = [
+            "CB4DB4435FBC2523AA796405460E9C7D7CDBD4AF03CA4085AE60387134F76AAC",
+            "32737514B5DDD50BA5F98E28B36B40543A5EFFFCFF98E1F9FD464026BE50F051",
+            "47C3A071B293B4723FCACB17F2FD2FD75F68C010E333007ACC0EF425D92765FB",
+            "3F9441CBAC0A00718BA6CB2D4D1B6FF7FF96F42051567365B670ACFC08AB96EA",
+            "9D9C8D991198BCD0BCAA627F409181D08ADD8CA442730393D5A27FA1042D2477",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

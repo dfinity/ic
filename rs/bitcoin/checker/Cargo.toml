@@ -6,6 +6,10 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+[lib]
+name = "ic_btc_checker"
+path = "lib/lib.rs"
+
 [[bin]]
 name = "ic-btc-checker-canister"
 path = "src/main.rs"
@@ -21,7 +25,7 @@ hex = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }

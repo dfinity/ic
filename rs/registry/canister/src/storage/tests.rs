@@ -88,7 +88,7 @@ fn test_chunkify_reasonably_large_mutation() {
     let expected_mutation = HighCapacityRegistryAtomicMutateRequest {
         mutations: vec![result.mutations.first().unwrap().clone()],
         preconditions: vec![PRECONDITION.clone()],
-        timestamp_seconds: 0,
+        timestamp_nanoseconds: 0,
     };
     assert_eq!(result, expected_mutation);
 }

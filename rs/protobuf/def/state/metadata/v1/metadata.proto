@@ -2,12 +2,14 @@ syntax = "proto3";
 package state.metadata.v1;
 
 import "bitcoin/v1/bitcoin.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
+import "types/v1/idkg.proto";
 import "types/v1/types.proto";
 
 message Time {
@@ -71,12 +73,14 @@ message SetupInitialDkgContextTree {
 message EcdsaArguments {
   types.v1.EcdsaKeyId key_id = 1;
   bytes message_hash = 2;
+  types.v1.EcdsaMatchedPreSignature pre_signature = 3;
 }
 
 message SchnorrArguments {
   types.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
   optional bytes taproot_tree_root = 3;
+  types.v1.SchnorrMatchedPreSignature pre_signature = 4;
 }
 
 message VetKdArguments {
@@ -111,6 +115,17 @@ message SignWithThresholdContextTree {
   SignWithThresholdContext context = 2;
 }
 
+message PreSignatureStashTree {
+  types.v1.MasterPublicKeyId key_id = 1;
+  registry.subnet.v1.IDkgTranscript key_transcript = 2;
+  repeated PreSignatureIdPair pre_signatures = 3;
+}
+
+message PreSignatureIdPair {
+  uint64 pre_sig_id = 1;
+  types.v1.PreSignature pre_signature = 2;
+}
+
 enum HttpMethod {
   HTTP_METHOD_UNSPECIFIED = 0;
   HTTP_METHOD_GET = 1;
@@ -133,7 +148,15 @@ message CanisterHttpRequestContext {
   repeated HttpHeader headers = 7;
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
+  optional Replication replication = 11;
   reserved 5;
+}
+
+message Replication {
+  oneof replication_type {
+    google.protobuf.Empty fully_replicated = 1;
+    types.v1.NodeId non_replicated = 2;
+  }
 }
 
 message CanisterHttpRequestContextTree {
@@ -249,6 +272,7 @@ message SubnetCallContextManager {
   repeated RawRandContext raw_rand_contexts = 16;
   repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
+  repeated PreSignatureStashTree pre_signature_stashes = 19;
 }
 
 message SubnetMetrics {
@@ -349,6 +373,8 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 22;
 }
 
 message StableMemory {

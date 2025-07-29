@@ -107,6 +107,13 @@ impl StorageClient {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
+
+        // Run the fee collector balances repair if needed
+        tracing::info!(
+            "Storage initialization: Checking if fee collector balance repair is needed"
+        );
+        storage_client.repair_fee_collector_balances()?;
+
         Ok(storage_client)
     }
 
@@ -249,112 +256,7 @@ impl StorageClient {
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let open_connection = self.storage_connection.lock().unwrap();
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS metadata (
-                key TEXT PRIMARY KEY,
-                value BLOB NOT NULL
-            );
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS blocks (
-                idx INTEGER NOT NULL PRIMARY KEY,
-                hash BLOB NOT NULL,
-                serialized_block BLOB NOT NULL,
-                parent_hash BLOB,
-                timestamp INTEGER,
-                verified BOOLEAN,
-                tx_hash BLOB NOT NULL,
-                operation_type VARCHAR(255) NOT NULL,
-                from_principal BLOB,
-                from_subaccount BLOB,
-                to_principal BLOB,
-                to_subaccount BLOB,
-                spender_principal BLOB,
-                spender_subaccount BLOB,
-                memo BLOB,
-                amount TEXT,
-                expected_allowance TEXT,
-                fee TEXT,
-                transaction_created_at_time INTEGER,
-                approval_expires_at INTEGER
-            )
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS account_balances (
-                block_idx INTEGER NOT NULL,
-                principal BLOB NOT NULL,
-                subaccount BLOB NOT NULL,
-                amount TEXT NOT NULL,
-                PRIMARY KEY(principal,subaccount,block_idx)
-            )
-            "#,
-            [],
-        )?;
-
-        // The counters table entry needs to have a unique name, so that we don't end up with
-        // multiple entries for the same counter.
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)
-            "#,
-            [],
-        )?;
-
-        // Set the initial counter value for `SyncedBlocks` to the number of blocks in the blocks
-        // table. If the counter already exists, the value will not be updated.
-        open_connection.execute(
-            r#"
-            INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", (SELECT COUNT(*) FROM blocks))
-            "#,
-            [],
-        )?;
-
-        // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is
-        // inserted into the blocks table. For transactions that call `INSERT OR IGNORE` and try to
-        // insert a block that already exists, the trigger will not be executed. The trigger is
-        // executed once for each row that is inserted.
-        open_connection.execute(
-            r#"
-            CREATE TRIGGER IF NOT EXISTS SyncedBlocksUpdate AFTER INSERT ON blocks
-                BEGIN
-                    UPDATE counters SET value = value + 1 WHERE name = "SyncedBlocks";
-                END
-            "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-            CREATE INDEX IF NOT EXISTS block_idx_account_balances
-            ON account_balances(block_idx)
-            "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-        CREATE INDEX IF NOT EXISTS tx_hash_index
-        ON blocks(tx_hash)
-        "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-        CREATE INDEX IF NOT EXISTS block_hash_index
-        ON blocks(hash)
-        "#,
-            [],
-        )?;
-
-        Ok(())
+        super::schema::create_tables(&open_connection)
     }
 
     // Populates the blocks and transactions table by the Rosettablocks provided
@@ -399,9 +301,37 @@ impl StorageClient {
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 
+    // Retrieves the aggregated balance of all subaccounts for a given principal at a specific block height
+    pub fn get_aggregated_balance_for_principal_at_block_idx(
+        &self,
+        principal: &ic_base_types::PrincipalId,
+        block_idx: u64,
+    ) -> anyhow::Result<Nat> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+            &open_connection,
+            principal,
+            block_idx,
+        )
+    }
+
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_block_count(&open_connection)
+    }
+
+    /// Repairs account balances for databases created before the fee collector block index fix.
+    /// This function identifies Transfer operations that used fee_collector_block_index but didn't
+    /// properly credit the fee collector, and adds the missing fee credits.
+    ///
+    /// This is safe to run multiple times - it will only add missing credits and won't duplicate them.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
+    pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::repair_fee_collector_balances(&mut open_connection)
     }
 }
 
@@ -548,7 +478,7 @@ mod tests {
            }
 
           #[test]
-          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
+          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000).no_shrink()){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for i in 0..blockchain.0.len() {

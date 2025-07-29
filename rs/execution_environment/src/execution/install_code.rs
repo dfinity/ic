@@ -23,8 +23,8 @@ use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState, Mes
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, ComputeAllocation, Height,
-    MemoryAllocation, NumInstructions, Time,
+    funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, Height, MemoryAllocation,
+    NumInstructions, Time,
 };
 use ic_wasm_types::WasmHash;
 
@@ -32,7 +32,6 @@ use crate::{
     canister_manager::types::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
-    canister_settings::{validate_canister_settings, CanisterSettings},
     execution_environment::RoundContext,
     CompilationCostHandling, RoundLimits,
 };
@@ -232,13 +231,12 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
-        round_limits: &RoundLimits,
     ) -> Result<Self, (CanisterManagerError, NumInstructions, CanisterLog)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
             helper
-                .replay_step(state_change, original, round, round_limits)
+                .replay_step(state_change, original, round)
                 .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
         assert_eq!(paused_instructions_left, helper.instructions_left());
@@ -280,6 +278,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            round.cost_schedule,
             original.wasm_execution_mode,
             round.log,
         );
@@ -325,6 +324,7 @@ impl InstallCodeHelper {
                 bytes,
                 &original.execution_parameters.subnet_memory_saturation,
                 original.subnet_size,
+                round.cost_schedule,
             );
 
             match self
@@ -369,6 +369,7 @@ impl InstallCodeHelper {
                 self.canister.message_memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
+                round.cost_schedule,
                 self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
@@ -433,34 +434,6 @@ impl InstallCodeHelper {
             }
         }
 
-        let old_compute_allocation = clean_canister.compute_allocation();
-        let new_compute_allocation = self.canister.compute_allocation();
-        if new_compute_allocation.as_percent() > old_compute_allocation.as_percent() {
-            let others = round_limits
-                .compute_allocation_used
-                .saturating_sub(old_compute_allocation.as_percent());
-            let available = original.config.compute_capacity.saturating_sub(others + 1);
-            if new_compute_allocation.as_percent() > available {
-                return finish_err(
-                    clean_canister,
-                    self.instructions_left(),
-                    original,
-                    round,
-                    CanisterManagerError::SubnetComputeCapacityOverSubscribed {
-                        requested: new_compute_allocation,
-                        available: available.max(old_compute_allocation.as_percent()),
-                    },
-                    self.take_canister_log(),
-                );
-            }
-            round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
-        } else {
-            let others = round_limits
-                .compute_allocation_used
-                .saturating_sub(old_compute_allocation.as_percent());
-            round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
-        }
-
         // After this point `install_code` is guaranteed to succeed.
         // Commit all the remaining state and round limit changes.
 
@@ -500,8 +473,6 @@ impl InstallCodeHelper {
     pub fn validate_input(
         &mut self,
         original: &OriginalContext,
-        round: &RoundContext,
-        round_limits: &RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         self.steps.push(InstallCodeStep::ValidateInput);
 
@@ -509,34 +480,6 @@ impl InstallCodeHelper {
         let id = self.canister.system_state.canister_id;
 
         validate_controller(&self.canister, &original.sender)?;
-
-        validate_canister_settings(
-            CanisterSettings {
-                controllers: None,
-                compute_allocation: original.requested_compute_allocation,
-                memory_allocation: original.requested_memory_allocation,
-                wasm_memory_threshold: None,
-                freezing_threshold: None,
-                reserved_cycles_limit: None,
-                log_visibility: None,
-                wasm_memory_limit: None,
-            },
-            self.canister.memory_usage(),
-            self.canister.message_memory_usage(),
-            self.canister.memory_allocation(),
-            &round_limits.subnet_available_memory,
-            &original.execution_parameters.subnet_memory_saturation,
-            self.canister.compute_allocation(),
-            round_limits.compute_allocation_used,
-            original.config.compute_capacity,
-            original.config.max_controllers,
-            self.canister.system_state.freeze_threshold,
-            self.canister.system_state.balance(),
-            round.cycles_account_manager,
-            original.subnet_size,
-            self.canister.system_state.reserved_balance(),
-            self.canister.system_state.reserved_balance_limit(),
-        )?;
 
         match original.mode {
             CanisterInstallModeV2::Install => {
@@ -567,7 +510,6 @@ impl InstallCodeHelper {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
         memory_handling: CanisterMemoryHandling,
-        original: &OriginalContext,
     ) -> Result<(), CanisterManagerError> {
         self.steps
             .push(InstallCodeStep::ReplaceExecutionStateAndAllocations {
@@ -579,8 +521,7 @@ impl InstallCodeHelper {
         self.reduce_instructions_by(instructions_from_compilation);
 
         let old_memory_usage = self.canister.memory_usage();
-        let old_memory_allocation = self.canister.system_state.memory_allocation;
-        let old_compute_allocation = self.canister.scheduler_state.compute_allocation;
+        let memory_allocation = self.canister.system_state.memory_allocation;
         let old_wasm_custom_sections_memory_used = self
             .canister
             .execution_state
@@ -606,47 +547,24 @@ impl InstallCodeHelper {
 
         self.canister.execution_state = Some(execution_state);
 
-        // Update the compute allocation.
-        let new_compute_allocation = original
-            .requested_compute_allocation
-            .unwrap_or(old_compute_allocation);
-        self.canister.scheduler_state.compute_allocation = new_compute_allocation;
-        self.execution_parameters.compute_allocation = new_compute_allocation;
-
-        // Update the memory allocation.
-        let new_memory_allocation = original
-            .requested_memory_allocation
-            .unwrap_or(old_memory_allocation);
-        self.canister.system_state.memory_allocation = new_memory_allocation;
-        self.execution_parameters.memory_allocation = new_memory_allocation;
-
-        // It is impossible to transition from `MemoryAllocation::Reserved` to
-        // `MemoryAllocation::BestEffort` because `None` in `InstallCodeArgs` is
-        // interpreted as keeping the old memory allocation.
-        // This means that we can use the existing canister memory limit as the
-        // best effort memory limit.
-        debug_assert!(
-            old_memory_allocation == new_memory_allocation
-                || new_memory_allocation != MemoryAllocation::BestEffort
-        );
-        let best_effort_limit = self.execution_parameters.canister_memory_limit;
-        self.execution_parameters.canister_memory_limit =
-            self.canister.memory_limit(best_effort_limit);
-
         let new_memory_usage = self.canister.memory_usage();
-        if new_memory_usage > self.execution_parameters.canister_memory_limit {
-            return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                memory_allocation_given: new_memory_allocation,
-                memory_usage_needed: new_memory_usage,
-            });
+        match self.canister.memory_allocation() {
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                if new_memory_usage > reserved_bytes {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        memory_allocation_given: memory_allocation,
+                        memory_usage_needed: new_memory_usage,
+                    });
+                }
+            }
+            MemoryAllocation::BestEffort => (),
         }
         self.update_allocated_bytes(
             old_memory_usage,
-            old_memory_allocation,
             old_wasm_custom_sections_memory_used,
             new_memory_usage,
-            new_memory_allocation,
             new_wasm_custom_sections_memory_used,
+            memory_allocation,
         );
         Ok(())
     }
@@ -655,14 +573,13 @@ impl InstallCodeHelper {
     fn update_allocated_bytes(
         &mut self,
         old_memory_usage: NumBytes,
-        old_memory_allocation: MemoryAllocation,
         old_wasm_custom_sections_memory_used: NumBytes,
         new_memory_usage: NumBytes,
-        new_memory_allocation: MemoryAllocation,
         new_wasm_custom_sections_memory_used: NumBytes,
+        memory_allocation: MemoryAllocation,
     ) {
-        let old_bytes = old_memory_allocation.bytes().max(old_memory_usage);
-        let new_bytes = new_memory_allocation.bytes().max(new_memory_usage);
+        let old_bytes = memory_allocation.bytes().max(old_memory_usage);
+        let new_bytes = memory_allocation.bytes().max(new_memory_usage);
         if old_bytes <= new_bytes {
             self.allocated_bytes += new_bytes - old_bytes;
         } else {
@@ -821,10 +738,9 @@ impl InstallCodeHelper {
         step: InstallCodeStep,
         original: &OriginalContext,
         round: &RoundContext,
-        round_limits: &RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         match step {
-            InstallCodeStep::ValidateInput => self.validate_input(original, round, round_limits),
+            InstallCodeStep::ValidateInput => self.validate_input(original),
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,
@@ -833,7 +749,6 @@ impl InstallCodeHelper {
                 instructions_from_compilation,
                 maybe_execution_state,
                 memory_handling,
-                original,
             ),
             InstallCodeStep::ClearCertifiedData => {
                 self.clear_certified_data();
@@ -890,8 +805,6 @@ pub(crate) struct OriginalContext {
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
     pub subnet_size: usize,
-    pub requested_compute_allocation: Option<ComputeAllocation>,
-    pub requested_memory_allocation: Option<MemoryAllocation>,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
@@ -964,6 +877,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        round.cost_schedule,
         original.wasm_execution_mode,
         round.log,
     );

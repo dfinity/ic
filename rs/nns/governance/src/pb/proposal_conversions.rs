@@ -174,6 +174,9 @@ fn convert_action(
         pb::proposal::Action::UpdateCanisterSettings(v) => {
             pb_api::proposal::Action::UpdateCanisterSettings(v.clone().into())
         }
+        pb::proposal::Action::FulfillSubnetRentalRequest(v) => {
+            pb_api::proposal::Action::FulfillSubnetRentalRequest(v.clone().into())
+        }
 
         // The action types with potentially large fields need to be converted in a way that avoids
         // cloning the action first.
@@ -242,7 +245,6 @@ pub fn proposal_data_to_info(
     voting_period_seconds: impl Fn(pb::Topic) -> u64,
 ) -> pb_api::ProposalInfo {
     // Calculate derived fields
-    let topic = data.topic() as i32;
     let status = data.status() as i32;
     let reward_status = data.reward_status(now_seconds, voting_period_seconds(data.topic())) as i32;
     let deadline_timestamp_seconds =
@@ -251,6 +253,7 @@ pub fn proposal_data_to_info(
     // Trivially convert fields
     let id = data.id;
     let proposer = data.proposer;
+    let topic = data.topic() as i32;
     let reject_cost_e8s = data.reject_cost_e8s;
     let proposal_timestamp_seconds = data.proposal_timestamp_seconds;
     let latest_tally = data.latest_tally.map(|x| x.into());

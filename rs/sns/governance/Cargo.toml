@@ -35,8 +35,7 @@ comparable = { version = "0.5", features = ["derive"] }
 hex = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../rust_canisters/canister_profiler" }
@@ -65,6 +64,7 @@ ic-sns-governance-api = { path = "./api" }
 ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
 ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_total_limit" }
 ic-sns-governance-token-valuation = { path = "./token_valuation" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 lazy_static = { workspace = true }

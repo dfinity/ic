@@ -1,4 +1,9 @@
 use clap::Parser;
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
+use config::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_types::DeploymentEnvironment;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::NodeConfiguration,
@@ -19,9 +24,9 @@ use slog::{o, Drain};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::process::Command;
 use tempfile::tempdir;
 use url::Url;
+
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -36,9 +41,6 @@ struct Args {
     /// Image SHA256SUM
     #[clap(long)]
     sha256: String,
-    /// Path to `build-bootstrap-config-image.sh` script
-    #[clap(long)]
-    build_bootstrap_script: PathBuf,
     /// Key to be used for `admin` SSH
     #[clap(long)]
     ssh_key_path: Option<PathBuf>,
@@ -62,7 +64,6 @@ fn main() {
     let version = ReplicaVersion::try_from(args.version).unwrap();
     let url = args.url;
     let sha256 = args.sha256;
-    let build_bootstrap_script = args.build_bootstrap_script;
     let ssh_key_path = args.ssh_key_path;
 
     let test_name = "test_single_vm";
@@ -190,21 +191,58 @@ fn main() {
             std::fs::copy(key, keys_dir.join("admin")).unwrap();
         }
 
+        // Build GuestOS config object
+        let config = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
+            deterministic_prefix: None,
+            deterministic_prefix_length: None,
+            deterministic_gateway: None,
+            fixed_address: None,
+            fixed_gateway: None,
+            ipv4_address: None,
+            ipv4_gateway: None,
+            ipv4_prefix_length: None,
+            node_reward_type: None,
+            domain_name: None,
+            mgmt_mac: None,
+            deployment_environment: Some(DeploymentEnvironment::Testnet),
+            elasticsearch_hosts: None,
+            elasticsearch_tags: None,
+            use_nns_public_key: Some(true),
+            nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
+            enable_trusted_execution_environment: None,
+            use_node_operator_private_key: Some(true),
+            use_ssh_authorized_keys: Some(true),
+            inject_ic_crypto: Some(false),
+            inject_ic_state: Some(false),
+            inject_ic_registry_local_store: Some(false),
+            backup_retention_time_seconds: None,
+            backup_purging_interval_seconds: None,
+            malicious_behavior: None,
+            query_stats_epoch_length: None,
+            bitcoind_addr: None,
+            jaeger_addr: None,
+            socks_proxy: None,
+            hostname: None,
+            generate_ic_boundary_tls_cert: None,
+        };
+
+        let guestos_config = generate_testnet_config(config).unwrap();
+
         // Build config image
         let filename = "config.tar.gz";
         let config_path = tempdir.as_ref().join(filename);
         let local_store = prep_dir.join("ic_registry_local_store");
-        Command::new(build_bootstrap_script)
-            .arg(&config_path)
-            .arg("--nns_urls")
-            .arg(ipv6_addr.to_string())
-            .arg("--ic_crypto")
-            .arg(node.crypto_path())
-            .arg("--ic_registry_local_store")
-            .arg(&local_store)
-            .arg("--accounts_ssh_authorized_keys")
-            .arg(&keys_dir)
-            .status()
+
+        let bootstrap_options = BootstrapOptions {
+            guestos_config: Some(guestos_config),
+            ic_crypto: Some(node.crypto_path()),
+            ic_registry_local_store: Some(local_store),
+            accounts_ssh_authorized_keys: Some(keys_dir),
+            ..Default::default()
+        };
+        bootstrap_options
+            .build_bootstrap_config_image(&config_path)
             .unwrap();
 
         // Upload config image

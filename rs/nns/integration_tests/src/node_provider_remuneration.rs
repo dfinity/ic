@@ -54,7 +54,7 @@ impl NodeInfo {
         operator_id: PrincipalId,
         provider_id: PrincipalId,
         provider_account: AccountIdentifier,
-        reward_account: Option<icp_ledger::protobuf::AccountIdentifier>,
+        reward_account: Option<AccountIdentifier>,
     ) -> Self {
         NodeInfo {
             operator_id,
@@ -62,7 +62,7 @@ impl NodeInfo {
             provider_account,
             provider: NodeProvider {
                 id: Some(provider_id),
-                reward_account,
+                reward_account: reward_account.map(|id| id.into_proto_with_checksum()),
             },
         }
     }
@@ -70,23 +70,13 @@ impl NodeInfo {
 
 #[test]
 fn test_list_node_provider_rewards() {
-    do_test_list_node_provider_rewards(&[]);
-}
-
-// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
-#[test]
-fn test_list_node_provider_rewards_with_node_reward_canister() {
-    do_test_list_node_provider_rewards(&["test"]);
-}
-
-fn do_test_list_node_provider_rewards(features: &[&str]) {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -99,7 +89,7 @@ fn do_test_list_node_provider_rewards(features: &[&str]) {
         None,
     );
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into()),
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_1 = ((10 * 24_000) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
     let expected_node_provider_reward_1 = RewardNodeProvider {
@@ -293,25 +283,13 @@ fn do_test_list_node_provider_rewards(features: &[&str]) {
 
 #[test]
 fn test_automated_node_provider_remuneration() {
-    do_test_automated_node_provider_remuneration(&[]);
-}
-
-// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
-#[test]
-fn test_automated_node_provider_remuneration_with_node_reward_canister() {
-    do_test_automated_node_provider_remuneration(&["test"]);
-}
-
-// This test cannot depend on any specific "test" features to function, as
-// only one calling version uses the test feature flag.
-fn do_test_automated_node_provider_remuneration(features: &[&str]) {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -324,7 +302,7 @@ fn do_test_automated_node_provider_remuneration(features: &[&str]) {
         None,
     );
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into()),
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_1 =
         (((10 * 24_000) + (21 * 68_000) + (6 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -341,7 +319,7 @@ fn do_test_automated_node_provider_remuneration(features: &[&str]) {
         None,
     );
     let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_2.provider_account.into()),
+        to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_2 =
         (((35 * 68_000) + (17 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -356,10 +334,10 @@ fn do_test_automated_node_provider_remuneration(features: &[&str]) {
         *TEST_USER5_PRINCIPAL,
         *TEST_USER6_PRINCIPAL,
         AccountIdentifier::from(*TEST_USER7_PRINCIPAL),
-        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL).into()),
+        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL)),
     );
     let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_3.provider_account.into()),
+        to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
     }));
     let expected_rewards_e8s_3 =
         (((19 * 234_000) + (33 * 907_000) + (4 * 103_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -440,15 +418,30 @@ fn do_test_automated_node_provider_remuneration(features: &[&str]) {
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
     assert_eq!(monthly_node_provider_rewards.rewards.len(), 3);
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_1));
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_2));
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_3));
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_1),
+        "Expected reward 1: {:?} not found in monthly rewards: {:?}",
+        expected_node_provider_reward_2,
+        monthly_node_provider_rewards
+    );
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_2),
+        "Expected reward 2: {:?} not found in monthly rewards: {:?}",
+        expected_node_provider_reward_1,
+        monthly_node_provider_rewards
+    );
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_3),
+        "Expected reward 3: {:?} not found in monthly rewards: {:?}",
+        expected_node_provider_reward_3,
+        monthly_node_provider_rewards
+    );
 
     // Assert account balances are 0
     assert_account_balance(&state_machine, node_info_1.provider_account, 0);
@@ -935,6 +928,7 @@ fn add_node_operator(
         dc_id: dc_id.into(),
         rewardable_nodes,
         ipv6: Some(ipv6.into()),
+        max_rewardable_nodes: None,
     };
 
     submit_nns_proposal(

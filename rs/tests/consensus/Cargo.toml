@@ -15,10 +15,12 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-cup-explorer = { path = "../../cup_explorer" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../../recovery" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
@@ -29,7 +31,9 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic_consensus_system_test_utils = { path = "./utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "./tecdsa/utils" }
 k256 = { workspace = true }
+prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
@@ -37,6 +41,7 @@ reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+ssh2 = { workspace = true }
 ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -55,6 +60,10 @@ name = "ic-systest-node-graceful-leaving-test"
 path = "node_graceful_leaving_test.rs"
 
 [[bin]]
+name = "ic-systest-cup-explorer-test"
+path = "cup_explorer_test.rs"
+
+[[bin]]
 name = "ic-systest-replica-determinism-test"
 path = "replica_determinism_test.rs"
 
@@ -69,6 +78,10 @@ path = "max_ingress_payload_size_test.rs"
 [[bin]]
 name = "ic-systest-max-net-payload-size-test"
 path = "max_xnet_payload_size_test.rs"
+
+[[bin]]
+name = "ic-systest-guestos-recovery-engine-smoke-test"
+path = "guestos_recovery_engine_smoke_test.rs"
 
 [[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"

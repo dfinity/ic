@@ -3,15 +3,18 @@ pub mod pb;
 
 mod high_capacity;
 
-pub use high_capacity::{dechunkify_delta, dechunkify_mutation_value, GetChunk, MockGetChunk};
+pub use high_capacity::{
+    dechunkify_delta, dechunkify_get_value_response_content, dechunkify_mutation_value, GetChunk,
+    MockGetChunk,
+};
 
 use std::{fmt, str};
 
 use crate::pb::v1::{
     registry_error::Code,
     registry_mutation::{self, Type},
-    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse, Precondition,
-    RegistryError, RegistryMutation,
+    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+    HighCapacityRegistryGetValueResponse, Precondition, RegistryError, RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -223,16 +226,19 @@ pub fn serialize_get_value_response(
 
 /// Deserializes the response obtained from the registry canister for a
 /// get_value() call, from protobuf.
-pub fn deserialize_get_value_response(response: Vec<u8>) -> Result<(Vec<u8>, u64), Error> {
-    match pb::v1::RegistryGetValueResponse::decode(&response[..]) {
-        Ok(response) => {
-            if let Some(error) = response.error {
-                return Err(Error::from(error));
-            }
-            Ok((response.value, response.version))
-        }
-        Err(error) => Err(Error::MalformedMessage(error.to_string())),
+///
+/// It is often useful to pass the result to dechunkify_get_value_content
+pub fn deserialize_get_value_response(
+    response: Vec<u8>,
+) -> Result<HighCapacityRegistryGetValueResponse, Error> {
+    let result = pb::v1::HighCapacityRegistryGetValueResponse::decode(&response[..])
+        .map_err(|err| Error::MalformedMessage(err.to_string()))?;
+
+    if let Some(error) = result.error {
+        return Err(Error::from(error));
     }
+
+    Ok(result)
 }
 
 /// Serializes a response for a get_latest_version() request to the registry
@@ -301,6 +307,8 @@ pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Erro
 
 /// Deserializes the response obtained from the registry canister for a
 /// get_changes_since() call, from protobuf.
+///
+/// It is often useful to pass results from this to dechunkify_delta.
 pub fn deserialize_get_changes_since_response(
     response: Vec<u8>,
 ) -> Result<(Vec<HighCapacityRegistryDelta>, u64), Error> {
@@ -467,18 +475,18 @@ mod tests {
     fn test_serde_get_value_response() {
         let value = vec![1, 2, 3, 4];
         let version = 10;
-        let response = pb::v1::HighCapacityRegistryGetValueResponse {
+        let original = pb::v1::HighCapacityRegistryGetValueResponse {
             version,
             content: Some(high_capacity_registry_get_value_response::Content::Value(
                 value.clone(),
             )),
-            ..Default::default()
+            timestamp_nanoseconds: 42,
+            error: None,
         };
 
-        let bytes = serialize_get_value_response(response).unwrap();
-        let (ret_value, ret_version) = deserialize_get_value_response(bytes).unwrap();
-        assert_eq!(ret_value, value);
-        assert_eq!(ret_version, version);
+        let bytes = serialize_get_value_response(original.clone()).unwrap();
+        let deserialized = deserialize_get_value_response(bytes).unwrap();
+        assert_eq!(deserialized, original);
     }
 
     #[test]
@@ -572,6 +580,7 @@ mod tests {
                 value,
                 version,
                 deletion_marker,
+                timestamp_nanoseconds: 0,
             }
         };
 
@@ -581,7 +590,7 @@ mod tests {
         let high_capacity_registry_value = HighCapacityRegistryValue {
             content: Some(high_capacity_registry_value::Content::Value(value)),
             version,
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         };
 
         let version = 43;
@@ -591,6 +600,7 @@ mod tests {
             value: vec![],
             version,
             deletion_marker,
+            timestamp_nanoseconds: 0,
         };
 
         let high_capacity_delete = HighCapacityRegistryValue {
@@ -598,7 +608,7 @@ mod tests {
                 deletion_marker,
             )),
             version,
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         };
 
         let key = b"name".to_vec();
@@ -707,7 +717,7 @@ mod tests {
             content: Some(high_capacity_registry_get_value_response::Content::Value(
                 value,
             )),
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         };
 
         // Ok if client starts using HighCapacity before server.
@@ -821,7 +831,7 @@ mod tests {
                     }
                 })
                 .collect(),
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         };
 
         // Ok if client starts using HighCapacity before server.

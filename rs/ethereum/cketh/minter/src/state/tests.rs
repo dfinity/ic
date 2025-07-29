@@ -1,6 +1,5 @@
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
-use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
@@ -284,7 +283,6 @@ fn received_erc20_event() -> ReceivedErc20Event {
 }
 
 mod upgrade {
-    use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{TransactionNonce, Wei};
@@ -390,7 +388,7 @@ mod upgrade {
                 .contract_address(LogScrapingId::EthDepositWithoutSubaccount),
             Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
-        assert_eq!(state.ethereum_block_height, BlockTag::Safe);
+        assert_eq!(state.ethereum_block_height, CandidBlockTag::Safe);
     }
 }
 
@@ -576,6 +574,7 @@ prop_compose! {
         ledger_id in arb_principal(),
         ecdsa_key_name in "[a-z_]*",
         last_scraped_block_number in arb_nat(),
+        evm_rpc_id in proptest::option::of(arb_principal()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -586,6 +585,7 @@ prop_compose! {
             minimum_withdrawal_amount,
             next_transaction_nonce,
             last_scraped_block_number,
+            evm_rpc_id,
         }
     }
 }
@@ -805,6 +805,7 @@ fn state_equivalence() {
     use crate::tx::{
         Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
     };
+    use crate::EVM_RPC_ID_PRODUCTION;
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::{btreemap, btreeset};
 
@@ -997,7 +998,7 @@ fn state_equivalence() {
             chain_code: vec![2; 32],
         }),
         cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
-        ethereum_block_height: BlockTag::Finalized,
+        ethereum_block_height: CandidBlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
@@ -1039,7 +1040,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
-        evm_rpc_id: Some("7hfb6-caaaa-aaaar-qadga-cai".parse().unwrap()),
+        evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
     };
 
@@ -1100,7 +1101,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            ethereum_block_height: BlockTag::Latest,
+            ethereum_block_height: CandidBlockTag::Latest,
             ..state.clone()
         }),
         "changing essential fields should break equivalence",

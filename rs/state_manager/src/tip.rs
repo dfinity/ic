@@ -1,21 +1,24 @@
 use crate::{
     checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
-    compute_bundled_manifest, release_lock_and_persist_metadata,
+    compute_bundled_manifest,
+    manifest::{ManifestDelta, RehashManifest},
+    release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
     CheckpointError, PageMapType, SharedState, StateManagerMetrics,
     CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_logger::{error, fatal, info, warn, ReplicaLogger};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
@@ -34,8 +37,10 @@ use ic_state_layout::{
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
+use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
 use prometheus::HistogramTimer;
 use std::collections::BTreeSet;
+use std::convert::identity;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -70,12 +75,22 @@ pub(crate) struct PageMapToFlush {
 /// Request for the Tip directory handling thread.
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
-    /// Return the created checkpoint or error into the sender.
+    /// Sends the created checkpoint and the ReplicatedState switched to the
+    /// checkpoint or error into the sender.
+    /// Serializes protos to the newly created checkpoint after sending to `sender`
     /// State: latest_checkpoint_state = tip_folder_state
     ///        tip_folder_state = default
-    TipToCheckpoint {
+    TipToCheckpointAndSwitch {
         height: Height,
-        sender: Sender<Result<(CheckpointLayout<ReadOnly>, HasDowngrade), LayoutError>>,
+        state: ReplicatedState,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        #[allow(clippy::type_complexity)]
+        sender: Sender<
+            Result<
+                (Arc<ReplicatedState>, CheckpointLayout<ReadOnly>),
+                Box<dyn std::error::Error + Send>,
+            >,
+        >,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
     /// State: tip_folder_state.has_filtered_canisters = true
@@ -96,11 +111,6 @@ pub(crate) enum TipRequest {
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
-    },
-    /// State: tip_folder_state.has_protos = true
-    SerializeToTip {
-        height: Height,
-        replicated_state: Box<ReplicatedState>,
     },
     /// Compute manifest, store result into states and persist metadata as result.
     /// State: latest_checkpoint_state.has_manifest = true
@@ -132,10 +142,12 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum HasDowngrade {
-    Yes,
-    No,
+pub(crate) fn flush_tip_channel(tip_channel: &Sender<TipRequest>) {
+    let (sender, recv) = bounded(1);
+    tip_channel
+        .send(TipRequest::Wait { sender })
+        .expect("failed to send TipHandler Wait message");
+    recv.recv().expect("failed to wait for TipHandler thread");
 }
 
 pub(crate) fn spawn_tip_thread(
@@ -152,7 +164,7 @@ pub(crate) fn spawn_tip_thread(
     let mut tip_state = TipState::default();
     // Height(0) doesn't need manifest
     tip_state.latest_checkpoint_state.has_manifest = true;
-    let mut tip_downgrade = HasDowngrade::No;
+    let mut rehash_divergence = false;
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -174,42 +186,84 @@ pub(crate) fn spawn_tip_thread(
                                     )
                                 });
                         }
-                        TipRequest::TipToCheckpoint { height, sender } => {
+
+                        TipRequest::TipToCheckpointAndSwitch {
+                            height,
+                            state,
+                            fd_factory,
+                            sender,
+                        } => {
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
-                            debug_assert_eq!(tip_state.tip_folder_state.has_protos, Some(height));
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
+                            // Snapshots and other unflushed changed should have been handled earlier in `flush_canister_snapshots_and_page_maps `.
+                            debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
                             tip_state.tip_folder_state = Default::default();
-
-                            let _timer =
-                                request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
-                            let tip = tip_handler.tip(height);
-                            match tip {
+                            {
+                                let _timer =
+                                    request_timer(&metrics, "serialize_wasm_binaries_and_pagemaps");
+                                serialize_wasm_binaries_and_pagemaps(
+                                    &state,
+                                    &tip_handler.tip(height).unwrap(),
+                                    &mut thread_pool,
+                                    &lsmt_config,
+                                    &metrics.storage_metrics,
+                                )
+                                .unwrap_or_else(|err| {
+                                    fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
+                                });
+                            }
+                            let tip_to_checkpoint_result = {
+                                let _timer =
+                                    request_timer(&metrics, "tip_to_checkpoint_and_switch");
+                                tip_to_checkpoint_and_switch(
+                                    &log,
+                                    &mut tip_handler,
+                                    &state_layout,
+                                    height,
+                                    state,
+                                    &fd_factory,
+                                )
+                            };
+                            match tip_to_checkpoint_result {
                                 Err(err) => {
                                     sender
                                         .send(Err(err))
-                                        .expect("Failed to return TipToCheckpoint error");
-                                    continue;
+                                        .expect("Failed to send TipToCheckpointAndSwitch result");
                                 }
-                                Ok(tip) => {
-                                    let cp_or_err = state_layout
-                                        .promote_scratchpad_to_unverified_checkpoint(tip, height);
-                                    match cp_or_err {
-                                        Err(err) => {
-                                            sender
-                                                .send(Err(err))
-                                                .expect("Failed to return TipToCheckpoint error");
-                                            continue;
-                                        }
-                                        Ok(cp) => {
-                                            sender
-                                                .send(Ok((cp.clone(), tip_downgrade.clone())))
-                                                .expect("Failed to return TipToCheckpoint result");
-                                        }
+                                Ok(result) => {
+                                    sender
+                                        .send(Ok((
+                                            Arc::clone(&result.state),
+                                            result.checkpoint_readonly,
+                                        )))
+                                        .expect("Failed to send TipToCheckpointAndSwitch result");
+                                    if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
+                                    {
+                                        let _timer = request_timer(
+                                            &metrics,
+                                            "serialize_protos_to_checkpoint_readwrite",
+                                        );
+                                        serialize_protos_to_checkpoint_readwrite(
+                                            &result.state,
+                                            &checkpoint_readwrite,
+                                            &mut thread_pool,
+                                        )
+                                        .unwrap_or_else(
+                                            |err| {
+                                                fatal!(
+                                                    log,
+                                                    "Failed to serialize protos to cp @{}: {}",
+                                                    height,
+                                                    err
+                                                );
+                                            },
+                                        );
                                     }
                                 }
-                            }
+                            };
+                            tip_state.latest_checkpoint_state.has_protos = Some(height);
                         }
 
                         TipRequest::FlushPageMapDelta {
@@ -220,6 +274,18 @@ pub(crate) fn spawn_tip_thread(
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
                             tip_state.tip_folder_state.page_maps_height = height;
+
+                            // We flush snapshots and canister renamings to disk first.
+                            flush_unflushed_checkpoint_ops(
+                                &log,
+                                &mut tip_handler,
+                                height,
+                                unflushed_checkpoint_ops,
+                            )
+                            .unwrap_or_else(|err| {
+                                fatal!(log, "Failed to flush snapshot changes: {}", err);
+                            });
+
                             let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
                                 fatal!(
                                     log,
@@ -228,12 +294,6 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 );
                             });
-
-                            // We flush snapshots and canister renamings to disk first.
-                            flush_unflushed_checkpoint_ops(&log, layout, unflushed_checkpoint_ops)
-                                .unwrap_or_else(|err| {
-                                    fatal!(log, "Failed to flush snapshot changes: {}", err);
-                                });
 
                             parallel_map(
                                 &mut thread_pool,
@@ -285,48 +345,15 @@ pub(crate) fn spawn_tip_thread(
                                 },
                             );
                         }
-                        TipRequest::SerializeToTip {
-                            height,
-                            replicated_state,
-                        } => {
-                            let _timer = request_timer(&metrics, "serialize_to_tip");
-                            debug_assert!(tip_state.tip_folder_state.has_protos.is_none());
-                            tip_state.tip_folder_state.has_protos = Some(height);
-                            serialize_to_tip(
-                                &replicated_state,
-                                &tip_handler.tip(height).unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to get tip @{} to serialize to: {}",
-                                        height,
-                                        err
-                                    );
-                                }),
-                                &mut thread_pool,
-                                &metrics.storage_metrics,
-                                &lsmt_config,
-                            )
-                            .unwrap_or_else(|err| {
-                                fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
-                            });
-                        }
+
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
                             pagemaptypes,
                         } => {
-                            let _timer = request_timer(&metrics, "reset_tip_to");
+                            let timer = request_timer(&metrics, "reset_tip_to");
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
                                 tip_state.latest_checkpoint_state.page_maps_height;
-                            if tip_downgrade != HasDowngrade::No {
-                                info!(
-                                    log,
-                                    "tip_downgrade changes from {:?} to {:?}",
-                                    tip_downgrade,
-                                    HasDowngrade::No,
-                                );
-                                tip_downgrade = HasDowngrade::No;
-                            }
                             let height = checkpoint_layout.height();
                             tip_handler
                                 .reset_tip_to(
@@ -342,6 +369,9 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
+                            drop(timer);
+
+                            let _timer = request_timer(&metrics, "merge");
                             merge(
                                 &mut tip_handler,
                                 &pagemaptypes,
@@ -364,11 +394,12 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
-                            let _timer = request_timer(&metrics, "compute_manifest");
+                            let _timer = request_timer(&metrics, "compute_manifest_total");
                             if let Some(manifest_delta) = &manifest_delta {
                                 info!(
                                     log,
-                                    "Computing manifest for checkpoint @{} incrementally from checkpoint @{}",
+                                    "Computing manifest for checkpoint @{} incrementally \
+                                        from checkpoint @{}",
                                     checkpoint_layout.height(),
                                     manifest_delta.base_height
                                 );
@@ -379,7 +410,6 @@ pub(crate) fn spawn_tip_thread(
                                     checkpoint_layout.height()
                                 );
                             }
-
                             tip_state.latest_checkpoint_state.has_manifest = true;
                             handle_compute_manifest_request(
                                 &mut thread_pool,
@@ -391,17 +421,19 @@ pub(crate) fn spawn_tip_thread(
                                 manifest_delta,
                                 &persist_metadata_guard,
                                 &malicious_flags,
+                                &mut rehash_divergence,
                             );
                             tip_state.latest_checkpoint_state.has_manifest = true;
                         }
-
                         TipRequest::ValidateReplicatedStateAndFinalize {
                             checkpoint_layout,
                             reference_state,
                             own_subnet_type,
                             fd_factory,
                         } => {
-                            let _timer = request_timer(&metrics, "validate_replicated_state");
+                            let _timer =
+                                request_timer(&metrics, "validate_replicated_state_and_finalize");
+                            let start = Instant::now();
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,
                                 checkpoint_layout.height()
@@ -429,6 +461,12 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
+                            info!(
+                                log,
+                                "Validated checkpoint @{} in {:?}",
+                                checkpoint_layout.height(),
+                                start.elapsed()
+                            );
                         }
                     }
                 }
@@ -438,25 +476,235 @@ pub(crate) fn spawn_tip_thread(
     (tip_handle, tip_sender)
 }
 
+struct TipToCheckpointResult<'a, T> {
+    state: Arc<ReplicatedState>,
+    checkpoint_readonly: CheckpointLayout<ReadOnly>,
+    // Checkpoint to serialize protos to. None if we don't need to serialize protos, i.e. in case of AlreadyExists
+    checkpoint_readwrite: Option<CheckpointLayout<RwPolicy<'a, T>>>,
+}
+
+fn tip_to_checkpoint_and_switch<'a>(
+    log: &ReplicaLogger,
+    tip_handler: &'a mut TipHandler,
+    state_layout: &'a StateLayout,
+    height: Height,
+    mut state: ReplicatedState,
+    fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<TipToCheckpointResult<'a, TipHandler>, Box<dyn std::error::Error + Send>> {
+    let tip = tip_handler.tip(height).unwrap();
+
+    match state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height) {
+        Ok(checkpoint_readwrite) => {
+            let checkpoint_readonly = checkpoint_readwrite.as_readonly();
+            switch_to_checkpoint(&mut state, &checkpoint_readonly, fd_factory)?;
+            Ok(TipToCheckpointResult::<'a, TipHandler> {
+                state: Arc::new(state),
+                checkpoint_readonly: checkpoint_readwrite.as_readonly(),
+                checkpoint_readwrite: Some(checkpoint_readwrite),
+            })
+        }
+
+        Err(LayoutError::AlreadyExists(_)) => {
+            warn!(
+                log,
+                "Failed to create checkpoint @{} because it already exists, \
+                     re-loading the checkpoint from disk",
+                height
+            );
+
+            let checkpoint_layout = state_layout
+                .checkpoint_in_verification(height)
+                .unwrap_or_else(|err| {
+                    fatal!(log, "Failed to open checkpoint layout #{}: {}", height, err);
+                });
+            switch_to_checkpoint(&mut state, &checkpoint_layout, fd_factory)?;
+            Ok(TipToCheckpointResult {
+                state: Arc::new(state),
+                checkpoint_readonly: checkpoint_layout,
+                checkpoint_readwrite: None,
+            })
+        }
+        Err(err) => Err(Box::new(err)),
+    }
+}
+
+/// Switches `tip` to the most recent checkpoint file provided by `layout`.
+///
+/// Preconditions:
+/// 1) `tip` and `layout` mut have exactly the same set of canisters.
+/// 2) The page deltas must be empty in `tip`
+/// 3) The memory sizes must match.
+fn switch_to_checkpoint(
+    tip: &mut ReplicatedState,
+    layout: &CheckpointLayout<ReadOnly>,
+    fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<(), Box<dyn std::error::Error + Send>> {
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        let canister_layout = layout.canister(tip_id).unwrap();
+        tip_canister
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.wasm_chunk_store()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+
+        if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
+            tip_execution.wasm_memory.page_map.switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.vmemory_0()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+            tip_execution.stable_memory.page_map.switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.stable_memory()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+        }
+    }
+
+    for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
+        let new_snapshot = Arc::make_mut(tip_snapshot);
+        let snapshot_layout = layout.snapshot(tip_id).unwrap();
+
+        new_snapshot
+            .chunk_store_mut()
+            .page_map_mut()
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(snapshot_layout.wasm_chunk_store()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+
+        new_snapshot
+            .execution_snapshot_mut()
+            .wasm_memory
+            .page_map
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(snapshot_layout.vmemory_0()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+        new_snapshot
+            .execution_snapshot_mut()
+            .stable_memory
+            .page_map
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(snapshot_layout.stable_memory()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+
+        let new_snapshot_wasm_binary = &new_snapshot.execution_snapshot().wasm_binary;
+        let wasm_binary = snapshot_layout
+            .wasm()
+            .lazy_load_with_module_hash(
+                new_snapshot_wasm_binary.module_hash().into(),
+                Some(new_snapshot_wasm_binary.len()),
+            )
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+        debug_assert_eq!(
+            wasm_binary.module_loading_status(),
+            ModuleLoadingStatus::FileNotLoaded
+        );
+        new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
+    }
+
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        if let Some(tip_state) = &mut tip_canister.execution_state {
+            let canister_layout = layout.canister(tip_id).unwrap();
+
+            // We can reuse the cache because the Wasm binary has the same
+            // contents, only the storage of that binary changed.
+            let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+            let tip_state_wasm_binary = &tip_state.wasm_binary.binary;
+            let wasm_binary = canister_layout
+                .wasm()
+                .lazy_load_with_module_hash(
+                    tip_state_wasm_binary.module_hash().into(),
+                    Some(tip_state_wasm_binary.len()),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+            debug_assert_eq!(
+                tip_state.wasm_binary.binary.as_slice(),
+                canister_layout
+                    .wasm()
+                    .lazy_load_with_module_hash(
+                        tip_state.wasm_binary.binary.module_hash().into(),
+                        Some(tip_state_wasm_binary.len())
+                    )
+                    .unwrap()
+                    .as_slice()
+            );
+
+            debug_assert_eq!(
+                wasm_binary.module_loading_status(),
+                ModuleLoadingStatus::FileNotLoaded
+            );
+            tip_state.wasm_binary = Arc::new(
+                ic_replicated_state::canister_state::execution_state::WasmBinary {
+                    binary: wasm_binary,
+                    embedder_cache,
+                },
+            );
+
+            // Reset the sandbox state to force full synchronization on the next message
+            // execution because the checkpoint file of `tip` has changed.
+            tip_state.wasm_memory.sandbox_memory = SandboxMemory::new();
+            tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
+        }
+    }
+    Ok(())
+}
+
 /// Update the tip directory files with the most recent checkpoint operations.
 /// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
-fn flush_unflushed_checkpoint_ops<T>(
+fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
-    layout: &CheckpointLayout<RwPolicy<T>>,
+    tip_handler: &mut TipHandler,
+    height: Height,
     operations: Vec<UnflushedCheckpointOp>,
 ) -> Result<(), LayoutError> {
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
     for op in operations {
         match op {
             UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
-                layout.snapshot(&snapshot_id)?.delete_dir()?;
+                tip_handler
+                    .tip(height)?
+                    .snapshot(&snapshot_id)?
+                    .delete_dir()?;
             }
             UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
-                backup(log, layout, canister_id, snapshot_id)?;
+                backup(log, &tip_handler.tip(height)?, canister_id, snapshot_id)?;
             }
             UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id) => {
-                restore(log, layout, canister_id, snapshot_id)?;
+                restore(log, &tip_handler.tip(height)?, canister_id, snapshot_id)?;
             }
+            UnflushedCheckpointOp::RenameCanister(src, dst) => {
+                tip_handler.move_canister_directory(height, src, dst)?;
+            }
+            UnflushedCheckpointOp::UploadSnapshotData(..)
+            | UnflushedCheckpointOp::UploadSnapshotMetadata(..) => {}
         }
     }
 
@@ -778,16 +1026,11 @@ fn merge(
     });
 }
 
-fn serialize_to_tip(
+fn serialize_protos_to_checkpoint_readwrite(
     state: &ReplicatedState,
-    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
-    metrics: &StorageMetrics,
-    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
-    debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
-
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
     //
@@ -795,34 +1038,39 @@ fn serialize_to_tip(
     // manifest file hashes (the ingress history is initially preserved unmodified
     // on both sides of the split, while the system metadata is not).
     let ingress_history = (&state.system_metadata().ingress_history).into();
-    tip.ingress_history().serialize(ingress_history)?;
+    checkpoint_readwrite
+        .ingress_history()
+        .serialize(ingress_history)?;
 
     let system_metadata: SystemMetadata = state.system_metadata().into();
-    tip.system_metadata().serialize(system_metadata)?;
+    checkpoint_readwrite
+        .system_metadata()
+        .serialize(system_metadata)?;
 
     // The split marker is also serialized separately from `SystemMetadata` because
     // preserving the latter unmodified during a split makes verification a matter
     // of comparing manifest file hashes.
     match state.system_metadata().split_from {
         Some(subnet_id) => {
-            tip.split_marker().serialize(SplitFrom {
+            checkpoint_readwrite.split_marker().serialize(SplitFrom {
                 subnet_id: Some(subnet_id_into_protobuf(subnet_id)),
             })?;
         }
         None => {
-            tip.split_marker().try_remove_file()?;
+            checkpoint_readwrite.split_marker().try_remove_file()?;
         }
     }
 
-    tip.subnet_queues()
+    checkpoint_readwrite
+        .subnet_queues()
         .serialize((state.subnet_queues()).into())?;
 
-    tip.stats().serialize(Stats {
+    checkpoint_readwrite.stats().serialize(Stats {
         query_stats: state.query_stats().as_query_stats(),
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(canister_state, tip, metrics, lsmt_config)
+        serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)
     });
 
     for result in results.into_iter() {
@@ -833,12 +1081,10 @@ fn serialize_to_tip(
         thread_pool,
         state.canister_snapshots.iter(),
         |canister_snapshot| {
-            serialize_snapshot_to_tip(
+            serialize_snapshot_protos_to_checkpoint_readwrite(
                 canister_snapshot.0,
                 canister_snapshot.1,
-                tip,
-                metrics,
-                lsmt_config,
+                checkpoint_readwrite,
             )
         },
     );
@@ -850,7 +1096,54 @@ fn serialize_to_tip(
     Ok(())
 }
 
-fn serialize_canister_to_tip(
+fn serialize_wasm_binaries_and_pagemaps(
+    state: &ReplicatedState,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    thread_pool: &mut scoped_threadpool::Pool,
+    lsmt_config: &LsmtConfig,
+    metrics: &StorageMetrics,
+) -> Result<(), CheckpointError> {
+    parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)
+    })
+    .into_iter()
+    .try_for_each(identity)?;
+    parallel_map(
+        thread_pool,
+        state.canister_snapshots.iter(),
+        |(snapshot_id, snapshot)| {
+            serialize_snapshot_wasm_binary_and_pagemaps(
+                snapshot_id,
+                snapshot,
+                tip,
+                metrics,
+                lsmt_config,
+            )
+        },
+    )
+    .into_iter()
+    .try_for_each(identity)
+}
+
+fn serialize_wasm_binary(
+    wasm_file: &WasmFile<RwPolicy<TipHandler>>,
+    binary: &CanisterModule,
+) -> Result<(), CheckpointError> {
+    if !binary.is_file() {
+        // Canister was installed/upgraded. Persist the new wasm binary.
+        wasm_file.serialize(binary)?;
+    } else {
+        // This if should always be false, as we hardlink the entire checkpoint to the tip
+        // It is left in mainly as defensive programming
+        if !wasm_file.raw_path().exists() {
+            debug_assert!(false);
+            wasm_file.serialize(binary)?;
+        }
+    }
+    Ok(())
+}
+
+fn serialize_canister_wasm_binary_and_pagemaps(
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
@@ -858,27 +1151,10 @@ fn serialize_canister_to_tip(
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
     let canister_layout = tip.canister(&canister_id)?;
-    canister_layout
-        .queues()
-        .serialize(canister_state.system_state.queues().into())?;
 
-    let execution_state_bits = match &canister_state.execution_state {
+    match &canister_state.execution_state {
         Some(execution_state) => {
-            let wasm_binary = &execution_state.wasm_binary.binary;
-            if !wasm_binary.is_file() {
-                // Canister was installed/upgraded. Persist the new wasm binary.
-                canister_layout
-                    .wasm()
-                    .serialize(&execution_state.wasm_binary.binary)?;
-            } else {
-                let wasm = canister_layout.wasm();
-                // This if should always be false, as we hardlink the entire checkpoint to the tip
-                // It is left in mainly as defensive programming
-                if !wasm.raw_path().exists() {
-                    debug_assert!(false);
-                    wasm.serialize(wasm_binary)?;
-                }
-            }
+            serialize_wasm_binary(&canister_layout.wasm(), &execution_state.wasm_binary.binary)?;
             execution_state.wasm_memory.page_map.persist_delta(
                 &canister_layout.vmemory_0(),
                 tip.height(),
@@ -891,25 +1167,14 @@ fn serialize_canister_to_tip(
                 lsmt_config,
                 metrics,
             )?;
-
-            Some(ExecutionStateBits {
-                exported_globals: execution_state.exported_globals.clone(),
-                heap_size: execution_state.wasm_memory.size,
-                exports: execution_state.exports.clone(),
-                last_executed_round: execution_state.last_executed_round,
-                metadata: execution_state.metadata.clone(),
-                binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
-                next_scheduled_method: execution_state.next_scheduled_method,
-                is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
-            })
         }
         None => {
+            // The canister is uninstalled
             canister_layout.vmemory_0().delete_files()?;
             canister_layout.stable_memory().delete_files()?;
             canister_layout.wasm().try_delete_file()?;
-            None
         }
-    };
+    }
 
     canister_state
         .system_state
@@ -921,6 +1186,64 @@ fn serialize_canister_to_tip(
             lsmt_config,
             metrics,
         )?;
+    Ok(())
+}
+
+fn serialize_snapshot_wasm_binary_and_pagemaps(
+    snapshot_id: &SnapshotId,
+    snapshot: &CanisterSnapshot,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
+) -> Result<(), CheckpointError> {
+    let snapshot_layout = tip.snapshot(snapshot_id)?;
+
+    let execution_snapshot = snapshot.execution_snapshot();
+    serialize_wasm_binary(&snapshot_layout.wasm(), &execution_snapshot.wasm_binary)?;
+    execution_snapshot.wasm_memory.page_map.persist_delta(
+        &snapshot_layout.vmemory_0(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+    execution_snapshot.stable_memory.page_map.persist_delta(
+        &snapshot_layout.stable_memory(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+    snapshot.chunk_store().page_map().persist_delta(
+        &snapshot_layout.wasm_chunk_store(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+    Ok(())
+}
+
+fn serialize_canister_protos_to_checkpoint_readwrite(
+    canister_state: &CanisterState,
+    checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
+) -> Result<(), CheckpointError> {
+    let canister_id = canister_state.canister_id();
+    let canister_layout = checkpoint_readwrite.canister(&canister_id)?;
+    canister_layout
+        .queues()
+        .serialize(canister_state.system_state.queues().into())?;
+
+    let execution_state_bits = canister_state
+        .execution_state
+        .as_ref()
+        .map(|execution_state| ExecutionStateBits {
+            exported_globals: execution_state.exported_globals.clone(),
+            heap_size: execution_state.wasm_memory.size,
+            exports: execution_state.exports.clone(),
+            last_executed_round: execution_state.last_executed_round,
+            metadata: execution_state.metadata.clone(),
+            binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
+            next_scheduled_method: execution_state.next_scheduled_method,
+            is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
+        });
 
     canister_layout.canister().serialize(
         CanisterStateBits {
@@ -989,21 +1312,23 @@ fn serialize_canister_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            environment_variables: canister_state
+                .system_state
+                .environment_variables
+                .clone()
+                .into(),
         }
         .into(),
     )?;
     Ok(())
 }
 
-/// Serialize a single snapshot to disk at checkpoint time.
-fn serialize_snapshot_to_tip(
+fn serialize_snapshot_protos_to_checkpoint_readwrite(
     snapshot_id: &SnapshotId,
     canister_snapshot: &CanisterSnapshot,
-    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
-    metrics: &StorageMetrics,
-    lsmt_config: &LsmtConfig,
+    checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
-    let snapshot_layout = tip.snapshot(snapshot_id)?;
+    let snapshot_layout = checkpoint_readwrite.snapshot(snapshot_id)?;
 
     // The protobuf is written at each checkpoint.
     snapshot_layout.snapshot().serialize(
@@ -1028,42 +1353,6 @@ fn serialize_snapshot_to_tip(
         .into(),
     )?;
 
-    // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
-    let wasm_binary = canister_snapshot.canister_module();
-    if !wasm_binary.is_file() {
-        snapshot_layout.wasm().serialize(wasm_binary)?;
-    } else {
-        // During `flush_page_maps` we created copied this file from the canister directory.
-        debug_assert!(snapshot_layout.wasm().raw_path().exists());
-    }
-
-    canister_snapshot
-        .execution_snapshot()
-        .wasm_memory
-        .page_map
-        .persist_delta(
-            &snapshot_layout.vmemory_0(),
-            tip.height(),
-            lsmt_config,
-            metrics,
-        )?;
-    canister_snapshot
-        .execution_snapshot()
-        .stable_memory
-        .page_map
-        .persist_delta(
-            &snapshot_layout.stable_memory(),
-            tip.height(),
-            lsmt_config,
-            metrics,
-        )?;
-    canister_snapshot.chunk_store().page_map().persist_delta(
-        &snapshot_layout.wasm_chunk_store(),
-        tip.height(),
-        lsmt_config,
-        metrics,
-    )?;
-
     Ok(())
 }
 
@@ -1078,7 +1367,13 @@ fn handle_compute_manifest_request(
     manifest_delta: Option<crate::manifest::ManifestDelta>,
     persist_metadata_guard: &Arc<Mutex<()>>,
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
+    rehash_divergence: &mut bool,
 ) {
+    let manifest_delta = if *rehash_divergence {
+        None
+    } else {
+        manifest_delta
+    };
     let system_metadata = checkpoint_layout
         .system_metadata()
         .deserialize()
@@ -1117,6 +1412,7 @@ fn handle_compute_manifest_request(
     }
 
     let start = Instant::now();
+    let manifest_is_incremental = manifest_delta.is_some();
     let manifest = crate::manifest::compute_manifest(
         thread_pool,
         &metrics.manifest_metrics,
@@ -1125,6 +1421,7 @@ fn handle_compute_manifest_request(
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
         manifest_delta,
+        RehashManifest::No,
     )
     .unwrap_or_else(|err| {
         fatal!(
@@ -1172,7 +1469,7 @@ fn handle_compute_manifest_request(
 
     let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
 
-    let bundled_manifest = compute_bundled_manifest(manifest);
+    let bundled_manifest = compute_bundled_manifest(manifest.clone());
 
     #[cfg(feature = "malicious_code")]
     let bundled_manifest = crate::BundledManifest {
@@ -1236,6 +1533,38 @@ fn handle_compute_manifest_request(
     }
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+
+    if !manifest_is_incremental {
+        *rehash_divergence = false;
+        return;
+    }
+    let _timer = request_timer(metrics, "compute_manifest_rehash");
+    let start = Instant::now();
+    let rehashed_manifest = crate::manifest::compute_manifest(
+        thread_pool,
+        &metrics.manifest_metrics,
+        log,
+        state_sync_version,
+        checkpoint_layout,
+        crate::state_sync::types::DEFAULT_CHUNK_SIZE,
+        Some(ManifestDelta {
+            base_manifest: manifest.clone(),
+            base_checkpoint: checkpoint_layout.clone(),
+            base_height: checkpoint_layout.height(),
+            target_height: checkpoint_layout.height(),
+        }),
+        RehashManifest::Yes,
+    )
+    .unwrap_or_else(|err| {
+        fatal!(
+            log,
+            "Failed to rehash manifest for checkpoint @{} after {:?}: {}",
+            checkpoint_layout.height(),
+            start.elapsed(),
+            err
+        )
+    });
+    *rehash_divergence = manifest != rehashed_manifest;
 }
 
 #[cfg(test)]
@@ -1284,7 +1613,8 @@ mod test {
             // Create a marker in the tip and promote it to a checkpoint.
             let checkpoint_layout = state_layout
                 .promote_scratchpad_to_unverified_checkpoint(tip, height)
-                .unwrap();
+                .unwrap()
+                .as_readonly();
 
             let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
                 certifications_metadata: Default::default(),
@@ -1306,6 +1636,7 @@ mod test {
                 None,
                 &Default::default(),
                 &Default::default(),
+                &mut false,
             );
         });
     }

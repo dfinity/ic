@@ -1,8 +1,6 @@
-#![allow(clippy::disallowed_types)]
-
 use std::{
     sync::{Arc, RwLock},
-    time::Instant,
+    time::{Instant, SystemTime},
 };
 
 use anyhow::Error;
@@ -14,27 +12,36 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use bytes::Bytes;
+use candid::Principal;
 use http::header::CONTENT_TYPE;
-use ic_bn_lib::http::{body::CountingBody, http_version, ConnInfo};
-use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
-use prometheus::{
-    proto::MetricFamily, register_histogram_vec_with_registry,
-    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
-    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
-    IntGauge, IntGaugeVec, Registry, TextEncoder,
+use humantime::format_rfc3339;
+use ic_bn_lib::{
+    http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo},
+    tasks::Run,
 };
+use ic_bn_lib::{
+    prometheus::{
+        proto::MetricFamily, register_histogram_vec_with_registry,
+        register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+        register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+        IntGauge, IntGaugeVec, Registry, TextEncoder,
+    },
+    pubsub::Broker,
+};
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use serde_json::json;
 use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
+use tokio_util::sync::CancellationToken;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    cache::{Cache, CacheStatus},
-    core::Run,
-    geoip,
+    errors::ErrorCause,
+    http::middleware::{cache::CacheState, geoip, retry::RetryResult},
     persist::RouteSubnet,
-    retry::RetryResult,
-    routes::{ErrorCause, RequestContext, RequestType},
+    routes::{Health, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
 };
 
@@ -80,14 +87,14 @@ fn remove_stale_metrics(
                 let node_id = v
                     .get_label()
                     .iter()
-                    .find(|&v| v.get_name() == NODE_ID_LABEL)
-                    .map(|x| x.get_value());
+                    .find(|&v| v.name() == NODE_ID_LABEL)
+                    .map(|x| x.value());
 
                 let subnet_id = v
                     .get_label()
                     .iter()
-                    .find(|&v| v.get_name() == SUBNET_ID_LABEL)
-                    .map(|x| x.get_value());
+                    .find(|&v| v.name() == SUBNET_ID_LABEL)
+                    .map(|x| x.value());
 
                 match (node_id, subnet_id) {
                     // Check if we got both node_id and subnet_id labels
@@ -127,14 +134,14 @@ pub struct MetricsRunner {
     registry: Registry,
     encoder: TextEncoder,
 
-    cache: Option<Arc<Cache>>,
-    cache_items: IntGauge,
-    cache_size: IntGauge,
+    cache_state: Option<Arc<CacheState>>,
 
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
+    healthy: IntGauge,
 
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    health: Arc<dyn Health>,
 }
 
 // Snapshots & encodes the metrics for the handler to export
@@ -142,23 +149,10 @@ impl MetricsRunner {
     pub fn new(
         metrics_cache: Arc<RwLock<MetricsCache>>,
         registry: Registry,
-        cache: Option<Arc<Cache>>,
+        cache_state: Option<Arc<CacheState>>,
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+        health: Arc<dyn Health>,
     ) -> Self {
-        let cache_items = register_int_gauge_with_registry!(
-            format!("cache_items"),
-            format!("Number of items in the request cache"),
-            registry
-        )
-        .unwrap();
-
-        let cache_size = register_int_gauge_with_registry!(
-            format!("cache_size"),
-            format!("Size of items in the request cache in bytes"),
-            registry
-        )
-        .unwrap();
-
         let mem_allocated = register_int_gauge_with_registry!(
             format!("memory_allocated"),
             format!("Allocated memory in bytes"),
@@ -173,23 +167,30 @@ impl MetricsRunner {
         )
         .unwrap();
 
+        let healthy = register_int_gauge_with_registry!(
+            format!("healthy"),
+            format!("Node health status"),
+            registry
+        )
+        .unwrap();
+
         Self {
             metrics_cache,
             registry,
             encoder: TextEncoder::new(),
-            cache,
-            cache_items,
-            cache_size,
+            cache_state,
             mem_allocated,
             mem_resident,
+            healthy,
             published_registry_snapshot,
+            health,
         }
     }
 }
 
 #[async_trait]
 impl Run for MetricsRunner {
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&self, _: CancellationToken) -> Result<(), Error> {
         // Record jemalloc memory usage
         epoch::advance().unwrap();
         self.mem_allocated
@@ -197,18 +198,13 @@ impl Run for MetricsRunner {
         self.mem_resident
             .set(stats::resident::read().unwrap() as i64);
 
-        // Gather cache stats if it's enabled, otherwise set to zero
-        let (cache_items, cache_size) = match self.cache.as_ref() {
-            Some(v) => {
-                v.housekeep().await;
-                (v.len(), v.size())
-            }
+        if let Some(v) = &self.cache_state {
+            v.update_metrics().await;
+        }
 
-            None => (0, 0),
-        };
-
-        self.cache_items.set(cache_items as i64);
-        self.cache_size.set(cache_size as i64);
+        // Record health metric
+        let healthy: i64 = (self.health.health() == ReplicaHealthStatus::Healthy).into();
+        self.healthy.set(healthy);
 
         // Get a snapshot of metrics
         let mut metric_families = self.registry.gather();
@@ -225,55 +221,6 @@ impl Run for MetricsRunner {
             .encode(&metric_families, &mut metrics_cache.buffer)?;
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct WithMetrics<T>(pub T, pub MetricParams);
-
-#[derive(Clone, Debug)]
-pub struct MetricParams {
-    pub action: String,
-    pub counter: IntCounterVec,
-    pub recorder: HistogramVec,
-}
-
-impl MetricParams {
-    pub fn new(registry: &Registry, action: &str) -> Self {
-        Self::new_with_opts(registry, action, &["status"], None)
-    }
-
-    pub fn new_with_opts(
-        registry: &Registry,
-        action: &str,
-        labels: &[&str],
-        buckets: Option<&[f64]>,
-    ) -> Self {
-        let mut recorder_opts = HistogramOpts::new(
-            format!("{action}_duration_sec"),
-            format!("Records the duration of {action} calls in seconds"),
-        );
-
-        if let Some(b) = buckets {
-            recorder_opts.buckets = b.to_vec();
-        }
-
-        Self {
-            action: action.to_string(),
-
-            // Count
-            counter: register_int_counter_vec_with_registry!(
-                format!("{action}_total"),
-                format!("Counts occurrences of {action} calls"),
-                labels,
-                registry
-            )
-            .unwrap(),
-
-            // Duration
-            recorder: register_histogram_vec_with_registry!(recorder_opts, labels, registry)
-                .unwrap(),
-        }
     }
 }
 
@@ -360,6 +307,7 @@ pub struct HttpMetricParams {
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
     pub anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    pub logs_broker: Option<Arc<Broker<Bytes, Principal>>>,
 }
 
 impl HttpMetricParams {
@@ -368,6 +316,7 @@ impl HttpMetricParams {
         action: &str,
         log_failed_requests_only: bool,
         anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+        logs_broker: Option<Arc<Broker<Bytes, Principal>>>,
     ) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
@@ -419,6 +368,7 @@ impl HttpMetricParams {
             .unwrap(),
 
             anonymization_salt,
+            logs_broker,
         }
     }
 }
@@ -532,16 +482,12 @@ pub async fn metrics_middleware(
         .unwrap_or("N/A".into());
 
     // for canister requests we extract canister_id
-    let canister_id = request
-        .extensions()
-        .get::<CanisterId>()
-        .map(|x| x.to_string());
+    let canister_id = request.extensions().get::<CanisterId>().map(|x| x.get().0);
+    let canister_id_str = canister_id.map(|x| x.to_string());
 
     // for /api/v2/subnet requests we extract subnet_id directly from extension
-    let subnet_id = request
-        .extensions()
-        .get::<SubnetId>()
-        .map(|x| x.to_string());
+    let subnet_id = request.extensions().get::<SubnetId>().map(|x| x.get().0);
+    let subnet_id_str = subnet_id.map(|x| x.to_string());
 
     let http_version = http_version(request.version());
 
@@ -554,7 +500,8 @@ pub async fn metrics_middleware(
     let subnet_id = subnet_id.or(response
         .extensions()
         .get::<Arc<RouteSubnet>>()
-        .map(|x| x.id.to_string()));
+        .map(|x| x.id));
+    let subnet_id_str = subnet_id_str.or(subnet_id.map(|x| x.to_string()));
 
     // Extract extensions
     let ctx = response
@@ -577,7 +524,7 @@ pub async fn metrics_middleware(
 
     // Prepare fields
     let status_code = response.status();
-    let sender = ctx.sender.map(|x| x.to_string());
+    let sender = ctx.sender.map(|x| x.to_string()).unwrap_or_default();
     let node_id = node.as_ref().map(|x| x.id.to_string());
 
     let HttpMetricParams {
@@ -588,6 +535,7 @@ pub async fn metrics_middleware(
         request_sizer,
         response_sizer,
         anonymization_salt,
+        logs_broker,
     } = metric_params;
 
     let (parts, body) = response.into_parts();
@@ -615,7 +563,9 @@ pub async fn metrics_middleware(
         // Prepare labels
         // Otherwise "temporary value dropped" error occurs
         let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
-        let subnet_id_lbl = subnet_id.clone().unwrap_or(SUBNET_ID_UNKNOWN.to_string());
+        let subnet_id_lbl = subnet_id_str
+            .clone()
+            .unwrap_or_else(|| SUBNET_ID_UNKNOWN.to_string());
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
         let retry_lbl =
@@ -669,8 +619,8 @@ pub async fn metrics_middleware(
             hex::encode(&result[..16])
         };
 
-        let remote_addr = hash_fn(&remote_addr);
-        let sender = hash_fn(&sender.unwrap_or_default());
+        let remote_addr_hashed = hash_fn(&remote_addr);
+        let sender_hashed = hash_fn(&sender);
 
         // Log
         if !log_failed_requests_only || failed {
@@ -682,25 +632,59 @@ pub async fn metrics_middleware(
                 error_cause,
                 error_details,
                 status = status_code.as_u16(),
-                subnet_id,
+                subnet_id_str,
                 node_id,
-                canister_id,
+                canister_id_str,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
-                sender,
-                remote_addr,
+                sender_hashed,
+                remote_addr_hashed,
                 method = ctx.method_name,
                 duration = proc_duration,
                 duration_full = full_duration,
                 request_size = ctx.request_size,
                 response_size,
                 retry_count = &retry_result.as_ref().map(|x| x.retries),
-                retry_success = &retry_result.map(|x| x.success),
+                retry_success = &retry_result.as_ref().map(|x| x.success),
                 %cache_status,
-                cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
+                cache_bypass_reason = cache_bypass_reason_lbl,
                 country_code,
                 client_ip_family = ip_family,
             );
+        }
+
+        // See if have a broker, a canister_id and then extract the topic
+        if let Some(topic) = logs_broker
+            .zip(canister_id)
+            .and_then(|(broker, id)| broker.topic_get(&id))
+        {
+            let ts = format_rfc3339(SystemTime::now()).to_string();
+            let client_id = hash_fn(&format!("{sender}{remote_addr}"));
+
+            let msg = json!({
+                "cache_status": cache_status_lbl,
+                "cache_bypass_reason": cache_bypass_reason_lbl,
+                "client_id": client_id,
+                "client_ip_family": ip_family,
+                "client_country_code": country_code,
+                "duration": proc_duration,
+                "error_cause": error_cause,
+                "error_details": error_details,
+                "http_status": status_code.as_u16(),
+                "http_version": http_version,
+                "ic_canister_id": canister_id_str,
+                "ic_node_id": node_id.unwrap_or_default(),
+                "ic_subnet_id": subnet_id_str,
+                "ic_method": ctx.method_name,
+                "request_id": request_id,
+                "request_size": ctx.request_size,
+                "request_type": request_type,
+                "response_size": response_size,
+                "timestamp": ts,
+            });
+
+            // We don't care for errors in this case
+            let _ = topic.publish(Bytes::from(msg.to_string()));
         }
     });
 
@@ -724,4 +708,147 @@ pub async fn metrics_handler(
 }
 
 #[cfg(test)]
-pub mod test;
+mod test {
+    use super::*;
+
+    use crate::check::test::generate_custom_registry_snapshot;
+    use ic_bn_lib::prometheus::proto::{LabelPair, Metric};
+
+    // node_id, subnet_id
+    const NODES: &[(&str, &str)] = &[
+        ("y7s52-3xjam-aaaaa-aaaap-2ai", "fscpm-uiaaa-aaaaa-aaaap-yai"),
+        ("ftjgm-3pkam-aaaaa-aaaap-2ai", "fscpm-uiaaa-aaaaa-aaaap-yai"),
+        ("fat3m-uhiam-aaaaa-aaaap-2ai", "fscpm-uiaaa-aaaaa-aaaap-yai"),
+        ("fat3m-uhiam-aaaaa-aaaap-2ai", "ascpm-uiaaa-aaaaa-aaaap-yai"), // node in snapshot, but in different subnet
+        ("fat3n-uhiam-aaaaa-aaaap-2ai", "fscpm-uiaaa-aaaaa-aaaap-yai"), // node not in snapshot
+        ("fat3o-uhiam-aaaaa-aaaap-2ai", "fscpm-uiaaa-aaaaa-aaaap-yai"), // node not in snapshot
+    ];
+
+    fn gen_metric(node_id: Option<String>, subnet_id: Option<String>) -> Metric {
+        let mut m = Metric::new();
+
+        let mut lbl = LabelPair::new();
+        lbl.set_name("foo".into());
+        lbl.set_value("bar".into());
+
+        let mut lbls = vec![lbl];
+
+        if let Some(v) = node_id {
+            let mut lbl = LabelPair::new();
+            lbl.set_name(NODE_ID_LABEL.into());
+            lbl.set_value(v);
+            lbls.push(lbl);
+        }
+
+        if let Some(v) = subnet_id {
+            let mut lbl = LabelPair::new();
+            lbl.set_name(SUBNET_ID_LABEL.into());
+            lbl.set_value(v);
+            lbls.push(lbl);
+        }
+
+        m.set_label(lbls);
+
+        m
+    }
+
+    fn gen_metric_family(
+        name: String,
+        nodes: &[(&str, &str)],
+        add_node_id: bool,
+        add_subnet_id: bool,
+    ) -> MetricFamily {
+        let metrics = nodes
+            .iter()
+            .map(|&(node_id, subnet_id)| {
+                gen_metric(
+                    if add_node_id {
+                        Some(node_id.into())
+                    } else {
+                        None
+                    },
+                    if add_subnet_id {
+                        Some(subnet_id.into())
+                    } else {
+                        None
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let mut mf = MetricFamily::new();
+        mf.set_name(name);
+        mf.set_metric(metrics);
+        mf
+    }
+
+    fn gen_metric_families() -> Vec<MetricFamily> {
+        let mut mfs = Vec::new();
+
+        // These are with both labels defined
+        for n in &["foobar", "foobaz", "fooboo"] {
+            mfs.push(gen_metric_family((*n).into(), NODES, true, true));
+        }
+
+        // These with one of them
+        mfs.push(gen_metric_family("boo".into(), NODES, false, true));
+        mfs.push(gen_metric_family("goo".into(), NODES, true, false));
+
+        // This without both them
+        mfs.push(gen_metric_family("zoo".into(), NODES, false, false));
+
+        mfs
+    }
+
+    #[test]
+    fn test_remove_stale_metrics() -> Result<(), Error> {
+        // subnet id: fscpm-uiaaa-aaaaa-aaaap-yai
+        // node ids in a snapshot:
+        // - y7s52-3xjam-aaaaa-aaaap-2ai
+        // - ftjgm-3pkam-aaaaa-aaaap-2ai
+        // - fat3m-uhiam-aaaaa-aaaap-2ai
+        let snapshot = Arc::new(generate_custom_registry_snapshot(1, 3, 0));
+        let mfs = remove_stale_metrics(Arc::clone(&snapshot), gen_metric_families());
+        assert_eq!(mfs.len(), 6);
+
+        let mut only_node_id = 0;
+        let mut only_subnet_id = 0;
+        let mut no_ids = 0;
+
+        // Check that the metric families now contain only metrics with node_id+subnet_id from the snapshot
+        // and other metrics are untouched
+        for mf in mfs {
+            for m in mf.get_metric() {
+                let node_id = m
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.name() == NODE_ID_LABEL)
+                    .map(|x| x.value());
+
+                let subnet_id = m
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.name() == SUBNET_ID_LABEL)
+                    .map(|x| x.value());
+
+                match (node_id, subnet_id) {
+                    (Some(node_id), Some(subnet_id)) => assert!(snapshot
+                        .nodes
+                        .get(node_id)
+                        .map(|x| x.subnet_id.to_string() == subnet_id)
+                        .unwrap_or(false)),
+
+                    (Some(_), None) => only_node_id += 1,
+                    (None, Some(_)) => only_subnet_id += 1,
+                    _ => no_ids += 1,
+                }
+            }
+        }
+
+        assert_eq!(only_node_id, NODES.len());
+        assert_eq!(only_subnet_id, NODES.len() - 1);
+        assert_eq!(no_ids, NODES.len());
+
+        Ok(())
+    }
+}

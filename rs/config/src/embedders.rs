@@ -14,19 +14,37 @@ use crate::flag_status::FlagStatus;
 // each message's execution time (about 40x), so set a limit 3 orders of
 // magnitude lower which should still allow for reasonable canisters to be
 // written (current max number of globals on the Alpha network is 7).
-pub(crate) const MAX_GLOBALS: usize = 1000;
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
+pub const MAX_GLOBALS: usize = 1000;
 // The maximum number of functions allowed in a Wasm module.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // The total size of the exported custom sections in bytes.
 // The size should not exceed 1MiB.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
 // The maximum number of exported functions called `canister_update <name>`,
 // `canister_query <name>`, or `canister_composite_query <name>`.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_NUMBER_EXPORTED_FUNCTIONS: usize = 1000;
 // The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
 // `canister_query <name>`, or `canister_composite_query <name>`.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS: usize = 20000;
 /// The number of threads to use for query execution per canister.
 /// See also `QUERY_EXECUTION_THREADS_TOTAL`.
@@ -112,6 +130,8 @@ pub struct FeatureFlags {
     pub wasm64: FlagStatus,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
+    /// If this flag is enabled, then the environment variables are supported.
+    pub environment_variables: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -121,6 +141,7 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
+            environment_variables: FlagStatus::Disabled,
         }
     }
 }

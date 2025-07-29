@@ -27,6 +27,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExecutionId};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
+use ic_test_utilities_consensus::idkg::key_transcript_for_tests;
 use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
     fetch_int_gauge, fetch_int_gauge_vec, metric_vec, HistogramStats,
@@ -34,7 +35,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
-    batch::ConsensusResponse,
+    batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::idkg::PreSigId,
     ingress::IngressStatus,
     messages::{
@@ -3032,6 +3033,7 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
             body: None,
             transform: None,
             max_response_bytes: None,
+            is_replicated: None,
         })
         .unwrap();
 
@@ -4104,6 +4106,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             }),
             context: transform_context,
         }),
+        is_replicated: None,
     };
 
     // Create request to `HttpRequest` method.
@@ -4162,6 +4165,70 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         ),
         metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.get() as f64),]),
     );
+}
+
+#[test]
+fn http_outcalls_free() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let caller_canister = test.create_canister();
+
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
+
+    let cycles_before = test.canister_state(caller_canister).system_state.balance();
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: Some(response_size_limit),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name,
+            }),
+            context: transform_context,
+        }),
+        is_replicated: None,
+    };
+
+    // Create request to `HttpRequest` method.
+    let payment = Cycles::new(0);
+    let payload = args.encode();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        payload,
+        payment,
+        caller_canister,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let fee = test.http_request_fee(
+        http_request_context.variable_parts_size(),
+        Some(NumBytes::from(response_size_limit)),
+    );
+    assert_eq!(fee, Cycles::new(0));
+    let cycles_after = test.canister_state(caller_canister).system_state.balance();
+    assert_eq!(cycles_before, cycles_after);
 }
 
 #[test]
@@ -5793,12 +5860,17 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
-    let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
-
+    // TODO(CON-1545): Update signature contexts with full pre-signatures
+    let pre_signatures = BTreeMap::from_iter([(pre_sig_id, None)]);
     inject_ecdsa_signing_request(&mut test, &key_id);
-    test.deliver_pre_signature_ids(BTreeMap::from_iter([(
-        MasterPublicKeyId::Ecdsa(key_id),
-        pre_sig_ids,
+    let master_key_id = MasterPublicKeyId::Ecdsa(key_id);
+    let key_transcript = key_transcript_for_tests(&master_key_id);
+    test.deliver_pre_signatures(BTreeMap::from_iter([(
+        master_key_id,
+        AvailablePreSignatures {
+            key_transcript,
+            pre_signatures,
+        },
     )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -5852,6 +5924,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 #[test]
 fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
+    let master_key_ids: Vec<_> = key_ids
+        .iter()
+        .cloned()
+        .map(MasterPublicKeyId::Ecdsa)
+        .collect();
     let mut test = SchedulerTestBuilder::new()
         .with_chain_keys(
             key_ids
@@ -5863,19 +5940,26 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
-    let pre_sig_ids0 = BTreeSet::from_iter([PreSigId(0), PreSigId(1)]);
-    let pre_sig_ids1 = BTreeSet::from_iter([PreSigId(2)]);
-    let pre_sig_id_map = BTreeMap::from_iter([
+    // TODO(CON-1545): Update signature contexts with full pre-signatures
+    let pre_sig_ids0 = BTreeMap::from_iter([(PreSigId(0), None), (PreSigId(1), None)]);
+    let pre_sig_ids1 = BTreeMap::from_iter([(PreSigId(2), None)]);
+    let pre_signatures = BTreeMap::from_iter([
         (
-            MasterPublicKeyId::Ecdsa(key_ids[0].clone()),
-            pre_sig_ids0.clone(),
+            master_key_ids[0].clone(),
+            AvailablePreSignatures {
+                key_transcript: key_transcript_for_tests(&master_key_ids[0]),
+                pre_signatures: pre_sig_ids0.clone(),
+            },
         ),
         (
-            MasterPublicKeyId::Ecdsa(key_ids[1].clone()),
-            pre_sig_ids1.clone(),
+            master_key_ids[1].clone(),
+            AvailablePreSignatures {
+                key_transcript: key_transcript_for_tests(&master_key_ids[1]),
+                pre_signatures: pre_sig_ids1.clone(),
+            },
         ),
     ]);
-    test.deliver_pre_signature_ids(pre_sig_id_map);
+    test.deliver_pre_signatures(pre_signatures);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -5904,14 +5988,14 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     assert!(context1.nonce.is_some());
     assert_eq!(
         context1.matched_pre_signature,
-        Some((*pre_sig_ids1.first().unwrap(), expected_height))
+        Some((*pre_sig_ids1.keys().next().unwrap(), expected_height))
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
         context2.matched_pre_signature,
-        Some((*pre_sig_ids0.first().unwrap(), expected_height))
+        Some((*pre_sig_ids0.keys().next().unwrap(), expected_height))
     );
 }
 

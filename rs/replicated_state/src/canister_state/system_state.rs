@@ -15,7 +15,7 @@ use crate::{
     PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
@@ -280,6 +280,11 @@ impl CanisterHistory {
         self.total_num_changes
     }
 
+    /// Overwrites the `total_num_changes`, which can happen in the context of canister migration.
+    pub fn set_total_num_changes(&mut self, total_num_changes: u64) {
+        self.total_num_changes = total_num_changes;
+    }
+
     pub fn get_memory_usage(&self) -> NumBytes {
         self.canister_history_memory_usage
     }
@@ -398,6 +403,9 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
+
+    /// Environment variables.
+    pub environment_variables: EnvironmentVariables,
 }
 
 /// A wrapper around the different canister statuses.
@@ -766,6 +774,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
@@ -810,6 +819,7 @@ impl SystemState {
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
+        environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
         let system_state = Self {
@@ -839,6 +849,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
+            environment_variables: EnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1845,8 +1856,13 @@ impl SystemState {
     }
 
     /// Checks if the given amount of cycles from the main balance can be moved to the reserved balance.
+    /// The provided `main_balance` might be lower than `self.cycles_balance` when this function is used to perform validation before cycles are actually consumed.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn can_reserve_cycles(&self, amount: Cycles) -> Result<(), ReservationError> {
+    pub fn can_reserve_cycles(
+        &self,
+        amount: Cycles,
+        main_balance: Cycles,
+    ) -> Result<(), ReservationError> {
         if amount == Cycles::zero() {
             return Ok(());
         }
@@ -1858,10 +1874,10 @@ impl SystemState {
             }
         }
 
-        if amount > self.cycles_balance {
+        if amount > main_balance {
             Err(ReservationError::InsufficientCycles {
                 requested: amount,
-                available: self.cycles_balance,
+                available: main_balance,
             })
         } else {
             Ok(())
@@ -1871,7 +1887,7 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
-        self.can_reserve_cycles(amount)?;
+        self.can_reserve_cycles(amount, self.cycles_balance)?;
         self.cycles_balance -= amount;
         self.reserved_balance += amount;
         Ok(())
@@ -1944,6 +1960,12 @@ impl SystemState {
             change_details,
         );
         self.canister_history.add_canister_change(new_change);
+    }
+
+    /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
+    pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
+        self.canister_history
+            .set_total_num_changes(total_num_changes);
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {
@@ -2038,6 +2060,19 @@ impl SystemState {
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
+        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
+            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        } else {
+            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        }
+    }
+
+    /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
+    pub fn is_low_wasm_memory_hook_condition_satisfied(
+        &self,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
+    ) -> bool {
         let memory_allocation = match self.memory_allocation {
             MemoryAllocation::Reserved(bytes) => Some(bytes),
             MemoryAllocation::BestEffort => None,
@@ -2046,17 +2081,13 @@ impl SystemState {
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
 
-        if is_low_wasm_memory_hook_condition_satisfied(
+        is_low_wasm_memory_hook_condition_satisfied(
             memory_usage,
             wasm_memory_usage,
             memory_allocation,
             wasm_memory_limit,
             wasm_memory_threshold,
-        ) {
-            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-        } else {
-            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
-        }
+        )
     }
 }
 
@@ -2329,6 +2360,7 @@ pub mod testing {
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
+            environment_variables: Default::default(),
         };
     }
 }

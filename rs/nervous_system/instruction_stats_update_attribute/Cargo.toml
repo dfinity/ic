@@ -12,4 +12,4 @@ syn = { workspace = true }
 
 [dev-dependencies]
 candid = { workspace = true }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }

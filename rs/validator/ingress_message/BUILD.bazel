@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/validator",
     "@crate_index//:base64",
     "@crate_index//:hex",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:time",
 ]
 

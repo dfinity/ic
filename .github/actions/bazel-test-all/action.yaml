@@ -1,23 +1,22 @@
 name: 'Bazel-Test-All'
-description: 'Run Bazel Test'
+description: 'Run Bazel Test with some optional speed optimizations'
 inputs:
   diff-only:
     required: false
     default: false
-  release-build:
+  stamp-build:
     required: false
     default: true
+  upload-artifacts:
+    required: false
+    default: false
   execlogs-artifact-name:
     required: false
     description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
-  BAZEL_COMMAND:
+  extra-bazel-args:
     required: true
-    default: 'test'
-  BAZEL_TARGETS:
-    required: true
+    description: "Extra arguments to pass to 'bazel test'"
   CLOUD_CREDENTIALS_CONTENT:
-    required: false
-  SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
   GPG_PASSPHRASE:
     required: true
@@ -26,38 +25,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-      - name: Prepare worker cache
-        shell: bash
-        run: |
-          # freshly deployed k8s machines require ownership correctly set
-          if [ -e /cache ]; then
-            sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
-          fi
-
-      - name: Set up backup pod access
-        shell: bash
-        if: inputs.SSH_PRIVATE_KEY_BACKUP_POD != ''
-        run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
-
-          rm -rf ~/.ssh
-          mkdir -p ~/.ssh
-          chmod 0700 ~/.ssh
-          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         env:
@@ -68,23 +35,19 @@ runs:
           execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
             set -euo pipefail
+            echo "::notice::Node Name: ${NODE_NAME}"
 
             diff_only='${{ inputs.diff-only }}'
-            release_build='${{ inputs.release-build }}'
+            stamp_build='${{ inputs.stamp-build }}'
 
-            bazel_args=( )
+            bazel_args=(
+                --config=flaky_retry # auto retry eg systests
+            )
 
-            if [[ $release_build == "true" ]]; then
-              bazel_args+=( --config=release )
+            if [[ $stamp_build == "true" ]]; then
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
             fi
-
-            BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
-
-            bazel_targets=( )
-            for tgt in $BAZEL_TARGETS; do
-              bazel_targets+=( "$tgt" )
-            done
-
 
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
@@ -101,8 +64,8 @@ runs:
                 # get bazel targets that changed in the commit range and take the union with
                 # the targets that are expected to be built.
                 comm -12 \
-                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
-                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh test "$commit_range" | sort) \
+                  <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
 
                 # if bazel targets is empty we don't need to run any tests
                 if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
@@ -114,14 +77,21 @@ runs:
                 # complaining about the argument list being too long.
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
-                bazel_args+=( "${bazel_targets[@]}" )
+                bazel_args+=( //... )
             fi
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
-            else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
-            fi
+            bazel test ${{ inputs.extra-bazel-args }} "${bazel_args[@]}"
+
+      - name: Upload to S3
+        uses: ./.github/actions/upload-artifacts
+        if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        with:
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ inputs.CLOUD_CREDENTIALS_CONTENT }}

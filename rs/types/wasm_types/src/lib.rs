@@ -378,7 +378,7 @@ impl ModuleStorage {
     /// This may invalidate the module, but is useful for uploading a
     /// module chunk by chunk.
     fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        let end = offset + buf.len();
+        let end = offset.saturating_add(buf.len());
         if self.len() < end {
             return Err(format!(
                 "Offset {} + slice length {} exceeds module length {}.",

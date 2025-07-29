@@ -1,8 +1,8 @@
 use crate::fake::FakeDriver;
 use ic_nns_governance::{
     encode_metrics, governance::Governance, governance_proto_builder::GovernanceProtoBuilder,
-    pb::v1::RewardEvent,
 };
+use ic_nns_governance_api::RewardEvent;
 
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379
@@ -14,7 +14,7 @@ pub mod common;
 
 #[test]
 fn test_reward_event_amounts_metrics() {
-    let governance_proto = GovernanceProtoBuilder::new()
+    let governance_api = GovernanceProtoBuilder::new()
         .with_latest_reward_event(RewardEvent {
             total_available_e8s_equivalent: 100,
             ..Default::default()
@@ -24,7 +24,7 @@ fn test_reward_event_amounts_metrics() {
     let helpers = FakeDriver::default();
 
     let governance = Governance::new(
-        governance_proto,
+        governance_api,
         helpers.get_fake_env(),
         helpers.get_fake_ledger(),
         helpers.get_fake_cmc(),

@@ -3,7 +3,7 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 use axum::body::Body;
 use futures::FutureExt;
 use http_body_util::{BodyExt, Full, LengthLimitError};
-use hyper::Request;
+use hyper::{client::conn::http1::SendRequest, Request};
 use hyper_util::rt::TokioIo;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
@@ -37,11 +37,33 @@ use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
 use crate::{
-    common::{get_root_threshold_public_key, CONTENT_TYPE_CBOR, MAX_REQUEST_RECEIVE_TIMEOUT},
+    common::{get_root_threshold_public_key, CONTENT_TYPE_CBOR},
     metrics::DelegationManagerMetrics,
 };
 
+// In order to properly test the time outs we set much lower values for them when we are
+// in the test mode.
+#[cfg(not(test))]
 const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * 60);
+#[cfg(test)]
+const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
+
+const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
+
+#[cfg(not(test))]
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
+
+#[cfg(not(test))]
+const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = crate::common::MAX_REQUEST_RECEIVE_TIMEOUT;
+#[cfg(test)]
+const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(1);
+
+#[cfg(not(test))]
+const NNS_DELEGATION_REQUEST_SEND_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const NNS_DELEGATION_REQUEST_SEND_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Spawns a task which periodically fetches the nns delegation.
 pub fn start_nns_delegation_manager(
@@ -177,14 +199,16 @@ async fn load_root_delegation(
             fetching_root_delagation_attempts
         );
 
-        let backoff = Duration::from_secs(rand::thread_rng().gen_range(1..15));
+        let backoff = Duration::from_secs(
+            rand::thread_rng().gen_range(1..DELEGATION_RETRY_MAX_BACKOFF_SECONDS),
+        );
 
         match try_fetch_delegation_from_nns(
             config,
             log,
             rt_handle,
-            &subnet_id,
-            &nns_subnet_id,
+            subnet_id,
+            nns_subnet_id,
             registry_client,
             tls_config,
         )
@@ -215,12 +239,12 @@ async fn try_fetch_delegation_from_nns(
     config: &Config,
     log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
-    subnet_id: &SubnetId,
-    nns_subnet_id: &SubnetId,
+    subnet_id: SubnetId,
+    nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<CertificateDelegation, BoxError> {
-    let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id) {
+    let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, nns_subnet_id) {
         Ok(node_topology) => node_topology,
         Err(err) => {
             fatal!(
@@ -260,7 +284,155 @@ async fn try_fetch_delegation_from_nns(
 
     let registry_version = registry_client.get_latest_version();
 
-    let ip_addr = node.ip_addr.parse().unwrap();
+    let mut request_sender = timeout(
+        CONNECTION_TIMEOUT,
+        connect(
+            log.clone(),
+            rt_handle,
+            peer_id,
+            node,
+            registry_client,
+            tls_config,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        format!("Timed out while connecting to the nns node after {CONNECTION_TIMEOUT:?}")
+    })??;
+
+    // any effective canister id can be used when invoking read_state here
+    let uri = "/api/v2/canister/aaaaa-aa/read_state";
+
+    info!(
+        log,
+        "Attempt to fetch HTTPS delegation from root subnet node, uri = `{uri}`."
+    );
+
+    let nns_request = Request::builder()
+        .method(hyper::Method::POST)
+        .uri(uri)
+        .header(hyper::header::CONTENT_TYPE, CONTENT_TYPE_CBOR)
+        .body(Body::new(Full::from(body).map_err(BoxError::from)))?;
+
+    let raw_response_res = timeout(
+        NNS_DELEGATION_REQUEST_SEND_TIMEOUT,
+        request_sender.send_request(nns_request),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "Timed out while sending request to the nns \
+            node after {NNS_DELEGATION_REQUEST_SEND_TIMEOUT:?}",
+        )
+    })??;
+
+    let raw_response = match timeout(
+        NNS_DELEGATION_BODY_RECEIVE_TIMEOUT,
+        http_body_util::Limited::new(
+            raw_response_res.into_body(),
+            config.max_delegation_certificate_size_bytes as usize,
+        )
+        .collect(),
+    )
+    .await
+    {
+        Ok(Ok(c)) => c.to_bytes(),
+        Ok(Err(e)) if e.is::<LengthLimitError>() => {
+            return Err(format!(
+                "Http body exceeds size limit of {} bytes.",
+                config.max_delegation_certificate_size_bytes
+            )
+            .into())
+        }
+        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
+        Err(_) => {
+            return Err(format!(
+                "Timed out while receiving http body after {NNS_DELEGATION_BODY_RECEIVE_TIMEOUT:?}"
+            )
+            .into())
+        }
+    };
+
+    debug!(log, "Response from nns subnet: {:?}", raw_response);
+
+    let response: HttpReadStateResponse = serde_cbor::from_slice(&raw_response)?;
+
+    let parsed_delegation: Certificate = serde_cbor::from_slice(&response.certificate)
+        .map_err(|e| format!("failed to parse delegation certificate: {}", e))?;
+
+    let labeled_tree = LabeledTree::try_from(parsed_delegation.tree)
+        .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;
+
+    let own_public_key_from_registry = match registry_client
+        .get_threshold_signing_public_key_for_subnet(subnet_id, registry_version)
+    {
+        Ok(Some(pk)) => Ok(pk),
+        Ok(None) => Err(format!(
+            "subnet {} public key from registry is empty",
+            subnet_id
+        )),
+        Err(err) => Err(format!(
+            "subnet {} public key could not be extracted from registry: {:?}",
+            subnet_id, err
+        )),
+    }?;
+
+    match lookup_path(
+        &labeled_tree,
+        &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
+    ) {
+        Some(LabeledTree::Leaf(pk_bytes)) => {
+            let public_key_from_certificate = parse_threshold_sig_key_from_der(pk_bytes)?;
+
+            if public_key_from_certificate != own_public_key_from_registry {
+                Err(format!(
+                    "invalid public key type in certificate for subnet {}",
+                    subnet_id
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        _ => Err(format!(
+            "subnet {} public key could not be extracted from certificate",
+            subnet_id
+        )),
+    }?;
+
+    let root_threshold_public_key =
+        get_root_threshold_public_key(log, registry_client, registry_version, &nns_subnet_id)
+            .ok_or("could not retrieve threshold root public key from registry")?;
+
+    validate_subnet_delegation_certificate(
+        &response.certificate,
+        &subnet_id,
+        &root_threshold_public_key,
+    )
+    .map_err(|err| format!("invalid subnet delegation certificate: {:?} ", err))?;
+
+    let delegation = CertificateDelegation {
+        subnet_id: Blob(subnet_id.get().to_vec()),
+        certificate: response.certificate,
+    };
+
+    info!(log, "Setting NNS delegation to: {:?}", delegation);
+    Ok(delegation)
+}
+
+async fn connect(
+    log: ReplicaLogger,
+    rt_handle: &tokio::runtime::Handle,
+    peer_id: NodeId,
+    node: ConnectionEndpoint,
+    registry_client: &dyn RegistryClient,
+    tls_config: &(dyn TlsConfig + Send + Sync),
+) -> Result<SendRequest<Body>, BoxError> {
+    let registry_version = registry_client.get_latest_version();
+
+    let ip_addr = node
+        .ip_addr
+        .parse()
+        .map_err(|err| format!("Failed to parse the ip addr: {err}"))?;
 
     let addr = SocketAddr::new(ip_addr, node.port as u16);
 
@@ -300,129 +472,17 @@ async fn try_fetch_delegation_from_nns(
         log,
         "Establishing HTTP connection to {peer_id}. Tls stream: {tls_stream:?}"
     );
-    let (mut request_sender, connection) =
+    let (request_sender, connection) =
         hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
-
-    let log_clone = log.clone();
 
     // Spawn a task to poll the connection, driving the HTTP state
     rt_handle.spawn(async move {
         if let Err(err) = connection.await {
-            warn!(log_clone, "Polling connection failed: {:?}.", err);
+            warn!(log, "Polling connection failed: {err:?}.");
         }
     });
 
-    // any effective canister id can be used when invoking read_state here
-    let uri = "/api/v2/canister/aaaaa-aa/read_state";
-
-    info!(
-        log,
-        "Attempt to fetch HTTPS delegation from root subnet node with addr = `{}`, uri = `{}`.",
-        addr,
-        uri
-    );
-
-    let nns_request = Request::builder()
-        .method(hyper::Method::POST)
-        .uri(uri)
-        .header(hyper::header::CONTENT_TYPE, CONTENT_TYPE_CBOR)
-        .body(Body::new(Full::from(body).map_err(BoxError::from)))?;
-
-    let raw_response_res = request_sender.send_request(nns_request).await?;
-
-    let raw_response = match timeout(
-        MAX_REQUEST_RECEIVE_TIMEOUT,
-        http_body_util::Limited::new(
-            raw_response_res.into_body(),
-            config.max_delegation_certificate_size_bytes as usize,
-        )
-        .collect(),
-    )
-    .await
-    {
-        Ok(Ok(c)) => c.to_bytes(),
-        Ok(Err(e)) if e.is::<LengthLimitError>() => {
-            return Err(format!(
-                "Http body exceeds size limit of {} bytes.",
-                config.max_delegation_certificate_size_bytes
-            )
-            .into())
-        }
-        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
-        Err(e) => {
-            return Err(format!(
-                "Timeout of {}s reached while receiving http body: {}",
-                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
-                e
-            )
-            .into())
-        }
-    };
-
-    debug!(log, "Response from nns subnet: {:?}", raw_response);
-
-    let response: HttpReadStateResponse = serde_cbor::from_slice(&raw_response)?;
-
-    let parsed_delegation: Certificate = serde_cbor::from_slice(&response.certificate)
-        .map_err(|e| format!("failed to parse delegation certificate: {}", e))?;
-
-    let labeled_tree = LabeledTree::try_from(parsed_delegation.tree)
-        .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;
-
-    let own_public_key_from_registry = match registry_client
-        .get_threshold_signing_public_key_for_subnet(*subnet_id, registry_version)
-    {
-        Ok(Some(pk)) => Ok(pk),
-        Ok(None) => Err(format!(
-            "subnet {} public key from registry is empty",
-            subnet_id
-        )),
-        Err(err) => Err(format!(
-            "subnet {} public key could not be extracted from registry: {:?}",
-            subnet_id, err
-        )),
-    }?;
-
-    match lookup_path(
-        &labeled_tree,
-        &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
-    ) {
-        Some(LabeledTree::Leaf(pk_bytes)) => {
-            let public_key_from_certificate = parse_threshold_sig_key_from_der(pk_bytes)?;
-
-            if public_key_from_certificate != own_public_key_from_registry {
-                Err(format!(
-                    "invalid public key type in certificate for subnet {}",
-                    subnet_id
-                ))
-            } else {
-                Ok(())
-            }
-        }
-        _ => Err(format!(
-            "subnet {} public key could not be extracted from certificate",
-            subnet_id
-        )),
-    }?;
-
-    let root_threshold_public_key =
-        get_root_threshold_public_key(log, registry_client, registry_version, nns_subnet_id)
-            .ok_or("could not retrieve threshold root public key from registry")?;
-
-    validate_subnet_delegation_certificate(
-        &response.certificate,
-        subnet_id,
-        &root_threshold_public_key,
-    )
-    .map_err(|err| format!("invalid subnet delegation certificate: {:?} ", err))?;
-
-    let delegation = CertificateDelegation {
-        subnet_id: Blob(subnet_id.get().to_vec()),
-        certificate: response.certificate,
-    };
-
-    info!(log, "Setting NNS delegation to: {:?}", delegation);
-    Ok(delegation)
+    Ok(request_sender)
 }
 
 fn get_random_node_from_nns_subnet(
@@ -464,8 +524,10 @@ mod tests {
 
     use crate::common::Cbor;
 
+    use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
+    use hyper::Response;
     use ic_certification_test_utils::serialize_to_cbor;
     use ic_certification_test_utils::{
         encoded_time, generate_root_of_trust, CertificateBuilder, CertificateData,
@@ -529,12 +591,37 @@ mod tests {
             .unwrap()
     }
 
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    enum Delay {
+        /// We will sleep for an hour before accepting incoming request
+        AcceptingConnection,
+        /// We will sleep for an hour before sending back a response
+        SendingResponse,
+        /// We will delay sending back the response body indefinitely
+        SendingBody,
+    }
+
+    /// A stream which never resolves
+    struct EndlessStream;
+
+    impl futures::Stream for EndlessStream {
+        type Item = Result<axum::body::Bytes, String>;
+
+        fn poll_next(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            std::task::Poll::Pending
+        }
+    }
+
     /// Sets up all the dependencies.
     fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
         // Optional certificate delegation returned by a mocked NNS node.
         // None means we will generate a random, valid certificate.
         override_nns_delegation: Arc<RwLock<Option<CertificateDelegation>>>,
+        delay: Option<Delay>,
     ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
         let registry_version = 1;
 
@@ -623,9 +710,23 @@ mod tests {
         };
 
         rt_handle.spawn(async move {
+            if delay == Some(Delay::AcceptingConnection) {
+                tokio::time::sleep(Duration::from_secs(60 * 60)).await;
+            }
             let time = Arc::new(RwLock::new(42));
 
             let router = axum::routing::any(move || async move {
+                match delay {
+                    Some(Delay::SendingResponse) => {
+                        tokio::time::sleep(Duration::from_secs(60 * 60)).await;
+                    }
+                    Some(Delay::SendingBody) => {
+                        return Response::new(Body::from_stream(EndlessStream {}))
+                    }
+                    Some(Delay::AcceptingConnection) => unreachable!(),
+                    None => {}
+                }
+
                 let mut time = time.write().unwrap();
                 *time += 1;
 
@@ -694,11 +795,14 @@ mod tests {
         (registry_client, tls_config)
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn manager_load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -717,11 +821,14 @@ mod tests {
         assert!(rx.borrow().is_none());
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn manager_load_root_delegation_on_non_nns_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -752,13 +859,14 @@ mod tests {
         }
     }
 
-    const TIMEOUT_WAIT: Duration = Duration::from_secs(3);
-
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn manager_should_not_refresh_if_not_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -776,17 +884,19 @@ mod tests {
         rx.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has elapsed.
-        tokio::time::advance(DELEGATION_UPDATE_INTERVAL / 2).await;
-        tokio::time::resume();
-
-        assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_err());
+        assert!(timeout(DELEGATION_UPDATE_INTERVAL / 2, rx.changed())
+            .await
+            .is_err());
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn manager_should_refresh_if_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -804,18 +914,20 @@ mod tests {
         rx.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has passed.
-        tokio::time::advance(DELEGATION_UPDATE_INTERVAL).await;
-        tokio::time::resume();
-
-        assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_ok());
+        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.changed())
+            .await
+            .is_ok());
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn manager_should_not_return_an_invalid_delegation_test() {
         let override_nns_delegation = Arc::new(RwLock::new(None));
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), override_nns_delegation.clone());
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            override_nns_delegation.clone(),
+            /*delay=*/ None,
+        );
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -838,13 +950,11 @@ mod tests {
             certificate: Blob(vec![]),
         });
 
-        // Advance enough time to wake up the manager
-        tokio::time::advance(2 * DELEGATION_UPDATE_INTERVAL).await;
-        tokio::time::resume();
-
         // Since the returned certificate is invalid, we don't expect the manager to return
         // any new certification.
-        assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_err());
+        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.changed())
+            .await
+            .is_err());
 
         *override_nns_delegation.write().unwrap() = None;
         // The mocked NNS node should now return a valid certification, so we expect that
@@ -855,8 +965,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
 
         let delegation = load_root_delegation(
             &Config::default(),
@@ -876,8 +989,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_non_nns_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) =
-            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
 
         let delegation = load_root_delegation(
             &Config::default(),
@@ -903,5 +1019,74 @@ mod tests {
             Some(LabeledTree::SubTree(..)) => (),
             _ => panic!("Didn't find the subnet path in the state tree"),
         }
+    }
+
+    #[tokio::test]
+    async fn load_root_delegation_times_out_on_connect_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            Some(Delay::AcceptingConnection),
+        );
+
+        let response = try_fetch_delegation_from_nns(
+            &Config::default(),
+            &no_op_logger(),
+            &rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client.as_ref(),
+            &tls_config,
+        )
+        .await;
+
+        assert_matches!(response, Err(err) if err.to_string().contains("Timed out while connecting"));
+    }
+
+    #[tokio::test]
+    async fn load_root_delegation_times_out_on_send_request_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            Some(Delay::SendingResponse),
+        );
+
+        let response = try_fetch_delegation_from_nns(
+            &Config::default(),
+            &no_op_logger(),
+            &rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client.as_ref(),
+            &tls_config,
+        )
+        .await;
+
+        assert_matches!(response, Err(err) if err.to_string().contains("Timed out while sending"));
+    }
+
+    #[tokio::test]
+    async fn load_root_delegation_times_out_on_receive_body_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            Some(Delay::SendingBody),
+        );
+
+        let response = try_fetch_delegation_from_nns(
+            &Config::default(),
+            &no_op_logger(),
+            &rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client.as_ref(),
+            &tls_config,
+        )
+        .await;
+
+        assert_matches!(response, Err(err) if err.to_string().contains("Timed out while receiving"));
     }
 }

@@ -5,14 +5,13 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 ALIASES = {}

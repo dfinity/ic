@@ -136,6 +136,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# IC HTTP Gateway container used in tests
+oci.pull(
+    name = "ic_gatewayd",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:0a25e9da712202966447919dfce145f9af5df62e282f2dfe8a7ea226a44b077a",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "ic_gatewayd", "ic_gatewayd_linux_amd64")
+
 # foundry container used in test
 oci.pull(
     name = "foundry",
@@ -165,6 +175,14 @@ oci.pull(
     ],
 )
 use_repo(oci, "jaeger", "jaeger_linux_amd64")
+oci.pull(
+    name = "vector-with-log-fetcher",
+    image = "ghcr.io/dfinity/dre/log-fetcher@sha256:61696bcce605f4ef7b86f606077b47675191ed099f7559b7746281d3bb2a3fba",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "vector-with-log-fetcher", "vector-with-log-fetcher_linux_amd64")
 
 # Used by tests
 oci.pull(
@@ -177,7 +195,7 @@ use_repo(oci, "minica", "minica_linux_amd64")
 # used by rosetta image
 oci.pull(
     name = "rust_base",
-    image = "gcr.io/distroless/cc-debian11@sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
+    image = "gcr.io/distroless/cc-debian12@sha256:3310655aac0d85eb9d579792387af1ff3eb7a1667823478be58020ab0e0d97a8",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "rust_base", "rust_base_linux_amd64")
@@ -185,7 +203,7 @@ use_repo(oci, "rust_base", "rust_base_linux_amd64")
 # used in various places as base
 oci.pull(
     name = "ubuntu_base",
-    image = "ghcr.io/dfinity/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    image = "ghcr.io/dfinity/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
@@ -223,17 +241,6 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 bazel_dep(name = "rules_distroless", version = "0.3.8")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
-
-## Packageset based on an Ubuntu focal snapshot, see manifest file
-## for details
-## To update, comment out the `lock` field below and run:
-##   bazel run @focal//:lock
-apt.install(
-    name = "focal",
-    lock = "//bazel:focal.lock.json",
-    manifest = "//bazel:focal.yaml",
-)
-use_repo(apt, "focal")
 
 # Packageset based on an Ubuntu noble snapshot, see manifest file
 # for details
@@ -580,6 +587,24 @@ http_file(
     url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/sns_aggregator_dev.wasm.gz",
 )
 
+# KongSwap backend canister
+
+http_file(
+    name = "kong_backend_canister",
+    downloaded_file_path = "kong_backend.wasm.gz",
+    sha256 = "bed9a193158348843c8661616c65b152f57f875863f75dad3b75627ad6a2b4fc",
+    url = "https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz",
+)
+
+# SNS-KongSwap Adaptor canister (an SNS extension of the TreasuryManager kind)
+
+http_file(
+    name = "kongswap-adaptor-canister",
+    downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
+    sha256 = "d5b1326ddc4c002a211bb3e263c0d94c20250e5683b401096c74f385c326c175",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250723-193307-6c37829/kongswap-adaptor-canister.wasm.gz",
+)
+
 # Cycles Ledger canister
 
 http_file(
@@ -593,9 +618,9 @@ http_file(
 
 http_file(
     name = "subnet_rental_canister",
-    downloaded_file_path = "subnet_rental_canister.wasm",
-    sha256 = "c4d4db8618a6ce9c24672f57cd88572a2a66ae78cbf1315fe96ae96e598c3fbf",
-    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.1.0/subnet_rental_canister.wasm",
+    downloaded_file_path = "subnet_rental_canister.wasm.gz",
+    sha256 = "d3d703b649bf32d60100e49f02b070a0b9c52022b556b30102139b1eb57bbb8b",
+    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.2.0/subnet_rental_canister.wasm.gz",
 )
 
 # Financial Integration artifacts for upgrade testing
@@ -619,8 +644,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "d3d5f1ba715b5d67718bff088a75a498e83dcaa5c8b7c375c772ce6391aa5d9a",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.3.0/evm_rpc.wasm.gz",
+    sha256 = "53ff4625ad3990f22ab8ee1cee85b6ab43cb623e0ca28d3162c41cfac55bd1a6",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.4.0/evm_rpc.wasm.gz",
 )
 
 http_archive(
@@ -814,8 +839,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
-    url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
+    sha256 = "399596330c40a76effbbd20660ce8e892d5d74f3de6380cad4aac1598b9d6394",
+    url = "https://download.dfinity.systems/ic/c36a05a9d367bb6ba9068444e6d6f53e7911f1b0/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 # Management canister candid interface

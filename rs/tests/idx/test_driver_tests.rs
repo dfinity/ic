@@ -53,7 +53,7 @@ fn create_unique_working_dir() -> PathBuf {
         .prefix(prefix_path.as_os_str())
         .tempdir()
         .unwrap()
-        .into_path();
+        .keep();
     // Test driver assumes that "root_env" dir already exists prior to starting execution.
     std::fs::create_dir(path.join("root_env")).unwrap();
     path

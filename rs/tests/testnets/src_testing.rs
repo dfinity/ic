@@ -2,7 +2,8 @@
 //   one 1-node System subnet for the NNS,
 //   one 1-node System subnet for exchange rate canister,
 //   32 1-node Application subnets filling the canister ID ranges between the NNS and the exchange rate canister and also used for the cycles wallet,
-//   a single boundary node, and a p8s (with grafana) VM.
+//   one API boundary node
+//   one ic-gateway and a p8s (with grafana) VM.
 // All replica nodes use the default resources.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
@@ -44,16 +45,14 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
+use ic_system_test_driver::driver::vector_vm::VectorVm;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    },
+    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::util::{block_on, create_canister};
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
@@ -107,9 +106,11 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
+    let mut vector_vm = VectorVm::new();
+    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     // set up IC
-    let mut ic = InternetComputer::new();
+    let mut ic = InternetComputer::new().with_api_boundary_nodes(1);
     // the following subnets are gonna have IDs 1, 2, 3, ...
     for _ in 0..32 {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
@@ -139,25 +140,21 @@ pub fn setup(env: TestEnv) {
     // sets the application subnets as "authorized" for canister creation by CMC
     set_authorized_subnets(&env);
 
-    // deploy boundary node
-    let bn_name = "boundary-node".to_string();
-    BoundaryNode::new(bn_name.clone())
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
+    // deploy ic-gateway
+    let ic_gatewway_name = "ic-gateway";
+    IcGatewayVm::new(ic_gatewway_name)
         .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-    let boundary_node = env
-        .get_deployed_boundary_node(bn_name.as_str())
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    env.sync_with_prometheus_by_name("", boundary_node.get_playnet());
-    await_boundary_node_healthy(&env, &bn_name);
+        .expect("failed to setup ic-gateway");
+    let ic_gateway = env.get_deployed_ic_gateway(ic_gatewway_name).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    vector_vm
+        .sync_targets(&env)
+        .expect("Failed to sync Vector targets");
 
     // install II, NNS dapp, and Subnet Rental Canister
-    install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, None);
+    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
 
     // install the Exchange Rate Canister
     let topology = env.topology_snapshot();

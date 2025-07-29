@@ -14,7 +14,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
-        "@crate_index//:ic_cdk_0_17_1",
+        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
 )
@@ -22,13 +22,12 @@ rust_library(
 rust_canister(
     name = "stable_memory_integrity_canister",
     srcs = ["bin/main.rs"],
-    proc_macro_deps = ["@crate_index//:ic_cdk_macros_0_17_1"],
     service_file = ":stable_memory_integrity.did",
     deps = [
         # Keep sorted.
         "//rs/rust_canisters/stable_memory_integrity",
         "@crate_index//:candid",
-        "@crate_index//:ic_cdk_0_17_1",
+        "@crate_index//:ic-cdk",
     ],
 )
 

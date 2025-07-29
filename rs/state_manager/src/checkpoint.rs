@@ -22,13 +22,13 @@ use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::convert::{identity, TryFrom};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapToFlush, TipRequest,
+    CheckpointError, CheckpointMetrics, PageMapToFlush, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
     CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -53,37 +53,25 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 /// layout. Returns a layout of the new state that is equivalent to the
 /// given one and a result of the operation.
 pub(crate) fn make_unvalidated_checkpoint(
-    state: &mut ReplicatedState,
+    mut state: ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
+) -> Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), Box<dyn std::error::Error + Send>> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["flush_page_map_deltas"])
             .start_timer();
-        flush_canister_snapshots_and_page_maps(state, height, tip_channel);
+        flush_canister_snapshots_and_page_maps(&mut state, height, tip_channel);
     }
     {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["strip_page_map_deltas"])
             .start_timer();
-        strip_page_map_deltas(state, fd_factory);
-    }
-    {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["serialize_to_tip_cloning"])
-            .start_timer();
-        tip_channel
-            .send(TipRequest::SerializeToTip {
-                height,
-                replicated_state: Box::new(state.clone()),
-            })
-            .unwrap();
+        strip_page_map_deltas(&mut state, Arc::clone(&fd_factory));
     }
 
     tip_channel
@@ -93,7 +81,7 @@ pub(crate) fn make_unvalidated_checkpoint(
         })
         .unwrap();
 
-    let (cp, has_downgrade) = {
+    {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
@@ -101,16 +89,15 @@ pub(crate) fn make_unvalidated_checkpoint(
         #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
         tip_channel
-            .send(TipRequest::TipToCheckpoint {
+            .send(TipRequest::TipToCheckpointAndSwitch {
                 height,
+                state,
+                fd_factory,
                 sender: send,
             })
             .unwrap();
-        let (cp, has_downgrade) = recv.recv().unwrap()?;
-        (cp, has_downgrade)
-    };
-
-    Ok((cp, has_downgrade))
+        recv.recv().unwrap()
+    }
 }
 
 pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
@@ -385,12 +372,26 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
     let unflushed_checkpoint_ops = tip_state.metadata.unflushed_checkpoint_ops.take();
 
+    // Because of `UploadCanisterSnapshotData`, the same snapshot ID may be present many times in the list above.
+    // So for efficiency, we deduplicate using this set.
+    let mut processed_snapshots: HashSet<SnapshotId> = HashSet::new();
+
     for op in &unflushed_checkpoint_ops {
-        // Only CanisterSnapshots that are new since the last flush will have PageMaps that need to be flushed. They will
-        // have a corresponding CreateSnapshot in the unflushed operations list.
-        if let UnflushedCheckpointOp::TakeSnapshot(_canister_id, snapshot_id) = op {
+        // Only CanisterSnapshots that are new since the last flush and CanisterSnapshots that have had binary data uploaded
+        // will have PageMaps that need to be flushed. They will have a corresponding `CreateSnapshot` or `UploadSnapshotData`
+        // in the unflushed operations list.
+        if let UnflushedCheckpointOp::TakeSnapshot(.., snapshot_id)
+        | UnflushedCheckpointOp::UploadSnapshotData(snapshot_id)
+        | UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id) = op
+        {
             // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
             if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id) {
+                if processed_snapshots.contains(snapshot_id) {
+                    continue;
+                } else {
+                    processed_snapshots.insert(*snapshot_id);
+                }
+
                 let new_snapshot = Arc::make_mut(canister_snapshot);
 
                 add_to_pagemaps_and_strip(
@@ -892,6 +893,7 @@ pub fn load_canister_state(
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,
+        canister_state_bits.environment_variables,
         metrics,
     );
 

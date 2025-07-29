@@ -1,5 +1,5 @@
 // Set up a testnet containing:
-//   one 1-node System and two 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
+//   one 1-node System and two 1-node Application subnets, one unassigned node, one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
@@ -38,14 +38,16 @@ use anyhow::Result;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::ic_gateway_vm::{
+    HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME,
+};
+use ic_system_test_driver::driver::vector_vm::VectorVm;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use nns_dapp::{
@@ -53,8 +55,6 @@ use nns_dapp::{
     set_authorized_subnets, set_sns_subnet,
 };
 use slog::info;
-
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -67,10 +67,14 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
+    let mut vector_vm = VectorVm::new();
+    vector_vm.start(&env).expect("Failed to start Vector VM");
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
@@ -78,20 +82,17 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
+    // deploy ic-gateway
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-    let boundary_node = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    let farm_url = boundary_node.get_playnet().unwrap();
-    env.sync_with_prometheus_by_name("", Some(farm_url));
+        .expect("failed to setup ic-gateway");
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    vector_vm
+        .sync_targets(&env)
+        .expect("Failed to sync Vector targets");
 
     let topology = env.topology_snapshot();
     let mut app_subnets = topology
@@ -106,15 +107,9 @@ pub fn setup(env: TestEnv) {
     let logger = env.logger();
     info!(logger, "Use {} as effective canister ID when creating canisters for your dapp, e.g., using --provisional-create-canister-effective-canister-id {} with DFX", app_effective_canister_id, app_effective_canister_id);
 
-    let sns_aggregator_canister_id = install_sns_aggregator(&env, BOUNDARY_NODE_NAME, sns_node);
-    install_ii_nns_dapp_and_subnet_rental(
-        &env,
-        BOUNDARY_NODE_NAME,
-        Some(sns_aggregator_canister_id),
-    );
+    let sns_aggregator_canister_id = install_sns_aggregator(&env, &ic_gateway_url, sns_node);
+    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, Some(sns_aggregator_canister_id));
     set_authorized_subnets(&env);
     set_sns_subnet(&env, sns_subnet.subnet_id);
     add_all_wasms_to_sns_wasm(&env);
-
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

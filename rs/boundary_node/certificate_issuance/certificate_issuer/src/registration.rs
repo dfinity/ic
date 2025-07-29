@@ -34,9 +34,9 @@ impl From<ProcessError> for State {
         match e {
             ProcessError::AwaitingAcmeOrderCreation => State::PendingOrder,
             ProcessError::AwaitingDnsPropagation => State::PendingChallengeResponse,
-            ProcessError::AwaitingAcmeOrderReady => State::PendingAcmeApproval,
+            ProcessError::AwaitingAcmeOrderReady(_) => State::PendingAcmeApproval,
             ProcessError::FailedUserConfigurationCheck => State::PendingOrder,
-            ProcessError::UnexpectedError(_) => State::Failed(e.to_string()),
+            ProcessError::UnexpectedError(err) => State::Failed(err.to_string()),
         }
     }
 }

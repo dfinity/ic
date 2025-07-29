@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use commands::{run_script, run_script_in_current_process};
 use commit_switcher::CommitSwitcher;
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 use url::Url;
 use utils::*;
 
@@ -185,7 +185,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         "Genesis-Token",
         "Node-Rewards",
     ];
-    let sns_candidates = ["Root", "Governance", "Swap", "Ledger", "Archive", "Index"];
+    let sns_candidates = ["Root", "Governance", "Swap", "Index", "Ledger", "Archive"];
 
     // Prepare vectors for selected releases.
     let mut nns_canisters: Vec<String> = Vec::new();
@@ -207,13 +207,29 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         }
     }
 
+    let icrc_ledger_suite: BTreeSet<String> = ["index", "ledger", "archive"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let sns_canisters_set: BTreeSet<String> = sns_canisters.iter().map(String::from).collect();
+    let has_icrc_ledger_suite = sns_canisters_set.intersection(&icrc_ledger_suite).count() > 0;
+    let not_exactly_icrc_ledger_suite =
+        !nns_canisters.is_empty() || sns_canisters_set != icrc_ledger_suite;
+    let maybe_warning = if has_icrc_ledger_suite && not_exactly_icrc_ledger_suite {
+        "\nWARNING: You are releasing some of the ICRC ledger suite but also some other canisters at the same commit. \
+        ICRC ledger suite usually requires a specific commit, so you might want to consider releasing them separately."
+    } else {
+        ""
+    };
+
     print_step(
         2,
         "Determine Upgrade Targets",
         &format!(
-            "NNS canisters selected for release: {}\nSNS canisters selected for release: {}",
+            "NNS canisters selected for release: {}\nSNS canisters selected for release: {}{}",
             nns_canisters.join(", "),
-            sns_canisters.join(", ")
+            sns_canisters.join(", "),
+            maybe_warning
         ),
     )?;
 
@@ -509,7 +525,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     let ic = ic_dir();
 
     // --- Generate NNS forum post ---
-    {
+    if !nns_proposal_text_paths.is_empty() {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
         let mut args = vec!["generate_forum_post_nns_upgrades"];
         let path_strs: Vec<&str> = nns_proposal_text_paths
@@ -541,8 +557,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
                 );
                 acc
             })
@@ -552,7 +567,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     }
 
     // --- Generate SNS forum post ---
-    {
+    if !sns_proposal_text_paths.is_empty() {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
         let mut args = vec!["generate_forum_post_sns_wasm_publish"];
         let path_strs: Vec<&str> = sns_proposal_text_paths
@@ -584,8 +599,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
                 );
                 acc
             })

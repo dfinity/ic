@@ -3,15 +3,16 @@ use candid::{Decode, Encode};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_error_types::{ErrorCode, RejectCode};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotDataKind, CanisterSnapshotResponse, ChunkHash, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, Global, GlobalTimer, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -30,6 +31,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
@@ -38,7 +40,6 @@ use ic_types::{
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
-use serde_bytes::ByteBuf;
 use std::borrow::Borrow;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
@@ -64,18 +65,6 @@ fn take_canister_snapshot_decode_round_trip() {
         response,
         CanisterSnapshotResponse::decode(encoded_response.as_slice()).unwrap()
     );
-}
-
-#[test]
-fn take_canister_snapshot_decode_fails() {
-    let canister_id = canister_test_id(4);
-    let args = ic00::TakeCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        replace_snapshot: Some(ByteBuf::from(vec![4, 5, 6, 6])), // Invalid snapshot ID.
-    };
-    let encoded_args = args.encode();
-    let err = TakeCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload,);
 }
 
 #[test]
@@ -546,6 +535,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
                 NumBytes::from(subnet_memory_usage_after - subnet_memory_usage_before),
                 &ResourceSaturation::new(subnet_memory_usage_before, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
     });
@@ -944,6 +934,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
     test.canister_state_mut(canister_id)
@@ -1679,7 +1670,7 @@ fn load_canister_snapshot_succeeds() {
         *last_canister_change.details(),
         CanisterChangeDetails::load_snapshot(
             canister_version_before,
-            snapshot_id.to_vec(),
+            snapshot_id,
             snapshot_taken_at_timestamp
         )
     );
@@ -1920,6 +1911,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -1981,6 +1973,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -2652,6 +2645,446 @@ fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
 }
+
+#[test]
+fn canister_snapshot_data_upload_fails_out_of_bounds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_snapshot_metadata_upload()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            counter_canister_wasm.clone(),
+        )
+        .unwrap();
+    // create new snapshot from metadata
+    let wasm_module_size = 1234;
+    let wasm_memory_size = (1 << 16) * 3;
+    let stable_memory_size = (1 << 16) * 4;
+    let md_upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        wasm_module_size,
+        vec![],
+        wasm_memory_size,
+        stable_memory_size,
+        vec![],
+        None,
+        None,
+    );
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let snapshot_id = Decode!(&bytes, UploadCanisterSnapshotMetadataResponse)
+        .unwrap()
+        .get_snapshot_id();
+    // attempt to write beyond the wasm module size
+    let args = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataOffset::WasmModule {
+            offset: wasm_module_size - 5,
+        },
+        vec![42; 10],
+    );
+    let e: UserError = test
+        .subnet_message("upload_canister_snapshot_data", Encode!(&args).unwrap())
+        .unwrap_err();
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+    assert!(e.description().contains("Invalid subslice"));
+    // TODO: EXC-2050 other memories
+}
+
+#[test]
+fn canister_snapshot_roundtrip_succeeds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_snapshot_metadata_upload()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    // 1. Create new canister
+    let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            counter_canister_wasm.clone(),
+        )
+        .unwrap();
+    // 2. set state
+    // Upload chunk 1.
+    let chunk1 = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: chunk1.clone(),
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+    // Upload chunk 2.
+    let chunk2 = vec![6, 7, 8];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: chunk2.clone(),
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+    // Grow the stable memory and change the counter
+    let stable_pages = 3;
+    let mut res = vec![];
+    for _ in 0..stable_pages {
+        let WasmResult::Reply(bytes) = test
+            .ingress(canister_id, "inc", Encode!(&()).unwrap())
+            .unwrap()
+        else {
+            panic!("Expected reply")
+        };
+        res = bytes;
+    }
+    assert_eq!(3, i32::from_le_bytes(res[0..4].try_into().unwrap()));
+
+    // 3. Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // 4. Get the metadata
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    let ReadCanisterSnapshotMetadataResponse {
+        wasm_module_size,
+        wasm_memory_size,
+        stable_memory_size,
+        wasm_chunk_store,
+        ..
+    } = metadata.clone();
+    let md_orig = metadata.clone();
+
+    // 5. Download all binary snapshot data
+    // wasm module
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmModule {
+            offset: 0,
+            size: wasm_module_size,
+        },
+    );
+    let snapshot_wasm_module = read_canister_snapshot_data(&mut test, &args_module);
+
+    // canister heap
+    let args_main = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory {
+            offset: 0,
+            size: wasm_memory_size,
+        },
+    );
+    let snapshot_wasm_heap = read_canister_snapshot_data(&mut test, &args_main);
+
+    // stable memory
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: 0,
+            size: stable_memory_size,
+        },
+    );
+    let snapshot_stable_memory = read_canister_snapshot_data(&mut test, &args_stable);
+
+    // chunk store
+    assert_eq!(wasm_chunk_store.len(), 2);
+    let args_chunk_1 = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmChunk {
+            hash: wasm_chunk_store[0].hash.clone(),
+        },
+    );
+    let args_chunk_2 = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmChunk {
+            hash: wasm_chunk_store[1].hash.clone(),
+        },
+    );
+    let chunk1_res = read_canister_snapshot_data(&mut test, &args_chunk_1);
+    let chunk2_res = read_canister_snapshot_data(&mut test, &args_chunk_2);
+    // 6. upload snapshot md
+    let md_upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        metadata.wasm_module_size,
+        metadata.exported_globals,
+        metadata.wasm_memory_size,
+        metadata.stable_memory_size,
+        metadata.certified_data,
+        metadata.global_timer,
+        metadata.on_low_wasm_memory_hook_status,
+    );
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+
+    let res = Decode!(&bytes, UploadCanisterSnapshotMetadataResponse).unwrap();
+    let new_snapshot_id = res.get_snapshot_id();
+
+    // 7. upload snapshot data
+    // wasm module
+    let args_module = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+        snapshot_wasm_module,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_module).unwrap(),
+    )
+    .unwrap();
+    // main memory
+    let args_heap = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataOffset::MainMemory { offset: 0 },
+        snapshot_wasm_heap,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_heap).unwrap(),
+    )
+    .unwrap();
+    // stable memory
+    let args_stable = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataOffset::StableMemory { offset: 0 },
+        snapshot_stable_memory.clone(),
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_stable).unwrap(),
+    )
+    .unwrap();
+    // chunk store
+    let args_chunk1 = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataOffset::WasmChunk,
+        chunk1_res,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_chunk1).unwrap(),
+    )
+    .unwrap();
+    let args_chunk2 = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataOffset::WasmChunk,
+        chunk2_res,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_chunk2).unwrap(),
+    )
+    .unwrap();
+
+    // 8. change state
+    let WasmResult::Reply(bytes) = test
+        .ingress(canister_id, "inc", Encode!(&()).unwrap())
+        .unwrap()
+    else {
+        panic!("Expected reply")
+    };
+    assert_eq!(4, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
+
+    // 9. load snapshot
+    helper_load_snapshot(&mut test, canister_id, new_snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .ingress(canister_id, "read", Encode!(&()).unwrap())
+        .unwrap()
+    else {
+        panic!("Expected reply")
+    };
+    // 10. observe original state
+    // we reverted to the old state, so the counter should be 3 again.
+    assert_eq!(3, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
+
+    // 11. compare snapshot metadata
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let md_2 = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    assert_eq!(md_orig.wasm_module_size, md_2.wasm_module_size);
+    assert_eq!(md_orig.wasm_memory_size, md_2.wasm_memory_size);
+    assert_eq!(md_orig.stable_memory_size, md_2.stable_memory_size);
+    assert_eq!(md_orig.exported_globals, md_2.exported_globals);
+    assert_eq!(md_orig.wasm_chunk_store, md_2.wasm_chunk_store);
+    assert_eq!(md_orig.global_timer, md_2.global_timer);
+    assert_eq!(
+        md_orig.on_low_wasm_memory_hook_status,
+        md_2.on_low_wasm_memory_hook_status
+    );
+    assert_eq!(md_orig.certified_data, md_2.certified_data);
+
+    // also assert stable memory equal
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: 0,
+            size: md_2.stable_memory_size,
+        },
+    );
+    let snapshot_stable_memory_2 = read_canister_snapshot_data(&mut test, &args_stable);
+    assert_eq!(snapshot_stable_memory, snapshot_stable_memory_2);
+}
+
+#[test]
+fn canister_snapshot_invalid_metadata_fails() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_snapshot_metadata_upload()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    // 1. Create new canister
+    let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            counter_canister_wasm.clone(),
+        )
+        .unwrap();
+    let md_upload_args_original = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        1024,
+        vec![Global::I32(42); 1000],
+        1 << 16,
+        1 << 16,
+        vec![42; 32],
+        None,
+        None,
+    );
+    //original should succeed
+    test.subnet_message(
+        "upload_canister_snapshot_metadata",
+        md_upload_args_original.encode(),
+    )
+    .unwrap();
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.wasm_module_size = 0;
+    let e = test
+        .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+        .expect_err("Expected error");
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.wasm_memory_size = 123;
+    let e = test
+        .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+        .expect_err("Expected error");
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.stable_memory_size = 123;
+    let e = test
+        .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+        .expect_err("Expected error");
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.certified_data = vec![42; 33];
+    let e = test
+        .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+        .expect_err("Expected error");
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.exported_globals = vec![Global::I32(42); 1001];
+    let e = test
+        .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+        .expect_err("Expected error");
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+}
+
+/// Counter canister that also grows the stable memory by one page on "inc".
+const COUNTER_CANISTER_WAT: &str = r#"
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append"
+  (func $msg_reply_data_append (param i32 i32)))
+  (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+
+  (func $read
+    (i32.store
+      (i32.const 0)
+      (global.get 0)
+    )
+    (call $msg_reply_data_append
+      (i32.const 0)
+      (i32.const 4)
+    )
+    (call $msg_reply)
+  )
+  
+  (func $write
+    (i32.const 1)
+    (call $stable_grow)
+    (drop)
+    (global.set 0
+      (i32.add
+        (global.get 0)
+        (i32.const 1)
+      )
+    )
+    (call $read)
+  )
+
+  (memory $memory 1)
+  (export "memory" (memory $memory))
+  (global (export "counter_global") (mut i32) (i32.const 0))
+  (export "canister_query read" (func $read))
+  (export "canister_update inc" (func $write))
+)
+"#;
 
 /// Early warning system / stumbling block forcing the authors of changes adding
 /// or removing canister state fields to think about and/or ask the Execution

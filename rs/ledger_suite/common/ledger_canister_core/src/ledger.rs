@@ -432,6 +432,10 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
     remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
 }
 
+// The maximum blocks to archive at once. Note that chunking may still split up the blocks that are
+// being archived into multiple messages to the archive canister.
+pub const MAX_BLOCKS_TO_ARCHIVE: usize = 18_000;
+
 pub fn blocks_to_archive<LA: LedgerAccess>(
     sink: &impl Sink,
 ) -> Result<(LedgerArchivingGuard<LA>, VecDeque<EncodedBlock>), ArchivingGuardError> {
@@ -441,9 +445,10 @@ pub fn blocks_to_archive<LA: LedgerAccess>(
     let blocks_to_archive = LA::with_ledger(|ledger| {
         let archive_guard = ledger.blockchain().archive.read().unwrap();
         let archive = archive_guard.as_ref().unwrap();
-        ledger
-            .blockchain()
-            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
+        ledger.blockchain().get_blocks_for_archiving(
+            archive.trigger_threshold,
+            archive.num_blocks_to_archive.min(MAX_BLOCKS_TO_ARCHIVE),
+        )
     });
     if !blocks_to_archive.is_empty() {
         log!(

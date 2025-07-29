@@ -11,7 +11,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 candid = { workspace = true }
 futures = "0.3.31"
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }

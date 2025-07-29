@@ -10,8 +10,8 @@ DEPENDENCIES = [
     "//rs/nervous_system/timers",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:serde",
 ]
 

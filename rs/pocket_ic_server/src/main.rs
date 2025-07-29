@@ -57,7 +57,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "9.0.1")]
+#[clap(version = "9.0.3")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -545,55 +545,5 @@ impl BlobStore for InMemoryBlobStore {
     async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob> {
         let m = self.map.read().await;
         m.get(&blob_id).cloned()
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::sync::Arc;
-
-    use clap::Parser;
-    use ic_agent::agent::route_provider::RoundRobinRouteProvider;
-    use ic_bn_lib::tls::prepare_client_config;
-    use ic_gateway::{setup_router, Cli};
-
-    #[test]
-    fn test_setup_router() {
-        let args = vec![
-            "",
-            "--domain",
-            "ic0.app",
-            "--domain-canister-id-from-query-params",
-        ];
-        let cli = Cli::parse_from(args);
-
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .unwrap();
-
-        let mut http_client_opts: ic_bn_lib::http::client::Options<ic_bn_lib::http::dns::Resolver> =
-            (&cli.http_client).into();
-        http_client_opts.tls_config = Some(prepare_client_config(&[
-            &rustls::version::TLS13,
-            &rustls::version::TLS12,
-        ]));
-        let http_client =
-            Arc::new(ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone()).unwrap());
-
-        let route_provider = RoundRobinRouteProvider::new(vec!["https://icp-api.io"]).unwrap();
-
-        let mut tasks = ic_bn_lib::tasks::TaskManager::new();
-
-        let _ = setup_router(
-            &cli,
-            vec![],
-            &mut tasks,
-            http_client,
-            Arc::new(route_provider),
-            &prometheus::Registry::new(),
-            None,
-            None,
-        )
-        .unwrap();
     }
 }

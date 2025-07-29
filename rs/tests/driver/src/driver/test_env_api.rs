@@ -139,7 +139,6 @@ use super::{
 };
 use crate::{
     driver::{
-        boundary_node::BoundaryNodeVm,
         constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
@@ -152,7 +151,7 @@ use crate::{
     retry_with_msg, retry_with_msg_async,
     util::{block_on, create_agent},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::{export::Principal, Agent, AgentError};
@@ -1142,8 +1141,6 @@ impl HasRegistryLocalStore for TestEnv {
 pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
 }
 
 impl<T: HasTestEnv> HasIcDependencies for T {
@@ -1158,16 +1155,6 @@ impl<T: HasTestEnv> HasIcDependencies for T {
         let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
         Ok(initial_replica_version.version)
     }
-
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
-    }
-
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
-    }
 }
 
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
@@ -1177,13 +1164,153 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-pub fn get_ic_os_img_url() -> Result<Url> {
+pub fn get_current_branch_version() -> Result<String> {
+    read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+}
+
+pub fn get_mainnet_nns_revision() -> String {
+    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet nns version from environment")
+}
+
+pub fn get_mainnet_application_subnet_revision() -> String {
+    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet application subnet version from environment")
+}
+
+// The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
+
+/// Pull the version of the initial GuestOS image from the environment.
+pub fn get_guestos_img_version() -> Result<String> {
+    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
+    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")
+    {
+        Ok(from_file)
+    } else {
+        Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
+    }
+}
+
+/// Pull the URL of the initial GuestOS image from the environment.
+pub fn get_guestos_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_ic_os_img_sha256() -> Result<String> {
+/// Pull the hash of the initial GuestOS image from the environment.
+pub fn get_guestos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
+}
+
+/// Pull the URL of the initial GuestOS update image from the environment.
+///
+/// With the initial image, there is also a corresponding initial update image.
+/// The version is shared, so only the URL and hash are provided.
+pub fn get_guestos_initial_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+/// Pull the hash of the initial GuestOS update image from the environment.
+///
+/// With the initial image, there is also a corresponding initial update image.
+/// The version is shared, so only the URL and hash are provided.
+pub fn get_guestos_initial_update_img_sha256(env: &TestEnv) -> Result<String> {
+    // TODO: Until the update hash is stored in the repo, resolve from the passed URL, instead.
+    if let Ok(from_url) = fetch_sha256(
+        std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?,
+        "update-img.tar.zst",
+        env.logger(),
+    ) {
+        Ok(from_url)
+    } else {
+        Ok(std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?)
+    }
+}
+
+/// Pull the version of the target GuestOS update image from the environment.
+pub fn get_guestos_update_img_version() -> Result<String> {
+    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
+    if let Ok(from_file) =
+        read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")
+    {
+        Ok(from_file)
+    } else {
+        Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
+    }
+}
+
+/// Pull the URL of the target GuestOS update image from the environment.
+pub fn get_guestos_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+/// Pull the hash of the target GuestOS update image from the environment.
+pub fn get_guestos_update_img_sha256(env: &TestEnv) -> Result<String> {
+    // TODO: Until the update hash is stored in the repo, resolve from the passed URL, instead.
+    if let Ok(from_url) = fetch_sha256(
+        std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?,
+        "update-img.tar.zst",
+        env.logger(),
+    ) {
+        Ok(from_url)
+    } else {
+        Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
+    }
+}
+
+/// Pull the version of the initial SetupOS image from the environment.
+pub fn get_setupos_img_version() -> Result<String> {
+    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
+    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")
+    {
+        Ok(from_file)
+    } else {
+        Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
+    }
+}
+
+/// Pull the URL of the initial SetupOS image from the environment.
+pub fn get_setupos_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+/// Pull the hash of the initial SetupOS image from the environment.
+pub fn get_setupos_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?)
+}
+
+/// Pull the version of the target HostOS update image from the environment.
+pub fn get_hostos_update_img_version() -> Result<String> {
+    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
+    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")
+    {
+        Ok(from_file)
+    } else {
+        Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
+    }
+}
+
+/// Pull the URL of the target HostOS update image from the environment.
+pub fn get_hostos_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+/// Pull the hash of the target HostOS update image from the environment.
+pub fn get_hostos_update_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_HASH")?)
+}
+
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
@@ -1193,24 +1320,6 @@ pub fn get_malicious_ic_os_img_url() -> Result<Url> {
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
-}
-
-pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
-}
-
-pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
@@ -1233,57 +1342,17 @@ pub fn get_boundary_node_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
 }
 
-pub fn get_mainnet_nns_revision() -> String {
-    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet nns version from environment")
-}
-
-pub fn get_mainnet_application_subnet_revision() -> String {
-    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet application subnet version from environment")
-}
-
-pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
-}
-
-pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_empty_disk_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
-}
-
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let url = &format!("{base_url}/SHA256SUMS");
+    let url = Url::parse(&format!("{base_url}SHA256SUMS"))?;
     let response = retry_with_msg!(
         format!("GET {url}"),
         logger.clone(),
         FETCH_SHA256SUMS_RETRY_TIMEOUT,
         FETCH_SHA256SUMS_RETRY_BACKOFF,
-        || reqwest::blocking::get(url).map_err(|e| anyhow!("{:?}", e))
+        || reqwest::blocking::get(url.clone()).map_err(|e| anyhow!("{:?}", e))
     )?;
 
     if !response.status().is_success() {
@@ -1483,12 +1552,27 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-pub trait SshSession {
+pub trait SshSession: HasTestEnv {
+    /// Return the address of the SSH server to connect to.
+    fn get_host_ip(&self) -> Result<IpAddr>;
+
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
-    fn get_ssh_session(&self) -> Result<Session>;
+    fn get_ssh_session(&self) -> Result<Session> {
+        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
+            .context("Failed to get SSH session")
+    }
 
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session(&self) -> Result<Session>;
+    fn block_on_ssh_session(&self) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg!(
+            format!("get_ssh_session to {ip}"),
+            self.test_env().logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || { self.get_ssh_session() }
+        )
+    }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
@@ -1564,10 +1648,14 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
+        block_on(self.status_async())
+    }
+
+    async fn status_async(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
 
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
         let client = match (self.uses_dns(), url.domain()) {
@@ -1578,11 +1666,13 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             .build()
             .expect("cannot build a reqwest client")
             .get(url.join("api/v2/status").expect("failed to join URLs"))
-            .send()?;
+            .send()
+            .await?;
 
         let status = response.status();
         let body = response
             .bytes()
+            .await
             .expect("failed to convert a response to bytes")
             .to_vec();
         if status.is_client_error() || status.is_server_error() {
@@ -1601,7 +1691,11 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// The status-endpoint reports `healthy`.
     fn status_is_healthy(&self) -> Result<bool> {
-        match self.status() {
+        block_on(self.status_is_healthy_async())
+    }
+
+    async fn status_is_healthy_async(&self) -> Result<bool> {
+        match self.status_async().await {
             Ok(s) if s.replica_health_status.is_some() => {
                 let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
                 if !healthy {
@@ -1628,16 +1722,26 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry_with_msg!(
+        block_on(self.await_status_is_healthy_async())
+    }
+
+    async fn await_status_is_healthy_async(&self) -> Result<()> {
+        retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
-            self.test_env().logger(),
+            &self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
-            || {
-                self.status_is_healthy()
-                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+            || async {
+                self.status_is_healthy_async().await.and_then(|s| {
+                    if !s {
+                        bail!("Not ready!")
+                    } else {
+                        Ok(())
+                    }
+                })
             }
         )
+        .await
     }
 
     /// Checks if the Orchestrator dashboard endpoint is accessible
@@ -2041,24 +2145,10 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
 }
 
 impl SshSession for IcNodeSnapshot {
-    fn get_ssh_session(&self) -> Result<Session> {
+    fn get_host_ip(&self) -> Result<IpAddr> {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        get_ssh_session_from_env(&self.env, ip_addr)
-    }
-
-    fn block_on_ssh_session(&self) -> Result<Session> {
-        let node_record = self.raw_node_record();
-        let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        retry_with_msg!(
-            format!("get_ssh_session to {}", ip_addr.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session() }
-        )
+        IpAddr::from_str(&connection_endpoint.ip_addr).context("Failed to parse IP address")
     }
 }
 
@@ -2180,7 +2270,7 @@ where
                 break Ok(v);
             }
             Err(err) => {
-                let err_msg = err.to_string();
+                let err_msg = format!("{:?}", err);
                 if start.elapsed() > timeout {
                     break Err(err.context(format!(
                         "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}",
@@ -2429,17 +2519,6 @@ impl TestEnvAttribute for InitialReplicaVersion {
     fn attribute_name() -> String {
         "initial_replica_version".to_string()
     }
-}
-
-pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    boundary_node
-        .await_status_is_healthy()
-        .expect("BN did not come up!");
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {

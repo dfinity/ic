@@ -287,11 +287,16 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: 100,
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    100
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -364,6 +369,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
             height: 10,
@@ -382,6 +388,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
                 }],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
         };
 
@@ -416,6 +423,10 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
 
         assert_eq!(
@@ -516,11 +527,18 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
             let chain_key_config_pb = ChainKeyConfigPb {
                 key_configs: vec![KeyConfigPb {
                     key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
-                    pre_signatures_to_create_in_advance: Some(1),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            1
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             };
             Some(chain_key_config_pb)
         };
@@ -605,6 +623,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
             height: 10,
@@ -616,6 +635,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                 key_configs: vec![],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
         };
 
@@ -646,6 +666,10 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
 
         assert_eq!(chain_key_config.key_configs, vec![]);
@@ -976,6 +1000,7 @@ fn test_recover_subnet_resets_cup_contents() {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -1075,6 +1100,7 @@ fn test_recover_subnet_resets_cup_contents() {
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
             height: 10,
@@ -1093,6 +1119,7 @@ fn test_recover_subnet_resets_cup_contents() {
                 }],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
         };
 
@@ -1131,6 +1158,10 @@ fn test_recover_subnet_resets_cup_contents() {
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
 
         assert_eq!(

@@ -121,6 +121,7 @@ fn setup_data_for_test_rewards_calculation(fake_registry: Arc<FakeRegistry>) {
                 "type3".to_string() => 3,
             },
             ipv6: None,
+            max_rewardable_nodes: Default::default(),
         }),
     );
 
@@ -136,6 +137,7 @@ fn setup_data_for_test_rewards_calculation(fake_registry: Arc<FakeRegistry>) {
                 "type1".to_string() => 2,
             },
             ipv6: None,
+            max_rewardable_nodes: Default::default(),
         }),
     );
 
@@ -270,6 +272,7 @@ fn add_node_operator_with_dc(
         dc_id: dc_id.clone(),
         rewardable_nodes: rewardable_nodes.clone(),
         ipv6: None,
+        max_rewardable_nodes: Default::default(),
     };
 
     registry.encode_value(make_node_operator_record_key(no_principal), Some(no_record));
@@ -317,6 +320,7 @@ fn test_get_node_providers_monthly_xdr_rewards_ignores_deleted_keys() {
             dc_id: "dc1".to_string(),
             rewardable_nodes: Default::default(),
             ipv6: None,
+            max_rewardable_nodes: Default::default(),
         }),
     );
 

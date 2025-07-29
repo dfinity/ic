@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -28,10 +28,9 @@ system_test(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    uses_guestos_dev = True,
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
+    uses_guestos_img = True,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":catch_up_test_common",
@@ -50,9 +49,8 @@ system_test(
         "k8s",
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    uses_guestos_dev = True,
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
+    uses_guestos_img = True,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":catch_up_test_common",
@@ -70,7 +68,6 @@ system_test(
         "experimental_system_test_colocation",
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -111,12 +108,9 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":liveness_test_common",
@@ -133,7 +127,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -159,7 +152,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -181,7 +173,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -197,7 +188,37 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "cup_explorer_test",
+    tags = [
+        "k8s",
+    ],
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/cup_explorer",
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "subnet_splitting_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
@@ -205,9 +226,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS + [
+        GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
         ],
     deps = [
@@ -226,18 +246,44 @@ system_test_nns(
 )
 
 system_test(
+    name = "guestos_recovery_engine_smoke_test",
+    env = {
+        "GUESTOS_RECOVERY_ENGINE_UVM_CONFIG_PATH": "$(rootpath //rs/tests:guestos_recovery_engine_uvm_config_image)",
+        "RECOVERY_HASH_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256)",
+        "RECOVERY_CUP_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:cup.proto.b64)",
+        "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
+        "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
+    },
+    uses_guestos_img = False,
+    uses_guestos_recovery_dev_img = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [
+        "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
+        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
+        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
+        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256",
+        "//rs/tests:guestos_recovery_engine_uvm_config_image",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+    ],
+)
+
+system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
     malicious = True,
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -257,12 +303,9 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/crypto/test_utils/reproducible_rng",
@@ -289,12 +332,9 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":liveness_test_common",
@@ -325,7 +365,6 @@ system_test_nns(
         "experimental_system_test_colocation",
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
@@ -346,13 +385,13 @@ system_test_nns(
 
 system_test_nns(
     name = "adding_nodes_to_subnet_test",
+    env = MESSAGE_CANISTER_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",

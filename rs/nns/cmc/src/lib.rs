@@ -38,21 +38,26 @@ pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 I
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "ic0")]
 extern "C" {
-    pub fn mint_cycles(amount: u64) -> u64;
+    pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: usize);
 }
 
 /// # Safety
 /// This function always panics outside of wasm32, but the wasm32 version is safe to call from CMC.
 #[cfg(not(target_arch = "wasm32"))]
-pub unsafe fn mint_cycles(_amount: u64) -> u64 {
-    panic!("mint_cycles should only be called inside canisters.");
+pub unsafe fn mint_cycles128(_amount_high: u64, _amount_low: u64, _dst: usize) {
+    panic!("mint_cycles128 should only be called inside canisters.");
 }
 
 // Not available in ic_cdk
 /// This function can only be called from the CMC canister, and this is the CMC canister.
 /// It is not exposed in ic-cdk because it can't be called from anywhere else.
-pub fn ic0_mint_cycles(amount: u64) -> u64 {
-    unsafe { mint_cycles(amount) }
+pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
+    let (amount_high, amount_low) = amount.into_parts();
+    let mut dst = 0u128;
+    unsafe {
+        mint_cycles128(amount_high, amount_low, &mut dst as *mut u128 as usize);
+    }
+    Cycles::new(dst)
 }
 
 /// caller that returns principalId instead of Principal
@@ -199,6 +204,7 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
+            environment_variables: None,
         }
     }
 }

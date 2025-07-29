@@ -1,14 +1,22 @@
 use crate::{
     canister_state::{
-        execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
+        execution_state::{Memory, WasmExecutionMode},
+        system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
         WASM_PAGE_SIZE_IN_BYTES,
     },
-    page_map::Buffer,
+    page_map::{Buffer, PageAllocatorFileDescriptor},
     CanisterState, NumWasmPages, PageMap,
 };
-use ic_management_canister_types_private::{Global, OnLowWasmMemoryHookStatus, SnapshotSource};
+use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
+use ic_management_canister_types_private::{
+    Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
+    UploadCanisterSnapshotMetadataArgs,
+};
 use ic_sys::PAGE_SIZE;
-use ic_types::{CanisterId, CanisterTimer, NumBytes, SnapshotId, Time};
+use ic_types::{
+    CanisterId, CanisterTimer, NumBytes, PrincipalId, SnapshotId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    MAX_WASM64_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
@@ -52,6 +60,28 @@ impl CanisterSnapshots {
             snapshot_ids,
             memory_usage,
         }
+    }
+
+    /// Inserts a chunk into a snaphot's chunk store and updates its `size` and
+    /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
+    /// Returns an error if the given snapshot ID could not be found. In this case,
+    /// the method has no effect.
+    #[allow(clippy::result_unit_err)]
+    pub fn insert_chunk(
+        &mut self,
+        snapshot_id: SnapshotId,
+        validated_chunk: ValidatedChunk,
+    ) -> Result<(), ()> {
+        let snapshot = self.get_mut(snapshot_id).ok_or(())?;
+        let snapshot_inner = Arc::make_mut(snapshot);
+        snapshot_inner
+            .chunk_store_mut()
+            .insert_chunk(validated_chunk);
+        // use the maximum chunk size
+        let amount = wasm_chunk_store::chunk_size();
+        snapshot_inner.size += amount;
+        self.memory_usage += amount;
+        Ok(())
     }
 
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
@@ -341,6 +371,11 @@ impl CanisterSnapshot {
         }
     }
 
+    /// Creates a snapshot from a canister.
+    ///
+    /// This method fails early, before any expensive computations are
+    /// performed. If that changes, the instructions used in this method
+    /// have to be accounted for in the caller.
     pub fn from_canister(
         canister: &CanisterState,
         taken_at_timestamp: Time,
@@ -374,6 +409,42 @@ impl CanisterSnapshot {
         })
     }
 
+    pub fn from_metadata(
+        metadata: &ValidatedSnapshotMetadata,
+        taken_at_timestamp: Time,
+        canister_version: u64,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Self {
+        let stable_memory = PageMemory {
+            page_map: PageMap::new(Arc::clone(&fd_factory)),
+            size: metadata.stable_memory_size,
+        };
+        let wasm_memory = PageMemory {
+            page_map: PageMap::new(Arc::clone(&fd_factory)),
+            size: metadata.wasm_memory_size,
+        };
+        let execution_snapshot = ExecutionStateSnapshot {
+            // This is an invalid module now, but will be written to via `upload_canister_snapshot_data`.
+            wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size.get() as usize]),
+            exported_globals: metadata.exported_globals.clone(),
+            stable_memory,
+            wasm_memory,
+            global_timer: metadata.global_timer.map(CanisterTimer::from),
+            on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+        };
+        let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
+        Self {
+            canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
+            source: SnapshotSource::MetadataUpload,
+            taken_at_timestamp,
+            canister_version,
+            size: metadata.snapshot_size_bytes(),
+            certified_data: metadata.certified_data.clone(),
+            chunk_store,
+            execution_snapshot,
+        }
+    }
+
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
@@ -402,8 +473,16 @@ impl CanisterSnapshot {
         &self.execution_snapshot.stable_memory
     }
 
+    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.stable_memory
+    }
+
     pub fn wasm_memory(&self) -> &PageMemory {
         &self.execution_snapshot.wasm_memory
+    }
+
+    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.wasm_memory
     }
 
     pub fn canister_module(&self) -> &CanisterModule {
@@ -486,6 +565,137 @@ pub enum CanisterSnapshotError {
     EmptyExecutionState(CanisterId),
     /// Offset and size exceed module or memory bounds.
     InvalidSubslice { offset: u64, size: u64 },
+    /// Metadata is invalid.
+    InvalidMetadata { reason: String },
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidatedSnapshotMetadata {
+    canister_id: PrincipalId,
+    replace_snapshot: Option<SnapshotId>,
+    wasm_module_size: NumBytes,
+    exported_globals: Vec<Global>,
+    wasm_memory_size: NumWasmPages,
+    stable_memory_size: NumWasmPages,
+    certified_data: Vec<u8>,
+    global_timer: Option<GlobalTimer>,
+    on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
+}
+
+impl ValidatedSnapshotMetadata {
+    pub fn validate(
+        raw: UploadCanisterSnapshotMetadataArgs,
+        wasm_mode: WasmExecutionMode,
+    ) -> Result<Self, MetadataValidationError> {
+        if raw.wasm_module_size == 0 {
+            return Err(MetadataValidationError::WasmModuleEmpty);
+        }
+        if raw.wasm_module_size > WASM_MAX_SIZE.get() {
+            return Err(MetadataValidationError::WasmModuleTooLarge);
+        }
+        if raw.wasm_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+            return Err(MetadataValidationError::WasmMemoryNotPageAligned);
+        }
+        match wasm_mode {
+            WasmExecutionMode::Wasm32 => {
+                if raw.wasm_memory_size > MAX_WASM_MEMORY_IN_BYTES {
+                    return Err(MetadataValidationError::WasmMemoryTooLarge);
+                }
+            }
+            WasmExecutionMode::Wasm64 => {
+                if raw.wasm_memory_size > MAX_WASM64_MEMORY_IN_BYTES {
+                    return Err(MetadataValidationError::WasmMemoryTooLarge);
+                }
+            }
+        }
+        if raw.stable_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+            return Err(MetadataValidationError::StableMemoryNotPageAligned);
+        }
+        if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
+            return Err(MetadataValidationError::StableMemoryTooLarge);
+        }
+        if raw.exported_globals.len() > MAX_GLOBALS {
+            return Err(MetadataValidationError::ExportedGlobalsTooLarge);
+        }
+        // a 32 byte hash
+        if raw.certified_data.len() > 32 {
+            return Err(MetadataValidationError::CertifiedDataTooLarge);
+        }
+
+        Ok(Self {
+            canister_id: raw.canister_id,
+            replace_snapshot: raw.replace_snapshot,
+            wasm_module_size: NumBytes::new(raw.wasm_module_size),
+            exported_globals: raw.exported_globals,
+            wasm_memory_size: NumWasmPages::new(
+                raw.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
+            ),
+            stable_memory_size: NumWasmPages::new(
+                raw.stable_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
+            ),
+            certified_data: raw.certified_data,
+            global_timer: raw.global_timer,
+            on_low_wasm_memory_hook_status: raw.on_low_wasm_memory_hook_status,
+        })
+    }
+
+    /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
+        let num_bytes = self.wasm_module_size.get()
+            + (self.wasm_memory_size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64
+            + (self.stable_memory_size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64
+            + self.certified_data.len() as u64
+            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+        NumBytes::new(num_bytes)
+    }
+
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn replace_snapshot(&self) -> Option<SnapshotId> {
+        self.replace_snapshot
+    }
+
+    pub fn wasm_module_size(&self) -> NumBytes {
+        self.wasm_module_size
+    }
+
+    pub fn exported_globals(&self) -> &Vec<Global> {
+        &self.exported_globals
+    }
+
+    pub fn wasm_memory_size(&self) -> NumWasmPages {
+        self.wasm_memory_size
+    }
+
+    pub fn stable_memory_size(&self) -> NumWasmPages {
+        self.stable_memory_size
+    }
+
+    pub fn certified_data(&self) -> &Vec<u8> {
+        &self.certified_data
+    }
+
+    pub fn global_timer(&self) -> Option<GlobalTimer> {
+        self.global_timer
+    }
+
+    pub fn on_low_wasm_memory_hook_status(&self) -> Option<OnLowWasmMemoryHookStatus> {
+        self.on_low_wasm_memory_hook_status
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum MetadataValidationError {
+    WasmModuleEmpty,
+    WasmModuleTooLarge,
+    WasmMemoryNotPageAligned,
+    WasmMemoryTooLarge,
+    StableMemoryNotPageAligned,
+    StableMemoryTooLarge,
+    ExportedGlobalsTooLarge,
+    CertifiedDataTooLarge,
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use crate::{
     pb::v1::{Ballot, ProposalData, Topic, Topic::NeuronManagement, Vote},
     storage::with_voting_state_machines_mut,
 };
+use ic_cdk::{eprintln, println};
 #[cfg(not(any(test, feature = "canbench-rs")))]
 use ic_nervous_system_long_message::is_message_over_threshold;
 #[cfg(test)]
@@ -593,9 +594,8 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            self as pb, neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto,
-            Motion, Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
-            WaitForQuietState,
+            proposal::Action, Ballot, Followees, Motion, Proposal, ProposalData, Tally, Topic,
+            Vote, VotingPowerEconomics, WaitForQuietState,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{
@@ -614,9 +614,10 @@ mod test {
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+    use ic_nns_governance_api::Governance as ApiGovernance;
     use ic_stable_structures::DefaultMemoryImpl;
     use icp_ledger::Subaccount;
-    use maplit::{btreemap, hashmap};
+    use maplit::hashmap;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::sync::Arc;
 
@@ -664,6 +665,13 @@ mod test {
     fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management() {
         let now = 1000;
         let topic = Topic::NeuronManagement;
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
 
         let make_neuron = |id: u64, followees: Vec<u64>| {
             make_neuron(
@@ -675,7 +683,7 @@ mod test {
             )
         };
 
-        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
+        let add_neuron_with_ballot = |neuron_store: &mut NeuronStore,
                                       ballots: &mut HashMap<u64, Ballot>,
                                       id: u64,
                                       followees: Vec<u64>,
@@ -683,51 +691,45 @@ mod test {
             let neuron = make_neuron(id, followees);
             let deciding_voting_power =
                 neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
-            neuron_map.insert(id, neuron);
+            neuron_store.add_neuron(neuron).unwrap();
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
 
         let add_neuron_without_ballot =
-            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
+            |neuron_store: &mut NeuronStore, id: u64, followees: Vec<u64>| {
                 let neuron = make_neuron(id, followees);
-                neuron_map.insert(id, neuron);
+                neuron_store.add_neuron(neuron).unwrap();
             };
 
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            ..Default::default()
+        };
         for id in 1..=5 {
             // Each neuron follows all neurons with a lower id
             let followees = (1..id).collect();
 
-            add_neuron_with_ballot(&mut neurons, &mut ballots, id, followees, Vote::Unspecified);
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                id,
+                followees,
+                Vote::Unspecified,
+            );
         }
         // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(&mut neurons, &mut ballots, 6, vec![1, 7], Vote::Unspecified);
+        add_neuron_with_ballot(
+            &mut governance.neuron_store,
+            &mut proposal.ballots,
+            6,
+            vec![1, 7],
+            Vote::Unspecified,
+        );
 
         // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut neurons, 7, vec![1]);
+        add_neuron_without_ballot(&mut governance.neuron_store, 7, vec![1]);
 
-        let governance_proto = crate::pb::v1::Governance {
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    ..Default::default()
-                }
-            },
-            ..Default::default()
-        };
-        let mut governance = Governance::new(
-            governance_proto,
-            Arc::new(MockEnvironment::new(Default::default(), 0)),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+        governance.heap_data.proposals.insert(1, proposal);
 
         governance
             .cast_vote_and_cascade_follow(
@@ -775,7 +777,7 @@ mod test {
             )
         };
 
-        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
+        let add_neuron_with_ballot = |neuron_store: &mut NeuronStore,
                                       ballots: &mut HashMap<u64, Ballot>,
                                       id: u64,
                                       followees: Vec<u64>,
@@ -783,51 +785,54 @@ mod test {
             let neuron = make_neuron(id, followees);
             let deciding_voting_power =
                 neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
-            neuron_map.insert(id, neuron);
+            neuron_store.add_neuron(neuron).unwrap();
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
 
         let add_neuron_without_ballot =
-            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
+            |neuron_store: &mut NeuronStore, id: u64, followees: Vec<u64>| {
                 let neuron = make_neuron(id, followees);
-                neuron_map.insert(id, neuron);
+                neuron_store.add_neuron(neuron).unwrap();
             };
 
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
-        for id in 1..=5 {
-            // Each neuron follows all neurons with a lower id
-            let followees = (1..id).collect();
-
-            add_neuron_with_ballot(&mut neurons, &mut ballots, id, followees, Vote::Unspecified);
-        }
-        // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(&mut neurons, &mut ballots, 6, vec![1, 7], Vote::Unspecified);
-
-        // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut neurons, 7, vec![1]);
-
-        let governance_proto = crate::pb::v1::Governance {
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    ..Default::default()
-                }
-            },
-            ..Default::default()
-        };
         let mut governance = Governance::new(
-            governance_proto,
+            Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 234)),
             Arc::new(StubIcpLedger {}),
             Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
+
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            ..Default::default()
+        };
+
+        for id in 1..=5 {
+            // Each neuron follows all neurons with a lower id
+            let followees = (1..id).collect();
+
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                id,
+                followees,
+                Vote::Unspecified,
+            );
+        }
+        // Add another neuron that follows both a neuron with a ballot and without a ballot
+        add_neuron_with_ballot(
+            &mut governance.neuron_store,
+            &mut proposal.ballots,
+            6,
+            vec![1, 7],
+            Vote::Unspecified,
+        );
+
+        // Add a neuron without a ballot for neuron 6 to follow.
+        add_neuron_without_ballot(&mut governance.neuron_store, 7, vec![1]);
+
+        governance.heap_data.proposals.insert(1, proposal);
 
         governance
             .cast_vote_and_cascade_follow(
@@ -877,13 +882,13 @@ mod test {
     }
 
     fn add_neuron_with_ballot(
-        neurons: &mut BTreeMap<u64, Neuron>,
+        neuron_store: &mut NeuronStore,
         ballots: &mut HashMap<u64, Ballot>,
         neuron: Neuron,
     ) {
         let cached_stake = neuron.cached_neuron_stake_e8s;
         let id = neuron.id().id;
-        neurons.insert(id, neuron);
+        neuron_store.add_neuron(neuron).unwrap();
         ballots.insert(
             id,
             Ballot {
@@ -928,11 +933,15 @@ mod test {
             ProposalVotingStateMachine::new(ProposalId { id: 0 }, Topic::NetworkEconomics);
 
         let mut ballots = HashMap::new();
-        let mut neurons = BTreeMap::new();
+        let mut neuron_store = NeuronStore::new(Default::default());
 
-        add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(1, 101, hashmap! {}));
         add_neuron_with_ballot(
-            &mut neurons,
+            &mut neuron_store,
+            &mut ballots,
+            make_neuron(1, 101, hashmap! {}),
+        );
+        add_neuron_with_ballot(
+            &mut neuron_store,
             &mut ballots,
             make_neuron(
                 2,
@@ -942,7 +951,6 @@ mod test {
                 }},
             ),
         );
-        let mut neuron_store = NeuronStore::new(neurons);
 
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
         state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
@@ -1039,10 +1047,10 @@ mod test {
             ProposalVotingStateMachine::new(ProposalId { id: 0 }, Topic::NetworkEconomics);
 
         let mut ballots = HashMap::new();
-        let mut neurons = BTreeMap::new();
+        let mut neuron_store = NeuronStore::new(Default::default());
 
         add_neuron_with_ballot(
-            &mut neurons,
+            &mut neuron_store,
             &mut ballots,
             make_neuron(
                 1,
@@ -1053,7 +1061,7 @@ mod test {
             ),
         );
         add_neuron_with_ballot(
-            &mut neurons,
+            &mut neuron_store,
             &mut ballots,
             make_neuron(
                 2,
@@ -1063,8 +1071,6 @@ mod test {
                 }},
             ),
         );
-
-        let mut neuron_store = NeuronStore::new(neurons);
 
         // We assert it is immediately done after casting an unspecified vote b/c there
         // is no work to do.
@@ -1083,8 +1089,19 @@ mod test {
     fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots() {
         let _a = temporarily_set_over_soft_message_limit(true);
         let topic = Topic::NetworkEconomics;
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            ..Default::default()
+        };
+
         for i in 1..=100 {
             let mut followees = HashMap::new();
             if i != 1 {
@@ -1096,30 +1113,14 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                make_neuron(i, 100, followees),
+            );
         }
 
-        let governance_proto = GovernanceProto {
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    ..Default::default()
-                }
-            },
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            ..Default::default()
-        };
-        let mut governance = Governance::new(
-            governance_proto,
-            Arc::new(MockEnvironment::new(Default::default(), 0)),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+        governance.heap_data.proposals.insert(1, proposal);
 
         // In our test configuration, we always return "true" for is_over_instructions_limit()
         // So our logic is at least resilient to not having enough instructions, and is able
@@ -1159,8 +1160,19 @@ mod test {
     #[test]
     fn test_cast_vote_and_cascade_breaks_if_over_hard_limit() {
         let topic = Topic::NetworkEconomics;
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            ..Default::default()
+        };
+
         for i in 1..=10 {
             let mut followees = HashMap::new();
             if i != 1 {
@@ -1172,30 +1184,14 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                make_neuron(i, 100, followees),
+            );
         }
 
-        let governance_proto = GovernanceProto {
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    ..Default::default()
-                }
-            },
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            ..Default::default()
-        };
-        let mut governance = Governance::new(
-            governance_proto,
-            Arc::new(MockEnvironment::new(Default::default(), 0)),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+        governance.heap_data.proposals.insert(1, proposal);
 
         let _e = temporarily_set_over_soft_message_limit(true);
         let _f = in_test_temporarily_set_call_context_over_threshold();
@@ -1219,8 +1215,18 @@ mod test {
     fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit() {
         let _a = temporarily_set_over_soft_message_limit(true);
         let topic = Topic::NetworkEconomics;
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            ..Default::default()
+        };
 
         for i in 1..=9 {
             let mut followees = HashMap::new();
@@ -1233,30 +1239,14 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                make_neuron(i, 100, followees),
+            );
         }
 
-        let governance_proto = GovernanceProto {
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    ..Default::default()
-                }
-            },
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            ..Default::default()
-        };
-        let mut governance = Governance::new(
-            governance_proto,
-            Arc::new(MockEnvironment::new(Default::default(), 0)),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+        governance.heap_data.proposals.insert(1, proposal);
 
         // In test mode, we are always saying we're over the soft-message limit, so we know that
         // this will hit that limit and not record any recent ballots.
@@ -1317,8 +1307,26 @@ mod test {
     #[test]
     fn test_process_voting_state_machines_processes_votes_and_executes_proposals() {
         let topic = Topic::Governance;
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), 1234)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            proposal: Some(Proposal {
+                title: Some("".to_string()),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "".to_string(),
+                })),
+            }),
+            ..Default::default()
+        };
 
         for i in 1..=9 {
             let mut followees = HashMap::new();
@@ -1331,41 +1339,14 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                make_neuron(i, 100, followees),
+            );
         }
 
-        let motion = Motion {
-            motion_text: "".to_string(),
-        };
-        let action = Action::Motion(motion);
-        let proposal = Proposal {
-            title: Some("".to_string()),
-            summary: "".to_string(),
-            url: "".to_string(),
-            action: Some(action),
-        };
-        let governance_proto = GovernanceProto {
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    proposal: Some(proposal),
-                    ..Default::default()
-                }
-            },
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            ..Default::default()
-        };
-        let mut governance = Governance::new(
-            governance_proto,
-            Arc::new(MockEnvironment::new(Default::default(), 1234)),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+        governance.heap_data.proposals.insert(1, proposal);
 
         governance.record_neuron_vote(ProposalId { id: 1 }, NeuronId { id: 1 }, Vote::Yes, topic);
 
@@ -1411,73 +1392,6 @@ mod test {
     fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
         let now = 1733433219;
         let topic = Topic::Governance;
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
-
-        for i in 1..=9 {
-            let mut followees = HashMap::new();
-            if i != 1 {
-                // cascading followees
-                followees.insert(
-                    topic as i32,
-                    Followees {
-                        followees: vec![NeuronId { id: i - 1 }],
-                    },
-                );
-            }
-            add_neuron_with_ballot(
-                &mut neurons,
-                &mut ballots,
-                make_neuron(i, 100_000_000, followees),
-            );
-        }
-
-        // Neurons should all get rewards.
-        for ballot in ballots.iter_mut() {
-            ballot.1.vote = Vote::Yes as i32;
-        }
-
-        add_neuron_with_ballot(
-            &mut neurons,
-            &mut ballots,
-            make_neuron(
-                100,
-                100_000_000,
-                hashmap! {
-                topic as i32 => Followees { followees: vec![NeuronId { id: 1 }] }},
-            ),
-        );
-
-        let motion = Motion {
-            motion_text: "".to_string(),
-        };
-        let action = Action::Motion(motion);
-        let proposal = Proposal {
-            title: Some("".to_string()),
-            summary: "".to_string(),
-            url: "".to_string(),
-            action: Some(action),
-        };
-        let governance_proto = GovernanceProto {
-            genesis_timestamp_seconds: now - REWARD_DISTRIBUTION_PERIOD_SECONDS,
-            proposals: btreemap! {
-                1 => ProposalData {
-                    id: Some(ProposalId {id: 1}),
-                    ballots,
-                    wait_for_quiet_state: Some(WaitForQuietState {
-                        current_deadline_timestamp_seconds: now - 100
-                    }),
-                    proposal: Some(proposal),
-                    decided_timestamp_seconds: now - 100,
-                    ..Default::default()
-                }
-            },
-            neurons: neurons
-                .into_iter()
-                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
-                .collect(),
-            ..Default::default()
-        };
         let environment = MockEnvironment::new(
             vec![(
                 ExpectedCallCanisterMethodCallArguments::new(
@@ -1492,12 +1406,68 @@ mod test {
         let now_setter = environment.now_setter();
 
         let mut governance = Governance::new(
-            governance_proto,
+            ApiGovernance {
+                genesis_timestamp_seconds: now - REWARD_DISTRIBUTION_PERIOD_SECONDS,
+                ..Default::default()
+            },
             Arc::new(environment),
             Arc::new(StubIcpLedger {}),
             Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
+
+        let mut proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            proposal: Some(Proposal {
+                title: Some("".to_string()),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "".to_string(),
+                })),
+            }),
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: now - 100,
+            }),
+            decided_timestamp_seconds: now - 100,
+            ..Default::default()
+        };
+
+        for i in 1..=9 {
+            let mut followees = HashMap::new();
+            if i != 1 {
+                // cascading followees
+                followees.insert(
+                    topic as i32,
+                    Followees {
+                        followees: vec![NeuronId { id: i - 1 }],
+                    },
+                );
+            }
+            add_neuron_with_ballot(
+                &mut governance.neuron_store,
+                &mut proposal.ballots,
+                make_neuron(i, 100_000_000, followees),
+            );
+        }
+
+        // Neurons should all get rewards.
+        for ballot in proposal.ballots.iter_mut() {
+            ballot.1.vote = Vote::Yes as i32;
+        }
+
+        add_neuron_with_ballot(
+            &mut governance.neuron_store,
+            &mut proposal.ballots,
+            make_neuron(
+                100,
+                100_000_000,
+                hashmap! {
+                topic as i32 => Followees { followees: vec![NeuronId { id: 1 }] }},
+            ),
+        );
+
+        governance.heap_data.proposals.insert(1, proposal);
 
         assert_eq!(
             governance
@@ -1527,7 +1497,7 @@ mod test {
         // to make this work, so that the timer accesses the same value of governance.
         set_governance_for_tests(governance);
         let governance = governance_mut();
-        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
         run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
@@ -1545,7 +1515,7 @@ mod test {
             .process_voting_state_machines()
             .now_or_never()
             .unwrap();
-        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
         // Now rewards should be able to be distributed
         run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 

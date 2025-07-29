@@ -1,10 +1,11 @@
 #![allow(unused)]
 use crate::{
-    governance::LOG_PREFIX,
+    governance::{LOG_PREFIX, MAX_FOLLOWEES_PER_TOPIC},
     neuron_store::voting_power::VotingPowerSnapshot,
     pb::v1::{Ballot, NeuronIdToVotingPowerMap, VotingPowerTotal},
 };
 
+use ic_cdk::eprintln;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_stable_structures::{
     memory_manager::VirtualMemory, storable::Bound, DefaultMemoryImpl, StableBTreeMap, Storable,
@@ -47,11 +48,10 @@ fn insert_and_truncate<Value: Storable>(
     // Log if we just clobbered an existing entry, because it is a exceedingly unlikely
     // that this would happen in practice.
     if let Some(existing_value) = existing_value {
-        ic_cdk::eprintln!(
+        eprintln!(
             "{}Somehow the voting power snapshot is taken multiple times at \
 	            the same timestamp {}",
-            LOG_PREFIX,
-            timestamp_seconds,
+            LOG_PREFIX, timestamp_seconds,
         );
     }
 
@@ -79,7 +79,6 @@ impl VotingPowerSnapshots {
             return false;
         };
 
-        // If the latest snapshot is already considered a spike,
         self.totals_entry_with_minimum_total_potential_voting_power_if_voting_power_spiked(
             now_seconds,
             latest_totals.total_potential_voting_power,
@@ -96,6 +95,15 @@ impl VotingPowerSnapshots {
     ) {
         let (voting_power_map, voting_power_total) =
             <(NeuronIdToVotingPowerMap, VotingPowerTotal)>::from(snapshot);
+        // We are being defensive here to make sure that the voting power snapshot is not taken as a
+        // neuron management proposal, which is a special case where the ballots are created from
+        // NeuronManagement topic followees rather than all voting eligible neurons.
+        if voting_power_total.total_potential_voting_power <= MAX_FOLLOWEES_PER_TOPIC as u64 {
+            ic_cdk::println!(
+                "Voting power total is less than MAX_FOLLOWEES_PER_TOPIC. This should not happen."
+            );
+            return;
+        }
         insert_and_truncate(
             &mut self.neuron_id_to_voting_power_maps,
             timestamp_seconds,
@@ -151,6 +159,13 @@ impl VotingPowerSnapshots {
         total_potential_voting_power: u64,
         now_seconds: TimestampSeconds,
     ) -> Option<(TimestampSeconds, VotingPowerSnapshot)> {
+        // Step 0: skip the check in test mode when the snapshots are not yet full. Otherwise it
+        // would be difficult to get around the spike detection in tests, and a lot of test setups
+        // involve creating a lot of voting power.
+        if cfg!(feature = "test") && self.voting_power_totals.len() < MAX_VOTING_POWER_SNAPSHOTS {
+            return None;
+        }
+
         // Step 1: find the voting power totals entry with the minimum total potential voting power,
         // if a spike is detected.
         let Some((
@@ -161,7 +176,7 @@ impl VotingPowerSnapshots {
             total_potential_voting_power,
         )
         else {
-            ic_cdk::eprintln!(
+            eprintln!(
                 "{}Voting power totals are empty. No voting power spike detected.",
                 LOG_PREFIX,
             );
@@ -173,16 +188,16 @@ impl VotingPowerSnapshots {
             .neuron_id_to_voting_power_maps
             .get(&timestamp_with_minimum_total_potential_voting_power)
         else {
-            ic_cdk::eprintln!(
+            eprintln!(
                 "{}Voting power map not found for timestamp {} while the totals \
                 are found. This should not happen.",
-                LOG_PREFIX,
-                timestamp_with_minimum_total_potential_voting_power,
+                LOG_PREFIX, timestamp_with_minimum_total_potential_voting_power,
             );
             return None;
         };
 
-        // Step 3: returns the previous voting power map since a voting power spike is detected.
+        // Step 3: returns one of the previous voting power maps (with minimum total potential
+        // voting power) since a voting power spike is detected.
         let previous_voting_power_snapshot = VotingPowerSnapshot::from((
             voting_power_map,
             totals_with_minimum_total_potential_voting_power,
@@ -228,3 +243,7 @@ impl Storable for VotingPowerTotal {
 #[path = "voting_power_snapshots_tests.rs"]
 #[cfg(test)]
 mod tests;
+
+#[path = "voting_power_snapshots_benches.rs"]
+#[cfg(feature = "canbench-rs")]
+mod benches;

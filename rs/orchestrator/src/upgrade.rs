@@ -351,7 +351,7 @@ impl Upgrade {
                 let downloader = FileDownloader::new(Some(self.logger.clone()));
                 let local_store_location = tempfile::tempdir()
                     .expect("temporary location for local store download could not be created")
-                    .into_path();
+                    .keep();
                 downloader
                     .download_and_extract_tar(
                         &registry_store_uri.uri,
@@ -953,6 +953,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
+            dkg::DkgSummary,
             idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
@@ -1050,8 +1051,7 @@ mod tests {
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
-                    dkg: ic_types::consensus::dkg::Summary::fake()
-                        .with_current_transcripts(nidkg_transcripts),
+                    dkg: DkgSummary::fake().with_current_transcripts(nidkg_transcripts),
                     idkg: Some(idkg),
                 }),
             ),

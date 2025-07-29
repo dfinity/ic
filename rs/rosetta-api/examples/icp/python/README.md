@@ -5,7 +5,6 @@ This repository contains Python examples demonstrating how to interact with the 
 ## Table of Contents
 - [Overview](#overview)
 - [Setup](#setup)
-- [Generating Keys](#generating-keys)
 - [Running the Examples](#running-the-examples)
 - [Example Scripts](#example-scripts)
   - [Account Information](#account-information)
@@ -24,67 +23,10 @@ The Rosetta API provides a standard interface for blockchain interactions. These
 
 ## Setup
 
-1. **Install dependencies**
-
-```sh
-pip install -r requirements.txt
-```
-
-2. **Access to a Rosetta node**
-
-You'll need access to a Rosetta API endpoint, either:
-- Local node running at <NODE_ADDRESS>
-- Public endpoint (if available)
-
-## Generating Keys
-
-To sign transactions and derive account identifiers, you need a key pair. The Internet Computer supports different cryptographic curves:
-
-### Ed25519 Keys
-
-Generate an Ed25519 private key:
-
-```sh
-# Generate a private key in PEM format using ed25519 curve
-$ openssl genpkey -algorithm ed25519 -out my_ed25519_key.pem
-
-# View the private key details (optional)
-$ openssl pkey -in my_ed25519_key.pem -text -noout
-```
-
-Extract the Ed25519 public key in the correct format:
-
-```sh
-# Extract compressed public key in hex format for Ed25519
-$ openssl pkey -in my_ed25519_key.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32
-93f14fad36957237baab3b7ce8890c766b44c7071bda09830592379f2a2d418f
-```
-
-### secp256k1 Keys
-
-Generate a secp256k1 private key:
-
-```sh
-# Generate a private key in PEM format using secp256k1 curve
-$ openssl ecparam -name secp256k1 -genkey -noout -out my_secp256k1_key.pem
-
-# View the private key details and confirm the curve type
-$ openssl ec -in my_secp256k1_key.pem -text -noout
-$ openssl ec -in my_secp256k1_key.pem -text -noout | grep 'ASN1 OID'
-ASN1 OID: secp256k1
-```
-
-Extract the secp256k1 public key in the correct format:
-
-```sh
-# Extract compressed public key in hex format for secp256k1
-$ openssl ec -in my_secp256k1_key.pem -pubout -conv_form compressed -outform DER | tail -c 33 | xxd -p -c 33
-03e4be477eb605d5d0738f643b2f6d8ffea8685855bc60d03f58244a15130a0ef8
-```
-
-Note the important differences:
-- Ed25519 public keys are 32 bytes
-- secp256k1 compressed public keys are 33 bytes, with the first byte being either `02` or `03`
+Please refer to the [common setup instructions](../../README.md) for:
+- Installing dependencies
+- Generating keys (both Ed25519 and secp256k1 are supported for ICP operations)
+- Accessing a Rosetta node
 
 ## Running the Examples
 
@@ -190,6 +132,13 @@ python get_proposal_info.py --node-address <NODE_ADDRESS> --proposal-id <PROPOSA
 ```
 
 Fetches detailed information about a specific proposal, including its status, voting results, proposer, and execution time.
+
+**Get Minimum Dissolve Delay of a Neuron**:
+```sh
+python get_minimum_dissolve_delay.py --node-address <NODE_ADDRESS>
+```
+
+Returns the minimum dissolve delay of a neuron that still allows it to vote on NNS proposals.
 
 ## Testing All Examples
 

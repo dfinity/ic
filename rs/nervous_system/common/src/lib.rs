@@ -62,7 +62,8 @@ pub const E8: u64 = 100_000_000;
 
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+pub const ONE_HOUR_SECONDS: u64 = 60 * 60;
+pub const ONE_DAY_SECONDS: u64 = 24 * ONE_HOUR_SECONDS;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
 pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
@@ -719,6 +720,7 @@ pub fn serve_metrics(
     match encode_metrics(&mut writer) {
         Ok(()) => HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build(),
         Err(err) => {

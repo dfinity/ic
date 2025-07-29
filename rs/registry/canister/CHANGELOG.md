@@ -11,6 +11,111 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-18: Proposal 137500
+
+https://dashboard.internetcomputer.org/proposal/137500
+
+Back fill some node records with reward type.
+
+
+# 2025-07-11: Proposal 137347
+
+http://dashboard.internetcomputer.org/proposal/137347
+
+## Changed
+
+* `create_subnet` now returns the new subnet's ID.
+
+
+# 2025-07-06: Proposal 137254
+
+http://dashboard.internetcomputer.org/proposal/137254
+
+## Added
+
+* There is now a `canister_cycles_cost_schedule` field in `CreateSubnetPayload`
+  and `SubnetRecord`. This isn't used yet, but it will be in the not too distant
+  future, for [subnet rental].
+
+[subnet rental]: https://dashboard.internetcomputer.org/proposal/128820
+
+
+# 2025-06-20: Proposal 137081
+
+https://dashboard.internetcomputer.org/proposal/137081
+
+### Changed
+
+* The `check_routing_table_invariants` method now checks the new canister_ranges_
+  and ensures they match the `routing_table` record. The old invariant check will be
+  removed once `routing_table` is removed.
+
+
+# 2025-06-13: Proposal 136988
+
+http://dashboard.internetcomputer.org/proposal/136988
+
+## Added
+
+- The RoutingTable is now also broken up into `canister_ranges_*` records, instead of only in a single
+  `routing_table` record. This will allow clients to migrate to the new format incrementally, as both will continue
+  to be available until all known clients have migrated to the new format, at which point `routing_table` will be
+  removed.
+
+## Changed
+
+* When performing "large" mutations (greater than approximately 1.3 MiB),
+  chunking is used. This has no effect on how mutations are written. Rather,
+  this affects how large mutations and records are read. For non-large
+  mutations, this has no effect. Chunking means that to fetch a large mutation
+  or record, clients must make follow up `get_chunk` canister method calls.
+  Because of this requirement, this is a breaking change (for clients who read
+  large mutations/records). This breaking change and how clients migrate was
+  [announced at the end of March in a forum][chunking] (and various other
+  channels). This release marks the end of the "migration window" described in
+  the aforelinked forum post.
+
+[chunking]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893?u=daniel-wong
+
+
+# 2025-06-06: Proposal 136894
+
+http://dashboard.internetcomputer.org/proposal/136894
+
+## Added
+
+- `add_node_operator` and `update_node_operator_config` methods both support a new field `max_rewardable_nodes`,
+  with the same structure as `rewardable_nodes`, but with a different purpose. This field will set the upper limit
+  on the number of nodes that can be rewarded for a given node operator for the next version of Node Provider Rewards.
+
+
+# 2025-05-16: Proposal 136695
+
+http://dashboard.internetcomputer.org/proposal/136695
+
+## Changed
+
+* The field `node_reward_type` in AddNodePayload is now required to be populated with a valid node_reward_type when
+  adding a node (in `do_add_node`) if a node_rewards table record is present in the registry.
+
+
+# 2025-05-10: Proposal 136581
+
+http://dashboard.internetcomputer.org/proposal/136581
+
+## Added
+
+* Added new endpoint for `migrate_canisters` which is only callable by governance, and updates the routing table for
+  the provided canisters when called so that requests will be routed to a different subnet. This will be used to support
+  the broader canister migrations feature.
+
+* Started populating `timestamp_seconds` fields.
+
+## Changed
+
+* The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.
+
+
 # 2025-05-02: Proposal 136428
 
 https://dashboard.internetcomputer.org/proposal/136428

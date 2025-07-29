@@ -96,10 +96,13 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_enable_trusted_execution_environment: Optional[str] = None
+
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
-    # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
+    # Path to the setupos-inject-config tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
     # Time to wait between each remote deployment, in minutes
@@ -149,7 +152,7 @@ class Args:
             self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
-            assert self.inject_configuration_tool, "setupos_inject_configuration tool required to modify image"
+            assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
         ipv4_args = [
             self.inject_image_ipv4_address,
             self.inject_image_ipv4_gateway,
@@ -251,15 +254,7 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
         return None
 
 
-def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bool:
-    metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
-    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
-    metrics_output = get_url_content(metrics_endpoint, timeout_secs)
-    if not metrics_output:
-        log.warning(f"Request to {metrics_endpoint} failed.")
-        return False
-
-    log.info("Got metrics result from HostOS")
+def check_hostos_power_metrics(metrics_output: str) -> bool:
     try:
         power_metric_line = next(
             line
@@ -271,6 +266,22 @@ def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bo
     except StopIteration:
         log.warning("power_average_watts metric in HostOS metrics not found or invalid")
         return False
+
+
+def check_hostos_version_metrics(metrics_output: str) -> bool:
+    for metric in ["hostos_version", "hostos_config_version"]:
+        try:
+            pattern_template = rf"{re.escape(metric)}\{{version=\".*\"\}} 1"
+            version_metric_line = next(
+                line
+                for line in metrics_output.splitlines()
+                if not line.startswith("#") and re.fullmatch(pattern_template, line)
+            )
+            log.info(f"{metric} metric: {version_metric_line}")
+        except StopIteration:
+            log.warning(f"{metric} metric in HostOS metrics not found or invalid")
+            return False
+    return True
 
 
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
@@ -306,15 +317,32 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
 
 def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional[str] = None) -> bool:
     # Check that the HSM is working correctly, over an SSH session with the node.
+    log.info(f"Starting HSM capability check for {ip_address}")
+
     ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+    # Execute the HSM command
+    log.info(f"Executing HSM command on {ip_address}")
+    hsm_command = "/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
     result = invoke.run(
-        f"ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} '/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep \"Nitrokey HSM\"'",
+        f'ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} "{hsm_command}"',
         warn=True,
     )
+
     if not result or not result.ok:
+        log.error(f"HSM command failed on {ip_address}")
+        if result:
+            log.error(f"HSM command stderr: {result.stderr.strip()}")
+            log.error(f"HSM command stdout: {result.stdout.strip()}")
+            # Check if it's an SSH connectivity issue vs HSM-specific issue
+            if result.returncode == 255 or "Connection refused" in result.stderr or "No route to host" in result.stderr:
+                log.error(f"SSH connectivity issue detected for {ip_address}")
+            else:
+                log.error(f"HSM-specific issue detected for {ip_address}")
         return False
 
+    log.info(f"HSM command executed successfully on {ip_address}")
     log.info("HSM check success.")
     return True
 
@@ -570,8 +598,16 @@ def benchmark_nodes(
 
 def check_node_hostos_metrics(bmc_info: BMCInfo):
     log.info("Checking HostOS metrics.")
-    timeout_secs = 5
-    result = check_hostos_power_metrics(bmc_info.hostos_ipv6_address, timeout_secs)
+
+    metrics_endpoint = f"https://[{bmc_info.hostos_ipv6_address.exploded}]:9100/metrics"
+    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
+    metrics_output = get_url_content(metrics_endpoint, 5)
+    if not metrics_output:
+        log.warning(f"Request to {metrics_endpoint} failed.")
+        return False
+
+    result = check_hostos_power_metrics(metrics_output) and check_hostos_version_metrics(metrics_output)
+
     return OperationResult(bmc_info, success=result)
 
 
@@ -641,12 +677,13 @@ def upload_to_file_share(
 
 
 def inject_config_into_image(
-    setupos_inject_configuration_path: Path,
+    setupos_inject_config_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
     node_reward_type: str,
     ipv6_prefix: str,
     ipv6_gateway: str,
+    inject_enable_trusted_execution_environment: Optional[str],
     ipv4_args: Optional[Ipv4Args],
     verbose: Optional[str],
     pub_key: Optional[str],
@@ -665,7 +702,7 @@ def inject_config_into_image(
     def is_executable(p: Path) -> bool:
         return os.access(p, os.X_OK)
 
-    assert setupos_inject_configuration_path.exists() and is_executable(setupos_inject_configuration_path)
+    assert setupos_inject_config_path.exists() and is_executable(setupos_inject_config_path)
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
@@ -683,6 +720,12 @@ def inject_config_into_image(
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
         ipv4_part += f"--domain {ipv4_args.domain} "
 
+    enable_trusted_execution_environment_part = ""
+    if inject_enable_trusted_execution_environment is not None:
+        enable_trusted_execution_environment_part += (
+            f"--enable-trusted-execution-environment {inject_enable_trusted_execution_environment}"
+        )
+
     verbose_part = ""
     if verbose:
         verbose_part = f"--verbose {verbose} "
@@ -692,7 +735,7 @@ def inject_config_into_image(
         admin_key_part = f'--public-keys "{pub_key}"'
 
     invoke.run(
-        f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
         echo=True,
     )
 
@@ -773,6 +816,7 @@ def main():
                 args.inject_image_node_reward_type,
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
+                args.inject_enable_trusted_execution_environment,
                 ipv4_args,
                 args.inject_image_verbose,
                 args.inject_image_pub_key,

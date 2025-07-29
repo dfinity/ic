@@ -43,17 +43,17 @@ use ic_nns_governance_api::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
-        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
-        Split, StakeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse, DisburseMaturity,
+        Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote,
+        RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Account as GovernanceAccount, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -62,7 +62,7 @@ use ic_registry_transport::{
     deserialize_get_latest_version_response,
     pb::v1::{
         HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
-        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse, RegistryGetValueRequest,
+        RegistryGetChangesSinceRequest, RegistryGetValueRequest,
     },
 };
 use ic_sns_governance::pb::v1::{
@@ -91,6 +91,13 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
 use std::{convert::TryInto, time::Duration};
+
+/// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+/// Canisters created in those tests without any `specified_id` are assigned to the default range
+/// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+/// canisters created with `specified_id` can only be assigned to the extra range
+/// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+pub const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -142,17 +149,6 @@ pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, Stri
     )?;
     deserialize_get_latest_version_response(response)
         .map_err(|e| format!("Could not decode response {e:?}"))
-}
-
-// TODO(NNS1-3679): Replace with high-capacity version.
-pub fn registry_get_changes_since(
-    state_machine: &StateMachine,
-    sender: PrincipalId,
-    version: u64,
-) -> RegistryGetChangesSinceResponse {
-    let result = registry_high_capacity_get_changes_since(state_machine, sender, version);
-
-    RegistryGetChangesSinceResponse::try_from(result).unwrap()
 }
 
 pub fn registry_high_capacity_get_changes_since(
@@ -1188,17 +1184,13 @@ pub fn nns_disburse_maturity(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    percentage_to_disburse: u32,
-    to_account: Option<GovernanceAccount>,
+    disburse_maturity: DisburseMaturity,
 ) -> ManageNeuronResponse {
     manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
-        ManageNeuronCommandRequest::DisburseMaturity(DisburseMaturity {
-            percentage_to_disburse,
-            to_account,
-        }),
+        ManageNeuronCommandRequest::DisburseMaturity(disburse_maturity),
     )
 }
 
@@ -1482,6 +1474,23 @@ pub fn nns_stake_maturity(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::StakeMaturity(StakeMaturity {
         percentage_to_stake,
+    });
+
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_set_auto_stake_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    auto_stake: bool,
+) -> ManageNeuronResponse {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
+        operation: Some(Operation::ChangeAutoStakeMaturity(
+            ChangeAutoStakeMaturity {
+                requested_setting_for_auto_stake_maturity: auto_stake,
+            },
+        )),
     });
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)

@@ -1,6 +1,5 @@
 load("@os_info//:defs.bzl", "os_info")
 load("//bazel:defs.bzl", "gzip_compress")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
@@ -17,7 +16,6 @@ ALL_BINARIES = {
     "ic-backup": "//rs/backup:ic-backup",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
-    "ic-starter": "//rs/starter:ic-starter",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
     "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
@@ -53,7 +51,6 @@ TESTONLY_BINARIES = [
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
-    "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
     "replicated-state-test",
@@ -121,33 +118,29 @@ filegroup(
 
 artifact_bundle(
     name = "bundle",
-    inputs = [":binaries"],
-)
-
-upload_artifacts(
-    name = "upload",
     testonly = True,
-    inputs = [":binaries"],
-    remote_subdir = "binaries/" + os_info,
+    inputs = [
+        ":binaries",
+        "//rs/sns/testing:sns_testing_bundle",
+    ],
+    prefix = "binaries/" + os_info,
+    visibility = ["//visibility:public"],
 )
 
 # https://dfinity.atlassian.net/browse/IDX-2599
 # various places in the source code, and possibly other repositories reference
 # the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
-upload_artifacts(
-    name = "legacy_upload",
-    testonly = True,
+artifact_bundle(
+    name = "bundle-legacy",
     inputs = [":binaries"],
-    remote_subdir = "release",
-    target_compatible_with = ["@platforms//os:linux"],
-    visibility = ["//testnet/tools:__pkg__"],
-)
-
-upload_artifacts(
-    name = "upload_sns_testing_bundle",
-    testonly = True,
-    inputs = ["//rs/sns/testing:sns_testing_bundle"],
-    remote_subdir = "binaries/" + os_info,
+    prefix = "release",
+    # only create the bundle for a single platform since we don't prefix
+    # os_info
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//visibility:public"],
 )
 
 BINS_TO_TEST = [":" + name for name in ALL_BINARIES]

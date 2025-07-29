@@ -1,8 +1,8 @@
-use slog::{info, Logger};
-
 mod hyper;
 mod join_map;
 mod unix;
+
+use ic_logger::{info, ReplicaLogger};
 
 pub use self::{
     hyper::ExecuteOnTokioRuntime,
@@ -22,7 +22,7 @@ pub fn abort_on_panic() {
 /// Returns a `Future` that completes when the service should gracefully
 /// shutdown. Completion happens if either of `SIGINT` or `SIGTERM` are
 /// received.
-pub async fn shutdown_signal(log: Logger) {
+pub async fn shutdown_signal(log: ReplicaLogger) {
     use tokio::signal::unix::{signal, SignalKind};
     let mut sig_int =
         signal(SignalKind::interrupt()).expect("failed to install SIGINT signal handler");

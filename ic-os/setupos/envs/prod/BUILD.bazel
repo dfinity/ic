@@ -1,5 +1,4 @@
 load("//bazel:defs.bzl", "file_size_check")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
@@ -28,14 +27,11 @@ launch_bare_metal(
 )
 
 # Export checksums & build artifacts
+# (image is used as the IC-OS installation image downloaded by Node Providers)
 artifact_bundle(
     name = "bundle",
+    testonly = True,
     inputs = [":prod"],
-)
-
-# This image is used as the IC-OS installation image downloaded by Node Providers
-upload_artifacts(
-    name = "upload_disk-img",
-    inputs = [icos_images.disk_image],
-    remote_subdir = "setup-os/disk-img",
+    prefix = "setup-os/disk-img",
+    visibility = ["//visibility:public"],
 )

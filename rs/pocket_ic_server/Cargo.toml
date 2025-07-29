@@ -1,10 +1,10 @@
 [package]
 name = "pocket-ic-server"
-version = "9.0.1"
+version = "9.0.3"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.14.1", features = ["axum", "axum-json"] }
+aide = { workspace = true }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -17,6 +17,7 @@ bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 ctrlc = { version = "3.4.5", features = ["termination"] }
+cycles-minting-canister = { path = "../nns/cmc" }
 flate2 = { workspace = true }
 form_urlencoded = "1"
 fqdn = "0.3.11"
@@ -26,36 +27,39 @@ http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+icp-ledger = { path = "../ledger_suite/icp" }
 ic-agent = { workspace = true }
-ic-bn-lib = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-config = { path = "../config" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../../packages/ic-error-types" }
-ic-http-gateway = { workspace = true }
+ic-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-https-outcalls-service = { path = "../https_outcalls/service" }
+ic-icp-index = { path = "../ledger_suite/icp/index" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nns-common = { path = "../nns/common" }
+ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-starter = { path = "../starter" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
@@ -68,6 +72,7 @@ itertools = { workspace = true }
 libc = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 rand = { workspace = true }
+registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
@@ -84,20 +89,17 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
 bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
-ic-gateway = { workspace = true }
 ic-registry-transport = { path = "../registry/transport" }
-ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-nns-constants = { path = "../nns/constants" }
 nix = { version = "0.29.0" }
 prometheus = { workspace = true }
 rcgen = { workspace = true }
-registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde_json = { workspace = true }

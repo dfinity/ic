@@ -28,7 +28,6 @@ pub struct Config {
     pub nodes: Vec<SocketAddr>,
     #[serde(default)]
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with  the BTC network.
-    /// Socks proxy docs: https://github.com/dfinity/ic/blob/master/ic-os/boundary-guestos/docs/Components.adoc#user-content-socks-proxy
     /// Testing environment shared socks proxy address: socks5://socks5.testnet.dfinity.network:1080
     /// Proxy url is validated and needs to have scheme, host and port specified. I.e socks5://socksproxy.com:1080.
     pub socks_proxy: Option<String>,

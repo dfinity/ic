@@ -1,10 +1,14 @@
 //!
 //! Benchmark Wasm instructions using `execute_update()`.
 //!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
 //! To run a specific benchmark:
 //!
-//!     bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
-//!
+//! ```shell
+//! bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
+//! ```
 
 use std::time::Duration;
 
@@ -17,6 +21,7 @@ use ic_execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
@@ -68,6 +73,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                 network_topology,
                 &mut round_limits,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
             );
             // We do not validate the number of executed instructions.
             let _executed_instructions =

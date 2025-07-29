@@ -14,8 +14,9 @@ path = "src/lib.rs"
 candid = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }

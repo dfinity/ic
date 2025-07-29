@@ -349,6 +349,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         // 3xx -- `RejectCode::DestinationInvalid`
         CanisterNotFound => "Canister Not Found",
         CanisterSnapshotNotFound => "Canister Snapshot Not Found",
+        CanisterSnapshotImmutable => "Immutable Canister Snapshot",
         // 4xx -- `RejectCode::CanisterReject`
         InsufficientMemoryAllocation => "Insufficient memory allocation given to canister",
         InsufficientCyclesForCreateCanister => "Insufficient Cycles for Create Canister Request",

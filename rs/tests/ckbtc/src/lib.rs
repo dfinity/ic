@@ -1,12 +1,11 @@
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_checker::{
     BtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
-use ic_canister_client::Sender;
 use ic_ckbtc_minter::{
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
     CKBTC_LEDGER_MEMO_SIZE,
@@ -20,14 +19,9 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWithCyclesArgs};
-use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::{NnsFunction, ProposalStatus};
-use ic_nns_test_utils::{
-    governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
-};
+use ic_management_canister_types_private::{EcdsaCurve, MasterPublicKeyId};
+use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -40,22 +34,19 @@ use ic_system_test_driver::{
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
-    nns::vote_and_execute_proposal,
-    util::{assert_create_agent, runtime_from_url, MessageCanister},
+    util::{assert_create_agent, block_on, MessageCanister},
 };
 use ic_types::Height;
-use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
-use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
-use slog::{debug, info, Logger};
+use slog::{info, Logger};
 use std::{
     env,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     str::FromStr,
     time::Duration,
 };
 
+pub mod adapter;
 pub mod utils;
 
 pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
@@ -89,13 +80,63 @@ const BITCOIN_CLI_PORT: u16 = 18444;
 
 const HTTPS_PORT: u16 = 20443;
 
-pub fn btc_config(env: TestEnv) {
+pub fn ckbtc_config(env: TestEnv) {
+    let btc_node_ipv6 = setup_bitcoind_uvm(&env);
+    InternetComputer::new()
+        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(10))
+                .with_chain_key_config(ic_registry_subnet_features::ChainKeyConfig {
+                    key_configs: vec![ic_registry_subnet_features::KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: TEST_KEY_LOCAL.to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 10,
+                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                    }],
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                })
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        )
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+pub fn adapter_test_config(env: TestEnv) {
+    let btc_node_ipv6 = setup_bitcoind_uvm(&env);
+    InternetComputer::new()
+        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(10))
+                .add_nodes(1),
+        )
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+fn setup_bitcoind_uvm(env: &TestEnv) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
         ))
         .enable_ipv4()
-        .start(&env)
+        .start(env)
         .expect("failed to setup universal VM");
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
@@ -150,33 +191,21 @@ docker run  --name=bitcoind-node -d \
 "#
         ))
         .unwrap());
-
-    InternetComputer::new()
-        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(10))
-                .add_nodes(1),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(10))
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(1),
-        )
-        .use_specified_ids_allocation_range()
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
+    btc_node_ipv6
 }
 
-pub fn setup(env: TestEnv) {
-    // Use the btc integration setup.
-    btc_config(env.clone());
+pub fn ckbtc_setup(env: TestEnv) {
+    // Use the ckbtc integration setup.
+    ckbtc_config(env.clone());
     check_nodes_health(&env);
+    check_ecdsa_works(&env);
     install_nns_canisters_at_ids(&env);
+}
+
+pub fn adapter_test_setup(env: TestEnv) {
+    // Use the adapter test integration setup.
+    adapter_test_config(env.clone());
+    check_nodes_health(&env);
 }
 
 pub fn install_nns_canisters_at_ids(env: &TestEnv) {
@@ -206,22 +235,24 @@ fn check_nodes_health(env: &TestEnv) {
     info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
 }
 
-// By default ECDSA signature is not activated, we need to activate it explicitly.
-pub async fn activate_ecdsa_signature(
+fn check_ecdsa_works(env: &TestEnv) {
+    // Check that ECDSA signatures work
+    let sys_node = subnet_sys(env)
+        .nodes()
+        .next()
+        .expect("No node in sys subnet.");
+    block_on(async {
+        assert_ecdsa_signatures_work(sys_node, TEST_KEY_LOCAL, &env.logger()).await;
+    });
+    info!(&env.logger(), "Ecdsa signatures are operational");
+}
+
+pub async fn assert_ecdsa_signatures_work(
     sys_node: IcNodeSnapshot,
-    app_subnet_id: SubnetId,
     key_name: &str,
     logger: &Logger,
 ) {
-    debug!(
-        logger,
-        "Activating ECDSA signature with key {:?} on subnet {:?}", key_name, app_subnet_id
-    );
-    let nns = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-    let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-    let ecdsa_key_id = make_key(key_name);
-    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-    enable_ecdsa_signing(&governance, app_subnet_id, ecdsa_key_id).await;
+    let key_id = MasterPublicKeyId::Ecdsa(make_key(key_name));
     let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
 
     // Wait for key creation and verify signature (as it's done in tecdsa tests).
@@ -240,87 +271,6 @@ pub async fn activate_ecdsa_signature(
     .await
     .unwrap();
     verify_signature(&key_id, &message_hash, &public_key, &signature);
-}
-
-async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
-    let key_id = MasterPublicKeyId::Ecdsa(key_id);
-
-    // The ECDSA key sharing process requires that a key first be added to a
-    // subnet, and then enabling signing with that key must happen in a separate
-    // proposal.
-    let proposal_payload = UpdateSubnetPayload {
-        subnet_id,
-        chain_key_config: Some(ChainKeyConfig {
-            key_configs: vec![KeyConfig {
-                key_id: Some(key_id.clone()),
-                pre_signatures_to_create_in_advance: Some(10),
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            }],
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }),
-        ..empty_subnet_update()
-    };
-    execute_update_subnet_proposal(governance, proposal_payload).await;
-
-    let proposal_payload = UpdateSubnetPayload {
-        subnet_id,
-        chain_key_signing_enable: Some(vec![key_id]),
-        ..empty_subnet_update()
-    };
-    execute_update_subnet_proposal(governance, proposal_payload).await;
-}
-
-async fn execute_update_subnet_proposal(
-    governance: &Canister<'_>,
-    proposal_payload: UpdateSubnetPayload,
-) {
-    let proposal_id: ProposalId = submit_external_update_proposal(
-        governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::UpdateConfigOfSubnet,
-        proposal_payload,
-        "<proposal created by ckbtc minter test>".to_string(),
-        "Test summary".to_string(),
-    )
-    .await;
-    let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
-    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
-}
-
-fn empty_subnet_update() -> UpdateSubnetPayload {
-    UpdateSubnetPayload {
-        subnet_id: subnet_test_id(0),
-        max_ingress_bytes_per_message: None,
-        max_ingress_messages_per_block: None,
-        max_block_payload_size: None,
-        unit_delay_millis: None,
-        initial_notary_delay_millis: None,
-        dkg_interval_length: None,
-        dkg_dealings_per_block: None,
-        start_as_nns: None,
-        subnet_type: None,
-        is_halted: None,
-        halt_at_cup_height: None,
-        features: None,
-        chain_key_config: None,
-        chain_key_signing_disable: None,
-        chain_key_signing_enable: None,
-        max_number_of_canisters: None,
-        ssh_readonly_access: None,
-        ssh_backup_access: None,
-        // Deprecated/unused values follow
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: Default::default(),
-    }
 }
 
 pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {

@@ -75,8 +75,8 @@ assert_matches = { workspace = true }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
-pocket-ic = { path = "../../../packages/pocket-ic" }
 ic-registry-canister-api = { path = "../canister/api" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 
 [[bin]]
 name = "ic-admin"

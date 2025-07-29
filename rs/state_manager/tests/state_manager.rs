@@ -1223,6 +1223,123 @@ fn missing_manifests_are_recomputed() {
     });
 }
 
+/// Tests that the manifest is computed incrementally using a delta relative to the manifest at a
+/// lower height. Steps are:
+///
+/// - Compute the manifest at height 2 using the delta from the manifest at height 1.
+/// - Compute the manifest at height 3 using the delta from the manifest at height 2.
+/// - Compute the manifests at height 2 and 3 using the deltas from the manifest at height 1.
+///
+/// The third step consists of the first step + a new manifest computation that is expected to
+/// require more hashing than the second step since it's done from height 1.
+///
+/// Asserting that more hashing is required in step 3 ensures two things:
+/// - The computation in the second step was actually done from height 2 since it required less
+///   hashing.
+/// - Incremental manifest computation can be done from a height further back than the previous one
+///   (at the cost of more hashing).
+#[test]
+fn missing_manifest_is_computed_incrementally() {
+    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
+        use ic_state_manager::testing::StateManagerTesting;
+
+        let hashed_key = maplit::btreemap! {"type".to_string() => "hashed".to_string()};
+        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+        let hashed_and_compared_key =
+            maplit::btreemap! {"type".to_string() => "hashed_and_compared".to_string()};
+
+        let insert_canister_and_write_checkpoint = |state_manager: StateManagerImpl,
+                                                    height: Height,
+                                                    canister_id: CanisterId|
+         -> StateManagerImpl {
+            let (_height, mut state) = state_manager.take_tip();
+
+            insert_dummy_canister(&mut state, canister_id);
+            state
+                .canister_state_mut(&canister_id)
+                .unwrap()
+                .execution_state
+                .as_mut()
+                .unwrap()
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
+
+            state_manager.commit_and_certify(state, height, CertificationScope::Full, None);
+            wait_for_checkpoint(&state_manager, height);
+            state_manager.flush_tip_channel();
+
+            state_manager
+        };
+
+        let purge_manifests_and_restart = |mut state_manager: StateManagerImpl,
+                                           purge_manifest_heights: &[Height],
+                                           restart_height: Height|
+         -> (StateManagerImpl, u64, u64) {
+            for h in purge_manifest_heights {
+                assert!(state_manager.purge_manifest(*h));
+            }
+            let (metrics, state_manager) = restart_fn(state_manager, Some(restart_height));
+            wait_for_checkpoint(&state_manager, restart_height);
+
+            let chunk_bytes = fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes");
+
+            // Return the state manager along with the number of reused bytes and the
+            // number of bytes hashed.
+            (
+                state_manager,
+                chunk_bytes[&reused_key] + chunk_bytes[&hashed_and_compared_key],
+                chunk_bytes[&hashed_key],
+            )
+        };
+
+        // Create two checkpoints @1 and @2.
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(1), canister_test_id(1));
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(2), canister_test_id(2));
+
+        // Trigger an incremental manifest computation @2 with a delta 1 -> 2.
+        let (state_manager, incremental_at_2_from_1, hashed_at_2_from_1) =
+            purge_manifests_and_restart(
+                state_manager,
+                &[height(2)], // Purge manifest @2.
+                height(2),    // Restart the state manager @2.
+            );
+        // For an incremental manifest computation, something must have been incremental.
+        assert_ne!(0, incremental_at_2_from_1);
+
+        // Create a checkpoint @3.
+        let state_manager =
+            insert_canister_and_write_checkpoint(state_manager, height(3), canister_test_id(3));
+
+        // Trigger an incremental manifest computation @3 with a delta 2 -> 3.
+        let (state_manager, incremental_at_3_from_2, hashed_at_3_from_2) =
+            purge_manifests_and_restart(
+                state_manager,
+                &[height(3)], // Purge manifest at height 3.
+                height(3),    // Restart the state manager at height 3.
+            );
+        // For an incremental manifest computation, something must have been incremental.
+        assert_ne!(0, incremental_at_3_from_2);
+
+        // Trigger incremental manifest computations @2 and @3 with deltas 1 -> 2 and 1 -> 3.
+        let (_, incremental_at_2_and_3_from_1, hashed_at_2_and_3_from_1) =
+            purge_manifests_and_restart(
+                state_manager,
+                &[height(2), height(3)], // Purge manifest at height 2 and 3.
+                height(3),               // Restart the state manager at height 3.
+            );
+        // For an incremental manifest computation, something must have been incremental;
+        // since the both manifest computations are expected to be incremental, it
+        // must be larger than the one in step 1.
+        assert!(incremental_at_2_and_3_from_1 > incremental_at_2_from_1);
+
+        let hashed_at_3_from_1 = hashed_at_2_and_3_from_1 - hashed_at_2_from_1;
+        assert!(hashed_at_3_from_1 > hashed_at_3_from_2);
+    });
+}
+
 #[test]
 fn validate_replicated_state_is_called() {
     fn validate_was_called(metrics: &MetricsRegistry) -> bool {
@@ -1231,7 +1348,7 @@ fn validate_replicated_state_is_called() {
             "state_manager_tip_handler_request_duration_seconds",
         );
         for (label, _stats) in request_duration.iter() {
-            if label.get("request") == Some(&"validate_replicated_state".to_string()) {
+            if label.get("request") == Some(&"validate_replicated_state_and_finalize".to_string()) {
                 return true;
             }
         }
@@ -2672,7 +2789,7 @@ fn can_state_sync_from_cache() {
         canister_state.system_state.add_canister_change(
             Time::from_nanos_since_unix_epoch(42),
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
-            CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()]),
+            CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()], None),
         );
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
@@ -3400,6 +3517,46 @@ fn can_state_sync_based_on_old_checkpoint() {
 }
 
 #[test]
+fn state_sync_doesnt_load_already_existing_cp() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.get(),
+        };
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync message");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            dst_state_manager.take_tip();
+
+            let chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+            let state_layout = dst_state_manager.state_layout();
+            let cp1_path = state_layout
+                .raw_path()
+                .join("checkpoints")
+                .join("0000000000000001");
+            assert!(state_layout.checkpoint_in_verification(height(1)).is_err());
+            std::fs::create_dir(&cp1_path).unwrap();
+            assert!(state_layout.checkpoint_in_verification(height(1)).is_ok());
+            std::fs::create_dir(cp1_path.join("garbage")).unwrap(); // rust successfully renames a directory into another if destination is empty
+
+            pipe_state_sync(msg, chunkable);
+
+            assert_no_remaining_chunks(dst_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    });
+}
+
+#[test]
 fn can_recover_from_corruption_on_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
 
@@ -3596,6 +3753,86 @@ fn can_recover_from_corruption_on_state_sync() {
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
         })
+    });
+}
+
+#[test]
+fn can_detect_divergence_with_rehash() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+
+    state_manager_test(|metrics, state_manager| {
+        use std::os::unix::fs::FileExt;
+        let (_height, mut state) = state_manager.take_tip();
+
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        for i in 0..10000 {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+        }
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // Corrupt some data
+        let state_layout = state_manager.state_layout();
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout
+                .checkpoint_verified(height(1))
+                .unwrap()
+                .raw_path()
+                .to_path_buf(),
+            height(1),
+        )
+        .unwrap();
+
+        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+        let canister_memory = canister_layout
+            .vmemory_0()
+            .existing_overlays()
+            .unwrap()
+            .remove(0);
+        make_mutable(&canister_memory).unwrap();
+        for i in 0..10000 {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create(false)
+                .truncate(false)
+                .open(&canister_memory)
+                .unwrap()
+                .write_all_at(b"Garbage", i * 4096)
+                .unwrap();
+        }
+        make_readonly(&canister_memory).unwrap();
+
+        let count_critical_errors = || {
+            fetch_int_counter_vec(metrics, "critical_errors")
+                .values()
+                .sum::<u64>()
+        };
+
+        assert_eq!(0, count_critical_errors());
+        // After the first manifest, we expect to detect a divergence and raise critical errors counter.
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert_ne!(0, count_critical_errors());
+
+        // For the second manifest we expect a full recomputation of the manifest, no new critical errors.
+        let (_height, state) = state_manager.take_tip();
+        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+        let reused_bytes =
+            fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes")[&reused_key];
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert_eq!(
+            reused_bytes,
+            fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes")[&reused_key]
+        );
     });
 }
 
@@ -4088,7 +4325,7 @@ fn can_short_circuit_state_sync() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest};
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest, RehashManifest};
     use ic_state_manager::ManifestMetrics;
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
@@ -4098,21 +4335,24 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
-        const NEW_WASM_PAGE: u64 = 300;
-        const WASM_PAGES: u64 = 2;
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
-        const NEW_STABLE_PAGE: u64 = 500;
-        const STABLE_PAGES: u64 = 2;
-        execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
+        const WASM_PAGES: u64 = 300;
+        for i in 0..WASM_PAGES {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[i as u8; PAGE_SIZE])]);
+        }
+        const STABLE_PAGES: u64 = 500;
+        for i in 0..STABLE_PAGES {
+            execution_state
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[i as u8; PAGE_SIZE])]);
+        }
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
+        state_manager.flush_tip_channel();
 
         let mut reused_label = Labels::new();
         reused_label.insert("type".to_string(), "reused".to_string());
@@ -4127,14 +4367,16 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
+        state_manager.flush_tip_channel();
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
         let expected_size_estimate =
             PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
         let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
-        assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
-        assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
+        // We compute manifest then rehash, so twice the size
+        assert!(((expected_size_estimate as f64 * 2.2) as u64) > size);
+        assert!(((expected_size_estimate as f64 * 2.0) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()
@@ -4151,6 +4393,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             &checkpoint,
             DEFAULT_CHUNK_SIZE,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 
@@ -6697,6 +6940,98 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
+/// Simplified version of canister migration that only does the parts relevant to the state manager.
+fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: CanisterId) {
+    // Take canister out.
+    let mut canister = state.take_canister_state(&old_id).unwrap();
+
+    canister.system_state.canister_id = new_id;
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .rename_canister(old_id, new_id);
+
+    // Put canister with the new id
+    state.put_canister_state(canister);
+}
+
+#[test]
+fn can_rename_canister() {
+    fn can_rename_canister_impl(certification_scope: CertificationScope) {
+        state_manager_test(|_metrics, state_manager| {
+            let canister_id = canister_test_id(100);
+            let new_canister_id = canister_test_id(101);
+
+            // Install a canister and give it some initial state
+            let (_height, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_id);
+            let canister_state = state.canister_state_mut(&canister_id).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            execution_state
+                .stable_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            canister_state
+                .system_state
+                .wasm_chunk_store
+                .page_map_mut()
+                .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
+            state_manager.commit_and_certify(state, height(1), certification_scope.clone(), None);
+
+            let (_height, mut state) = state_manager.take_tip();
+            migrate_canister(&mut state, canister_id, new_canister_id);
+
+            // Take a snapshot to make sure we can do both in the same round.
+            let new_snapshot = CanisterSnapshot::from_canister(
+                state.canister_state(&new_canister_id).unwrap(),
+                state.time(),
+            )
+            .unwrap();
+            let snapshot_id = SnapshotId::from((new_canister_id, 0));
+            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+
+            // Trigger a flush either at the checkpoint or by committing exactly
+            // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+            if certification_scope == CertificationScope::Full {
+                state_manager.commit_and_certify(
+                    state,
+                    height(2),
+                    certification_scope.clone(),
+                    None,
+                );
+            } else {
+                state_manager.commit_and_certify(
+                    state,
+                    height(2),
+                    certification_scope.clone(),
+                    Some(BatchSummary {
+                        next_checkpoint_height: height(
+                            2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+                        ),
+                        current_interval_length: height(500),
+                    }),
+                );
+            }
+            state_manager.flush_tip_channel();
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height(0),
+            )
+            .unwrap();
+            assert_eq!(tip.canister_ids().unwrap(), vec![new_canister_id]);
+            assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
+            let (_height, state) = state_manager.take_tip();
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+        });
+    }
+    can_rename_canister_impl(CertificationScope::Metadata);
+    can_rename_canister_impl(CertificationScope::Full);
+}
+
 #[test_strategy::proptest]
 fn stream_store_encode_decode(
     #[strategy(arb_stream(
@@ -6718,9 +7053,9 @@ fn stream_store_encode_decode(
         /* certification verification should succeed  */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // we do not modify the slice before decoding it again - so this should succeed
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6747,12 +7082,12 @@ fn stream_store_decode_with_modified_hash_fails(
         /* certification verification should succeed  */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, mut slice| {
+        |_state_manager, mut slice| {
             let mut hash = slice.certification.signed.content.hash.get();
             *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
             slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
 
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6779,10 +7114,9 @@ fn stream_store_decode_with_empty_witness_fails(
         /* certification verification should succeed */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, mut slice| {
+        |_state_manager, mut slice| {
             slice.merkle_proof = vec![];
-
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6974,10 +7308,10 @@ fn stream_store_decode_with_invalid_destination(
         /* certification verification should succeed */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice before decoding it again - the wrong
             // destination subnet should already make it fail
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7004,10 +7338,10 @@ fn stream_store_decode_with_rejecting_verifier(
         /* certification verification should fail */
         false,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice before decoding it again - the signature validation
             // failure caused by passing the `RejectingVerifier` should already make it fail.
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7036,10 +7370,10 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         /* certification verification should fail  */
         false,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice, the wrong destination subnet and rejecting verifier
             // should make it fail regardless.
-            (state_manager, slice)
+            slice
         },
     );
 }
