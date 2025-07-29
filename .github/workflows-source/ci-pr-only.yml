@@ -37,7 +37,7 @@ anchors:
     name: Checkout
     uses: actions/checkout@v4
   skip-merge-group: &skip-merge-group
-    if: ${{ github.event_name != 'merge_group' || github.event.pull_request.head.repo.full_name != github.repository }}
+    if: ${{ github.event_name != 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository }}
 
 jobs:
   insta-tests:
