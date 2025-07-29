@@ -1,5 +1,5 @@
 use crate::rewards_calculator_results::{
-    DailyResults, DayUTC, NodeMetricsDaily, NodeProviderResults, NodeResults, NodeStatus,
+    DailyResults, DayUTC, NodeMetricsDaily, NodeProviderResults, NodeResults, NodeStatus, Percent,
     RewardCalculatorError, RewardsCalculatorResults, XDRPermyriad,
 };
 use crate::types::{
@@ -74,7 +74,7 @@ pub fn calculate_rewards(
         // Step 3: Compute performance multiplier for each node for each provider
         let relative_nodes_fr = provider_nodes_metrics_daily
             .iter()
-            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr))
+            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr.0))
             .collect::<BTreeMap<_, _>>();
         let Step3Results {
             reward_reduction,
@@ -121,7 +121,7 @@ const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.75;
 
 #[derive(Default)]
 struct Step0Results {
-    subnets_fr: BTreeMap<(DayUTC, SubnetId), Decimal>,
+    subnets_fr: BTreeMap<(DayUTC, SubnetId), Percent>,
     nodes_metrics_daily: BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
 }
 fn step_0_subnets_nodes_fr(
@@ -158,7 +158,9 @@ fn step_0_subnets_nodes_fr(
 
         let subnet_fr =
             calculate_daily_subnet_fr(&nodes_original_fr.values().cloned().collect::<Vec<_>>());
-        result.subnets_fr.insert((day, subnet_id), subnet_fr);
+        result
+            .subnets_fr
+            .insert((day, subnet_id), Percent(subnet_fr));
 
         for NodeMetricsDailyRaw {
             node_id,
@@ -173,11 +175,11 @@ fn step_0_subnets_nodes_fr(
                 (day, node_id),
                 NodeMetricsDaily {
                     subnet_assigned: subnet_id,
-                    subnet_assigned_fr: subnet_fr,
+                    subnet_assigned_fr: Percent(subnet_fr),
                     num_blocks_proposed,
                     num_blocks_failed,
-                    original_fr,
-                    relative_fr,
+                    original_fr: Percent(original_fr),
+                    relative_fr: Percent(relative_fr),
                 },
             );
         }
@@ -230,7 +232,7 @@ fn step_2_extrapolated_fr(
         grouped_fr
             .entry(*day)
             .or_default()
-            .push(metrics.relative_fr);
+            .push(metrics.relative_fr.0);
     }
 
     // Include all rewardable days even if there was no data
@@ -336,7 +338,7 @@ fn step_4_compute_base_rewards_type_region(
         rewards_table: &NodeRewardsTable,
         region: &Region,
         node_reward_type: &NodeRewardType,
-    ) -> (XDRPermyriad, RewardsCoefficientPercent) {
+    ) -> (Decimal, RewardsCoefficientPercent) {
         rewards_table
             .get_rate(region, &node_reward_type.to_string())
             .map(|rate| {
@@ -401,10 +403,7 @@ fn step_4_compute_base_rewards_type_region(
                 base_rewards_type3
                     .entry(key)
                     .and_modify(
-                        |(rates, coeffs): &mut (
-                            Vec<XDRPermyriad>,
-                            Vec<RewardsCoefficientPercent>,
-                        )| {
+                        |(rates, coeffs): &mut (Vec<Decimal>, Vec<RewardsCoefficientPercent>)| {
                             rates.push(base_rewards_daily);
                             coeffs.push(coefficient);
                         },
@@ -452,7 +451,7 @@ fn step_4_compute_base_rewards_type_region(
                     .expect("base rewards expected for each node")
             };
 
-            base_rewards_per_node.insert((*day, node.node_id), *base_rewards_for_day);
+            base_rewards_per_node.insert((*day, node.node_id), XDRPermyriad(*base_rewards_for_day));
         }
     }
 
@@ -493,16 +492,17 @@ fn step_5_adjust_node_rewards(
         for day in &node.rewardable_days {
             let provider_nodes_count = nodes_count.get(&day).expect("Daily nodes count expected");
 
-            let base_rewards_for_day = *base_rewards
+            let base_rewards_for_day = base_rewards
                 .get(&(*day, node.node_id))
-                .expect("Base rewards expected for each node");
+                .expect("Base rewards expected for each node")
+                .0;
 
             if provider_nodes_count <= &FULL_REWARDS_MACHINES_LIMIT {
                 // Node Providers with up to FULL_REWARDS_MACHINES_LIMIT nodes are rewarded fully,
                 // independently of their performance.
                 result
                     .adjusted_rewards
-                    .insert((*day, node.node_id), base_rewards_for_day);
+                    .insert((*day, node.node_id), XDRPermyriad(base_rewards_for_day));
             } else {
                 let performance_multiplier = performance_multiplier
                     .get(&(*day, node.node_id))
@@ -511,7 +511,7 @@ fn step_5_adjust_node_rewards(
                 let adjusted_rewards_for_day = base_rewards_for_day * performance_multiplier;
                 result
                     .adjusted_rewards
-                    .insert((*day, node.node_id), adjusted_rewards_for_day);
+                    .insert((*day, node.node_id), XDRPermyriad(adjusted_rewards_for_day));
             }
         }
     }
@@ -533,7 +533,7 @@ fn step_6_construct_provider_results(
     computation_log: String,
 ) -> NodeProviderResults {
     let mut node_results = BTreeMap::new();
-    let mut rewards_total = XDRPermyriad::ZERO;
+    let mut rewards_total = Decimal::ZERO;
 
     for node in rewardable_nodes {
         let node_reward_type = node.node_reward_type;
@@ -552,7 +552,7 @@ fn step_6_construct_provider_results(
                     .expect("Extrapolated FR expected for every provider");
 
                 NodeStatus::Unassigned {
-                    extrapolated_fr: *extrapolated_fr,
+                    extrapolated_fr: Percent(*extrapolated_fr),
                 }
             };
 
@@ -572,14 +572,14 @@ fn step_6_construct_provider_results(
                 .remove(&(day, node.node_id))
                 .expect("Adjusted rewards should be present in rewards");
 
-            rewards_total += adjusted_rewards;
+            rewards_total += adjusted_rewards.0;
 
             daily_results.insert(
                 day,
                 DailyResults {
                     node_status,
-                    performance_multiplier,
-                    rewards_reduction,
+                    performance_multiplier: Percent(performance_multiplier),
+                    rewards_reduction: Percent(rewards_reduction),
                     base_rewards,
                     adjusted_rewards,
                 },
@@ -598,7 +598,7 @@ fn step_6_construct_provider_results(
     }
 
     NodeProviderResults {
-        rewards_total,
+        rewards_total: XDRPermyriad(rewards_total),
         computation_log,
         results_by_node: node_results,
     }

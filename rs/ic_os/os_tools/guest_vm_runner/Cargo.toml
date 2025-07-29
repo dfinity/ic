@@ -18,9 +18,7 @@ anyhow = { workspace = true }
 askama = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
-devicemapper = "0.34"
 gpt = { workspace = true }
-loopdev-3 = "0.5"
 macaddr = { workspace = true }
 nix = { workspace = true }
 regex = { workspace = true }
@@ -31,6 +29,8 @@ tokio-util = { workspace = true }
 uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+loopdev-3 = "0.5"
+devicemapper = "0.34"
 systemd = { workspace = true }
 sys-mount = { workspace = true }
 virt = { workspace = true }

@@ -15,7 +15,7 @@ ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
-rust_decimal = "1.37.1"
+rust_decimal = { version = "1.37.2", features = ["serde-with-float"] }
 rust_decimal_macros = "1.37.1"
 chrono = "0.4.41"
 candid = { workspace = true }

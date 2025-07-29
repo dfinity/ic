@@ -1,28 +1,90 @@
 use crate::types::{RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
+use candid::types::{Serializer, Type};
+use candid::CandidType;
 use chrono::DateTime;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
+use serde::ser::Error;
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
+use std::rc::Rc;
 
-pub type XDRPermyriad = Decimal;
-pub type Percent = Decimal;
+#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, candid::Deserialize)]
+pub struct XDRPermyriad(#[serde(with = "rust_decimal::serde::float")] pub Decimal);
 
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Eq,
-    Copy,
-    candid::CandidType,
-    candid::Deserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, candid::Deserialize)]
+pub struct Percent(#[serde(with = "rust_decimal::serde::float")] pub Decimal);
+
+impl Display for XDRPermyriad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_string())
+    }
+}
+
+impl Display for Percent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_string())
+    }
+}
+
+fn decimal_to_f64<S>(serializer: S, value: Decimal) -> Result<(), S::Error>
+where
+    S: Serializer,
+{
+    let decimal_to_f64 = value
+        .round_dp(4)
+        .to_f64()
+        .ok_or(S::Error::custom("Decimal serialization failed"))?;
+    serializer.serialize_float64(decimal_to_f64)
+}
+
+impl CandidType for XDRPermyriad {
+    fn _ty() -> Type {
+        Type(Rc::new(candid::types::TypeInner::Float64))
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: Serializer,
+    {
+        decimal_to_f64(serializer, self.0)
+    }
+}
+
+impl CandidType for Percent {
+    fn _ty() -> Type {
+        Type(Rc::new(candid::types::TypeInner::Float64))
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: Serializer,
+    {
+        decimal_to_f64(serializer, self.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, candid::Deserialize)]
 pub struct DayUTC(UnixTsNanos);
+
+impl CandidType for DayUTC {
+    fn _ty() -> Type {
+        Type(Rc::new(candid::types::TypeInner::Text))
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: Serializer,
+    {
+        let dd_mm_yyyy = DateTime::from_timestamp_nanos(self.unix_ts_at_day_end() as i64)
+            .naive_utc()
+            .format("%d-%m-%Y")
+            .to_string();
+        serializer.serialize_text(dd_mm_yyyy.as_str())
+    }
+}
 
 impl From<UnixTsNanos> for DayUTC {
     fn from(value: UnixTsNanos) -> Self {
@@ -157,7 +219,7 @@ impl From<RewardPeriodError> for RewardCalculatorError {
     }
 }
 
-impl Error for RewardCalculatorError {}
+impl std::error::Error for RewardCalculatorError {}
 
 impl fmt::Display for RewardCalculatorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

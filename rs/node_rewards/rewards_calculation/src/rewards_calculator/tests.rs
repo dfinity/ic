@@ -135,12 +135,12 @@ fn test_compute_subnets_nodes_fr() {
     let original_nodes_fr: BTreeMap<_, _> = result
         .nodes_metrics_daily
         .iter()
-        .map(|(k, v)| (*k, v.original_fr))
+        .map(|(k, v)| (*k, v.original_fr.0))
         .collect();
     let relative_nodes_fr: BTreeMap<_, _> = result
         .nodes_metrics_daily
         .iter()
-        .map(|(k, v)| (*k, v.relative_fr))
+        .map(|(k, v)| (*k, v.relative_fr.0))
         .collect();
 
     // --- Assertions for Day 1, Subnet 1 ---
@@ -149,7 +149,7 @@ fn test_compute_subnets_nodes_fr() {
     let expected_subnet1_day1_fr = dec!(0.25);
     assert_eq!(
         subnets_fr.get(&(day1, subnet1)),
-        Some(&expected_subnet1_day1_fr)
+        Some(&Percent(expected_subnet1_day1_fr))
     );
     assert_eq!(original_nodes_fr.get(&(day1, s1_node1)), Some(&dec!(0.25)));
     // Relative FR = max(0, original - subnet_fr)
@@ -163,7 +163,7 @@ fn test_compute_subnets_nodes_fr() {
     let expected_subnet2_day1_fr = dec!(0.40);
     assert_eq!(
         subnets_fr.get(&(day1, subnet2)),
-        Some(&expected_subnet2_day1_fr)
+        Some(&Percent(expected_subnet2_day1_fr))
     );
     assert_eq!(original_nodes_fr.get(&(day1, s2_node1)), Some(&dec!(0.20)));
     assert_eq!(relative_nodes_fr.get(&(day1, s2_node1)), Some(&dec!(0.0))); // 0.20 - 0.40 < 0
@@ -175,7 +175,7 @@ fn test_compute_subnets_nodes_fr() {
     let expected_subnet1_day2_fr = dec!(0.01);
     assert_eq!(
         subnets_fr.get(&(day2, subnet1)),
-        Some(&expected_subnet1_day2_fr)
+        Some(&Percent(expected_subnet1_day2_fr))
     );
     assert_eq!(original_nodes_fr.get(&(day2, s1_node1)), Some(&dec!(0.01)));
     assert_eq!(relative_nodes_fr.get(&(day2, s1_node1)), Some(&dec!(0.0))); // 0.01 - 0.01 = 0
@@ -189,11 +189,11 @@ impl Default for NodeMetricsDaily {
     fn default() -> Self {
         Self {
             subnet_assigned: test_subnet_id(0),
-            subnet_assigned_fr: dec!(0.0),
+            subnet_assigned_fr: Percent(dec!(0.0)),
             num_blocks_proposed: 0,
             num_blocks_failed: 0,
-            original_fr: dec!(0.0),
-            relative_fr: dec!(0.0),
+            original_fr: Percent(dec!(0.0)),
+            relative_fr: Percent(dec!(0.0)),
         }
     }
 }
@@ -215,8 +215,8 @@ fn test_compute_providers_extrapolated_fr() {
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
     let p2_metrics = btreemap! {
-        (day, p2_node1) => NodeMetricsDaily { relative_fr: dec!(0.2), ..Default::default() },
-        (day, p2_node2) => NodeMetricsDaily { relative_fr: dec!(0.4), ..Default::default() },
+        (day, p2_node1) => NodeMetricsDaily { relative_fr: Percent(dec!(0.2)), ..Default::default() },
+        (day, p2_node2) => NodeMetricsDaily { relative_fr: Percent(dec!(0.4)), ..Default::default() },
     };
     let result_p2 = step_2_extrapolated_fr(&p2_nodes, &p2_metrics);
     // Extrapolated FR for P2 should be the average of its nodes' relative FR
@@ -382,9 +382,18 @@ Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards
     assert_eq!(base_rewards_log, expected_log);
 
     // --- Assertions ---
-    assert_eq!(base_rewards.get(&(day, type1_node)), Some(&dec!(10000)));
-    assert_eq!(base_rewards.get(&(day, type3_node_ca)), Some(&dec!(31500)));
-    assert_eq!(base_rewards.get(&(day, type3_node_nv)), Some(&dec!(31500)));
+    assert_eq!(
+        base_rewards.get(&(day, type1_node)),
+        Some(&XDRPermyriad(dec!(10000)))
+    );
+    assert_eq!(
+        base_rewards.get(&(day, type3_node_ca)),
+        Some(&XDRPermyriad(dec!(31500)))
+    );
+    assert_eq!(
+        base_rewards.get(&(day, type3_node_nv)),
+        Some(&XDRPermyriad(dec!(31500)))
+    );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -413,7 +422,7 @@ fn test_adjust_nodes_rewards() {
     let mut performance_multiplier = HashMap::new();
     for node in &rewardable_nodes {
         for day in &node.rewardable_days {
-            base_rewards.insert((*day, node.node_id), dec!(1000));
+            base_rewards.insert((*day, node.node_id), XDRPermyriad(dec!(1000)));
             performance_multiplier.insert((*day, node.node_id), dec!(0.5));
         }
     }
@@ -426,10 +435,13 @@ fn test_adjust_nodes_rewards() {
     // Case 1: More than 4 nodes (5 on day1), penalty applies
     assert_eq!(
         adjusted_rewards.get(&(day1, node1)),
-        Some(&(dec!(1000) * dec!(0.5)))
+        Some(&XDRPermyriad(dec!(1000) * dec!(0.5)))
     );
     // Case 2: 4 or fewer nodes (4 on day2), full rewards
-    assert_eq!(adjusted_rewards.get(&(day2, node1)), Some(&dec!(1000)));
+    assert_eq!(
+        adjusted_rewards.get(&(day2, node1)),
+        Some(&XDRPermyriad(dec!(1000)))
+    );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -451,11 +463,11 @@ impl NodeProviderResults {
             for (day, daily_results) in &node_results.daily_results {
                 let summary = summaries.entry(*day).or_insert(DailyProviderSummary {
                     underperforming_nodes: Vec::new(),
-                    total_rewards: dec!(0),
+                    total_rewards: XDRPermyriad(dec!(0)),
                 });
 
-                summary.total_rewards += daily_results.adjusted_rewards;
-                if daily_results.performance_multiplier < dec!(1) {
+                summary.total_rewards.0 += daily_results.adjusted_rewards.0;
+                if daily_results.performance_multiplier.0 < dec!(1) {
                     summary.underperforming_nodes.push(*node_id);
                 }
             }
@@ -767,11 +779,11 @@ Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient:
 
     assert_eq!(results.tabled(), expected);
 
-    let total_p1_rewards: XDRPermyriad = results.provider_results.get(&p1).unwrap().rewards_total;
+    let total_p1_rewards: Decimal = results.provider_results.get(&p1).unwrap().rewards_total.0;
     let expected_total_p1_rewards = dec!(87200) + dec!(50000);
     assert_eq!(total_p1_rewards, expected_total_p1_rewards);
 
-    let total_p2_rewards: XDRPermyriad = results.provider_results.get(&p2).unwrap().rewards_total;
+    let total_p2_rewards: Decimal = results.provider_results.get(&p2).unwrap().rewards_total.0;
     let expected_total_p2_rewards = dec!(10000);
     assert_eq!(total_p2_rewards, expected_total_p2_rewards);
 }
