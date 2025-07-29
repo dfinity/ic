@@ -596,7 +596,7 @@ pub struct DisburseMaturityMetadata {
     #[serde(default)]
     pub neuron_index: u64,
     #[serde(default)]
-    pub percentage_to_disburse: u32, // TODO: maybe we don't need it here?
+    pub percentage_to_disburse: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub recipient: Option<AccountIdentifier>,
