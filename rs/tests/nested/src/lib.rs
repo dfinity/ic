@@ -12,7 +12,7 @@ use ic_system_test_driver::{
         nested::NestedVms,
         test_env::TestEnv,
         test_env_api::*,
-        vector_vm::VectorVm,
+        vector_vm::HasVectorTargets,
     },
     retry_with_msg,
     util::block_on,
@@ -40,9 +40,6 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn config(env: TestEnv) {
-    let mut vector = VectorVm::new();
-    vector.start(&env).expect("Failed to start Vector VM");
-
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -62,11 +59,6 @@ pub fn config(env: TestEnv) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
-    // Initial sync to scrape the network.
-    vector
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
-
     setup_nested_vm(env.clone(), HOST_VM_NAME);
 
     let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
@@ -82,7 +74,7 @@ pub fn config(env: TestEnv) {
         ("node_exporter", network.guest_ip),
         ("host_node_exporter", network.host_ip),
     ] {
-        vector.add_custom_target(
+        env.add_custom_vector_target(
             format!("{HOST_VM_NAME}-{job}"),
             ip.into(),
             Some(
@@ -91,13 +83,9 @@ pub fn config(env: TestEnv) {
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
             ),
-        );
+        )
+        .unwrap();
     }
-
-    // Additional sync to generate new config for the nested vm.
-    vector
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 }
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
