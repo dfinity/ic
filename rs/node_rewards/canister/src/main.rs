@@ -5,6 +5,7 @@ use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
+use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -52,10 +53,32 @@ const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 fn schedule_timers() {
     ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
         spawn(async move {
-            NodeRewardsCanister::schedule_registry_sync(&CANISTER)
-                .await
-                .expect("Failed to schedule registry sync");
-            NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
+            let mut instruction_counter = telemetry::InstructionCounter::default();
+            instruction_counter.lap();
+            let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(&CANISTER).await;
+            let registry_sync_instructions = instruction_counter.lap();
+
+            let mut metrics_sync_instructions: u64 = 0;
+            match registry_sync_result {
+                Ok(_) => {
+                    instruction_counter.lap();
+                    NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
+                    metrics_sync_instructions = instruction_counter.lap();
+                    ic_cdk::println!("Successfully synced subnets metrics and local registry");
+                }
+                Err(e) => {
+                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
+                }
+            }
+
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+                m.record_last_sync_instructions(
+                    instruction_counter.sum(),
+                    registry_sync_instructions,
+                    metrics_sync_instructions,
+                )
+            });
         });
     });
 }

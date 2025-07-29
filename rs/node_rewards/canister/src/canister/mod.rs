@@ -66,10 +66,10 @@ impl NodeRewardsCanister {
 
     pub async fn schedule_registry_sync(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-    ) -> Result<(), String> {
+    ) -> Result<RegistryVersion, String> {
         let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
-        registry_client.sync_registry_stored().await?;
-        Ok(())
+
+        registry_client.sync_registry_stored().await
     }
 
     pub async fn schedule_metrics_sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
