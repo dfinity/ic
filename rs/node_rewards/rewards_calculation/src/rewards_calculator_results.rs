@@ -10,7 +10,18 @@ use std::fmt::Display;
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
 
-#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Eq,
+    Copy,
+    candid::CandidType,
+    candid::Deserialize,
+)]
 pub struct DayUTC(UnixTsNanos);
 
 impl From<UnixTsNanos> for DayUTC {
@@ -76,7 +87,7 @@ impl DayUTC {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: SubnetId,
     pub subnet_assigned_fr: Percent,
@@ -90,11 +101,13 @@ pub struct NodeMetricsDaily {
     pub relative_fr: Percent,
 }
 
+#[derive(candid::CandidType, candid::Deserialize)]
 pub enum NodeStatus {
     Assigned { node_metrics: NodeMetricsDaily },
     Unassigned { extrapolated_fr: Percent },
 }
 
+#[derive(candid::CandidType, candid::Deserialize)]
 pub struct DailyResults {
     pub node_status: NodeStatus,
     pub performance_multiplier: Percent,
@@ -103,6 +116,7 @@ pub struct DailyResults {
     pub adjusted_rewards: XDRPermyriad,
 }
 
+#[derive(candid::CandidType, candid::Deserialize)]
 pub struct NodeResults {
     pub node_reward_type: String,
     pub region: String,
@@ -110,6 +124,7 @@ pub struct NodeResults {
     pub daily_results: BTreeMap<DayUTC, DailyResults>,
 }
 
+#[derive(candid::CandidType, candid::Deserialize)]
 pub struct NodeProviderResults {
     pub rewards_total: XDRPermyriad,
     pub computation_log: String,
