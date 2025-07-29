@@ -17,7 +17,10 @@ itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 rust_decimal = { version = "1.37.2", features = ["serde-with-float"] }
 rust_decimal_macros = "1.37.1"
-chrono = { version = "0.4.41", default-features = false, features = [] }
+chrono = { version = "0.4.41", default-features = false, features = [
+    "alloc",
+    "serde",
+] }
 candid = { workspace = true }
 serde = { workspace = true }
 
