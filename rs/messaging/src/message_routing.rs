@@ -16,6 +16,7 @@ use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
@@ -33,7 +34,7 @@ use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary};
+use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
 use ic_types::crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
@@ -901,6 +902,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
+        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
+            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
+                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
+        );
 
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
@@ -946,6 +951,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 subnet_size,
                 node_ids: nodes,
                 registry_version,
+                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,

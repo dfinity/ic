@@ -12,6 +12,7 @@ use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -32,6 +33,7 @@ pub fn execute_non_replicated_query(
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
     state_changes_error: &IntCounter,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> (
     CanisterState,
     NumInstructions,
@@ -124,6 +126,7 @@ pub fn execute_non_replicated_query(
         state_changes_error,
         &CallTreeMetricsNoOp,
         time,
+        cost_schedule,
     );
     canister.system_state = output_system_state;
     if preserve_changes {
