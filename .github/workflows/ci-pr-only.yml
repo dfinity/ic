@@ -23,7 +23,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME
-    if: ${{ github.event_name != 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'merge_group' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME
-    if: ${{ github.event_name != 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'merge_group' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME
-    if: ${{ github.event_name != 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'merge_group' && github.event.pull_request.head.repo.full_name == github.repository }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
