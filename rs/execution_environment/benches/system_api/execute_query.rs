@@ -17,6 +17,7 @@ use ic_execution_environment::{
     NonReplicatedQueryKind, RoundLimits,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
@@ -125,6 +126,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
+                CanisterCyclesCostSchedule::Normal,
             )
             .2;
             let executed_instructions =

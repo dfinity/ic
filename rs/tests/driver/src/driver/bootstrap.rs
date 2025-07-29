@@ -182,7 +182,7 @@ pub fn init_ic(
 
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url) = (
-        get_guestos_initial_update_img_sha256(test_env)?,
+        get_guestos_initial_update_img_sha256()?,
         get_guestos_initial_update_img_url()?,
     );
     let mut ic_config = IcConfig::new(

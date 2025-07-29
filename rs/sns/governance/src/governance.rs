@@ -2,7 +2,10 @@ use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
 use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{valuation, Metrics, RegisterExtension, TreasuryMetrics, VotingPowerMetrics};
+use crate::pb::v1::{
+    valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
+    VotingPowerMetrics,
+};
 use crate::proposal::TreasuryAccount;
 use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
@@ -2146,6 +2149,10 @@ impl Governance {
                 self.perform_execute_generic_nervous_system_function(call)
                     .await
             }
+            Action::ExecuteExtensionOperation(execute_extension_operation) => {
+                self.perform_execute_extension_operation(execute_extension_operation)
+                    .await
+            }
             Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 self.perform_add_generic_nervous_system_function(nervous_system_function)
             }
@@ -2592,6 +2599,16 @@ impl Governance {
                 .await
             }
         }
+    }
+
+    async fn perform_execute_extension_operation(
+        &self,
+        _execute_extension_operation: ExecuteExtensionOperation,
+    ) -> Result<(), GovernanceError> {
+        Err(GovernanceError::new_with_message(
+            ErrorType::InvalidCommand,
+            "ExecuteExtensionOperation is not supported yet.",
+        ))
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
@@ -3498,6 +3515,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
+        // TODO: return the optional extension spec
         let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
         let nervous_system_parameters = self.nervous_system_parameters_or_panic();
