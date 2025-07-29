@@ -4,6 +4,7 @@ GitHub CI for the IC Repo
 
 ### CI Main
 
+Workflow *'CI Main'* is the core of CI and is also the only workflow relevant for external PRs.
 
 | Job Name                  | Runner / Image                   | Secrets Required                      | When Invoked                                                                                               | Purpose                                                                                      | External PR |
 |---------------------------|----------------------------------|---------------------------------------|------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|-------------|
@@ -21,14 +22,7 @@ GitHub CI for the IC Repo
 | bazel-test-macos-apple-silicon| namespace-profile-darwin, dfinity/ic-build | None                                                           | PR, merge_group, push (master, dev-gh-*)                   | Test targets with tag test_macos,test_macos_slow                        | Yes         |
 | dependencies-check          | dind-small, dfinity/ic-build | GITHUB_TOKEN, JIRA_API_TOKEN, SLACK_PSEC_BOT_OAUTH_TOKEN       | On internal pull_request (not merge_group) and repository_dispatch              | Dependency scanning (Rust, Bazel, lock/toml changes)          | Yes / `/run-ci-main`       |
 
-### CI PR Only
-
-| Job Name                    | Runner / Image        | Secrets Required                                               | When Invoked                                                          | Purpose                                                      | External PR |
-|-----------------------------|----------------------|----------------------------------------------------------------|-----------------------------------------------------------------------|--------------------------------------------------------------|-------------|
-| bazel-build-fuzzers-archives| dind-large, dfinity/ic-build | None                                                           | PR (opened, synchronize, reopened); not merge_group                   | Build and archive all fuzzers for PRs                        | Yes         |
-| lock-generate               | dind-small, dfinity/ic-build | PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY (for GitHub App Token)    | PR (opened, synchronize, reopened); not merge_group                   | Generate lock files and related dependencies for PRs          | No, needs to be run manually.         |
-| generate-config-fixtures    | dind-small, dfinity/ic-build | PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY (for GitHub App Token)    | PR (opened, synchronize, reopened); not merge_group                   | Generate config fixture files for config_types changes        | No, needs to be run manually.         |
-| bazel-test-coverage         | dind-large, dfinity/ic-build | None                                                           | PR with label `CI_COVERAGE`                                           | Run Bazel test coverage and upload HTML report                | Yes         |
+TODO: document other workflows.
 
 ## Using custom CI labels
 Note that setting custom CI logic via the pull request title has been deprecated and we now use labels instead. See labels below for custom logic that can be enabled:
