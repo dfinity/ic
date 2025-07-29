@@ -31,6 +31,7 @@ runs:
       env:
         # Used by the bazel wrapper
         BUILDBUDDY_LINKS: '[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+        FORK_PR: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
       run: |
         set -euo pipefail
 

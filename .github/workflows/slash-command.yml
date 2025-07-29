@@ -1,0 +1,32 @@
+name: Slash Command Listener
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  slash-command-dispatch:
+    name: Slash Command Dispatch
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
+        # users with 'admin' role can invoke `/run-ci-main` command
+      - name: Command Dispatch Admin
+        uses: peter-evans/slash-command-dispatch@13bc09769d122a64f75aa5037256f6f2d78be8c4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          permission: admin
+          issue-type: pull-request
+          commands: |
+            run-ci-main
+          static-args: |
+            pr_number=${{ github.event.issue.number }}
+            comment_id=${{ github.event.comment.id }}
+            actor=${{ github.actor }}
