@@ -20520,6 +20520,7 @@ dependencies = [
  "maplit",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde",
  "tabled",
 ]
 

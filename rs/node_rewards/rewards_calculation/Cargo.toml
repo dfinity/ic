@@ -19,6 +19,7 @@ rust_decimal = "1.37.1"
 rust_decimal_macros = "1.37.1"
 chrono = "0.4.41"
 candid = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 maplit = "1.0"
