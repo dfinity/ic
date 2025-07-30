@@ -230,8 +230,8 @@ impl HostSevCertificateProviderImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::firmware::MockSevHostFirmware;
-    use crate::testing::{MOCK_AMD_KEY_SERVER_URL, MOCK_CACHE_FILENAME};
+    use crate::host::firmware::MockSevHostFirmware;
+    use crate::host::testing::{MOCK_AMD_KEY_SERVER_URL, MOCK_CACHE_FILENAME};
     use std::fs;
     use tempfile::TempDir;
     use testing::{mock_chip_id, mock_sev_host_firmware, mock_snp_platform_status};

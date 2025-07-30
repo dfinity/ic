@@ -7,13 +7,15 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
-ic_device = { path = "../../device" }
-itertools = { workspace = true }
-ic_sev = { path = "../../sev" }
-tempfile = { workspace = true }
-rand = { workspace = true }
-libcryptsetup-rs = { workspace = true }
 grub = { path = "../../grub" }
+libcryptsetup-rs = { workspace = true }
+linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
+ic_device = { path = "../../device" }
+ic_sev = { path = "../../sev" }
+itertools = { workspace = true }
+nix = { workspace = true }
+rand = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 parking_lot = { workspace = true }

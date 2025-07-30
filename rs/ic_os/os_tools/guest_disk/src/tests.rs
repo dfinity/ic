@@ -1,6 +1,6 @@
-use crate::crypt::{activate_crypt_device, check_passphrase, FormatOptions};
+use crate::crypt::{check_passphrase, format_crypt_device};
 use crate::partitions::PartitionSetup;
-use crate::{crypt_name, setup_disk_encryption_impl, Partition, STORE_CRYPT_NAME};
+use crate::{crypt_name, run, Args, Partition};
 use anyhow::Result;
 use config_types::{
     DeploymentEnvironment, GuestOSConfig, ICOSSettings, Ipv6Config, NetworkSettings,
@@ -103,19 +103,14 @@ impl<'a> TestFixture<'a> {
         }
     }
 
-    fn setup_disk_encryption(
-        &mut self,
-        partition: Partition,
-        allow_format_store: bool,
-    ) -> Result<()> {
-        setup_disk_encryption_impl(
-            partition,
+    fn run(&mut self, args: Args) -> Result<()> {
+        run(
+            args,
             &self.guestos_config,
             Some(&mut self.sev_key_deriver),
             &self.previous_key_path,
             &self.generated_key_path,
             &self.partition_setup,
-            allow_format_store,
         )
     }
 
@@ -168,10 +163,14 @@ fn test_generated_key_init_and_reopen() {
     for partition in [Partition::Store, Partition::Var] {
         let mut fixture = TestFixture::new(false);
         let device_path = get_device_path(partition);
-        // Test initialization
+
+        // Test format & open
         fixture
-            .setup_disk_encryption(partition, true)
-            .expect("Failed to setup disk encryption with generated key");
+            .run(Args::Format { partition })
+            .expect("Failed to format device encryption with generated key");
+        fixture
+            .run(Args::Open { partition })
+            .expect("Failed to open device encryption with generated key");
 
         assert!(device_path.exists());
         fs::write(device_path, "test_data")
@@ -180,7 +179,7 @@ fn test_generated_key_init_and_reopen() {
         // Test reopening
         fixture.detach_device(partition);
         fixture
-            .setup_disk_encryption(partition, false)
+            .run(Args::Open { partition })
             .expect("Failed to reopen partition with generated key");
 
         assert_device_has_content(device_path, b"test_data");
@@ -195,10 +194,13 @@ fn test_sev_key_init_and_reopen() {
 
         assert!(!device_path.exists());
 
-        // Test initialization
+        // Test format & open
         fixture
-            .setup_disk_encryption(partition, true)
-            .expect("Failed to setup disk encryption with SEV");
+            .run(Args::Format { partition })
+            .expect("Failed to format device encryption with generated key");
+        fixture
+            .run(Args::Open { partition })
+            .expect("Failed to open device encryption with generated key");
 
         assert!(device_path.exists());
         assert!(!fixture.generated_key_path.exists());
@@ -209,7 +211,7 @@ fn test_sev_key_init_and_reopen() {
         // Test reopening
         fixture.detach_device(partition);
         fixture
-            .setup_disk_encryption(partition, false)
+            .run(Args::Open { partition })
             .expect("Failed to reopen partition with SEV key");
 
         assert_device_has_content(device_path, b"test_data");
@@ -217,12 +219,15 @@ fn test_sev_key_init_and_reopen() {
 }
 
 #[test]
-fn test_fail_if_allow_format_store_is_false() {
+fn test_fail_to_open_if_device_is_not_formatted() {
     let mut fixture = TestFixture::new(false);
 
-    let result = fixture.setup_disk_encryption(Partition::Store, false);
+    fixture
+        .run(Args::Open {
+            partition: Partition::Store,
+        })
+        .expect_err("Expected setup_disk_encryption to fail due to unformatted device");
 
-    assert!(result.is_err());
     assert!(!Path::new("/dev/mapper/vda10-crypt").exists());
 }
 
@@ -234,14 +239,9 @@ fn test_store_sev_unlock_with_previous_key() {
         .expect("Failed to write previous key for testing");
 
     // Let's assume the store partition is already encrypted with a previous key
-    let mut device = activate_crypt_device(
+    let mut device = format_crypt_device(
         &fixture.partition_setup.store_partition_device,
-        STORE_CRYPT_NAME,
         b"previous key",
-        FormatOptions {
-            allow_if_uninit: true,
-            allow_if_cannot_activate: true,
-        },
     )
     .unwrap();
 
@@ -271,7 +271,9 @@ fn test_store_sev_unlock_with_previous_key() {
 
     // Reopen
     fixture
-        .setup_disk_encryption(Partition::Store, false)
+        .run(Args::Open {
+            partition: Partition::Store,
+        })
         .unwrap();
 
     assert_device_has_content(Path::new("/dev/mapper/vda10-crypt"), b"hello world");
@@ -306,96 +308,31 @@ fn test_store_sev_unlock_with_current_key_if_previous_key_does_not_work() {
         .expect("Failed to write previous key for testing");
 
     // The store partition is encrypted with the current SEV key but not with the previous key.
-    activate_crypt_device(
+    format_crypt_device(
         &fixture.partition_setup.store_partition_device,
-        STORE_CRYPT_NAME,
         &fixture
             .sev_key_deriver
             .derive_key(Key::StorePartitionEncryptionKey)
             .unwrap(),
-        FormatOptions {
-            allow_if_uninit: true,
-            allow_if_cannot_activate: true,
-        },
     )
     .unwrap();
 
-    fixture.detach_device(Partition::Store);
-
-    // Reopen
+    // Opening it should succeed
     fixture
-        .setup_disk_encryption(Partition::Store, false)
-        .expect("Failed to reopen store partition");
+        .run(Args::Open {
+            partition: Partition::Store,
+        })
+        .expect("Failed to open store partition");
 }
 
 #[test]
-fn test_generated_key_reopen_var_partition() {
-    let mut fixture = TestFixture::new(false);
-
-    fixture.setup_disk_encryption(Partition::Var, true).unwrap();
-    fs::write("/dev/mapper/var_crypt", "some data").unwrap();
-    fixture.detach_device(Partition::Var);
-
-    // Reopen
-    fixture
-        .setup_disk_encryption(Partition::Var, false)
-        .unwrap();
-
-    assert_device_has_content(Path::new("/dev/mapper/var_crypt"), b"some data");
-}
-
-#[test]
-fn test_reopen_store_partition() {
+fn test_fails_to_open_store_if_key_doesnt_work() {
     let mut fixture = TestFixture::new(false);
 
     fixture
-        .setup_disk_encryption(Partition::Store, true)
-        .unwrap();
-    fs::write("/dev/mapper/vda10-crypt", "some data").unwrap();
-    fixture.detach_device(Partition::Store);
-
-    // Reopen
-    fixture
-        .setup_disk_encryption(Partition::Store, false)
-        .unwrap();
-    assert_device_has_content(Path::new("/dev/mapper/vda10-crypt"), b"some data");
-}
-
-#[test]
-fn test_var_partition_reformatting_behavior() {
-    let mut fixture = TestFixture::new(false);
-
-    // Test that var partition can be formatted initially
-    fixture
-        .setup_disk_encryption(Partition::Var, false)
-        .unwrap();
-    assert!(fs::metadata(&fixture.generated_key_path).unwrap().len() > 0);
-
-    fs::write("/dev/mapper/var_crypt", "original data").unwrap();
-    fixture.detach_device(Partition::Var);
-
-    // Test that var partition gets reformatted when key doesn't work
-    fs::write(&fixture.generated_key_path, "wrong key").unwrap();
-
-    fixture
-        .setup_disk_encryption(Partition::Var, false)
-        .unwrap();
-
-    // Verify the partition was reformatted (original data should be gone)
-    let mut buf = vec![0; 13];
-    File::open("/dev/mapper/var_crypt")
-        .unwrap()
-        .read_exact(&mut buf)
-        .expect("Could not read from encrypted var partition");
-    assert_ne!(buf, b"original data");
-}
-
-#[test]
-fn test_wont_reformat_store_partition_if_key_doesnt_work() {
-    let mut fixture = TestFixture::new(false);
-
-    fixture
-        .setup_disk_encryption(Partition::Store, true)
+        .run(Args::Format {
+            partition: Partition::Var,
+        })
         .unwrap();
     fs::write("/dev/mapper/vda10-crypt", "some data").unwrap();
 
@@ -404,8 +341,9 @@ fn test_wont_reformat_store_partition_if_key_doesnt_work() {
     // Overwrite the key
     fs::write(&fixture.generated_key_path, "wrong key").unwrap();
 
-    // This should fail because store partition won't be reformatted
     fixture
-        .setup_disk_encryption(Partition::Store, true)
+        .run(Args::Open {
+            partition: Partition::Var,
+        })
         .expect_err("Expected setup_disk_encryption to fail due to wrong key");
 }

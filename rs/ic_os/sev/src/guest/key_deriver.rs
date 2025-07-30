@@ -1,46 +1,38 @@
 use crate::guest::firmware::SevGuestFirmware;
 use anyhow::Context;
 use anyhow::Result;
-// use base64::{engine::general_purpose::STANDARD, Engine as _};
-use sev::firmware::guest::{DerivedKey, Firmware, GuestFieldSelect};
+use hkdf::SimpleHkdf;
+use sev::firmware::guest::{DerivedKey, GuestFieldSelect};
+use sha2::Sha256;
 
+/// A key derivation provider that uses the SEV firmware to derive keys.
 pub struct SevKeyDeriver {
     sev_firmware: Box<dyn SevGuestFirmware>,
 }
 
 impl SevKeyDeriver {
     pub fn new() -> Result<Self> {
+        #[cfg(not(target_os = "linux"))]
+        {
+            anyhow::bail!("SEV key derivation is only supported on Linux");
+        }
+
+        #[cfg(target_os = "linux")]
         Ok(Self {
-            sev_firmware: Box::new(Firmware::open().context("Could not open SEV firmware")?),
+            sev_firmware: Box::new(
+                sev::firmware::guest::Firmware::open().context("Could not open SEV firmware")?,
+            ),
         })
     }
 
     pub fn new_for_test(sev_firmware: Box<dyn SevGuestFirmware>) -> Self {
         Self { sev_firmware }
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Key {
-    /// Encrypted var partition, private to the current GuestOS version.
-    VarPartitionEncryptionKey,
-    /// Encrypted store partition, shared between GuestOS releases.
-    StorePartitionEncryptionKey,
-}
-
-impl Key {
-    fn as_bytes(&self) -> &[u8] {
-        match self {
-            Key::VarPartitionEncryptionKey => b"ic-disk-encryption-key/var",
-            Key::StorePartitionEncryptionKey => b"ic-disk-encryption-key/store",
-        }
-    }
-}
-
-impl SevKeyDeriver {
-    pub fn derive_key(&mut self, key: Key) -> Result<Vec<u8>> {
+    /// Derives a key for the given `Key` variant using the SEV firmware.
+    /// The key is in base64 format (useful e.g., if the key must be entered manually).
+    pub fn derive_key(&mut self, key: Key) -> Result<String> {
         let mut field_select = GuestFieldSelect::default();
-        // TODO: review this
         field_select.set_measurement(true);
 
         let derived_key = self
@@ -48,44 +40,70 @@ impl SevKeyDeriver {
             .get_derived_key(Some(1), DerivedKey::new(false, field_select, 0, 0, 0))
             .context("Failed to get derived key from SEV firmware")?;
 
-        Ok("abcdef".to_string().into_bytes())
-        //
-        // let derived_key = [32; 32];
-        //
-        // let mut key = vec![];
-        // key.extend(derived_key);
-        // let domain = format!("ic-disk-encryption-key/{}", partition.name()).into_bytes();
-        // key.push(domain.len().try_into().expect("Domain too long"));
-        // key.extend(domain);
-        //
-        // let digest = ring::digest::digest(&ring::digest::SHA256, &key);
-        // Ok(STANDARD.encode(digest.as_ref()))
+        let mut output = vec![0; 32];
+        // Should not be InvalidLength, since we hardcoded 32 bytes for the derived key length
+        SimpleHkdf::<Sha256>::new(/*salt=*/ None, &derived_key)
+            .expand_multi_info(key.as_info(), &mut output)
+            .unwrap();
+
+        Ok(base64::encode(&output))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum_macros::EnumIter)]
+pub enum Key {
+    /// Encrypted var partition
+    VarPartitionEncryptionKey,
+    /// Encrypted store partition
+    StorePartitionEncryptionKey,
+}
+
+impl Key {
+    fn as_info(&self) -> &[&[u8]] {
+        match self {
+            Key::VarPartitionEncryptionKey => &[b"ic-disk-encryption-key", b"var"],
+            Key::StorePartitionEncryptionKey => &[b"ic-disk-encryption-key", b"store"],
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use sev::firmware::guest::Firmware;
+    use crate::guest::firmware::MockSevGuestFirmware;
+    use std::collections::HashSet;
+    use strum::IntoEnumIterator;
 
     #[test]
-    fn test_get_disk_encryption_key() {
-        // Mock a Firmware instance, or use a suitable framework for mocking where possible
-        // let firmware = Firmware::default(); // Assuming default implementation exists for testing
-        // let mut key_provider = DiskEncryptionKeyProvider { sev_firmware: firmware };
-        let key_provider = SevKeyDeriver::new().unwrap();
+    fn test_derives_key() {
+        let mut mock_sev_guest_firmware = MockSevGuestFirmware::new();
+        mock_sev_guest_firmware
+            .expect_get_derived_key()
+            .returning(|_, _| Ok([42; 32]));
+        let mut key_provider = SevKeyDeriver::new_for_test(Box::new(mock_sev_guest_firmware));
 
-        let key_result = key_provider.derive_key(Partition::Store);
-
-        assert!(
-            key_result.is_ok(),
-            "Expected the key result to be Ok, got Err: {:?}",
-            key_result.err()
+        assert_eq!(
+            key_provider
+                .derive_key(Key::StorePartitionEncryptionKey)
+                .unwrap(),
+            // This value does not have any particular meaning, but it should not change
+            // unless the key derivation algorithm changes.
+            "bmZDYEiOUvevnLLaE+KyTcO2rKXIuAAc64OspcMTeYA="
         );
+    }
 
-        let key = key_result.unwrap();
-        println!("Derived key: {}", key);
-        assert!(!key.is_empty(), "Derived key should not be empty");
-        assert_eq!(key.len(), 44, "Derived key length mismatch"); // Adjust this condition if the result's length is different
+    #[test]
+    fn test_derives_unique_keys() {
+        let mut mock_sev_guest_firmware = MockSevGuestFirmware::new();
+        mock_sev_guest_firmware
+            .expect_get_derived_key()
+            .returning(|_, _| Ok([42; 32]));
+        let mut key_provider = SevKeyDeriver::new_for_test(Box::new(mock_sev_guest_firmware));
+
+        let all_keys = Key::iter()
+            .map(|key| key_provider.derive_key(key).expect("Failed to derive key"))
+            .collect::<HashSet<String>>();
+
+        assert_eq!(all_keys.len(), Key::iter().count(), "Keys should be unique");
     }
 }
