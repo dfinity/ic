@@ -10,7 +10,7 @@ use rewards_calculation::types::NodeMetricsDailyRaw;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
-mod mock {
+pub mod mock {
     use super::{CallResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
     use crate::metrics::ManagementCanisterClient;
     use async_trait::async_trait;
@@ -28,7 +28,7 @@ mod mock {
 }
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 const ONE_DAY_NANOS: u64 = 24 * 60 * 60 * 1_000_000_000;
-fn subnet_id(id: u64) -> ic_base_types::SubnetId {
+pub fn subnet_id(id: u64) -> ic_base_types::SubnetId {
     PrincipalId::new_subnet_test_id(id).into()
 }
 fn node_id(id: u64) -> ic_base_types::NodeId {
@@ -36,7 +36,7 @@ fn node_id(id: u64) -> ic_base_types::NodeId {
 }
 
 impl MetricsManager<VM> {
-    fn new(client: mock::MockCanisterClient) -> Self {
+    pub(crate) fn new(client: mock::MockCanisterClient) -> Self {
         Self {
             client: Box::new(client),
             subnets_metrics: RefCell::new(crate::storage::stable_btreemap_init(MemoryId::new(0))),

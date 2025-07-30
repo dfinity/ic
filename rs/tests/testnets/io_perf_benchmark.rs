@@ -53,7 +53,6 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
-use ic_system_test_driver::driver::vector_vm::VectorVm;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     group::SystemTestGroup,
@@ -195,8 +194,6 @@ pub fn setup(env: TestEnv, config: Config) {
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new().with_required_host_features(vec![HostFeature::Performance]);
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
@@ -286,7 +283,4 @@ pub fn setup(env: TestEnv, config: Config) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 }

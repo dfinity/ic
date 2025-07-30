@@ -331,6 +331,7 @@ mod tests {
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
+        batch::CanisterCyclesCostSchedule,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
@@ -494,6 +495,7 @@ mod tests {
                     Some(canister_test_id(1).get()),
                     Some(CallContextId::new(123)),
                     IS_WASM64_EXECUTION,
+                    CanisterCyclesCostSchedule::Normal,
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },
