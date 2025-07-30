@@ -107,14 +107,12 @@ jobs:
     name: Bazel Test All
     needs: [config]
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
-    runs-on:
-      labels: dind-large-ipv6
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
