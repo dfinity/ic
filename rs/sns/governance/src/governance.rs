@@ -9,7 +9,6 @@ use crate::pb::v1::{
     valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
     VotingPowerMetrics,
 };
-use sns_treasury_manager::Error as TreasuryManagerError;
 use crate::proposal::TreasuryAccount;
 use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
@@ -93,6 +92,7 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
+use sns_treasury_manager::Error as TreasuryManagerError;
 
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
@@ -2405,7 +2405,7 @@ impl Governance {
         let treasury_manager_canister_id = extension_canister_id;
 
         let (arg, sns_amount_e8s, icp_amount_e8s) =
-            self.construct_treasury_manager_init_payload(init)?;
+            self.construct_treasury_manager_init_payload(init).await?;
 
         self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;
@@ -2633,8 +2633,9 @@ impl Governance {
 
         let treasury_manager_canister_id = extension_canister_id;
 
-        let (arg, sns_amount_e8s, icp_amount_e8s) =
-            self.construct_treasury_manager_deposit_payload(operation_arg)?;
+        let (arg, sns_amount_e8s, icp_amount_e8s) = self
+            .construct_treasury_manager_deposit_payload(operation_arg)
+            .await?;
 
         self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;

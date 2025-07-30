@@ -386,8 +386,12 @@ async fn test_treasury_manager() {
         let expected_fees_sns_e8s = 4 * SNS_FEE;
         let expected_fees_icp_e8s = 4 * ICP_FEE;
 
-        let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s + topup_treasury_allocation_sns_e8s - expected_fees_sns_e8s;
-        let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s + topup_treasury_allocation_icp_e8s - expected_fees_icp_e8s;
+        let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
+            + topup_treasury_allocation_sns_e8s
+            - expected_fees_sns_e8s;
+        let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s
+            + topup_treasury_allocation_icp_e8s
+            - expected_fees_icp_e8s;
 
         assert_eq!(
             response.asset_to_balances,

@@ -97,18 +97,20 @@ impl Governance {
         (treasury_sns_subaccount, treasury_icp_subaccount)
     }
 
-    fn construct_treasury_manager_deposit_allowances(
+    async fn construct_treasury_manager_deposit_allowances(
         &self,
         value: Option<Precise>,
     ) -> Result<(Vec<Allowance>, u64, u64), GovernanceError> {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let (treasury_sns_subaccount, treasury_icp_subaccount) = self.treasury_subaccounts();
 
+        let sns_token_symbol = get_sns_token_symbol(&*self.env, self.ledger.canister_id()).await?;
+
         let (allowances, sns_amount_e8s, icp_amount_e8s) =
             treasury_manager::construct_deposit_allowances(
                 value,
                 Asset::Token {
-                    symbol: "SNS".to_string(),
+                    symbol: sns_token_symbol,
                     ledger_canister_id: self.ledger.canister_id().get().0,
                     ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
                 },
@@ -137,12 +139,13 @@ impl Governance {
     }
 
     /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
-    pub fn construct_treasury_manager_init_payload(
+    pub async fn construct_treasury_manager_init_payload(
         &self,
         init: ExtensionInit,
     ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
-        let (allowances, sns_amount_e8s, icp_amount_e8s) =
-            self.construct_treasury_manager_deposit_allowances(init.value)?;
+        let (allowances, sns_amount_e8s, icp_amount_e8s) = self
+            .construct_treasury_manager_deposit_allowances(init.value)
+            .await?;
 
         let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
         let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
@@ -156,12 +159,13 @@ impl Governance {
     }
 
     /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
-    pub fn construct_treasury_manager_deposit_payload(
+    pub async fn construct_treasury_manager_deposit_payload(
         &self,
         arg: ExtensionOperationArg,
     ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
-        let (allowances, sns_amount_e8s, icp_amount_e8s) =
-            self.construct_treasury_manager_deposit_allowances(arg.value)?;
+        let (allowances, sns_amount_e8s, icp_amount_e8s) = self
+            .construct_treasury_manager_deposit_allowances(arg.value)
+            .await?;
 
         let arg = DepositRequest { allowances };
         let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
@@ -534,4 +538,36 @@ pub(crate) async fn validate_execute_extension_operation(
     }
 
     Ok(())
+}
+
+pub(crate) async fn get_sns_token_symbol(
+    env: &dyn Environment,
+    ledger_canister_id: CanisterId,
+) -> Result<String, GovernanceError> {
+    let arg = Encode!(&()).unwrap();
+    let (symbol,) = env
+        .call_canister(ledger_canister_id, "icrc1_symbol", arg)
+        .await
+        .map_err(|(code, err)| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Canister method call {}.deposit failed with code {:?}: {}",
+                    ledger_canister_id, code, err
+                ),
+            )
+        })
+        .map(|blob| {
+            Decode!(&blob, (String,)).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error decoding {}.icrc1_symbol response: {}",
+                        ledger_canister_id, err
+                    ),
+                )
+            })
+        })??;
+
+    Ok(symbol)
 }
