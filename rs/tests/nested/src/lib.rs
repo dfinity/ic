@@ -221,7 +221,7 @@ pub fn upgrade_hostos(env: TestEnv) {
             host_boot_id_pre_upgrade
         ),
         logger.clone(),
-        Duration::from_secs(5 * 60),
+        Duration::from_secs(7 * 60), // long wait for hostos upgrade to apply and reboot
         Duration::from_secs(5),
         || {
             let host_boot_id = get_host_boot_id(&host);
