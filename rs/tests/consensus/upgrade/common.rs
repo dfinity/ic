@@ -20,7 +20,6 @@ use ic_consensus_system_test_utils::rw_message::{
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -47,12 +46,11 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     let target_version = get_guestos_update_img_version().expect("target IC version");
 
     // Bless target version
-    let sha256 = get_guestos_update_img_sha256(env).unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &target_version,
-        UpdateImageType::Image,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],

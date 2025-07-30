@@ -4917,6 +4917,19 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 18,
+                        name: "Execute SNS extension operation".to_string(),
+                        description: Some(
+                            "Proposal to execute an operation on a registered SNS extension."
+                                .to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },

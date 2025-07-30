@@ -12,9 +12,9 @@ use ic_system_test_driver::{
         nested::NestedVms,
         test_env::TestEnv,
         test_env_api::*,
-        vector_vm::VectorVm,
+        vector_vm::HasVectorTargets,
     },
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg,
     util::block_on,
 };
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
@@ -24,9 +24,10 @@ use slog::info;
 
 mod util;
 use util::{
-    check_guestos_version, check_hostos_version, elect_guestos_version, elect_hostos_version,
-    get_blessed_guestos_versions, get_unassigned_nodes_config, setup_nested_vm, start_nested_vm,
-    update_nodes_hostos_version, update_unassigned_nodes,
+    check_hostos_version, elect_guestos_version, elect_hostos_version,
+    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
+    simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
+    wait_for_expected_guest_version, wait_for_guest_version,
 };
 
 use anyhow::bail;
@@ -39,9 +40,6 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn config(env: TestEnv) {
-    let mut vector = VectorVm::new();
-    vector.start(&env).expect("Failed to start Vector VM");
-
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -61,11 +59,6 @@ pub fn config(env: TestEnv) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
-    // Initial sync to scrape the network.
-    vector
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
-
     setup_nested_vm(env.clone(), HOST_VM_NAME);
 
     let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
@@ -81,7 +74,7 @@ pub fn config(env: TestEnv) {
         ("node_exporter", network.guest_ip),
         ("host_node_exporter", network.host_ip),
     ] {
-        vector.add_custom_target(
+        env.add_custom_vector_target(
             format!("{HOST_VM_NAME}-{job}"),
             ip.into(),
             Some(
@@ -90,13 +83,14 @@ pub fn config(env: TestEnv) {
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
             ),
-        );
+        )
+        .unwrap();
     }
-
-    // Additional sync to generate new config for the nested vm.
-    vector
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
+}
+/// Minimal setup that only creates a nested VM without any IC infrastructure.
+/// This is much faster than the full config() setup.
+pub fn simple_config(env: TestEnv) {
+    simple_setup_nested_vm(env.clone(), HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -201,13 +195,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Elected target HostOS version");
 
     info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
-    let retrieve_host_boot_id = || {
-        host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
-            .unwrap()
-            .trim()
-            .to_string()
-    };
-    let host_boot_id_pre_upgrade = retrieve_host_boot_id();
+    let host_boot_id_pre_upgrade = get_host_boot_id(&host);
     info!(
         logger,
         "Host boot ID pre upgrade: '{}'", host_boot_id_pre_upgrade
@@ -236,7 +224,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         Duration::from_secs(5 * 60),
         Duration::from_secs(5),
         || {
-            let host_boot_id = retrieve_host_boot_id();
+            let host_boot_id = get_host_boot_id(&host);
             if host_boot_id != host_boot_id_pre_upgrade {
                 info!(
                     logger,
@@ -265,6 +253,123 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
+}
+
+/// Test the guestos-recovery-upgrader component: tests upgrading the GuestOS
+/// from the HostOS based on injected version/hash boot parameters.
+pub fn recovery_upgrader_test(env: TestEnv) {
+    let logger = env.logger();
+
+    start_nested_vm(env.clone());
+
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    let guest_ipv6 = host
+        .get_nested_network()
+        .expect("Unable to get nested network")
+        .guest_ip;
+
+    block_on(async {
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let original_version = wait_for_guest_version(
+            &client,
+            &guest_ipv6,
+            &logger,
+            Duration::from_secs(10 * 60), // long wait for setupOS to install
+            Duration::from_secs(5),
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        info!(logger, "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted...");
+        let host_boot_id_pre_reboot = get_host_boot_id(&host);
+        info!(
+            logger,
+            "Host boot ID pre reboot: '{}'", host_boot_id_pre_reboot
+        );
+
+        info!(logger, "Checking current boot_args file content");
+        let current_boot_args = host
+            .block_on_bash_script("cat /boot/boot_args")
+            .expect("Failed to read /boot/boot_args file");
+        info!(logger, "Current boot_args content:\n{}", current_boot_args);
+
+        let target_version =
+            get_guestos_update_img_version().expect("Failed to get target guestos version");
+        let target_short_hash =
+            &get_guestos_update_img_sha256().expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
+
+        info!(
+            logger,
+            "Using target version: {} and short hash: {}", target_version, target_short_hash
+        );
+
+        info!(
+            logger,
+            "Remounting /boot as read-write and updating boot_args file"
+        );
+        let boot_args_command = format!(
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
+            target_version, target_short_hash
+        );
+        host.block_on_bash_script(&boot_args_command)
+            .expect("Failed to update boot_args file");
+        info!(logger, "Boot_args file updated successfully.");
+
+        info!(logger, "Verifying boot_args file contents");
+        let updated_boot_args = host
+            .block_on_bash_script("cat /boot/boot_args")
+            .expect("Failed to read updated /boot/boot_args file");
+        info!(logger, "Updated boot_args content:\n{}", updated_boot_args);
+
+        info!(logger, "Rebooting the host");
+        host.block_on_bash_script("sudo reboot")
+            .expect("Failed to send reboot command (connection may be terminated by reboot)");
+
+        info!(logger, "Waiting for host to reboot...");
+
+        retry_with_msg!(
+            format!(
+                "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
+                host_boot_id_pre_reboot
+            ),
+            logger.clone(),
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+            || {
+                let host_boot_id = get_host_boot_id(&host);
+                if host_boot_id != host_boot_id_pre_reboot {
+                    info!(
+                        logger,
+                        "Host boot ID changed from '{}' to '{}'",
+                        host_boot_id_pre_reboot,
+                        host_boot_id
+                    );
+                    Ok(())
+                } else {
+                    bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
+                }
+            }
+        )
+        .unwrap();
+
+        let new_version = wait_for_guest_version(
+            &client,
+            &guest_ipv6,
+            &logger,
+            Duration::from_secs(5 * 60),
+            Duration::from_secs(5),
+        )
+        .await
+        .expect("guest didn't come up as expected");
+
+        assert!(new_version != original_version);
+    });
 }
 
 /// Upgrade unassigned guestOS VMs to the target version, and verify that each one
@@ -318,6 +423,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
 
         let original_version = get_setupos_img_version().expect("Failed to find initial version");
+        info!(logger, "Original GuestOS version: {}", original_version);
 
         // determine new GuestOS version
         let upgrade_url = get_guestos_update_img_url()
@@ -330,7 +436,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
         info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)
@@ -339,25 +445,13 @@ pub fn upgrade_guestos(env: TestEnv) {
             .build()
             .expect("Failed to build HTTP client");
 
-        retry_with_msg_async!(
-            format!(
-                "Waiting until the guest is on the right version '{}'",
-                original_version
-            ),
+        wait_for_expected_guest_version(
+            &client,
+            &guest_ipv6,
+            &original_version,
             &logger,
             Duration::from_secs(5 * 60),
             Duration::from_secs(5),
-            || async {
-                let current_version = check_guestos_version(&client, &guest_ipv6)
-                    .await
-                    .unwrap_or("unavaiblable".to_string());
-                if current_version == original_version {
-                    info!(logger, "Guest upgraded to '{}'", current_version);
-                    Ok(())
-                } else {
-                    bail!("Guest is still on version '{}'", current_version)
-                }
-            }
         )
         .await
         .expect("guest didn't come up as expected");
@@ -396,25 +490,13 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
 
         // Check that GuestOS is on the expected version (upgrade version)
-        retry_with_msg_async!(
-            format!(
-                "Waiting until the guest is on the right version '{}'",
-                target_version
-            ),
+        wait_for_expected_guest_version(
+            &client,
+            &guest_ipv6,
+            &target_version_str,
             &logger,
             Duration::from_secs(5 * 60),
             Duration::from_secs(5),
-            || async {
-                let current_version = check_guestos_version(&client, &guest_ipv6)
-                    .await
-                    .unwrap_or("unavaiblable".to_string());
-                if current_version == target_version_str {
-                    info!(logger, "Guest upgraded to '{}'", current_version);
-                    Ok(())
-                } else {
-                    bail!("Guest is still on version '{}'", current_version)
-                }
-            }
         )
         .await
         .expect("guest failed to upgrade");
