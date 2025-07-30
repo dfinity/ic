@@ -369,16 +369,18 @@ impl TryFrom<&models::Request> for Request {
                     let recipient = match (to_account, to_account_identifier) {
                         (None, None) => None,
                         (Some(account), None) => {
+                            let owner = match account.owner {
+                                None => return Err(ApiError::invalid_request("Invalid Account, the owner needs to be specified")),
+                                Some(owner) =>  owner.0,
+                            };
                             let account = Account {
-                                owner: account
-                                    .owner
-                                    .expect("Invalid Account, owner needs to be specified")
-                                    .0,
-                                subaccount: account.subaccount.map(|sa| {
-                                    sa.try_into().unwrap_or_else(|v: Vec<u8>| {
-                                        panic!("Invalid subaccount length: {}, should be 32", v.len());
-                                    })
-                                }),
+                                owner,
+                                subaccount: match account.subaccount {
+                                    None => None,
+                                    Some(subaccount) =>  Some(subaccount.try_into().map_err(|v: Vec<u8>| {
+                                        ApiError::invalid_request(format!("Invalid subaccount length: {}", v.len()))
+                                    })?),
+                                },
                             };
                             Some(AccountIdentifier::from(account))
                         }
