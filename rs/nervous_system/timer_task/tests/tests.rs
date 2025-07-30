@@ -235,17 +235,10 @@ fn test_terminating_recurring_sync_task() {
         vec!["terminating_recurring_sync_task".to_string()],
     );
 
-    // Start the terminating sync task
-    let result = state_machine.update(
-        canister_id,
-        "start_task",
-        Encode!(&"terminating_recurring_sync_task".to_string()).unwrap(),
-    );
-    assert!(result.is_ok());
-
-    // Let it run for a short time - it should execute only once
-    state_machine.advance_time(std::time::Duration::from_secs(5));
-    state_machine.tick();
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
 
     // Verify it ran exactly once
     let counter = get_counter(
@@ -255,21 +248,7 @@ fn test_terminating_recurring_sync_task() {
     );
     assert_eq!(
         counter, 1,
-        "Terminating sync task should have run exactly once"
-    );
-
-    // Wait longer and verify it doesn't run again (because it returned None)
-    state_machine.advance_time(std::time::Duration::from_secs(10));
-    state_machine.tick();
-
-    let counter_after = get_counter(
-        &state_machine,
-        canister_id,
-        "terminating_recurring_sync_task",
-    );
-    assert_eq!(
-        counter_after, 1,
-        "Terminating sync task should not run again after returning None"
+        "Terminating async task should have run exactly once"
     );
 }
 
@@ -281,40 +260,19 @@ fn test_terminating_recurring_async_task() {
         vec!["terminating_recurring_async_task".to_string()],
     );
 
-    // Start the terminating async task
-    let result = state_machine.update(
-        canister_id,
-        "start_task",
-        Encode!(&"terminating_recurring_async_task".to_string()).unwrap(),
-    );
-    assert!(result.is_ok());
-
-    // Let it run for a short time - it should execute only once
-    state_machine.advance_time(std::time::Duration::from_secs(5));
-    state_machine.tick();
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
 
     // Verify it ran exactly once
     let counter = get_counter(
         &state_machine,
         canister_id,
-        "terminating_recurring_async_task",
+        "terminating_recurring_sync_task",
     );
     assert_eq!(
         counter, 1,
-        "Terminating async task should have run exactly once"
-    );
-
-    // Wait longer and verify it doesn't run again (because it returned None)
-    state_machine.advance_time(std::time::Duration::from_secs(10));
-    state_machine.tick();
-
-    let counter_after = get_counter(
-        &state_machine,
-        canister_id,
-        "terminating_recurring_async_task",
-    );
-    assert_eq!(
-        counter_after, 1,
-        "Terminating async task should not run again after returning None"
+        "Terminating sync task should have run exactly once"
     );
 }

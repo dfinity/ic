@@ -24,6 +24,7 @@ DEV_DEPENDENCIES = DEPENDENCIES + select({
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/types",
+        "@crate_index//:tokio",
     ],
 })
 

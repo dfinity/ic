@@ -11192,6 +11192,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "serde",
+ "tokio",
 ]
 
 [[package]]
