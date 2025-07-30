@@ -5337,7 +5337,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "async-trait",
  "clap 4.5.27",
  "config",
  "config_types",
@@ -5347,13 +5346,11 @@ dependencies = [
  "gpt",
  "grub",
  "ic-metrics-tool",
+ "ic_device",
  "ic_sev",
- "loopdev-3",
  "macaddr",
  "nix 0.24.3",
- "partition_tools",
  "regex",
- "sys-mount",
  "systemd",
  "tempfile",
  "thiserror 2.0.12",
@@ -15201,6 +15198,23 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic_device"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "devicemapper",
+ "gpt",
+ "loopdev-3",
+ "nix 0.24.3",
+ "partition_tools",
+ "sys-mount",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

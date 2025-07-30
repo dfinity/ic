@@ -106,6 +106,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
+    runs-on:
+      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
