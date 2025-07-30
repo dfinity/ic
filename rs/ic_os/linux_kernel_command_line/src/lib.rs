@@ -277,7 +277,7 @@ mod tests {
             ),
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
-            let mut cmdline = KernelCommandLine::from_str(*input).unwrap();
+            let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.remove_argument(argument_to_remove);
             let result: String = cmdline.into();
             if result != *expected {
@@ -309,7 +309,7 @@ actual:   {result:?}",
             ),
         ];
         for (name, input) in table.iter() {
-            if KernelCommandLine::from_str(*input).is_ok() {
+            if KernelCommandLine::from_str(input).is_ok() {
                 panic!(
                     "During test {name}: input {input:?} intentionally misquoted argument did not trigger error",
                 )
