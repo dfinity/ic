@@ -44,7 +44,7 @@ use ic_types::{
     registry::RegistryClientError,
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, Time,
+    Height, NumBytes, RegistryVersion, ReplicaVersion, Time,
 };
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
@@ -1471,6 +1471,7 @@ fn test_response_and_metadata_full(
         timeout: response.timeout,
         content_hash: crypto_hash(&response),
         registry_version: RegistryVersion::new(1),
+        replica_version: ReplicaVersion::default(),
     };
     (response, metadata)
 }

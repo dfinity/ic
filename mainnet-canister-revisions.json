@@ -60,8 +60,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "250daf4dd0cf7ea74c496b45457dd47ced16368c",
-    "sha256": "28df08368379862ee17f69542b0779670deec200a08f23540c3e6168c07cc9aa"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "4ca89381ad5bafcb66c0e5de51b5e78d2bdee582f5c7b7d046298cbf2bab9c11"
   },
   "cycles_ledger": {
     "sha256": "a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37",
@@ -76,12 +76,12 @@
     "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
   },
   "governance": {
-    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
-    "sha256": "10ced0fec20794640fe45d0e44960faeecaeda8b1b032a04082c758192f24ac6"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "e774351d97bf02469a7c469264be533b3696d21930fc11e9e5cb87a747813aa1"
   },
   "governance-canister_test": {
-    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
-    "sha256": "f24481801f2eacaa7ff877bef665492fb6e8151ea2b02af3b418344146ee15be"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "fe680d9acecb7d5dcc56cac76fa88239882de48a85ad5df4d4be8b57820fc4da"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -116,8 +116,8 @@
     "sha256": "bd21de14ad2bf39af9603fb8e5de1f69fdba2573f82ca781700c68fac64f4d3d"
   },
   "sns_governance": {
-    "rev": "fccfa2c7c7cba9e5485ad0b48823990e24a67f40",
-    "sha256": "12214386fbfc2d57a3c3fcf72f627d5b2419eb60d11df2ab3a1701446ec7e8d4"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "688f15a6f825421c6bc2044886189978f62232ebff18b933bf07228857c08bae"
   },
   "sns_index": {
     "rev": "2dd93c8aeb7f85c00e3add7efa6f573ddc9b0122",
