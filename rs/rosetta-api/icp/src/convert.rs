@@ -37,6 +37,7 @@ use icp_ledger::{
     Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
     Transaction,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::{from_value, map::Map, Number, Value};
@@ -535,6 +536,39 @@ pub fn from_transaction_operation_results(
 
 pub fn transaction_results_to_api_error(tr: TransactionResults, token_name: &str) -> ApiError {
     ApiError::OperationsErrors(tr, token_name.to_string())
+}
+
+pub fn from_account_ai_to_ai(
+    to_account: Option<ic_nns_governance_api::Account>,
+    to_account_identifier: Option<icp_ledger::protobuf::AccountIdentifier>,
+) -> Result<Option<icp_ledger::AccountIdentifier>, ApiError> {
+    let result = match (to_account, to_account_identifier) {
+        (None, None) => None,
+        (Some(account), None) => {
+            let owner = match account.owner {
+                None => return Err(ApiError::invalid_request("Invalid Account, the owner needs to be specified")),
+                Some(owner) =>  owner.0,
+            };
+            let account = Account {
+                owner,
+                subaccount: match account.subaccount {
+                    None => None,
+                    Some(subaccount) =>  Some(subaccount.try_into().map_err(|v: Vec<u8>| {
+                        ApiError::invalid_request(format!("Invalid subaccount length: {}", v.len()))
+                    })?),
+                },
+            };
+            Some(icp_ledger::AccountIdentifier::from(account))
+        }
+        (None, Some(a)) => Some((&a).try_into().map_err(|e| {
+            ApiError::invalid_request(format!(
+                "Could not parse recipient account identifier: {}",
+                e
+            ))
+        })?),
+        (Some(_), Some(_)) => return Err(ApiError::invalid_request("Invalid DisburseMaturity command, cannot specify both to_account and to_account_identifier")),
+    };
+    Ok(result)
 }
 
 #[cfg(test)]

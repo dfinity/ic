@@ -5,8 +5,7 @@ use crate::{
 use candid::Decode;
 use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
-use icp_ledger::{AccountIdentifier, Tokens};
-use icrc_ledger_types::icrc1::account::Account;
+use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};
 
 use crate::models::Operation;
@@ -366,32 +365,8 @@ impl TryFrom<&models::Request> for Request {
                     to_account_identifier,
                 })) = command
                 {
-                    let recipient = match (to_account, to_account_identifier) {
-                        (None, None) => None,
-                        (Some(account), None) => {
-                            let owner = match account.owner {
-                                None => return Err(ApiError::invalid_request("Invalid Account, the owner needs to be specified")),
-                                Some(owner) =>  owner.0,
-                            };
-                            let account = Account {
-                                owner,
-                                subaccount: match account.subaccount {
-                                    None => None,
-                                    Some(subaccount) =>  Some(subaccount.try_into().map_err(|v: Vec<u8>| {
-                                        ApiError::invalid_request(format!("Invalid subaccount length: {}", v.len()))
-                                    })?),
-                                },
-                            };
-                            Some(AccountIdentifier::from(account))
-                        }
-                        (None, Some(a)) => Some((&a).try_into().map_err(|e| {
-                            ApiError::invalid_request(format!(
-                                "Could not parse recipient account identifier: {}",
-                                e
-                            ))
-                        })?),
-                        (Some(_), Some(_)) => return Err(ApiError::invalid_request("Invalid DisburseMaturity command, cannot specify both to_account and to_account_identifier")),
-                    };
+                    let recipient =
+                        convert::from_account_ai_to_ai(to_account, to_account_identifier)?;
 
                     Ok(Request::DisburseMaturity(DisburseMaturity {
                         account,

@@ -1,5 +1,5 @@
 use crate::{
-    convert::{self, from_arg, to_model_account_identifier},
+    convert::{self, from_account_ai_to_ai, from_arg, to_model_account_identifier},
     errors::ApiError,
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
     request_handler::{verify_network_id, RosettaRequestHandler},
@@ -350,26 +350,19 @@ fn disburse_maturity(
     if let ManageNeuron {
         command:
             Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
-                to_account: _, // TODO: use it
+                to_account,
                 percentage_to_disburse,
                 to_account_identifier,
             })),
         ..
     } = manage
     {
+        let recipient = from_account_ai_to_ai(to_account, to_account_identifier)?;
+
         requests.push(Request::DisburseMaturity(DisburseMaturity {
             account: from,
             percentage_to_disburse,
-            recipient: to_account_identifier.map_or(Ok(None), |a| {
-                AccountIdentifier::try_from(&a)
-                    .map_err(|e| {
-                        ApiError::internal_error(format!(
-                            "Could not parse recipient AccountIdentifier {:?}",
-                            e
-                        ))
-                    })
-                    .map(Some)
-            })?,
+            recipient,
             neuron_index,
         }));
     } else {
