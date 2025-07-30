@@ -1221,13 +1221,6 @@ impl Governance {
             neuron.neuron_fees_e8s = neuron.neuron_fees_e8s.saturating_sub(max_burnable_fee);
         }
 
-        let nid = id.to_string();
-        let neuron = self
-            .proto
-            .neurons
-            .get_mut(&nid)
-            .expect("Expected the parent neuron to exist");
-
         // Transfer 2 - Disburse to the chosen account. This may fail if the
         // user told us to disburse more than they had in their account (but
         // the burn still happened).
@@ -1241,6 +1234,13 @@ impl Governance {
                 self.env.now(),
             )
             .await?;
+
+        let nid = id.to_string();
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&nid)
+            .expect("Expected the parent neuron to exist");
 
         let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
