@@ -60,8 +60,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "250daf4dd0cf7ea74c496b45457dd47ced16368c",
-    "sha256": "28df08368379862ee17f69542b0779670deec200a08f23540c3e6168c07cc9aa"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "4ca89381ad5bafcb66c0e5de51b5e78d2bdee582f5c7b7d046298cbf2bab9c11"
   },
   "cycles_ledger": {
     "sha256": "a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37",
@@ -76,8 +76,12 @@
     "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
   },
   "governance": {
-    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
-    "sha256": "2dfffe9149d8e5b61f2e5a3de79c6fece4e50cc57d1653ae519914dec2de68d4"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "e774351d97bf02469a7c469264be533b3696d21930fc11e9e5cb87a747813aa1"
+  },
+  "governance-canister_test": {
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "fe680d9acecb7d5dcc56cac76fa88239882de48a85ad5df4d4be8b57820fc4da"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -96,8 +100,8 @@
     "sha256": "59d76a35284b7f2dfd06e74e16841b593e24d538b323e5eca90224713258e8e6"
   },
   "registry": {
-    "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
-    "sha256": "aa91c2298025569b78a7f6bc88150e6d0d799925f13a18043e500feb1bdb36ab"
+    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
+    "sha256": "24465ad08cc136ac79e44512d5e82352fd2d916acaa44411aba217dce932b79a"
   },
   "root": {
     "rev": "2f87fe95207dc6371a2f2dc273362ba03b41e0e9",
@@ -112,8 +116,8 @@
     "sha256": "bd21de14ad2bf39af9603fb8e5de1f69fdba2573f82ca781700c68fac64f4d3d"
   },
   "sns_governance": {
-    "rev": "fccfa2c7c7cba9e5485ad0b48823990e24a67f40",
-    "sha256": "12214386fbfc2d57a3c3fcf72f627d5b2419eb60d11df2ab3a1701446ec7e8d4"
+    "rev": "4b7cde9a0e3b5ad4725e75cbc36ce635be6fa6a8",
+    "sha256": "688f15a6f825421c6bc2044886189978f62232ebff18b933bf07228857c08bae"
   },
   "sns_index": {
     "rev": "2dd93c8aeb7f85c00e3add7efa6f573ddc9b0122",
@@ -128,8 +132,8 @@
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
   "sns_root": {
-    "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
-    "sha256": "80f2fc15a12043ff07927fb63f1dd88334f4eebee6626451f0d8669fe9db7856"
+    "rev": "65f66f13fe07b3266ac9d1b44413fd5f0e9b4463",
+    "sha256": "899329e5829e127afb5ad4f1a60056d3a70b08942bb7a4e467615e3300f8b17a"
   },
   "swap": {
     "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",

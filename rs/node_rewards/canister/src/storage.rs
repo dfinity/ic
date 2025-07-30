@@ -12,7 +12,7 @@ const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
 const LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID: MemoryId = MemoryId::new(2);
 const SUBNETS_TO_RETRY_MEMORY_ID: MemoryId = MemoryId::new(3);
 
-type VM = VirtualMemory<DefaultMemoryImpl>;
+pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
 pub fn stable_btreemap_init<K: Storable + Clone + Ord, V: Storable>(
     memory_id: MemoryId,
@@ -59,7 +59,7 @@ impl RegistryDataStableMemory for RegistryStoreStableMemoryBorrower {
     }
 }
 
-pub fn clear_registry_store() {
+pub fn _clear_registry_store() {
     MEMORY_MANAGER.with_borrow(|mm| {
         let _cleared: StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM> =
             StableBTreeMap::new(mm.get(REGISTRY_STORE_MEMORY_ID));

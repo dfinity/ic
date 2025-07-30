@@ -7,7 +7,17 @@ The process that populates this file is described in
 `rs/nervous_system/changelog_process.md`. In general though, the entries you see
 here were moved from the adjacent `unreleased_changelog.md` file.
 
+
 INSERT NEW RELEASES HERE
+
+
+# 2025-07-18: Proposal 137499
+
+http://dashboard.internetcomputer.org/proposal/137499
+
+## Added
+
+* Minor improvements on voting power spike detection mechanism.
 
 # 2025-07-11: Proposal 137346
 

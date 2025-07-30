@@ -1,3 +1,4 @@
+use crate::io::retry_if_busy;
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use gpt::GptDisk;
@@ -98,6 +99,9 @@ pub struct GptPartitionProvider {
 }
 
 impl GptPartitionProvider {
+    /// Creates a new [GptPartitionProvider] for the given device.
+    /// The `device` must be a block device or a disk image with a valid GPT partition table and
+    /// must be valid for the entire lifetime of the constructed object.
     pub fn new(device: PathBuf) -> Result<Self> {
         #[cfg(target_os = "linux")]
         return Self::with_mounter(device, Box::new(LoopDeviceMounter));
@@ -107,12 +111,23 @@ impl GptPartitionProvider {
     }
 
     pub fn with_mounter(device: PathBuf, mounter: Box<dyn Mounter>) -> Result<Self> {
-        let gpt = gpt::disk::read_disk(&device).context("Could not read GPT from device")?;
+        let gpt = gpt::disk::read_disk(&device)
+            .with_context(|| format!("Could not read GPT from device {}", device.display()))?;
         Ok(Self {
             device,
             gpt,
             mounter,
         })
+    }
+}
+
+impl Drop for GptPartitionProvider {
+    fn drop(&mut self) {
+        debug_assert!(
+            self.device.exists(),
+            "Device {} does not exist",
+            self.device.display()
+        );
     }
 }
 
@@ -137,6 +152,7 @@ impl PartitionProvider for GptPartitionProvider {
         self.mounter
             .mount_range(self.device.clone(), offset_bytes, len_bytes, options)
             .await
+            .context("mount_range failed")
     }
 }
 
@@ -174,12 +190,15 @@ impl Mounter for LoopDeviceMounter {
             let tempdir = TempDir::new()?;
             let mount_point = tempdir.path();
             Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
-                mount: Mount::builder()
-                    .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                    .loopback_offset(offset_bytes)
-                    .flags(MountFlags::empty())
-                    .explicit_loopback()
-                    .mount_autodrop(device, mount_point, UnmountFlags::empty())?,
+                mount: retry_if_busy(|| {
+                    Mount::builder()
+                        .fstype(FilesystemType::Manual(options.file_system.as_str()))
+                        .loopback_offset(offset_bytes)
+                        .flags(MountFlags::empty())
+                        .explicit_loopback()
+                        .mount_autodrop(&device, mount_point, UnmountFlags::empty())
+                })
+                .context("Failed to create mount")?,
                 _tempdir: tempdir,
             })
         })
@@ -188,7 +207,6 @@ impl Mounter for LoopDeviceMounter {
     }
 }
 
-#[cfg(test)]
 pub mod testing {
     use super::*;
     use anyhow::Context;
@@ -249,7 +267,7 @@ pub mod testing {
     ///
     /// The mounter "remembers" the extracted partitions, so extracting the same device/offset/len
     /// always returns the same directory.
-    #[derive(Clone)]
+    #[derive(Clone, Default)]
     pub struct ExtractingFilesystemMounter {
         #[allow(clippy::disallowed_types)] // Using tokio Mutex in testing is fine.
         mounts: Arc<tokio::sync::Mutex<PartitionMap>>,
@@ -286,13 +304,6 @@ pub mod testing {
     }
 
     impl ExtractingFilesystemMounter {
-        #[allow(dead_code)]
-        pub fn new() -> Self {
-            Self {
-                mounts: Default::default(),
-            }
-        }
-
         async fn extract_partition_to_tempdir(
             &self,
             device: PathBuf,

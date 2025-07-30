@@ -1134,6 +1134,18 @@ impl SignWithThresholdContext {
         }
     }
 
+    pub fn requires_pre_signature(&self) -> bool {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => {
+                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+            }
+            ThresholdArguments::Schnorr(args) => {
+                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+            }
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
     /// Returns true if arguments are for ECDSA.
     pub fn is_ecdsa(&self) -> bool {
         matches!(&self.args, ThresholdArguments::Ecdsa(_))
@@ -1307,19 +1319,10 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
             target_id: {
-                // The target id is empty, if we have a legacy IDkgDealingContext
-                // Since we don't need the target id for Idkg, this is safe
-                // TODO(CRP-2613): remove this case
-                if context.target_id.is_empty() {
-                    NiDkgTargetId::new([0; 32])
-                } else {
-                    match ni_dkg_target_id(context.target_id.as_slice()) {
-                        Ok(target_id) => target_id,
-                        Err(_) => {
-                            return Err(Self::Error::Other(
-                                "target_id is not 32 bytes.".to_string(),
-                            ))
-                        }
+                match ni_dkg_target_id(context.target_id.as_slice()) {
+                    Ok(target_id) => target_id,
+                    Err(_) => {
+                        return Err(Self::Error::Other("target_id is not 32 bytes.".to_string()))
                     }
                 }
             },
