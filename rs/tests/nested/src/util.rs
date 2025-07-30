@@ -333,19 +333,19 @@ pub async fn wait_for_guest_version(
     .await
 }
 
-/// Wait for the guest to reach a specific target version.
-pub async fn wait_for_target_guest_version(
+/// Wait for the guest to reach a specific version.
+pub async fn wait_for_expected_guest_version(
     client: &Client,
     guest_ipv6: &Ipv6Addr,
-    target_version: &str,
+    expected_version: &str,
     logger: &Logger,
     timeout: Duration,
     backoff: Duration,
 ) -> Result<()> {
     retry_with_msg_async!(
         format!(
-            "Waiting until the guest is on the target version '{}'",
-            target_version
+            "Waiting until the guest is on the expected version '{}'",
+            expected_version
         ),
         logger,
         timeout,
@@ -354,10 +354,10 @@ pub async fn wait_for_target_guest_version(
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
                 .unwrap_or("unavailable".to_string());
-            if current_version == target_version {
+            if current_version == expected_version {
                 info!(
                     logger,
-                    "Guest is now on target version '{}'", current_version
+                    "Guest is now on expected version '{}'", current_version
                 );
                 Ok(())
             } else {
