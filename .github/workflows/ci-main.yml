@@ -296,7 +296,7 @@ jobs:
   upload-external-artifacts:
     name: Upload external artifacts
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
@@ -340,7 +340,7 @@ jobs:
   bazel-run-fuzzers:
     name: Bazel Run Fuzzers
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
@@ -476,7 +476,7 @@ jobs:
     needs: [config]
     if: ${{ needs.config.outputs.skip_long_tests != 'true' }} # GHA output quirk, 'true' is a string
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
