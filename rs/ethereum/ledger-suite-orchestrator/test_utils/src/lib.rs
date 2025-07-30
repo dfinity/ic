@@ -330,7 +330,7 @@ impl LedgerSuiteOrchestrator {
         let canister_id = PrincipalId(canister_id).try_into().unwrap();
         self.wait_for(|| {
             let ledger_status = self.canister_status_of(canister_id);
-            if ledger_status.status() == CanisterStatusType::Running
+            if CanisterStatusType::from(ledger_status.status()) == CanisterStatusType::Running
                 && ledger_status.module_hash().is_some()
             {
                 Ok(())
@@ -535,5 +535,8 @@ pub fn stop_canister<T: AsRef<StateMachine>, P: Into<PrincipalId>>(
         .canister_status_as(controller, target)
         .unwrap()
         .unwrap();
-    assert_eq!(status.status(), CanisterStatusType::Stopped);
+    assert_eq!(
+        CanisterStatusType::from(status.status()),
+        CanisterStatusType::Stopped
+    );
 }

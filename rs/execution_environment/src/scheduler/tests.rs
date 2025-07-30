@@ -19,8 +19,9 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method,
-    Payload as _, SchnorrKeyId, SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterStatusType, CanisterStatusTypeExt, DerivationPath, EcdsaKeyId, EmptyBlob,
+    MasterPublicKeyId, Method, Payload as _, SchnorrKeyId, SignWithSchnorrArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -3070,7 +3071,7 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
     // The canister should now be stopping.
     {
         let status = test.canister_status(canister_id).unwrap().unwrap();
-        assert_eq!(status.status(), CanisterStatusType::Stopping);
+        assert_eq!(status.status(), CanisterStatusTypeExt::Stopping);
     }
 
     // Add the response to the output queue so that the context can be closed.
@@ -3097,7 +3098,12 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
     // The canister has stopped.
     {
         let status = test.canister_status(canister_id).unwrap().unwrap();
-        assert_eq!(status.status(), CanisterStatusType::Stopped);
+        assert_eq!(
+            status.status(),
+            CanisterStatusTypeExt::Stopped {
+                ready_for_migration: true
+            }
+        );
     }
 }
 

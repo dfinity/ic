@@ -20,7 +20,7 @@ use ic_cketh_minter::{
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusType};
+use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusTypeExt};
 use ic_state_machine_tests::{
     PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
@@ -526,7 +526,7 @@ impl CkEthSetup {
         assert_matches!(start_res, Ok(WasmResult::Reply(_)));
     }
 
-    pub fn minter_status(&self) -> CanisterStatusType {
+    pub fn minter_status(&self) -> CanisterStatusTypeExt {
         self.env
             .canister_status(self.minter_id)
             .unwrap()

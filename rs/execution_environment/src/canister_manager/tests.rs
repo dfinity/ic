@@ -36,13 +36,13 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
-    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable,
-    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
-    NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs,
-    RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-    WasmMemoryPersistence, IC_00,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterStatusTypeExt,
+    CanisterUpgradeOptions, ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
+    EnvironmentVariable, InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload,
+    RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply, WasmMemoryPersistence, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1282,7 +1282,7 @@ fn get_canister_status_of_running_canister() {
 
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
-    assert_eq!(status.status(), CanisterStatusType::Running);
+    assert_eq!(status.status(), CanisterStatusTypeExt::Running);
 }
 
 #[test]
@@ -1307,7 +1307,7 @@ fn get_canister_status_of_self() {
 
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
-    assert_eq!(status.status(), CanisterStatusType::Running);
+    assert_eq!(status.status(), CanisterStatusTypeExt::Running);
 }
 
 #[test]
@@ -1317,6 +1317,7 @@ fn get_canister_status_of_stopped_canister() {
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
+        let ready_for_migration = state.ready_for_migration(&canister_id);
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
@@ -1325,10 +1326,16 @@ fn get_canister_status_of_stopped_canister() {
                 canister,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                ready_for_migration,
             )
             .unwrap()
             .status();
-        assert_eq!(status, CanisterStatusType::Stopped);
+        assert_eq!(
+            status,
+            CanisterStatusTypeExt::Stopped {
+                ready_for_migration: true
+            }
+        );
     });
 }
 
@@ -1339,6 +1346,7 @@ fn get_canister_status_of_stopping_canister() {
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
         state.put_canister_state(canister);
+        let ready_for_migration = state.ready_for_migration(&canister_id);
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
@@ -1347,10 +1355,11 @@ fn get_canister_status_of_stopping_canister() {
                 canister,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                ready_for_migration,
             )
             .unwrap()
             .status();
-        assert_eq!(status, CanisterStatusType::Stopping);
+        assert_eq!(status, CanisterStatusTypeExt::Stopping);
     });
 }
 

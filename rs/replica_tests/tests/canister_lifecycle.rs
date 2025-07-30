@@ -6,8 +6,8 @@ use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, CanisterStatusTypeExt,
+    EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -61,7 +61,7 @@ fn full_canister_lifecycle_from_another_canister() {
             canister.update(wasm().call(
                 management::canister_status(expected_canister_id))
             ),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Running
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Running
         );
 
         // Let the canister stop the newly created canister.
@@ -75,7 +75,7 @@ fn full_canister_lifecycle_from_another_canister() {
             canister.update(wasm().call(
                 management::canister_status(expected_canister_id))
             ),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Stopped
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Stopped
         );
 
         // Start the canister again.
@@ -89,7 +89,7 @@ fn full_canister_lifecycle_from_another_canister() {
             canister.update(wasm().call(
                     management::canister_status(expected_canister_id))
             ),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Running
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Running
         );
     });
 }
@@ -144,7 +144,7 @@ fn full_canister_lifecycle_ingress() {
         // Verify that the newly created canister is running.
         assert_matches!(
             test.ingress(IC_00, Method::CanisterStatus, canister_id_record.clone()),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Running
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Running
         );
 
         // Let ic:00 stop the newly created canister.
@@ -156,7 +156,7 @@ fn full_canister_lifecycle_ingress() {
         // Verify that the newly created canister is now stopped.
         assert_matches!(
             test.ingress(IC_00, Method::CanisterStatus, canister_id_record.clone()),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Stopped
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Stopped
         );
 
         // Start the canister again.
@@ -168,7 +168,7 @@ fn full_canister_lifecycle_ingress() {
         // Verify that the newly created canister is running.
         assert_matches!(
             test.ingress(IC_00, Method::CanisterStatus, canister_id_record),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Running
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Running
         );
     })
 }
@@ -245,7 +245,7 @@ fn delete_running_canister_fails() {
         let canister_id_record = CanisterIdRecord::from(canister_b).encode();
         assert_matches!(
             test.ingress(IC_00, Method::CanisterStatus, canister_id_record),
-            Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap().status() == CanisterStatusType::Running
+            Ok(WasmResult::Reply(res)) if CanisterStatusType::from(CanisterStatusResultV2::decode(&res).unwrap().status()) == CanisterStatusType::Running
         );
 
         // Set the controller of canister_b to be canister_a
@@ -705,7 +705,7 @@ fn can_get_canister_information() {
             // We can check exact equality because no costs are incurred for a
             // canister that's created but has no code installed on it.
             Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap() == CanisterStatusResultV2::new(
-                CanisterStatusType::Running,
+                CanisterStatusTypeExt::Running,
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
@@ -769,7 +769,7 @@ fn can_get_canister_information() {
             ),
             Ok(WasmResult::Reply(res)) => assert_canister_status_result_equals(
                 CanisterStatusResultV2::new(
-                    CanisterStatusType::Running,
+                    CanisterStatusTypeExt::Running,
                     Some(ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec()),
                     canister_a.get(),
                     vec![canister_a.get()],

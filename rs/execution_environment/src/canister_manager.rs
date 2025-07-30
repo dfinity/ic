@@ -23,10 +23,10 @@ use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkReply,
+    CanisterStatusType, CanisterStatusTypeExt, ChunkHash, Global, GlobalTimer,
+    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
+    SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
@@ -1029,12 +1029,21 @@ impl CanisterManager {
         canister: &mut CanisterState,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
+        ready_for_migration: bool,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
             validate_controller(canister, &sender)?
         }
+
+        let status = match canister.status() {
+            CanisterStatusType::Running => CanisterStatusTypeExt::Running,
+            CanisterStatusType::Stopping => CanisterStatusTypeExt::Stopping,
+            CanisterStatusType::Stopped => CanisterStatusTypeExt::Stopped {
+                ready_for_migration,
+            },
+        };
 
         let controller = canister.system_state.controller();
         let controllers = canister
@@ -1062,7 +1071,7 @@ impl CanisterManager {
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
         Ok(CanisterStatusResultV2::new(
-            canister.status(),
+            status,
             canister
                 .execution_state
                 .as_ref()
