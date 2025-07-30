@@ -118,7 +118,8 @@ impl KernelCommandLine {
         Ok(())
     }
 
-    /// Returns the value of an argument if present in the command line.
+    /// Returns the value of an argument (without leading/trailing quotes) if present in the
+    /// command line.
     /// If the argument exists without a value, returns Some("").
     /// If the argument doesn't exist, returns None.
     pub fn get_argument(&self, argument_name: &str) -> Option<&str> {
