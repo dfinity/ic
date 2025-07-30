@@ -100,7 +100,7 @@ function process_bootstrap() {
         fi
     done
 
-    VARIANT_TYPE=$(/opt/ic/bin/config check-binary-type)
+    VARIANT_TYPE=$(/opt/ic/bin/config check-variant-type)
     if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/node_operator_private_key.pem" ]; then
         echo "Using node_operator_private_key.pem from injected config"
         cp -rL -T "${TMPDIR}/node_operator_private_key.pem" "${STATE_ROOT}/data/node_operator_private_key.pem"
