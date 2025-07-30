@@ -72,7 +72,7 @@ pub enum RequestType {
     #[serde(alias = "Disperse")]
     Disburse { neuron_index: u64 },
     #[serde(rename = "DISBURSE_MATURITY")]
-    #[serde(alias = "DisperseMaturity")]
+    #[serde(alias = "DisburseMaturity")]
     DisburseMaturity { neuron_index: u64 },
     #[serde(rename = "ADD_HOT_KEY")]
     #[serde(alias = "AddHotKey")]
