@@ -27,7 +27,7 @@ use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
     simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
-    wait_for_guest_version, wait_for_expected_guest_version,
+    wait_for_expected_guest_version, wait_for_guest_version,
 };
 
 use anyhow::bail;
