@@ -128,7 +128,7 @@ pub fn test(env: TestEnv) {
         upgrade_version: Some(working_version),
         replay_until_height: None, // We will set this after breaking the subnet, see below
         upgrade_image_url: get_guestos_update_img_url().ok(),
-        upgrade_image_hash: get_guestos_update_img_sha256().ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256(&env).ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         next_step: None,

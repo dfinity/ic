@@ -194,7 +194,7 @@ pub fn init_ic(
             )
         } else {
             (
-                get_guestos_initial_update_img_sha256()?,
+                get_guestos_initial_update_img_sha256(test_env)?,
                 get_guestos_initial_update_img_url()?,
             )
         }

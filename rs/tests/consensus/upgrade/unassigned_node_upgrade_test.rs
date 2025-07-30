@@ -105,7 +105,7 @@ fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal
