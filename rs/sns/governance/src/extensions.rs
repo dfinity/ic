@@ -1,5 +1,6 @@
-use candid::Nat;
-use ic_base_types::CanisterId;
+use candid::{Decode, Encode, Nat};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -11,11 +12,15 @@ use std::{collections::BTreeMap, fmt::Display};
 
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
-    pb::v1::{
-        governance_error::ErrorType, ChunkedCanisterWasm, ExecuteExtensionOperation, ExtensionInit,
-        ExtensionOperationArg, GovernanceError, Precise, RegisterExtension, Topic,
+    pb::{
+        sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+        v1::{
+            governance_error::ErrorType, ChunkedCanisterWasm, ExecuteExtensionOperation,
+            ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, RegisterExtension,
+            Topic,
+        },
     },
-    types::Wasm,
+    types::{Environment, Wasm},
 };
 
 lazy_static! {
@@ -394,4 +399,139 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
         "Wasm module with hash {:?} is not allowed as an extension.",
         hex::encode(wasm_module_hash)
     ))
+}
+
+async fn list_extensions(
+    env: &dyn Environment,
+    root_canister_id: CanisterId,
+) -> Result<Vec<PrincipalId>, GovernanceError> {
+    let list_extensions_arg = Encode!(&ListSnsCanistersRequest {}).unwrap();
+
+    let ListSnsCanistersResponse { extensions, .. } = env
+        .call_canister(root_canister_id, "list_extensions", list_extensions_arg)
+        .await
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Canister method call Root.list_extensions failed: {:?}",
+                    err
+                ),
+            )
+        })
+        .and_then(|blob| {
+            Decode!(&blob, ListSnsCanistersResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error decoding Root.list_extensions response: {:?}", err),
+                )
+            })
+        })?;
+
+    let extensions = extensions
+        .map(|extensions| extensions.extension_canister_ids)
+        .unwrap_or_default();
+
+    Ok(extensions)
+}
+
+async fn canister_module_hash(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<Vec<u8>, GovernanceError> {
+    let canister_info_arg =
+        Encode!(&CanisterInfoRequest::new(canister_id, Some(1),)).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Error encoding canister_info request.\n{}", err),
+            )
+        })?;
+
+    let response = env
+        .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
+        .await
+        .map_err(|err: (Option<i32>, String)| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Canister method call IC00.canister_info failed: {:?}", err),
+            )
+        })
+        .and_then(|blob| {
+            Decode!(&blob, CanisterInfoResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error decoding IC00.canister_info response:\n{}", err),
+                )
+            })
+        })?;
+
+    Ok(response.module_hash().unwrap_or_default())
+}
+
+/// Validates that this is a supported extension operation.
+// TODO: Validate the operation arguments as well.
+// TODO: Enforce 50% treasury limits.
+pub(crate) async fn validate_execute_extension_operation(
+    env: &dyn Environment,
+    root_canister_id: CanisterId,
+    extension_canister_id: CanisterId,
+    operation_name: &str,
+    _operation_arg: &ExtensionOperationArg,
+) -> Result<(), GovernanceError> {
+    let registered_extensions = list_extensions(env, root_canister_id).await?;
+
+    if !registered_extensions.contains(&extension_canister_id.get()) {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::NotFound,
+            format!(
+                "Extension canister {} is not registered with the SNS.",
+                extension_canister_id
+            ),
+        ));
+    }
+
+    let wasm_module_hash = canister_module_hash(env, extension_canister_id).await?;
+
+    let (extension_kind, extension_operations) = match validate_extension_wasm(&wasm_module_hash) {
+        Ok(ExtensionSpec {
+            kind, operations, ..
+        }) => (kind, operations),
+        Err(err) => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Extension canister {} does not have an extension spec despite being \
+                        registered with Root: {}",
+                    extension_canister_id, err,
+                ),
+            ));
+        }
+    };
+
+    if extension_kind != ExtensionKind::TreasuryManager {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Only TreasuryManager extensions are currently supported.",
+        ));
+    }
+
+    let Some(ExtensionOperationSpec { name, .. }) = extension_operations.get(&operation_name)
+    else {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Extension canister {} does not have an operation named {}",
+                extension_canister_id, operation_name
+            ),
+        ));
+    };
+
+    if name != "deposit" {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Only TreasuryManager.deposit extensions are currently supported.",
+        ));
+    }
+
+    Ok(())
 }
