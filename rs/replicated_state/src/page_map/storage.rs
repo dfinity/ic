@@ -34,7 +34,7 @@ pub const MAX_NUMBER_OF_FILES: usize = 7;
 
 /// For `get_memory_instructions`, any range with a size of up to that number
 /// of pages will be copied, and larger ranges will be memory mapped instead.
-const MAX_COPY_MEMORY_INSTRUCTION: u64 = 10;
+const MAX_COPY_MEMORY_INSTRUCTION: u64 = u64::MAX;
 
 /// The overlay version used for newly written overlays.
 const CURRENT_OVERLAY_VERSION: OverlayVersion = OverlayVersion::V0;

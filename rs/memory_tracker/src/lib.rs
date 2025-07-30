@@ -957,11 +957,6 @@ fn apply_memory_instructions(
             range.start.get() >= prefetch_range.start.get()
                 && range.end.get() <= prefetch_range.end.get()
         );
-        for i in range.start.get()..range.end.get() {
-            if let Some(was_handled) = handled.get_mut(&i) {
-                *was_handled = true;
-            }
-        }
         match mmap_or_data {
             ic_replicated_state::page_map::MemoryMapOrData::MemoryMap(
                 FileDescriptor { fd },
@@ -992,7 +987,7 @@ fn apply_memory_instructions(
                             .expect("uffd copy failed");
                         }
 
-                        // Don't drop the FD twice!
+                        // Don't drop the FD after file goes out of scope!
                         std::mem::forget(file);
                     }
                     None => {
@@ -1062,14 +1057,19 @@ fn apply_memory_instructions(
                 }
             }
         }
+        for i in range.start.get()..range.end.get() {
+            if let Some(was_handled) = handled.get_mut(&i) {
+                *was_handled = true;
+            }
+        }
     }
 
     for (i, _) in handled.iter().filter(|(_, v)| !*v) {
         let page_start_addr = tracker.page_start_addr_from(PageIndex::from(*i));
-        // println!(
-        //     "Handling zero page index {}, page_start_addr: {:?}, range_size: {}",
-        //     i, page_start_addr, PAGE_SIZE
-        // );
+        println!(
+            "Handling zero page index {}, page_start_addr: {:?}, range_size: {}",
+            i, page_start_addr, PAGE_SIZE
+        );
         if let Some(uffd) = uffd {
             unsafe {
                 uffd.zeropage(page_start_addr, PAGE_SIZE, false)
