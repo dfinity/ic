@@ -408,13 +408,13 @@ async fn list_extensions(
     let list_extensions_arg = Encode!(&ListSnsCanistersRequest {}).unwrap();
 
     let ListSnsCanistersResponse { extensions, .. } = env
-        .call_canister(root_canister_id, "list_extensions", list_extensions_arg)
+        .call_canister(root_canister_id, "list_sns_canisters", list_extensions_arg)
         .await
         .map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Canister method call Root.list_extensions failed: {:?}",
+                    "Canister method call Root.list_sns_canisters failed: {:?}",
                     err
                 ),
             )
@@ -423,7 +423,7 @@ async fn list_extensions(
             Decode!(&blob, ListSnsCanistersResponse).map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error decoding Root.list_extensions response: {:?}", err),
+                    format!("Error decoding Root.list_sns_canisters response: {:?}", err),
                 )
             })
         })?;

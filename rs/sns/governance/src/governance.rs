@@ -9,6 +9,7 @@ use crate::pb::v1::{
     valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
     VotingPowerMetrics,
 };
+use sns_treasury_manager::Error as TreasuryManagerError;
 use crate::proposal::TreasuryAccount;
 use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
@@ -2652,12 +2653,18 @@ impl Governance {
                 )
             })
             .and_then(|blob| {
-                Decode!(&blob, Balances).map_err(|err| {
+                Decode!(&blob, Result<Balances, TreasuryManagerError>).map_err(|err| {
                     GovernanceError::new_with_message(
                         ErrorType::External,
                         format!("Error decoding TreasuryManager.deposit response: {:?}", err),
                     )
                 })
+            })?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("TreasuryManager.deposit failed: {:?}", err),
+                )
             })?;
 
         log!(

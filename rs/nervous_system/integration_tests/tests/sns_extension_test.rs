@@ -383,17 +383,23 @@ async fn test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
+        let expected_fees_sns_e8s = 4 * SNS_FEE;
+        let expected_fees_icp_e8s = 4 * ICP_FEE;
+
+        let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s + topup_treasury_allocation_sns_e8s - expected_fees_sns_e8s;
+        let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s + topup_treasury_allocation_icp_e8s - expected_fees_icp_e8s;
+
         assert_eq!(
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token => empty_sns_balance_book
                     .clone()
-                    .treasury_owner(initial_treasury_allocation_sns_e8s - 4 * SNS_FEE)
-                    .fee_collector(4 * SNS_FEE),
+                    .treasury_owner(treasury_allocation_sns_e8s)
+                    .fee_collector(expected_fees_sns_e8s),
                 icp_token => empty_icp_balance_book
                     .clone()
-                    .treasury_owner(initial_treasury_allocation_icp_e8s - 4 * ICP_FEE)
-                    .fee_collector(4 * ICP_FEE),
+                    .treasury_owner(treasury_allocation_icp_e8s)
+                    .fee_collector(expected_fees_icp_e8s),
             }),
         );
     };
