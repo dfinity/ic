@@ -8,4 +8,4 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-regex = "1.11.1"
+regex = { workspace = true }
