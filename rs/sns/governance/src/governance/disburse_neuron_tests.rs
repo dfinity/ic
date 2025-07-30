@@ -8,7 +8,7 @@ use crate::{
     governance::AccountProto,
     pb::v1::{
         governance_error::ErrorType, manage_neuron, neuron::DissolveState, NeuronId, ProposalData,
-        ProposalId, Subaccount, Tally, WaitForQuietState,
+        ProposalId, Subaccount,
     },
     types::test_helpers::NativeEnvironment,
 };
@@ -24,10 +24,38 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use std::sync::{Arc, Mutex};
 
+// Struct representing a transfer call with named fields matching transfer_funds parameters
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TransferCall {
+    pub amount_e8s: u64,
+    pub fee_e8s: u64,
+    pub from_subaccount: Option<[u8; 32]>,
+    pub to: Account,
+    pub memo: u64,
+}
+
+impl TransferCall {
+    /// Returns true if this is a burn call (fee is 0, indicating a burn operation)
+    pub fn is_burn(&self) -> bool {
+        self.fee_e8s == 0
+    }
+
+    /// Returns true if this is a regular transfer call (fee > 0)
+    pub fn is_transfer(&self) -> bool {
+        self.fee_e8s > 0
+    }
+
+    /// Asserts that this call has the expected amount and fee
+    pub fn assert_amount_and_fee(&self, expected_amount: u64, expected_fee: u64) {
+        assert_eq!(self.amount_e8s, expected_amount);
+        assert_eq!(self.fee_e8s, expected_fee);
+    }
+}
+
 // Mock ledger for testing that implements transfer_funds without panicking
 #[derive(Clone)]
 pub(crate) struct MockLedger {
-    pub transfer_calls: Arc<Mutex<Vec<(u64, u64, Option<[u8; 32]>, Account, u64)>>>,
+    pub transfer_calls: Arc<Mutex<Vec<TransferCall>>>,
 }
 
 impl MockLedger {
@@ -37,12 +65,8 @@ impl MockLedger {
         }
     }
 
-    pub fn get_transfer_calls(&self) -> Vec<(u64, u64, Option<[u8; 32]>, Account, u64)> {
+    pub fn get_transfer_calls(&self) -> Vec<TransferCall> {
         self.transfer_calls.lock().unwrap().clone()
-    }
-
-    pub fn clear_transfer_calls(&self) {
-        self.transfer_calls.lock().unwrap().clear();
     }
 }
 
@@ -57,10 +81,13 @@ impl ICRC1Ledger for MockLedger {
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
         // Record the call for test verification
-        self.transfer_calls
-            .lock()
-            .unwrap()
-            .push((amount_e8s, fee_e8s, from_subaccount, to, memo));
+        self.transfer_calls.lock().unwrap().push(TransferCall {
+            amount_e8s,
+            fee_e8s,
+            from_subaccount,
+            to,
+            memo,
+        });
         // Return a mock block index for successful transfer
         Ok(1)
     }
@@ -476,14 +503,14 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
 
     // Check burn call (first transfer)
     let burn_call = &transfer_calls[0];
-    assert_eq!(burn_call.0, 70_000); // amount burned (100,000 - 30,000)
-    assert_eq!(burn_call.1, 0); // fee for burn (always 0)
+    assert!(burn_call.is_burn());
+    burn_call.assert_amount_and_fee(70_000, 0); // amount burned (100,000 - 30,000)
 
     // Check disburse call (second transfer)
     let disburse_call = &transfer_calls[1];
+    assert!(disburse_call.is_transfer());
     // Disburse: (500M stake - 100K fees) - 10K tx_fee = 499,890,000
-    assert_eq!(disburse_call.0, 499_890_000); // amount disbursed
-    assert_eq!(disburse_call.1, 10_000); // transaction fee
+    disburse_call.assert_amount_and_fee(499_890_000, 10_000);
 
     // Check that the neuron fees were reduced by the burnable amount
     let updated_neuron = governance
@@ -525,9 +552,9 @@ fn test_disburse_neuron_small_fees_not_burned() {
 
     // Check disburse call
     let disburse_call = &transfer_calls[0];
+    assert!(disburse_call.is_transfer());
     // Disburse: (500M stake - 1K fees) - 10K tx_fee = 499,989,000
-    assert_eq!(disburse_call.0, 499_989_000); // amount disbursed
-    assert_eq!(disburse_call.1, 10_000); // transaction fee
+    disburse_call.assert_amount_and_fee(499_989_000, 10_000);
 
     // Check that the neuron fees were NOT reduced (preserved for future)
     let updated_neuron = governance
@@ -574,9 +601,9 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
 
     // Check disburse call
     let disburse_call = &transfer_calls[0];
+    assert!(disburse_call.is_transfer());
     // Disburse: (500M stake - 100 fees) - 10K tx_fee = 499,989,900
-    assert_eq!(disburse_call.0, 499_989_900); // amount disbursed
-    assert_eq!(disburse_call.1, 10_000); // transaction fee
+    disburse_call.assert_amount_and_fee(499_989_900, 10_000);
 
     // Check that no fees were burned (all fees remain to potentially cover the reject cost)
     let updated_neuron = governance
@@ -625,14 +652,14 @@ fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
 
     // Check burn call (first transfer)
     let burn_call = &transfer_calls[0];
-    assert_eq!(burn_call.0, 30_000); // amount burned (50,000 - 20,000)
-    assert_eq!(burn_call.1, 0); // fee for burn (always 0)
+    assert!(burn_call.is_burn());
+    burn_call.assert_amount_and_fee(30_000, 0); // amount burned (50,000 - 20,000)
 
     // Check disburse call (second transfer)
     let disburse_call = &transfer_calls[1];
+    assert!(disburse_call.is_transfer());
     // Partial disburse: 2 tokens requested - 10K tx_fee = 199,990,000 e8s
-    assert_eq!(disburse_call.0, 199_990_000); // amount disbursed
-    assert_eq!(disburse_call.1, 10_000); // transaction fee
+    disburse_call.assert_amount_and_fee(199_990_000, 10_000);
 
     // Check final neuron state
     let updated_neuron = governance
@@ -688,14 +715,14 @@ fn test_disburse_neuron_caps_to_maximum_available_stake() {
 
     // Check burn call (first transfer)
     let burn_call = &transfer_calls[0];
-    assert_eq!(burn_call.0, 20_000); // amount burned (50K - 30K non-burnable)
-    assert_eq!(burn_call.1, 0); // fee for burn (always 0)
+    assert!(burn_call.is_burn());
+    burn_call.assert_amount_and_fee(20_000, 0); // amount burned (50K - 30K non-burnable)
 
     // Check disburse call (second transfer)
     let disburse_call = &transfer_calls[1];
+    assert!(disburse_call.is_transfer());
     // Max disburse: 499.95M available - 10K tx_fee = 499,940,000
-    assert_eq!(disburse_call.0, 499_940_000); // maximum possible amount disbursed
-    assert_eq!(disburse_call.1, 10_000); // transaction fee
+    disburse_call.assert_amount_and_fee(499_940_000, 10_000);
 
     // Check final neuron state after max disbursal
     let updated_neuron = governance
