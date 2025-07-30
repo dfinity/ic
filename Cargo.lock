@@ -10815,6 +10815,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-utils 0.9.0",
  "icrc-ledger-client",
+ "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "num-traits",
  "rand 0.8.5",
@@ -15236,12 +15237,15 @@ name = "ic_sev"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.1",
  "der 0.7.9",
+ "hkdf",
  "mockall",
  "pem 1.1.1",
  "rcgen",
  "reqwest 0.12.15",
  "sev",
+ "sha2 0.10.9",
  "tempfile",
 ]
 
