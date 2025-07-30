@@ -1,5 +1,5 @@
 use crate::rewards_calculator_results::{
-    DailyResults, DayUTC, NodeMetricsDaily, NodeProviderResults, NodeResults, NodeStatus, Percent,
+    DailyResults, DayUtc, NodeMetricsDaily, NodeProviderResults, NodeResults, NodeStatus,
     RewardCalculatorError, RewardsCalculatorResults, XDRPermyriad,
 };
 use crate::types::{
@@ -74,7 +74,7 @@ pub fn calculate_rewards(
         // Step 3: Compute performance multiplier for each node for each provider
         let relative_nodes_fr = provider_nodes_metrics_daily
             .iter()
-            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr.0))
+            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr_percent.0))
             .collect::<BTreeMap<_, _>>();
         let Step3Results {
             reward_reduction,
@@ -107,7 +107,7 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
-        subnets_fr,
+        subnets_fr_percent: subnets_fr,
         provider_results: results_per_provider,
     })
 }
@@ -121,8 +121,8 @@ const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.75;
 
 #[derive(Default)]
 struct Step0Results {
-    subnets_fr: BTreeMap<(DayUTC, SubnetId), Percent>,
-    nodes_metrics_daily: BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
+    subnets_fr: BTreeMap<(DayUtc, SubnetId), Percent>,
+    nodes_metrics_daily: BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
 }
 fn step_0_subnets_nodes_fr(
     daily_metrics_by_subnet: HashMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
@@ -175,11 +175,11 @@ fn step_0_subnets_nodes_fr(
                 (day, node_id),
                 NodeMetricsDaily {
                     subnet_assigned: subnet_id,
-                    subnet_assigned_fr: Percent(subnet_fr),
+                    subnet_assigned_fr_percent: Percent(subnet_fr),
                     num_blocks_proposed,
                     num_blocks_failed,
-                    original_fr: Percent(original_fr),
-                    relative_fr: Percent(relative_fr),
+                    original_fr_percent: Percent(original_fr),
+                    relative_fr_percent: Percent(relative_fr),
                 },
             );
         }
@@ -192,12 +192,12 @@ fn step_0_subnets_nodes_fr(
 // ------------------------------------------------------------------------------------------------
 #[derive(Default)]
 struct Step1Results {
-    provider_nodes_metrics_daily: BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
+    provider_nodes_metrics_daily: BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
 }
 
 fn step_1_provider_nodes_metrics_daily(
     rewardable_nodes: &[RewardableNode],
-    node_metrics_daily: &mut BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
+    node_metrics_daily: &mut BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
 ) -> Step1Results {
     let mut provider_nodes_metrics_daily = BTreeMap::new();
 
@@ -219,24 +219,24 @@ fn step_1_provider_nodes_metrics_daily(
 // ------------------------------------------------------------------------------------------------
 #[derive(Default)]
 struct Step2Results {
-    extrapolated_fr: HashMap<DayUTC, Decimal>,
+    extrapolated_fr: HashMap<DayUtc, Decimal>,
 }
 fn step_2_extrapolated_fr(
     rewardable_nodes: &[RewardableNode],
-    nodes_metrics_daily: &BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
+    nodes_metrics_daily: &BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
 ) -> Step2Results {
     let mut result = Step2Results::default();
     // Collect all relative FRs for this provider's nodes grouped by day.
-    let mut grouped_fr: BTreeMap<DayUTC, Vec<Decimal>> = BTreeMap::new();
+    let mut grouped_fr: BTreeMap<DayUtc, Vec<Decimal>> = BTreeMap::new();
     for ((day, _), metrics) in nodes_metrics_daily {
         grouped_fr
             .entry(*day)
             .or_default()
-            .push(metrics.relative_fr.0);
+            .push(metrics.relative_fr_percent.0);
     }
 
     // Include all rewardable days even if there was no data
-    let all_rewardable_days: HashSet<DayUTC> = rewardable_nodes
+    let all_rewardable_days: HashSet<DayUtc> = rewardable_nodes
         .iter()
         .flat_map(|n| n.rewardable_days.clone())
         .collect();
@@ -268,13 +268,13 @@ const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 
 #[derive(Default)]
 struct Step3Results {
-    reward_reduction: HashMap<(DayUTC, NodeId), Decimal>,
-    performance_multiplier: HashMap<(DayUTC, NodeId), Decimal>,
+    reward_reduction: HashMap<(DayUtc, NodeId), Decimal>,
+    performance_multiplier: HashMap<(DayUtc, NodeId), Decimal>,
 }
 fn step_3_performance_multiplier(
     rewardable_nodes: &[RewardableNode],
-    relative_nodes_fr: &BTreeMap<(DayUTC, NodeId), Decimal>,
-    extrapolated_fr: &HashMap<DayUTC, Decimal>,
+    relative_nodes_fr: &BTreeMap<(DayUtc, NodeId), Decimal>,
+    extrapolated_fr: &HashMap<DayUtc, Decimal>,
 ) -> Step3Results {
     let mut results = Step3Results::default();
     fn calculate_rewards_reduction(fr: Decimal) -> Decimal {
@@ -327,7 +327,7 @@ const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
 #[derive(Default)]
 struct Step4Results {
-    base_rewards: BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
+    base_rewards: BTreeMap<(DayUtc, NodeId), Decimal>,
     base_rewards_log: String,
 }
 fn step_4_compute_base_rewards_type_region(
@@ -451,7 +451,7 @@ fn step_4_compute_base_rewards_type_region(
                     .expect("base rewards expected for each node")
             };
 
-            base_rewards_per_node.insert((*day, node.node_id), XDRPermyriad(*base_rewards_for_day));
+            base_rewards_per_node.insert((*day, node.node_id), Decimal(*base_rewards_for_day));
         }
     }
 
@@ -469,12 +469,12 @@ const FULL_REWARDS_MACHINES_LIMIT: usize = 4;
 
 #[derive(Default)]
 struct Step5Results {
-    adjusted_rewards: BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
+    adjusted_rewards: BTreeMap<(DayUtc, NodeId), Decimal>,
 }
 fn step_5_adjust_node_rewards(
     rewardable_nodes: &[RewardableNode],
-    base_rewards: &BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
-    performance_multiplier: &HashMap<(DayUTC, NodeId), Decimal>,
+    base_rewards: &BTreeMap<(DayUtc, NodeId), Decimal>,
+    performance_multiplier: &HashMap<(DayUtc, NodeId), Decimal>,
 ) -> Step5Results {
     let mut nodes_count = BTreeMap::new();
     let mut result = Step5Results::default();
@@ -502,7 +502,7 @@ fn step_5_adjust_node_rewards(
                 // independently of their performance.
                 result
                     .adjusted_rewards
-                    .insert((*day, node.node_id), XDRPermyriad(base_rewards_for_day));
+                    .insert((*day, node.node_id), Decimal(base_rewards_for_day));
             } else {
                 let performance_multiplier = performance_multiplier
                     .get(&(*day, node.node_id))
@@ -511,7 +511,7 @@ fn step_5_adjust_node_rewards(
                 let adjusted_rewards_for_day = base_rewards_for_day * performance_multiplier;
                 result
                     .adjusted_rewards
-                    .insert((*day, node.node_id), XDRPermyriad(adjusted_rewards_for_day));
+                    .insert((*day, node.node_id), Decimal(adjusted_rewards_for_day));
             }
         }
     }
@@ -524,12 +524,12 @@ fn step_5_adjust_node_rewards(
 // ------------------------------------------------------------------------------------------------
 fn step_6_construct_provider_results(
     rewardable_nodes: Vec<RewardableNode>,
-    mut provider_nodes_metrics_daily: BTreeMap<(DayUTC, NodeId), NodeMetricsDaily>,
-    extrapolated_fr: HashMap<DayUTC, Decimal>,
-    mut reward_reduction: HashMap<(DayUTC, NodeId), Decimal>,
-    mut performance_multiplier: HashMap<(DayUTC, NodeId), Decimal>,
-    mut base_rewards: BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
-    mut adjusted_rewards: BTreeMap<(DayUTC, NodeId), XDRPermyriad>,
+    mut provider_nodes_metrics_daily: BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
+    extrapolated_fr: HashMap<DayUtc, Decimal>,
+    mut reward_reduction: HashMap<(DayUtc, NodeId), Decimal>,
+    mut performance_multiplier: HashMap<(DayUtc, NodeId), Decimal>,
+    mut base_rewards: BTreeMap<(DayUtc, NodeId), Decimal>,
+    mut adjusted_rewards: BTreeMap<(DayUtc, NodeId), Decimal>,
     computation_log: String,
 ) -> NodeProviderResults {
     let mut node_results = BTreeMap::new();
@@ -578,10 +578,10 @@ fn step_6_construct_provider_results(
                 day,
                 DailyResults {
                     node_status,
-                    performance_multiplier: Percent(performance_multiplier),
-                    rewards_reduction: Percent(rewards_reduction),
-                    base_rewards,
-                    adjusted_rewards,
+                    performance_multiplier_percent: Percent(performance_multiplier),
+                    rewards_reduction_percent: Percent(rewards_reduction),
+                    base_rewards_xdr_permyriad: base_rewards,
+                    adjusted_rewards_xdr_permyriad: adjusted_rewards,
                 },
             );
         }
@@ -598,7 +598,7 @@ fn step_6_construct_provider_results(
     }
 
     NodeProviderResults {
-        rewards_total: XDRPermyriad(rewards_total),
+        rewards_total_xdr_permyriad: Decimal(rewards_total),
         computation_log,
         results_by_node: node_results,
     }

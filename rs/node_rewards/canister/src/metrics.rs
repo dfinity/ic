@@ -1,4 +1,4 @@
-use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
+use crate::pb::ic_node_rewards::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use crate::KeyRange;
 use async_trait::async_trait;
 use candid::Principal;
@@ -7,7 +7,7 @@ use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
-use rewards_calculation::rewards_calculator_results::DayUTC;
+use rewards_calculation::rewards_calculator_results::DayUtc;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -185,8 +185,8 @@ where
     /// previous day from those of the current day.
     pub fn daily_metrics_by_subnet(
         &self,
-        start_day: DayUTC,
-        end_day: DayUTC,
+        start_day: DayUtc,
+        end_day: DayUtc,
     ) -> BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>> {
         let mut daily_metrics_by_subnet = BTreeMap::new();
         let previous_day_ts = start_day.previous_day().unix_ts_at_day_start();
@@ -199,7 +199,7 @@ where
             ..SubnetMetricsKey::max_key()
         };
 
-        let mut subnets_metrics_by_day: BTreeMap<DayUTC, _> = self
+        let mut subnets_metrics_by_day: BTreeMap<DayUtc, _> = self
             .subnets_metrics
             .borrow()
             .range(first_key..=last_key)

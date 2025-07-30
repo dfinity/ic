@@ -5,7 +5,7 @@
 // 4. Structure makes boundaries clear and easy to enforce
 // 5. Simple Organization
 
-use crate::pb::v1::{
+use crate::pb::ic_node_rewards::v1::{
     NodeMetrics as NodeMetricsProto, SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
 };
 use candid::Principal;

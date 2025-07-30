@@ -24,6 +24,7 @@ ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = "1.1.1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
