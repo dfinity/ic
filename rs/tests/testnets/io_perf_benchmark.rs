@@ -241,7 +241,7 @@ pub fn setup(env: TestEnv, config: Config) {
     let topology_snapshot = env.topology_snapshot();
     let mut switch_to_ssd_handles = Vec::new();
     for subnet in topology_snapshot.subnets() {
-        if subnet.subnet_type() != SubnetType::Application() {
+        if subnet.subnet_type() != SubnetType::Application {
             continue;
         }
         for node in subnet.nodes() {
