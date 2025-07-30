@@ -26,7 +26,7 @@ impl StateSource {
 
     fn to_argument(self) -> String {
         format!(
-            "{}@{}:/home/dev/{}.tar.zst",
+            "{}@{}:/home/readonly/states/{}.tar.zst",
             STATE_SOURCE_USER,
             STATE_SOURCE_HOST,
             self.state_dir_name()
