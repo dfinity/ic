@@ -804,6 +804,14 @@ impl CkBtcMinterState {
             .unwrap_or_default()
     }
 
+    pub(crate) fn oldest_retrieve_btc_submitted_transaction_timestamp(&self) -> Option<u64> {
+        self.submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+            .map(|tx| tx.submitted_at)
+            .min()
+    }
+
     /// Replaces a stuck transaction with a newly sent transaction.
     pub(crate) fn replace_transaction(&mut self, old_txid: &Txid, mut tx: SubmittedBtcTransaction) {
         assert_ne!(old_txid, &tx.txid);
