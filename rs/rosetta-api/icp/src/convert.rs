@@ -546,15 +546,22 @@ pub fn from_account_ai_to_ai(
         (None, None) => None,
         (Some(account), None) => {
             let owner = match account.owner {
-                None => return Err(ApiError::invalid_request("Invalid Account, the owner needs to be specified")),
-                Some(owner) =>  owner.0,
+                None => {
+                    return Err(ApiError::invalid_request(
+                        "Invalid Account, the owner needs to be specified",
+                    ))
+                }
+                Some(owner) => owner.0,
             };
             let account = Account {
                 owner,
                 subaccount: match account.subaccount {
                     None => None,
-                    Some(subaccount) =>  Some(subaccount.try_into().map_err(|v: Vec<u8>| {
-                        ApiError::invalid_request(format!("Invalid subaccount length: {}, should be 32", v.len()))
+                    Some(subaccount) => Some(subaccount.try_into().map_err(|v: Vec<u8>| {
+                        ApiError::invalid_request(format!(
+                            "Invalid subaccount length: {}, should be 32",
+                            v.len()
+                        ))
                     })?),
                 },
             };
@@ -566,7 +573,11 @@ pub fn from_account_ai_to_ai(
                 e
             ))
         })?),
-        (Some(_), Some(_)) => return Err(ApiError::invalid_request("Cannot specify both account and account_identifier")),
+        (Some(_), Some(_)) => {
+            return Err(ApiError::invalid_request(
+                "Cannot specify both account and account_identifier",
+            ))
+        }
     };
     Ok(result)
 }
