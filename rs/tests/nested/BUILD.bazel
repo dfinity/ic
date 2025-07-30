@@ -114,7 +114,7 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
-# Tests if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV | {
@@ -128,6 +128,25 @@ system_test_nns(
     uses_guestos_img = False,
     uses_guestos_mainnet_img = True,
     uses_hostos_update = True,
+    uses_setupos_mainnet_img = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    deps = RUNNER_DEPENDENCIES,
+)
+
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
+system_test_nns(
+    name = "guestos_upgrade_from_latest_release_to_current",
+    env = MAINNET_ENV | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
+    },
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["long_test"],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_img = True,
+    uses_guestos_update = True,
     uses_setupos_mainnet_img = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
