@@ -24,7 +24,6 @@ packages:
   - "bash"
   - "ca-certificates"
   - "coreutils" # for chmod
-  - "cryptsetup" # TODO: remove if we can move to libcryptsetup-dev
   - "dmsetup"
   - "dosfstools"
   - "dpkg" # for apt list --installed

@@ -2039,7 +2039,6 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
-    println!("SSH Private key path: {}", priv_key_path.display());
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
     Ok(sess)
 }

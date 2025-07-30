@@ -17,7 +17,3 @@ itertools = { workspace = true }
 network = { path = "../../network" }
 regex = { workspace = true }
 utils = { path = "../../utils" }
-ic_sev = { path = "../../sev" }
-nix = { version = "0.30.1", features = ["fs"] }
-tempfile = "3.20.0"
-rand = "0.8.5"

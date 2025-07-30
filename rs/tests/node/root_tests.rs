@@ -68,12 +68,9 @@ EOF
 
         docker build --tag final -f /tmp/Dockerfile .
         mkdir /tmp/out
-        docker run --privileged -v /tmp/out:/tmp/out -v /dev:/dev --rm final /usr/bin/bash -c "
+        docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
             RUST_BACKTRACE=1 /guest_disk_test
-            ls
-            cp *.profraw /tmp/out
         "
-        echo DONE
     "#,
         )
         .expect("Failed to run guest_disk_test");
