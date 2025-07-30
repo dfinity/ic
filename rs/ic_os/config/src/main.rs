@@ -314,9 +314,9 @@ pub fn main() -> Result<()> {
             let is_dev_feature = cfg!(feature = "dev");
 
             if is_dev_feature {
-                println!("dev");
+                print!("dev");
             } else {
-                println!("prod");
+                print!("prod");
             }
 
             Ok(())
