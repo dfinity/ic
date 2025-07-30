@@ -390,7 +390,7 @@ impl TryFrom<&models::Request> for Request {
                                 e
                             ))
                         })?),
-                        (Some(_), Some(_)) => panic!("Invalid DisburseMaturity command, cannot specify both to_account and to_account_identifier"),
+                        (Some(_), Some(_)) => return Err(ApiError::invalid_request("Invalid DisburseMaturity command, cannot specify both to_account and to_account_identifier")),
                     };
 
                     Ok(Request::DisburseMaturity(DisburseMaturity {
