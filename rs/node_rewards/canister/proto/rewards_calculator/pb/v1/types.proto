@@ -50,13 +50,13 @@ message NodeResults {
   repeated DailyResults daily_results = 5;
 }
 
-message NodeProviderResults {
+message NodeProviderRewards {
   ic_nervous_system.pb.v1.Decimal rewards_total_xdr_permyriad = 1;
   optional string computation_log = 2;
   repeated NodeResults nodes_results = 3;
 }
 
-message NodeProviderResultsKey {
+message NodeProviderRewardsKey {
   ic_base_types.pb.v1.PrincipalId principal_id = 1;
   DayUtc rewards_distribution_day = 2;
 }

@@ -1,4 +1,5 @@
 use crate::metrics::{ICCanisterClient, MetricsManager};
+use crate::pb::rewards_calculator::v1::{NodeProviderRewards, NodeProviderRewardsKey};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
@@ -11,7 +12,8 @@ const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
 const LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID: MemoryId = MemoryId::new(2);
 const SUBNETS_TO_RETRY_MEMORY_ID: MemoryId = MemoryId::new(3);
-const HISTORICAL_RESULTS_MEMORY_ID: MemoryId = MemoryId::new(4);
+const HISTORICAL_REWARDS_MEMORY_ID: MemoryId = MemoryId::new(4);
+const HISTORICAL_SUBNETS_FR_MEMORY_ID: MemoryId = MemoryId::new(5);
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -39,9 +41,14 @@ thread_local! {
         Rc::new(metrics_manager)
     };
 
-    pub static HISTORICAL_RESULTS: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>>
+    pub static HISTORICAL_REWARDS: RefCell<StableBTreeMap<NodeProviderRewardsKey, NodeProviderRewards, VM>>
         = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
-            StableBTreeMap::init(mm.get(HISTORICAL_RESULTS_MEMORY_ID))
+            StableBTreeMap::init(mm.get(HISTORICAL_REWARDS_MEMORY_ID))
+        ));
+
+    pub static HISTORICAL_SUBNETS_FR: RefCell<StableBTreeMap<NodeProviderRewardsKey, NodeProviderRewards, VM>>
+        = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
+            StableBTreeMap::init(mm.get(HISTORICAL_SUBNETS_FR_MEMORY_ID))
         ));
 
     static REGISTRY_DATA_STORE_BTREE_MAP: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>>

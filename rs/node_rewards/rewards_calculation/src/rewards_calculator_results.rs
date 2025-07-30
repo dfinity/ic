@@ -1,38 +1,16 @@
 use crate::types::{RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
-use candid::types::{Serializer, Type};
-use candid::CandidType;
 use chrono::DateTime;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
-use serde::ser::Error;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Display;
-use std::rc::Rc;
 
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
 
 #[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy)]
 pub struct DayUtc(UnixTsNanos);
-
-impl CandidType for DayUtc {
-    fn _ty() -> Type {
-        Type(Rc::new(candid::types::TypeInner::Text))
-    }
-
-    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
-    where
-        S: Serializer,
-    {
-        let dd_mm_yyyy = DateTime::from_timestamp_nanos(self.unix_ts_at_day_end() as i64)
-            .naive_utc()
-            .format("%d-%m-%Y")
-            .to_string();
-        serializer.serialize_text(dd_mm_yyyy.as_str())
-    }
-}
 
 impl From<UnixTsNanos> for DayUtc {
     fn from(value: UnixTsNanos) -> Self {
@@ -117,6 +95,7 @@ pub enum NodeStatus {
 }
 
 pub struct DailyResults {
+    pub day: DayUtc,
     pub node_status: NodeStatus,
     pub performance_multiplier_percent: Decimal,
     pub rewards_reduction_percent: Decimal,
@@ -125,21 +104,22 @@ pub struct DailyResults {
 }
 
 pub struct NodeResults {
+    pub node_id: NodeId,
     pub node_reward_type: String,
     pub region: String,
     pub dc_id: String,
-    pub daily_results: BTreeMap<DayUtc, DailyResults>,
+    pub daily_results: Vec<DailyResults>,
 }
 
-pub struct NodeProviderResults {
+pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: Decimal,
     pub computation_log: String,
-    pub results_by_node: BTreeMap<NodeId, NodeResults>,
+    pub nodes_results: Vec<NodeResults>,
 }
 
 pub struct RewardsCalculatorResults {
     pub subnets_fr_percent: BTreeMap<(DayUtc, SubnetId), Decimal>,
-    pub provider_results: BTreeMap<PrincipalId, NodeProviderResults>,
+    pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
 
 #[derive(Debug, PartialEq)]

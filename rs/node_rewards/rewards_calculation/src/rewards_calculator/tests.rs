@@ -135,12 +135,12 @@ fn test_compute_subnets_nodes_fr() {
     let original_nodes_fr: BTreeMap<_, _> = result
         .nodes_metrics_daily
         .iter()
-        .map(|(k, v)| (*k, v.original_fr_percent.0))
+        .map(|(k, v)| (*k, v.original_fr_percent))
         .collect();
     let relative_nodes_fr: BTreeMap<_, _> = result
         .nodes_metrics_daily
         .iter()
-        .map(|(k, v)| (*k, v.relative_fr_percent.0))
+        .map(|(k, v)| (*k, v.relative_fr_percent))
         .collect();
 
     // --- Assertions for Day 1, Subnet 1 ---
@@ -149,7 +149,7 @@ fn test_compute_subnets_nodes_fr() {
     let expected_subnet1_day1_fr = dec!(0.25);
     assert_eq!(
         subnets_fr.get(&(day1, subnet1)),
-        Some(&Percent(expected_subnet1_day1_fr))
+        Some(&expected_subnet1_day1_fr)
     );
     assert_eq!(original_nodes_fr.get(&(day1, s1_node1)), Some(&dec!(0.25)));
     // Relative FR = max(0, original - subnet_fr)
@@ -163,7 +163,7 @@ fn test_compute_subnets_nodes_fr() {
     let expected_subnet2_day1_fr = dec!(0.40);
     assert_eq!(
         subnets_fr.get(&(day1, subnet2)),
-        Some(&Percent(expected_subnet2_day1_fr))
+        Some(&expected_subnet2_day1_fr)
     );
     assert_eq!(original_nodes_fr.get(&(day1, s2_node1)), Some(&dec!(0.20)));
     assert_eq!(relative_nodes_fr.get(&(day1, s2_node1)), Some(&dec!(0.0))); // 0.20 - 0.40 < 0
@@ -175,7 +175,7 @@ fn test_compute_subnets_nodes_fr() {
     let expected_subnet1_day2_fr = dec!(0.01);
     assert_eq!(
         subnets_fr.get(&(day2, subnet1)),
-        Some(&Percent(expected_subnet1_day2_fr))
+        Some(&expected_subnet1_day2_fr)
     );
     assert_eq!(original_nodes_fr.get(&(day2, s1_node1)), Some(&dec!(0.01)));
     assert_eq!(relative_nodes_fr.get(&(day2, s1_node1)), Some(&dec!(0.0))); // 0.01 - 0.01 = 0
@@ -189,11 +189,11 @@ impl Default for NodeMetricsDaily {
     fn default() -> Self {
         Self {
             subnet_assigned: test_subnet_id(0),
-            subnet_assigned_fr_percent: Percent(dec!(0.0)),
+            subnet_assigned_fr_percent: dec!(0.0),
             num_blocks_proposed: 0,
             num_blocks_failed: 0,
-            original_fr_percent: Percent(dec!(0.0)),
-            relative_fr_percent: Percent(dec!(0.0)),
+            original_fr_percent: dec!(0.0),
+            relative_fr_percent: dec!(0.0),
         }
     }
 }
@@ -215,8 +215,8 @@ fn test_compute_providers_extrapolated_fr() {
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
     let p2_metrics = btreemap! {
-        (day, p2_node1) => NodeMetricsDaily { relative_fr_percent: Percent(dec!(0.2)), ..Default::default() },
-        (day, p2_node2) => NodeMetricsDaily { relative_fr_percent: Percent(dec!(0.4)), ..Default::default() },
+        (day, p2_node1) => NodeMetricsDaily { relative_fr_percent: dec!(0.2), ..Default::default() },
+        (day, p2_node2) => NodeMetricsDaily { relative_fr_percent: dec!(0.4), ..Default::default() },
     };
     let result_p2 = step_2_extrapolated_fr(&p2_nodes, &p2_metrics);
     // Extrapolated FR for P2 should be the average of its nodes' relative FR
@@ -382,18 +382,9 @@ Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards
     assert_eq!(base_rewards_log, expected_log);
 
     // --- Assertions ---
-    assert_eq!(
-        base_rewards.get(&(day, type1_node)),
-        Some(&Decimal(dec!(10000)))
-    );
-    assert_eq!(
-        base_rewards.get(&(day, type3_node_ca)),
-        Some(&Decimal(dec!(31500)))
-    );
-    assert_eq!(
-        base_rewards.get(&(day, type3_node_nv)),
-        Some(&Decimal(dec!(31500)))
-    );
+    assert_eq!(base_rewards.get(&(day, type1_node)), Some(&dec!(10000)));
+    assert_eq!(base_rewards.get(&(day, type3_node_ca)), Some(&dec!(31500)));
+    assert_eq!(base_rewards.get(&(day, type3_node_nv)), Some(&dec!(31500)));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -422,7 +413,7 @@ fn test_adjust_nodes_rewards() {
     let mut performance_multiplier = HashMap::new();
     for node in &rewardable_nodes {
         for day in &node.rewardable_days {
-            base_rewards.insert((*day, node.node_id), Decimal(dec!(1000)));
+            base_rewards.insert((*day, node.node_id), dec!(1000));
             performance_multiplier.insert((*day, node.node_id), dec!(0.5));
         }
     }
@@ -435,13 +426,10 @@ fn test_adjust_nodes_rewards() {
     // Case 1: More than 4 nodes (5 on day1), penalty applies
     assert_eq!(
         adjusted_rewards.get(&(day1, node1)),
-        Some(&Decimal(dec!(1000) * dec!(0.5)))
+        Some(&(dec!(1000) * dec!(0.5)))
     );
     // Case 2: 4 or fewer nodes (4 on day2), full rewards
-    assert_eq!(
-        adjusted_rewards.get(&(day2, node1)),
-        Some(&Decimal(dec!(1000)))
-    );
+    assert_eq!(adjusted_rewards.get(&(day2, node1)), Some(&(dec!(1000))));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -453,21 +441,32 @@ struct DailyProviderSummary {
     total_rewards: Decimal,
 }
 
-impl NodeProviderResults {
+impl NodeProviderRewards {
     /// Aggregates results across all nodes for a provider to calculate daily summaries.
     /// This separates data calculation from presentation.
     fn calculate_daily_summaries(&self) -> BTreeMap<DayUtc, DailyProviderSummary> {
         let mut summaries: BTreeMap<DayUtc, DailyProviderSummary> = BTreeMap::new();
 
-        for (node_id, node_results) in &self.results_by_node {
-            for (day, daily_results) in &node_results.daily_results {
+        for NodeResults {
+            node_id,
+            daily_results,
+            ..
+        } in &self.nodes_results
+        {
+            for DailyResults {
+                day,
+                adjusted_rewards_xdr_permyriad,
+                performance_multiplier_percent,
+                ..
+            } in daily_results
+            {
                 let summary = summaries.entry(*day).or_insert(DailyProviderSummary {
                     underperforming_nodes: Vec::new(),
-                    total_rewards: Decimal(dec!(0)),
+                    total_rewards: dec!(0),
                 });
 
-                summary.total_rewards.0 += daily_results.adjusted_rewards_xdr_permyriad.0;
-                if daily_results.performance_multiplier_percent.0 < dec!(1) {
+                summary.total_rewards += adjusted_rewards_xdr_permyriad;
+                if performance_multiplier_percent < &dec!(1) {
                     summary.underperforming_nodes.push(*node_id);
                 }
             }
@@ -511,9 +510,9 @@ impl RewardsCalculatorResults {
 
             // 4. First, generate tables for each individual node.
             let node_tables: Vec<String> = provider_results
-                .results_by_node
+                .nodes_results
                 .iter()
-                .map(|(node_id, node_results)| Self::build_node_table(node_id, node_results))
+                .map(|node_results| Self::build_node_table(&node_results.node_id, node_results))
                 .collect();
             all_tables.extend(node_tables);
         }
@@ -525,9 +524,9 @@ impl RewardsCalculatorResults {
         let mut builder = Builder::default();
         builder.push_record(Self::NODE_HEADERS);
 
-        for (day, results) in &node_results.daily_results {
-            let mut row = vec![day.to_string()];
-            let (status_cols, perf_cols) = Self::format_row_segments(results);
+        for result in &node_results.daily_results {
+            let mut row = vec![result.day.to_string()];
+            let (status_cols, perf_cols) = Self::format_row_segments(result);
             row.extend(status_cols);
             row.extend(perf_cols);
             builder.push_record(row);
@@ -579,12 +578,14 @@ impl RewardsCalculatorResults {
                     node_metrics.relative_fr_percent.to_string(),
                 ]
             }
-            NodeStatus::Unassigned { extrapolated_fr } => vec![
+            NodeStatus::Unassigned {
+                extrapolated_fr_percent,
+            } => vec![
                 "Unassigned".to_string(),
                 "N/A".to_string(),
                 "N/A".to_string(),
                 "N/A".to_string(),
-                extrapolated_fr.to_string(),
+                extrapolated_fr_percent.to_string(),
             ],
         };
 
@@ -783,8 +784,7 @@ Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient:
         .provider_results
         .get(&p1)
         .unwrap()
-        .rewards_total_xdr_permyriad
-        .0;
+        .rewards_total_xdr_permyriad;
     let expected_total_p1_rewards = dec!(87200) + dec!(50000);
     assert_eq!(total_p1_rewards, expected_total_p1_rewards);
 
@@ -792,8 +792,7 @@ Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient:
         .provider_results
         .get(&p2)
         .unwrap()
-        .rewards_total_xdr_permyriad
-        .0;
+        .rewards_total_xdr_permyriad;
     let expected_total_p2_rewards = dec!(10000);
     assert_eq!(total_p2_rewards, expected_total_p2_rewards);
 }

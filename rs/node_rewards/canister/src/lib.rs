@@ -8,12 +8,20 @@
 use crate::pb::ic_node_rewards::v1::{
     NodeMetrics as NodeMetricsProto, SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
 };
+use crate::pb::rewards_calculator::v1::{
+    DailyResults as DailyResultsProto, DayUtc as DayUtcProto,
+    NodeMetricsDaily as NodeMetricsDailyProto, NodeProviderRewards as NodeProviderRewardsProto,
+    NodeResults as NodeResultsProto,
+};
 use candid::Principal;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_management_canister_types::NodeMetrics;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use prost::Message;
+use rewards_calculation::rewards_calculator_results::{
+    DailyResults, NodeProviderRewards, NodeResults,
+};
 use rewards_calculation::types::SubnetMetricsDailyKey;
 use std::borrow::Cow;
 
@@ -130,6 +138,47 @@ impl Storable for SubnetMetricsValue {
     }
 
     const BOUND: Bound = Bound::Unbounded;
+}
+
+impl From<NodeProviderRewards> for NodeProviderRewardsProto {
+    fn from(value: NodeProviderRewards) -> Self {
+        Self {
+            rewards_total_xdr_permyriad: value.rewards_total_xdr_permyriad.into(),
+            computation_log: Some(value.computation_log),
+            nodes_results: value.nodes_results.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<NodeResults> for NodeResultsProto {
+    fn from(value: NodeResults) -> Self {
+        Self {
+            node_id: Some(value.node_id.into()),
+            node_reward_type: Some(value.node_reward_type),
+            region: Some(value.region),
+            dc_id: Some(value.dc_id),
+            daily_results: value.daily_results.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<DailyResults> for DailyResultsProto {
+    fn from(value: DailyResults) -> Self {
+        Self {
+            day: Some(value.day.into()),
+            node_status: Some(value.node_status.into()),
+            performance_multiplier_percent: value
+                .performance_multiplier_percent
+                .map(Into::into)
+                .collect(),
+            rewards_reduction_percent: value.rewards_reduction_percent.map(Into::into).collect(),
+            base_rewards_xdr_permyriad: value.base_rewards_xdr_permyriad.map(Into::into).collect(),
+            adjusted_rewards_xdr_permyriad: value
+                .adjusted_rewards_xdr_permyriad
+                .map(Into::into)
+                .collect(),
+        }
+    }
 }
 
 #[cfg(test)]
