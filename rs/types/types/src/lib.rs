@@ -72,7 +72,7 @@ pub mod crypto;
 pub mod funds;
 pub mod hostos_version;
 pub mod ingress;
-pub mod malicious_behavior;
+pub mod malicious_behaviour;
 pub mod malicious_flags;
 pub mod messages;
 pub mod methods;

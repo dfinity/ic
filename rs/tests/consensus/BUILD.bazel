@@ -22,14 +22,14 @@ rust_library(
 
 system_test(
     name = "catch_up_loop_prevention_test",
+    malicious = True,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "k8s",
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    uses_guestos_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -43,13 +43,13 @@ system_test(
 
 system_test(
     name = "catch_up_possible_test",
+    malicious = True,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "k8s",
         "long_test",
     ],
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    uses_guestos_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -104,11 +104,11 @@ rust_library(
 system_test(
     name = "liveness_with_equivocation_test",
     env = UNIVERSAL_CANISTER_ENV,
+    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    uses_guestos_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -277,11 +277,11 @@ system_test(
 system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
+    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    uses_guestos_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -299,11 +299,11 @@ system_test(
 system_test(
     name = "request_auth_malicious_replica_test",
     env = UNIVERSAL_CANISTER_ENV,
+    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    uses_guestos_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -328,11 +328,11 @@ system_test(
 system_test(
     name = "safety_test",
     env = UNIVERSAL_CANISTER_ENV,
+    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    uses_guestos_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [

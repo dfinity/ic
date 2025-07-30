@@ -81,7 +81,7 @@ pub fn test(env: TestEnv) {
     assert_eq!(last_pulled_msg, last_pushed_msg);
 
     info!(log, "Checking for malicious logs...");
-    assert_malicious_from_topo(&topology, vec!["allow_malicious_behavior: true"]);
+    assert_malicious_from_topo(&topology, vec!["allow_malicious_behaviour: true"]);
     info!(log, "Malicious log check succeeded.");
 }
 

@@ -182,7 +182,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    malicious_behavior::MaliciousBehavior,
+    malicious_behaviour::MaliciousBehaviour,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
     NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
@@ -222,7 +222,7 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
-pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
+pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -786,7 +786,7 @@ impl IcNodeSnapshot {
         self.malicious_behavior().is_some()
     }
 
-    pub fn malicious_behavior(&self) -> Option<MaliciousBehavior> {
+    pub fn malicious_behavior(&self) -> Option<MaliciousBehaviour> {
         let nodes_info: NodesInfo = self
             .env
             .read_json_object(NODES_INFO)
@@ -1268,6 +1268,26 @@ pub fn get_empty_disk_img_url() -> Result<Url> {
 
 pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
+}
+
+pub fn get_malicious_ic_os_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
+}
+
+pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {

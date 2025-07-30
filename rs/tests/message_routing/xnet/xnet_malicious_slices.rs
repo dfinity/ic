@@ -33,7 +33,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
-use ic_types::malicious_behavior::MaliciousBehavior;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;
 use systest_message_routing_common::{install_canisters, start_all_canisters};
@@ -76,7 +76,7 @@ impl Config {
             setup(
                 env,
                 self,
-                MaliciousBehavior::new(true).set_maliciously_alter_certified_hash(),
+                MaliciousBehaviour::new(true).set_maliciously_alter_certified_hash(),
             )
         }
     }
@@ -88,7 +88,7 @@ impl Config {
 }
 
 // Generic setup
-fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehavior) {
+fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
     std::thread::scope(|s| {
         s.spawn(|| {
             PrometheusVm::default()

@@ -1712,7 +1712,7 @@ impl MetricsFetcher {
     }
 }
 
-/// Assert that all malicious nodes in a topology produced log that signals malicious behavior.
+/// Assert that all malicious nodes in a topology produced log that signals malicious behaviour.
 /// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
 /// Use this function at the end of malicious node tests, when all logs are present already.
 pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals: Vec<&str>) {
@@ -1723,7 +1723,7 @@ pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals
     assert_malicious(malicious_nodes, malicious_signals);
 }
 
-/// Assert that all nodes of the given set produced log that signals malicious behavior.
+/// Assert that all nodes of the given set produced log that signals malicious behaviour.
 /// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
 /// Use this function at the end of malicious node tests, when all logs are present already.
 pub fn assert_malicious(
@@ -1766,7 +1766,7 @@ async fn assert_nodes_malicious_parallel(
     }
 }
 
-/// Assert that a node produced log that signals malicious behavior.
+/// Assert that a node produced log that signals malicious behaviour.
 pub async fn assert_node_malicious(node: IcNodeSnapshot, malicious_signals: Vec<&str>) {
     LogStream::open(vec![node].into_iter())
         .await

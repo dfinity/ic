@@ -512,5 +512,5 @@ table ip6 filter {\n\
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
     },
 
-    malicious_behavior: {{ malicious_behavior }},
+    malicious_behaviour: {{ malicious_behavior }},
 }

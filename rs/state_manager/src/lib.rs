@@ -1096,7 +1096,7 @@ fn release_lock_and_persist_metadata(
 /// by threads computing manifests.
 ///
 /// An important principle is that any persisted metadata is not
-/// necessary for correct behavior of `StateManager`, and the
+/// necessary for correct behaviour of `StateManager`, and the
 /// checkpoints alone are sufficient. The metadata does however
 /// improve performance. For example, if the metadata is missing or
 /// corrupt, manifests will have to be recomputed for any checkpoints
@@ -3654,8 +3654,8 @@ fn maliciously_return_wrong_hash(
     malicious_flags: &MaliciousFlags,
     height: Height,
 ) -> CryptoHashOfState {
-    use ic_protobuf::log::malicious_behavior_log_entry::v1::{
-        MaliciousBehavior, MaliciousBehaviorLogEntry,
+    use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
+        MaliciousBehaviour, MaliciousBehaviourLogEntry,
     };
 
     if malicious_flags
@@ -3666,7 +3666,7 @@ fn maliciously_return_wrong_hash(
             log,
             "[MALICIOUS] corrupting the hash of the state at height {}",
             height.get();
-            malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::CorruptOwnStateAtHeights as i32}
+            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::CorruptOwnStateAtHeights as i32}
         );
         CryptoHashOfState::from(CryptoHash(vec![0u8; 32]))
     } else {

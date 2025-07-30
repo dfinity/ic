@@ -42,7 +42,7 @@ use ic_system_test_driver::util::{
     random_ed25519_identity, sign_update, UniversalCanister,
 };
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
-use ic_types::malicious_behavior::MaliciousBehavior;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedDelegation,
 };
@@ -62,7 +62,7 @@ fn setup(env: TestEnv) {
                 .add_nodes(3)
                 .add_malicious_nodes(
                     1,
-                    MaliciousBehavior::new(true).set_maliciously_disable_ingress_validation(),
+                    MaliciousBehaviour::new(true).set_maliciously_disable_ingress_validation(),
                 ),
         )
         .setup_and_start(&env)

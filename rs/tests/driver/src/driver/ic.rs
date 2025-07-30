@@ -15,7 +15,7 @@ use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behavior::MaliciousBehavior;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
@@ -316,32 +316,32 @@ impl InternetComputer {
         }
     }
 
-    pub fn has_malicious_behaviors(&self) -> bool {
+    pub fn has_malicious_behaviours(&self) -> bool {
         let has_malicious_nodes: bool = self
             .subnets
             .iter()
-            .any(|s| s.nodes.iter().any(|n| n.malicious_behavior.is_some()));
+            .any(|s| s.nodes.iter().any(|n| n.malicious_behaviour.is_some()));
         let has_malicious_unassigned_nodes = self
             .unassigned_nodes
             .iter()
-            .any(|n| n.malicious_behavior.is_some());
+            .any(|n| n.malicious_behaviour.is_some());
         let has_malicious_api_boundary_nodes = self
             .api_boundary_nodes
             .iter()
-            .any(|n| n.malicious_behavior.is_some());
+            .any(|n| n.malicious_behaviour.is_some());
         has_malicious_nodes || has_malicious_unassigned_nodes || has_malicious_api_boundary_nodes
     }
 
-    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehavior> {
+    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehaviour> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
-                Some(n.malicious_behavior.clone())
+                Some(n.malicious_behaviour.clone())
             } else {
                 None
             }
         };
         // extract malicious nodes all subnet nodes
-        let mut malicious_nodes: Vec<Option<MaliciousBehavior>> = self
+        let mut malicious_nodes: Vec<Option<MaliciousBehaviour>> = self
             .subnets
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
@@ -669,7 +669,7 @@ impl Subnet {
     pub fn add_malicious_nodes(
         self,
         no_of_nodes: usize,
-        malicious_behavior: MaliciousBehavior,
+        malicious_behaviour: MaliciousBehaviour,
     ) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
             let default_vm_resources = subnet.default_vm_resources;
@@ -681,7 +681,7 @@ impl Subnet {
                     vm_allocation,
                     required_host_features,
                 )
-                .with_malicious_behavior(malicious_behavior.clone()),
+                .with_malicious_behaviour(malicious_behaviour.clone()),
             )
         })
     }
@@ -774,7 +774,7 @@ pub struct Node {
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
-    pub malicious_behavior: Option<MaliciousBehavior>,
+    pub malicious_behaviour: Option<MaliciousBehaviour>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
 }
@@ -803,8 +803,8 @@ impl Node {
             .node_id
     }
 
-    pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {
-        self.malicious_behavior = Some(malicious_behavior);
+    pub fn with_malicious_behaviour(mut self, malicious_behaviour: MaliciousBehaviour) -> Self {
+        self.malicious_behaviour = Some(malicious_behaviour);
         self
     }
 

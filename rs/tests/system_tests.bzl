@@ -205,6 +205,7 @@ def system_test(
         tags = [],
         test_timeout = "long",
         flaky = False,
+        malicious = False,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
@@ -212,11 +213,9 @@ def system_test(
         uses_guestos_img = True,
         uses_guestos_mainnet_img = False,
         uses_guestos_recovery_dev_img = False,
-        uses_guestos_malicious_img = False,
         uses_guestos_update = False,
         uses_guestos_test_update = False,
         uses_guestos_mainnet_update = False,
-        uses_guestos_malicious_update = False,
         uses_setupos_img = False,
         uses_setupos_mainnet_img = False,
         uses_hostos_update = False,
@@ -236,6 +235,7 @@ def system_test(
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       flaky: rerun in case of failure (up to 3 times).
+      malicious: use the malicious disk image.
       colocated_test_driver_vm_resources: a structure describing
       the required resources of the colocated test-driver VM. For example:
         {
@@ -252,11 +252,9 @@ def system_test(
       uses_guestos_img: the test uses the branch GuestOS image
       uses_guestos_mainnet_img: the test uses the mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
-      uses_guestos_malicious_img: the test uses the malicious GuestOS image
       uses_guestos_update: the test uses the branch GuestOS update image
       uses_guestos_test_update: the test uses the branch GuestOS update-test image
       uses_guestos_mainnet_update: the test uses the mainnet GuestOS update image
-      uses_guestos_malicious_update: the test uses the malicious GuestOS update image
       uses_setupos_img: the test uses the branch SetupOS image
       uses_setupos_mainnet_img: the test uses the mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
@@ -296,17 +294,16 @@ def system_test(
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
-    _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_recovery_dev_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
-    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
+    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) >= 2:
         fail("More than one target GuestOS (upgrade) image was specified!")
 
     if int(uses_setupos_img) + int(uses_setupos_mainnet_img) >= 2:
@@ -335,11 +332,6 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/recovery-dev:disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"  # use the branch update image for initial update image
 
-    if uses_guestos_malicious_img:
-        info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos_malicious + "disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos_malicious + "update-img.tar.zst"
-
     if uses_guestos_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
@@ -353,10 +345,6 @@ def system_test(
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
-
-    if uses_guestos_malicious_update:
-        info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos_malicious + "update-img.tar.zst"
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
@@ -387,6 +375,12 @@ def system_test(
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+
+    if malicious:
+        _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
+
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
 
     deps = list(runtime_deps)
     if logs:

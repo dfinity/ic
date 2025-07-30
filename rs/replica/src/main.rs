@@ -294,7 +294,7 @@ fn main() -> io::Result<()> {
 
     std::thread::sleep(Duration::from_millis(5000));
 
-    if config.malicious_behavior.maliciously_seg_fault() {
+    if config.malicious_behaviour.maliciously_seg_fault() {
         rt_main.spawn(async move {
             loop {
                 // Exit roughly every 8 seconds.

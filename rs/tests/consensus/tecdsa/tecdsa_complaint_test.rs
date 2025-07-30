@@ -15,18 +15,18 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
-use ic_types::malicious_behavior::MaliciousBehavior;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
 
 fn setup(env: TestEnv) {
-    let malicious_behavior = MaliciousBehavior::new(true).set_maliciously_corrupt_idkg_dealings();
+    let malicious_behaviour = MaliciousBehaviour::new(true).set_maliciously_corrupt_idkg_dealings();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(3)
-                .add_malicious_nodes(1, malicious_behavior),
+                .add_malicious_nodes(1, malicious_behaviour),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
