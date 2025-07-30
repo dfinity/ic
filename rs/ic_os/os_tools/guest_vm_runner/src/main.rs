@@ -12,7 +12,7 @@ use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
-use ic_sev::HostSevCertificateProvider;
+use ic_sev::host::HostSevCertificateProvider;
 use nix::unistd::getuid;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
@@ -605,7 +605,7 @@ mod tests {
     };
     use ic_device::mount::testing::ExtractingFilesystemMounter;
     use ic_device::mount::GptPartitionProvider;
-    use ic_sev::testing::mock_host_sev_certificate_provider;
+    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use std::fs::File;
