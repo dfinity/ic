@@ -173,21 +173,24 @@ fn call_context_instruction_counter() -> u64 {
 }
 
 pub trait RecurringSyncTask: Sized + 'static {
-    fn execute(self) -> (Duration, Self);
+    fn execute(self) -> (Option<Duration>, Self);
     fn initial_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
         set_timer(delay, move || {
             let instructions_before = instruction_counter();
 
-            let (new_delay, new_task) = self.execute();
+            let (maybe_delay, new_task) = self.execute();
 
             let instructions_used = instruction_counter() - instructions_before;
             with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
                 metrics.record(instructions_used, now_seconds());
             });
 
-            new_task.schedule_with_delay(new_delay, metrics_registry);
+            // Only reschedule if the task returned Some(delay)
+            if let Some(new_delay) = maybe_delay {
+                new_task.schedule_with_delay(new_delay, metrics_registry);
+            }
         });
     }
 
@@ -201,7 +204,7 @@ pub trait RecurringSyncTask: Sized + 'static {
 
 #[async_trait]
 pub trait RecurringAsyncTask: Sized + 'static {
-    async fn execute(self) -> (Duration, Self);
+    async fn execute(self) -> (Option<Duration>, Self);
     fn initial_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
@@ -212,13 +215,17 @@ pub trait RecurringAsyncTask: Sized + 'static {
                     metrics.record_start(now_seconds());
                 });
 
-                let (new_delay, new_task) = self.execute().await;
+                let (maybe_delay, new_task) = self.execute().await;
 
                 let instructions_used = call_context_instruction_counter() - instructions_before;
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
                     metrics.record_finish(instructions_used, now_seconds());
                 });
-                new_task.schedule_with_delay(new_delay, metrics_registry);
+
+                // Only reschedule if the task returned Some(delay)
+                if let Some(new_delay) = maybe_delay {
+                    new_task.schedule_with_delay(new_delay, metrics_registry);
+                }
             });
         });
     }
