@@ -41,8 +41,8 @@ prepare_guestos_upgrade() {
     echo "Set up loop device: $lodev"
 
     workdir="$(mktemp -d)"
-    grubdir="${workdir}/boot/grub"
-    mkdir -p "${grubdir}"
+    grubdir="${workdir}/grub"
+    mkdir "${grubdir}"
     echo "Created temporary directories in $workdir"
 
     mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
