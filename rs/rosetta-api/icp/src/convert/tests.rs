@@ -273,11 +273,10 @@ fn from_account_ai_to_ai_test() {
         owner: PrincipalId::new_user_test_id(1).0,
         subaccount: Some([2u8; 32]),
     };
-    let account_id = AccountIdentifier::from(account);
     let result = from_account_ai_to_ai(Some(to_nns_account(account)), None)
         .unwrap()
         .expect("should return an account identifier");
-    assert_eq!(result, account_id);
+    assert_eq!(result, AccountIdentifier::from(account));
 
     // Account without owner - Error
     let no_owner = ic_nns_governance_api::Account {
