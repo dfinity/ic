@@ -93,7 +93,7 @@ function process_bootstrap() {
         echo "Installing initial state"
         cp -rL -T "${TMPDIR}/ic_state" "${STATE_ROOT}/data/ic_state"
     fi
-    for ITEM in ic_registry_local_store nns_public_key.pem; do
+    for ITEM in ic_registry_local_store node_operator_private_key.pem; do
         if [ -e "${TMPDIR}/${ITEM}" ]; then
             echo "Setting up initial ${ITEM}"
             cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
@@ -101,14 +101,14 @@ function process_bootstrap() {
     done
 
     VARIANT_TYPE=$(/opt/ic/bin/config check-variant-type)
-    if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/node_operator_private_key.pem" ]; then
-        echo "Using node_operator_private_key.pem from injected config"
-        cp -rL -T "${TMPDIR}/node_operator_private_key.pem" "${STATE_ROOT}/data/node_operator_private_key.pem"
-    elif [ "${VARIANT_TYPE}" = "prod" ] && [ -e "/opt/ic/share/node_operator_private_key.pem" ]; then
-        echo "Using node_operator_private_key.pem from /opt/ic/share/node_operator_private_key.pem"
-        cp -rL -T "/opt/ic/share/node_operator_private_key.pem" "${STATE_ROOT}/data/node_operator_private_key.pem"
+    if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/nns_public_key.pem" ]; then
+        echo "Using nns_public_key.pem from injected config"
+        cp -rL -T "${TMPDIR}/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
+    elif [ "${VARIANT_TYPE}" = "prod" ] && [ -e "/opt/ic/share/nns_public_key.pem" ]; then
+        echo "Using nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
+        cp -rL -T "/opt/ic/share/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
     else
-        echo "Warning: No node_operator_private_key.pem copied to state root"
+        echo "Warning: No nns_public_key.pem copied to state root"
         echo "Variant type: ${VARIANT_TYPE}"
     fi
 
