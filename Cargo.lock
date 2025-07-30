@@ -15245,8 +15245,6 @@ dependencies = [
  "reqwest 0.12.15",
  "sev",
  "sha2 0.10.9",
- "strum 0.26.3",
- "strum_macros 0.26.4",
  "tempfile",
 ]
 
