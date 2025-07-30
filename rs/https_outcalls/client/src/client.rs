@@ -202,11 +202,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                     info!(
                         log,
-                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, reply_callback_id {}, process_id: {}",
+                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, reply_callback_id {}, sender {}, process_id: {}",
                         request_size,
                         adapter_req_timer.elapsed().as_millis(),
                         body.len() + headers_size,
                         reply_callback_id,
+                        request_sender,
                         std::process::id(),
                     );
 
