@@ -8,14 +8,14 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, FetchCanisterLogsRequest,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload,
+    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    RenameCanisterArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -189,13 +189,16 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            Err(ResolveDestinationError::UserError(UserError::new(
-                ic_error_types::ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} API is only accessible to end users in non-replicated mode",
-                    Ic00Method::FetchCanisterLogs
-                ),
-            )))
+            let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
+
+            // Err(ResolveDestinationError::UserError(UserError::new(
+            //     ic_error_types::ErrorCode::CanisterRejectedMessage,
+            //     format!(
+            //         "{} API is only accessible to end users in non-replicated mode",
+            //         Ic00Method::FetchCanisterLogs
+            //     ),
+            // )))
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
