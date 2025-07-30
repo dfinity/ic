@@ -475,7 +475,7 @@ pub(crate) async fn validate_execute_extension_operation(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     extension_canister_id: CanisterId,
-    operation_name: &str,
+    operation_name: String,
     _operation_arg: &ExtensionOperationArg,
 ) -> Result<(), GovernanceError> {
     let registered_extensions = list_extensions(env, root_canister_id).await?;

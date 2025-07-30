@@ -2646,7 +2646,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Canister method call {}.canister_info failed with code {:?}: {}",
+                        "Canister method call {}.deposit failed with code {:?}: {}",
                         treasury_manager_canister_id, code, err
                     ),
                 )
