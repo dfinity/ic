@@ -17,6 +17,10 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
+DEV_DEPENDENCIES = [
+    "@crate_index//:parking_lot",
+]
+
 MACRO_DEPENDENCIES = []
 
 rust_binary(
@@ -33,5 +37,14 @@ rust_binary(
 rust_test(
     name = "guest_disk_test",
     crate = ":guest_disk",
-    deps = DEPENDENCIES,
+    rustc_flags = [
+        "-C",
+        "instrument-coverage",
+        "-C",
+        "link-arg=-lstdc++",
+    ],
+    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
+    tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

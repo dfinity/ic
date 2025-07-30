@@ -14,3 +14,6 @@ tempfile = { workspace = true }
 rand = { workspace = true }
 libcryptsetup-rs = { workspace = true }
 grub = { path = "../../grub" }
+
+[dev-dependencies]
+parking_lot = { workspace = true }

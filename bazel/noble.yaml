@@ -24,11 +24,13 @@ packages:
   - "bash"
   - "ca-certificates"
   - "coreutils" # for chmod
+  - "cryptsetup" # TODO: remove if we can move to libcryptsetup-dev
   - "dmsetup"
   - "dosfstools"
   - "dpkg" # for apt list --installed
   - "gawk" # for build-bootstrap-config-image
   - "gzip" # for tar-ing up ic regsitry store in systests
+  - "libcryptsetup-dev"
   - "libssl3t64"
   - "libunwind8"
   - "mtools"

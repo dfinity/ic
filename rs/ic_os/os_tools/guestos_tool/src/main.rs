@@ -19,7 +19,6 @@ use generate_network_config::{generate_networkd_config, validate_and_construct_i
 use config::hostos::guestos_config;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
-use ic_sev::guest::key_deriver::SevKeyDeriver;
 use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
 
 #[derive(Subcommand)]
@@ -66,11 +65,11 @@ pub enum Commands {
         /// Fails if directory doesn't exist.
         output_path: String,
     },
-    GetDiskEncryptionKey {
-        #[arg(value_enum, long)]
-        /// The partition to get encryption key for
-        partition: guest::disk_encryption::Partition,
-    },
+    // GetDiskEncryptionKey {
+    //     #[arg(value_enum, long)]
+    //     /// The partition to get encryption key for
+    //     partition: guest::disk_encryption::Partition,
+    // },
 }
 
 #[derive(Parser)]
@@ -129,29 +128,29 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::GetDiskEncryptionKey { partition }) => {
-            let guestos_config: GuestOSConfig =
-                deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)?;
-
-            let enable_tee = guestos_config
-                .icos_settings
-                .enable_trusted_execution_environment;
-
-            let key = if enable_tee {
-                let mut provider = SevKeyDeriver::new()?;
-                provider
-                    .derive_key(partition)
-                    .context("Could not get disk encryption key")?
-                    .into_bytes()
-            } else {
-                std::fs::read("/boot/config/store.keyfile")
-                    .context("Could not read /boot/config/store.keyfile")?
-            };
-
-            std::io::stdout().write(&key)?;
-            std::io::stdout().flush()?;
-            Ok(())
-        }
+        // Some(Commands::GetDiskEncryptionKey { partition }) => {
+        //     let guestos_config: GuestOSConfig =
+        //         deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)?;
+        //
+        //     let enable_tee = guestos_config
+        //         .icos_settings
+        //         .enable_trusted_execution_environment;
+        //
+        //     let key = if enable_tee {
+        //         let mut provider = SevKeyDeriver::new()?;
+        //         provider
+        //             .derive_key(partition)
+        //             .context("Could not get disk encryption key")?
+        //             .into_bytes()
+        //     } else {
+        //         std::fs::read("/boot/config/store.keyfile")
+        //             .context("Could not read /boot/config/store.keyfile")?
+        //     };
+        //
+        //     std::io::stdout().write(&key)?;
+        //     std::io::stdout().flush()?;
+        //     Ok(())
+        // }
         None => Ok(()),
     }
 }

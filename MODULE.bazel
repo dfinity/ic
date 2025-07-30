@@ -872,26 +872,26 @@ os_info = use_repo_rule("//bazel:os_info.bzl", "os_info")
 os_info(name = "os_info")
 
 # Set up hermetic cc toolchains for binaries and canisters
-toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+#toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+#
+## The use_hermetic_cc setting is added to each toolchain to allow us to opt out
+## in favor of system toolchains, when needed.
+#toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+#use_repo(toolchains, "zig_sdk")
 
-# The use_hermetic_cc setting is added to each toolchain to allow us to opt out
-# in favor of system toolchains, when needed.
-toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
-use_repo(toolchains, "zig_sdk")
-
-register_toolchains(
-    # Linux toolchains
-    "@zig_sdk//toolchain:linux_amd64_gnu.2.28",
-
-    # macOS toolchains
-    # Do not use hermetic toolchains for macOS until we have had a chance to
-    # wrap the various system libraries.
-    # "@zig_sdk//toolchain:darwin_amd64",
-    # "@zig_sdk//toolchain:darwin_arm64",
-
-    # wasm toolchains
-    "@zig_sdk//toolchain:none_wasm",
-
-    # These toolchains are only registered locally.
-    dev_dependency = True,
-)
+#register_toolchains(
+#    # Linux toolchains
+#    "@zig_sdk//toolchain:linux_amd64_gnu.2.38",
+#
+#    # macOS toolchains
+#    # Do not use hermetic toolchains for macOS until we have had a chance to
+#    # wrap the various system libraries.
+#    # "@zig_sdk//toolchain:darwin_amd64",
+#    # "@zig_sdk//toolchain:darwin_arm64",
+#
+#    # wasm toolchains
+#    "@zig_sdk//toolchain:none_wasm",
+#
+#    # These toolchains are only registered locally.
+#    dev_dependency = True,
+#)

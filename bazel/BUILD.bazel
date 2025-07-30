@@ -44,13 +44,13 @@ config_setting(
 # by the system
 bool_flag(
     name = "hermetic_cc",
-    build_setting_default = True,
+    build_setting_default = False,
 )
 
 config_setting(
     name = "use_hermetic_cc",
     flag_values = {
-        ":hermetic_cc": "True",
+        ":hermetic_cc": "False",
     },
 )
 

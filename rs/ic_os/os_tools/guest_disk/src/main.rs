@@ -3,6 +3,10 @@ mod generated_key;
 mod partitions;
 mod sev;
 
+#[cfg(test)]
+mod tests;
+
+use crate::crypt::FormatOptions;
 use crate::generated_key::{setup_disk_encryption_with_generated_key, GENERATED_KEY_PATH};
 use crate::partitions::{partition_setup, PartitionSetup};
 use crate::sev::{setup_disk_encryption_with_sev, PREVIOUS_KEY_PATH};
@@ -11,12 +15,17 @@ use clap::Parser;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
 use ic_sev::guest::key_deriver::SevKeyDeriver;
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::io::Write;
 use std::path::Path;
 
+const VAR_CRYPT_NAME: &str = "var_crypt";
+const STORE_CRYPT_NAME: &str = "vda10-crypt";
+
 #[derive(clap::Parser)]
 pub enum Args {
-    SetupDiskEncryption { partition: Partition },
+    Open { partition: Partition },
+    Format { partition: Partition },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -30,12 +39,22 @@ pub enum Partition {
 fn main() -> Result<()> {
     let args = Args::parse();
     match args {
-        Args::SetupDiskEncryption { partition } => setup_disk_encryption(partition),
+        Args::Open {
+            partition,
+            allow_format_store,
+        } => setup_disk_encryption(partition, allow_format_store),
     }
 }
 
-fn setup_disk_encryption(partition: Partition) -> Result<()> {
-    let guestos_config = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
+fn crypt_name(partition: Partition) -> &'static str {
+    match partition {
+        Partition::Var => VAR_CRYPT_NAME,
+        Partition::Store => STORE_CRYPT_NAME,
+    }
+}
+
+fn setup_disk_encryption(partition: Partition, allow_format_store: bool) -> Result<()> {
+    let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
         .context("Failed to read GuestOS config")?;
 
     let mut sev_key_deriver = guestos_config
@@ -51,6 +70,7 @@ fn setup_disk_encryption(partition: Partition) -> Result<()> {
         Path::new(PREVIOUS_KEY_PATH),
         Path::new(GENERATED_KEY_PATH),
         &partition_setup(),
+        allow_format_store,
     )
 }
 
@@ -63,7 +83,22 @@ fn setup_disk_encryption_impl(
     previous_key_path: &Path,
     generated_key_path: &Path,
     partition_setup: &PartitionSetup,
+    allow_format_store: bool,
 ) -> Result<()> {
+    libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_error), None);
+    let format_options = match partition {
+        // If the partition is Var, we always allow formatting.
+        Partition::Var => FormatOptions {
+            allow_if_uninit: true,
+            allow_if_cannot_activate: true,
+        },
+        // If the partition is Store, we allow formatting only if the caller has specified it.
+        Partition::Store => FormatOptions {
+            allow_if_uninit: allow_format_store,
+            allow_if_cannot_activate: false,
+        },
+    };
+
     if guestos_config
         .icos_settings
         .enable_trusted_execution_environment
@@ -71,103 +106,33 @@ fn setup_disk_encryption_impl(
         setup_disk_encryption_with_sev(
             partition,
             partition_setup,
+            crypt_name(partition),
             sev_key_deriver.context("SevKeyDeriver was None, but TEE is enabled")?,
             previous_key_path,
+            format_options,
         )
         .with_context(|| {
             format!("Failed to setup disk encryption with SEV for partition {partition:?}")
         })
     } else {
-        setup_disk_encryption_with_generated_key(partition, partition_setup, generated_key_path)
-            .with_context(|| {
-                format!(
-                    "Failed to setup disk encryption with generated key for partition {partition:?}",
-                )
-            })
+        setup_disk_encryption_with_generated_key(
+            partition,
+            partition_setup,
+            crypt_name(partition),
+            generated_key_path,
+            format_options,
+        )
+        .with_context(|| {
+            format!(
+                "Failed to setup disk encryption with generated key for partition {partition:?}",
+            )
+        })
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use config_types::{
-        DeploymentEnvironment, GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings,
-    };
-    use ic_device::device_mapping::{Sectors, TempDevice};
-    use ic_sev::guest::firmware::MockSevGuestFirmware;
-    use std::path::PathBuf;
-    use tempfile::{tempdir, NamedTempFile, TempDir};
-
-    fn create_guestos_config(
-        guest_vm_type: GuestVMType,
-        enable_trusted_execution_environment: bool,
-    ) -> GuestOSConfig {
-        GuestOSConfig {
-            config_version: "".to_string(),
-            network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::RouterAdvertisement,
-                ipv4_config: None,
-                domain_name: None,
-            },
-            icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
-                deployment_environment: DeploymentEnvironment::Mainnet,
-                logging: Default::default(),
-                use_nns_public_key: false,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
-            },
-            guestos_settings: Default::default(),
-            guest_vm_type,
-            upgrade_config: Default::default(),
-            trusted_execution_environment_config: None,
-        }
-    }
-
-    #[test]
-    fn test_generated_disk_encryption() {
-        dbg!(std::fs::read_dir("/dev")
-            .expect("Failed to read /dev directory")
-            .collect::<Vec<_>>());
-
-        let store_device = TempDevice::new(Sectors(1024)).unwrap();
-        let previous_key = NamedTempFile::new().unwrap();
-        let generated_key = NamedTempFile::new().unwrap();
-        let mut mock_guest_firmware = MockSevGuestFirmware::new();
-        mock_guest_firmware
-            .expect_get_derived_key()
-            .returning(|_, _| Ok([42; 32]));
-
-        let partition_setup = PartitionSetup {
-            efi_partition_device: PathBuf::from("/dev/does_not_exist"),
-            grub_partition_device: PathBuf::from("/dev/does_not_exist"),
-            config_partition_device: PathBuf::from("/dev/does_not_exist"),
-            my_boot_partition_device: PathBuf::from("/dev/does_not_exist"),
-            my_root_partition_device: PathBuf::from("/dev/does_not_exist"),
-            my_var_partition_device: PathBuf::from("/dev/does_not_exist"),
-            alternative_boot_partition_device: PathBuf::from("/dev/does_not_exist"),
-            alternative_root_partition_device: PathBuf::from("/dev/does_not_exist"),
-            alternative_var_partition_device: PathBuf::from("/dev/does_not_exist"),
-            store_partition_device: store_device.path().unwrap(),
-        };
-
-        setup_disk_encryption_impl(
-            Partition::Store,
-            &create_guestos_config(GuestVMType::Default, false),
-            Some(&mut SevKeyDeriver::new_for_test(Box::new(
-                mock_guest_firmware,
-            ))),
-            previous_key.path(),
-            generated_key.path(),
-            &partition_setup,
-        )
-        .expect("Failed to setup disk encryption with generated key for store partition");
-        dbg!(std::fs::read_dir("/dev")
-            .expect("Failed to read /dev directory")
-            .collect::<Vec<_>>());
-    }
+extern "C" fn cryptsetup_error(level: c_int, msg: *const c_char, usrptr: *mut c_void) {
+    eprintln!(
+        "libcryptsetup: {}",
+        unsafe { CStr::from_ptr(msg) }.to_string_lossy()
+    );
 }

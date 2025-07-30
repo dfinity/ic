@@ -22,7 +22,9 @@ bool_flag(
 PACKAGES = [
     "@noble//bash/amd64",
     "@noble//ca-certificates/amd64",
+    "@noble//cryptsetup/amd64",
     "@noble//coreutils/amd64",
+    "@noble//libcryptsetup-dev/amd64",
     "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
     "@noble//gawk/amd64",

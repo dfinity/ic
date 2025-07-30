@@ -21,5 +21,3 @@ ic_sev = { path = "../../sev" }
 nix = { version = "0.30.1", features = ["fs"] }
 tempfile = "3.20.0"
 rand = "0.8.5"
-libcryptsetup-rs = "0.13.1"
-grub = { path = "../../grub" }
