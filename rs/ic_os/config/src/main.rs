@@ -310,6 +310,9 @@ pub fn main() -> Result<()> {
                 &generate_testnet_config(args)?,
             )
         }
+        // Note: This command should generally be avoided.
+        // Instead of relying on this command, consider porting the relevant bash logic to Rust
+        // and integrating it directly into the config tool.
         Some(Commands::CheckVariantType) => {
             let is_dev_feature = cfg!(feature = "dev");
 
