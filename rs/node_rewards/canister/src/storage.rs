@@ -1,9 +1,11 @@
-use crate::metrics::{ICCanisterClient, MetricsManager};
+use crate::metrics::{ICCanisterClient, MetricsManager, RetryCount};
+use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
+use rewards_calculation::types::UnixTsNanos;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -68,8 +70,11 @@ pub fn _clear_registry_store() {
 
 pub fn _clear_metrics_store() {
     MEMORY_MANAGER.with_borrow(|mm| {
-        let _cleared = StableBTreeMap::new(mm.get(SUBNETS_TO_RETRY_MEMORY_ID));
-        let _cleared = StableBTreeMap::new(mm.get(SUBNETS_METRICS_MEMORY_ID));
-        let _cleared = StableBTreeMap::new(mm.get(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID));
+        let _cleared: StableBTreeMap<SubnetIdKey, RetryCount, VM> =
+            StableBTreeMap::new(mm.get(SUBNETS_TO_RETRY_MEMORY_ID));
+        let _cleared: StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, VM> =
+            StableBTreeMap::new(mm.get(SUBNETS_METRICS_MEMORY_ID));
+        let _cleared: StableBTreeMap<SubnetIdKey, UnixTsNanos, VM> =
+            StableBTreeMap::new(mm.get(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID));
     });
 }
