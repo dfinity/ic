@@ -21,8 +21,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rcgen",
 ]
 
-MACRO_DEPENDENCIES = [
-]
+MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
