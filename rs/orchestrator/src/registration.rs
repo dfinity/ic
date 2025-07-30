@@ -3,10 +3,13 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
-    utils::http_endpoint_to_url,
+    utils::https_endpoint_to_url,
 };
 use candid::Encode;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{
+    export::{reqwest, Principal},
+    Agent, Identity,
+};
 use ic_config::{
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
@@ -43,7 +46,11 @@ use url::Url;
 const DELAY_COMPENSATION: f64 = 0.85;
 
 pub trait NodeRegistrationCrypto:
-    ic_interfaces::crypto::KeyManager + ic_interfaces::crypto::BasicSigner<MessageId> + Send + Sync
+    ic_interfaces::crypto::KeyManager
+    + ic_interfaces::crypto::BasicSigner<MessageId>
+    + ic_crypto_tls_interfaces::TlsConfig
+    + Send
+    + Sync
 {
 }
 
@@ -51,6 +58,7 @@ pub trait NodeRegistrationCrypto:
 impl<T> NodeRegistrationCrypto for T where
     T: ic_interfaces::crypto::KeyManager
         + ic_interfaces::crypto::BasicSigner<MessageId>
+        + ic_crypto_tls_interfaces::TlsConfig
         + Send
         + Sync
 {
@@ -147,14 +155,7 @@ impl NodeRegistration {
             UtilityCommand::notify_host(&message, 1);
             match self.signer.get() {
                 Ok(signer) => {
-                    let nns_url = self
-                        .get_random_nns_url_from_config()
-                        .expect("no NNS urls available");
-                    let agent = Agent::builder()
-                        .with_url(nns_url)
-                        .with_identity(signer)
-                        .build()
-                        .expect("Failed to create IC agent");
+                    let agent = self.get_https_agent_to_random_nns_url(signer).unwrap();
                     let add_node_encoded = Encode!(&add_node_payload)
                         .expect("Could not encode payload for the registration request");
 
@@ -399,14 +400,6 @@ impl NodeRegistration {
     ) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
-        let node_id = self.node_id;
-        let nns_url = match self
-            .get_random_nns_url()
-            .or_else(|| self.get_random_nns_url_from_config())
-        {
-            Some(url) => url,
-            None => return Err("Failed to get random NNS URL.".into()),
-        };
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
             key_handler
@@ -426,6 +419,7 @@ impl NodeRegistration {
             }
         };
 
+        let node_id = self.node_id;
         let key_handler = self.key_handler.clone();
         let sign_cmd = move |msg: &MessageId| {
             // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
@@ -441,11 +435,7 @@ impl NodeRegistration {
         };
 
         let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
-        let agent = Agent::builder()
-            .with_url(nns_url)
-            .with_identity(signer)
-            .build()
-            .map_err(|e| format!("Failed to create IC agent: {e}"))?;
+        let agent = self.get_https_agent_to_random_nns_url(signer)?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -463,6 +453,49 @@ impl NodeRegistration {
             .map_err(|e| format!("Error when sending register additional key request: {e}"))?;
 
         Ok(())
+    }
+
+    /// Fetches the registry to select a random NNS URL and the corresponding TLS configuration. If
+    /// the registry is not available, it falls back to the NNS URL from the node config, (obviously)
+    /// without TLS configuration.
+    /// Then builds an IC agent with the selected NNS URL and TLS configuration, using the provided
+    /// identity to sign messages.
+    fn get_https_agent_to_random_nns_url<I: 'static + Identity>(
+        &self,
+        identity: I,
+    ) -> Result<Agent, String> {
+        let (nns_url, rustls_config) =
+            match self.get_random_nns_url_and_rustls_config_from_registry() {
+                Some((url, config)) => (url, Some(config)),
+                None => {
+                    warn!(
+                        self.log,
+                        "Failed to get random NNS URL from registry. Falling back to node config."
+                    );
+                    match self.get_random_nns_url_from_config() {
+                        Some(url) => (url, None),
+                        None => {
+                            return Err("Failed to get random NNS URL.".into());
+                        }
+                    }
+                }
+            };
+
+        let mut agent = Agent::builder();
+        if let Some(config) = rustls_config {
+            let reqwest_client = reqwest::ClientBuilder::default()
+                .use_preconfigured_tls(config)
+                .build()
+                .map_err(|e| format!("Failed to create reqwest client: {e}"))?;
+
+            agent = agent.with_http_client(reqwest_client)
+        }
+
+        agent
+            .with_url(nns_url)
+            .with_identity(identity)
+            .build()
+            .map_err(|e| format!("Failed to create IC agent: {e}"))
     }
 
     // Returns one random NNS url from the node config.
@@ -487,8 +520,11 @@ impl NodeRegistration {
         urls.pop()
     }
 
-    // Returns one random NNS url from registry.
-    fn get_random_nns_url(&self) -> Option<Url> {
+    // Returns one random NNS url from registry and the corresponding TLS configuration that allows
+    // to connect with HTTPS.
+    fn get_random_nns_url_and_rustls_config_from_registry(
+        &self,
+    ) -> Option<(Url, rustls::ClientConfig)> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
@@ -509,19 +545,20 @@ impl NodeRegistration {
             }
         };
 
-        let mut urls: Vec<Url> = t_infos
+        let mut urls_and_clients: Vec<(Url, rustls::ClientConfig)> = t_infos
             .iter()
-            .filter_map(|(_nid, n_record)| {
+            .filter_map(|(n_id, n_record)| {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| http_endpoint_to_url(h, &self.log))
+                    .and_then(|h| https_endpoint_to_url(h, &self.log))
+                    .zip(self.key_handler.client_config(*n_id, version).ok())
             })
             .collect();
 
         let mut rng = thread_rng();
-        urls.shuffle(&mut rng);
-        urls.pop()
+        urls_and_clients.shuffle(&mut rng);
+        urls_and_clients.pop()
     }
 
     async fn is_node_registered(&self) -> bool {
@@ -775,6 +812,7 @@ mod tests {
     mod idkg_dealing_encryption_key_rotation {
         use super::*;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
+        use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
         use ic_interfaces::crypto::{
             BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
             IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
@@ -802,6 +840,7 @@ mod tests {
             PrincipalId,
         };
         use mockall::{predicate::*, *};
+        use rustls::{ClientConfig, ServerConfig};
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
@@ -836,6 +875,25 @@ mod tests {
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 
+            impl TlsConfig for KeyRotationCryptoComponent {
+                fn server_config(
+                    &self,
+                    allowed_clients: SomeOrAllNodes,
+                    registry_version: RegistryVersion,
+                ) -> Result<ServerConfig, TlsConfigError>;
+
+                fn server_config_without_client_auth(
+                    &self,
+                    registry_version: RegistryVersion,
+                ) -> Result<ServerConfig, TlsConfigError>;
+
+                fn client_config(
+                    &self,
+                    server: NodeId,
+                    registry_version: RegistryVersion,
+                ) -> Result<ClientConfig, TlsConfigError>;
+            }
+
             impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> for KeyRotationCryptoComponent {
                 fn verify_combined_threshold_sig_by_public_key(
                     &self,
@@ -856,6 +914,7 @@ mod tests {
             fn builder() -> SetupBuilder {
                 SetupBuilder {
                     check_keys_with_registry_result: None,
+                    current_node_public_keys_result: None,
                     rotate_idkg_dealing_encryption_keys_result: None,
                     logger: None,
                     without_ecdsa_subnet_config: false,
@@ -866,6 +925,8 @@ mod tests {
 
         struct SetupBuilder {
             check_keys_with_registry_result: Option<Result<(), CheckKeysWithRegistryError>>,
+            current_node_public_keys_result:
+                Option<Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>>,
             rotate_idkg_dealing_encryption_keys_result:
                 Option<Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>>,
             logger: Option<ReplicaLogger>,
@@ -879,6 +940,17 @@ mod tests {
                 check_keys_with_registry_result: Result<(), CheckKeysWithRegistryError>,
             ) -> Self {
                 self.check_keys_with_registry_result = Some(check_keys_with_registry_result);
+                self
+            }
+
+            fn with_current_node_public_keys_result(
+                mut self,
+                current_node_public_keys_result: Result<
+                    CurrentNodePublicKeys,
+                    CurrentNodePublicKeysError,
+                >,
+            ) -> Self {
+                self.current_node_public_keys_result = Some(current_node_public_keys_result);
                 self
             }
 
@@ -969,6 +1041,13 @@ mod tests {
                         .expect_check_keys_with_registry()
                         .times(1)
                         .return_const(check_keys_with_registry_result);
+                }
+                if let Some(current_node_public_keys_result) = self.current_node_public_keys_result
+                {
+                    key_handler
+                        .expect_current_node_public_keys()
+                        .times(1)
+                        .return_const(current_node_public_keys_result);
                 }
                 if let Some(rotate_idkg_dealing_encryption_keys_result) =
                     self.rotate_idkg_dealing_encryption_keys_result
@@ -1196,6 +1275,11 @@ mod tests {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
                 .with_check_keys_with_registry_result(Ok(()))
+                .with_current_node_public_keys_result(Err(
+                    CurrentNodePublicKeysError::TransientInternalError(
+                        "error getting current node public keys".to_string(),
+                    ),
+                ))
                 .with_rotate_idkg_dealing_encryption_keys_result(Ok(
                     IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
                         KeyRotationOutcome::KeyRotated {
