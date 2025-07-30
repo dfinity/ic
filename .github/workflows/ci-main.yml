@@ -112,7 +112,7 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
