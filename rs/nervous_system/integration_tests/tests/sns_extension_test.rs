@@ -383,8 +383,8 @@ async fn test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        let expected_fees_sns_e8s = 4 * SNS_FEE;
-        let expected_fees_icp_e8s = 4 * ICP_FEE;
+        let expected_fees_sns_e8s = 6 * SNS_FEE;
+        let expected_fees_icp_e8s = 7 * ICP_FEE;
 
         let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
             + topup_treasury_allocation_sns_e8s
@@ -412,8 +412,8 @@ async fn test_treasury_manager() {
         "After withdrawing.",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - 5 * ICP_FEE,
-        initial_sns_balance_e8s - 5 * SNS_FEE,
+        initial_icp_balance_e8s - 9 * ICP_FEE,
+        initial_sns_balance_e8s - 8 * SNS_FEE,
     )
     .await
     .unwrap();
