@@ -94,9 +94,9 @@ async fn main() -> Result<(), Error> {
     let mut deployment_json = fs::File::create(data_dir.join("deployment.json"))?;
     deployment_json.write_all(output.as_bytes())?;
 
-    // Write NNS key
-    if let Some(public_key) = cli.deployment.nns_public_key {
-        let mut nns_key = fs::File::create(data_dir.join("nns_public_key.pem"))?;
+    // Write NNS key override
+    if let Some(public_key) = cli.deployment.nns_public_key_override {
+        let mut nns_key = fs::File::create(data_dir.join("nns_public_key_override.pem"))?;
 
         nns_key.write_all(public_key.as_bytes())?;
     }

@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.4.0";
+pub const CONFIG_VERSION: &str = "1.5.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -114,7 +114,8 @@ pub struct ICOSSettings {
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
     pub logging: Logging,
-    pub use_nns_public_key: bool,
+    // TODO: remove field after next HostOS/GuestOS upgrade
+    pub use_nns_public_key: Option<bool>,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
@@ -342,7 +343,7 @@ mod tests {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
                 "logging": {},
-                "use_nns_public_key": false,
+                "use_nns_public_key": null,
                 "nns_urls": [],
                 "use_node_operator_private_key": false,
                 "use_ssh_authorized_keys": false,
@@ -380,7 +381,7 @@ mod tests {
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Logging::default(),
-                use_nns_public_key: false,
+                use_nns_public_key: None,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

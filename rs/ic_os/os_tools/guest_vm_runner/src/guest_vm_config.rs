@@ -70,9 +70,7 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
     }
 
-    if hostos_config.icos_settings.use_nns_public_key {
-        bootstrap_options.nns_public_key = Some(PathBuf::from("/boot/config/nns_public_key.pem"));
-    }
+    bootstrap_options.nns_public_key_override = Some(PathBuf::from("/boot/config/nns_public_key_override.pem"));
 
     if hostos_config.icos_settings.use_node_operator_private_key {
         bootstrap_options.node_operator_private_key =
@@ -181,7 +179,7 @@ mod tests {
                     elasticsearch_hosts: None,
                     elasticsearch_tags: None,
                 },
-                use_nns_public_key: false,
+                use_nns_public_key: None,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,
@@ -201,7 +199,6 @@ mod tests {
     #[test]
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
-        config.icos_settings.use_nns_public_key = true;
         config.icos_settings.use_ssh_authorized_keys = true;
         config.icos_settings.use_node_operator_private_key = true;
 
@@ -218,7 +215,7 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
+                nns_public_key_override: Some(PathBuf::from("/boot/config/nns_public_key_override.pem")),
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
                 )),

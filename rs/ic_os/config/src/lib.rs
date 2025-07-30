@@ -66,7 +66,7 @@ mod tests {
             mgmt_mac: "ec:2a:72:31:a2:0c".parse().unwrap(),
             deployment_environment: DeploymentEnvironment::Mainnet,
             logging: Logging::default(),
-            use_nns_public_key: true,
+            use_nns_public_key: None,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             use_node_operator_private_key: true,
             enable_trusted_execution_environment: true,
@@ -163,7 +163,7 @@ mod tests {
                 "elasticsearch_hosts": "elasticsearch.testnet.dfinity.network:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
-            "use_nns_public_key": true,
+            "use_nns_public_key": null,
             "nns_urls": [
                 "http://localhost"
             ],
@@ -221,7 +221,7 @@ mod tests {
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {},
-            "use_nns_public_key": true,
+            "use_nns_public_key": null,
             "nns_urls": [
                 "http://localhost"
             ],

@@ -12,7 +12,7 @@ SetupOS constructs its config struct from the following user-facing configuratio
   ssh_authorized_keys             # SSH private keys
   node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
   deployment.json                 # Deployment-specific configurations
-  nns_public_key.pem              # NNS public key
+  nns_public_key_override.pem     # NNS public key override (only for dev variant)
 
 Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
 

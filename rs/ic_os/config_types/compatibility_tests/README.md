@@ -26,7 +26,7 @@ Currently, only HostOS config objects are checked for backwards compatibility, a
 1. First PR:
    - Make field optional
    - Increment `CONFIG_VERSION` in the `config_types` crate
-2. Second PR (after the previous release has reached ALL mainnet nodes):
+2. Second PR (after the previous release has reached ALL mainnet nodes—GuestOS and HostOS):
    - Remove field
    - Add field to `RESERVED_FIELD_NAMES` in the `config_types` crate
    - Increment `CONFIG_VERSION` in the `config_types` crate

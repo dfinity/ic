@@ -101,9 +101,9 @@ function process_bootstrap() {
     done
 
     VARIANT_TYPE=$(/opt/ic/bin/config check-variant-type)
-    if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/nns_public_key.pem" ]; then
-        echo "Using nns_public_key.pem from injected config"
-        cp -rL -T "${TMPDIR}/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
+    if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/nns_public_key_override.pem" ]; then
+        echo "Using nns_public_key_override.pem from injected config"
+        cp -rL -T "${TMPDIR}/nns_public_key_override.pem" "${STATE_ROOT}/data/nns_public_key.pem"
     elif [ "${VARIANT_TYPE}" = "prod" ] && [ -e "/opt/ic/share/nns_public_key.pem" ]; then
         echo "Using nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
         cp -rL -T "/opt/ic/share/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"

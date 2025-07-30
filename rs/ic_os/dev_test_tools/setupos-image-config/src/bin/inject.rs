@@ -157,19 +157,19 @@ async fn main() -> Result<(), Error> {
     println!("{updated_deployment}");
 
     // Update NNS key
-    if let Some(public_key) = cli.deployment.nns_public_key {
+    if let Some(public_key) = cli.deployment.nns_public_key_override {
         let mut nns_key = NamedTempFile::new()?;
         write!(&mut nns_key, "{public_key}")?;
         fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
 
-        data.write_file(nns_key.path(), Path::new("/nns_public_key.pem"))
+        data.write_file(nns_key.path(), Path::new("/nns_public_key_override.pem"))
             .await
             .context("failed to copy nns key file")?;
 
         // Print updated NNS key
-        println!("Updated nns_public_key.pem:\n---");
+        println!("Updated nns_public_key_override.pem:\n---");
         let updated_nns_key = String::from_utf8(
-            data.read_file(Path::new("/nns_public_key.pem"))
+            data.read_file(Path::new("/nns_public_key_override.pem"))
                 .await
                 .context("failed to read updated nns key")?,
         )?;

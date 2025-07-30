@@ -25,7 +25,6 @@ pub struct GenerateTestnetConfigArgs {
     pub deployment_environment: Option<DeploymentEnvironment>,
     pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,
-    pub use_nns_public_key: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
     pub enable_trusted_execution_environment: Option<bool>,
     pub use_node_operator_private_key: Option<bool>,
@@ -74,7 +73,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         deployment_environment,
         elasticsearch_hosts,
         elasticsearch_tags,
-        use_nns_public_key,
         nns_urls,
         enable_trusted_execution_environment,
         use_node_operator_private_key,
@@ -174,8 +172,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         elasticsearch_tags,
     };
 
-    let use_nns_public_key = use_nns_public_key.unwrap_or(true);
-
     let nns_urls = match nns_urls {
         Some(urls) => urls
             .iter()
@@ -196,7 +192,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         mgmt_mac,
         deployment_environment,
         logging,
-        use_nns_public_key,
+        use_nns_public_key: None,
         nns_urls,
         use_node_operator_private_key,
         enable_trusted_execution_environment,
