@@ -545,7 +545,7 @@ pub(crate) async fn get_sns_token_symbol(
     ledger_canister_id: CanisterId,
 ) -> Result<String, GovernanceError> {
     let arg = Encode!(&()).unwrap();
-    let (symbol,) = env
+    let symbol = env
         .call_canister(ledger_canister_id, "icrc1_symbol", arg)
         .await
         .map_err(|(code, err)| {
@@ -558,7 +558,7 @@ pub(crate) async fn get_sns_token_symbol(
             )
         })
         .map(|blob| {
-            Decode!(&blob, (String,)).map_err(|err| {
+            Decode!(&blob, String).map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
