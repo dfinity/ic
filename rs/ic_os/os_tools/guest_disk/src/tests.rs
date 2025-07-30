@@ -288,8 +288,11 @@ fn test_store_sev_unlock_with_previous_key() {
         &fixture.partition_setup.store_partition_device,
         &fixture
             .sev_key_deriver
-            .derive_key(Key::StorePartitionEncryptionKey)
-            .unwrap(),
+            .derive_key(Key::DiskEncryptionKey {
+                device_path: &fixture.partition_setup.store_partition_device,
+            })
+            .unwrap()
+            .as_bytes(),
     )
     .expect("SEV key should unlock the store partition");
 
@@ -312,8 +315,11 @@ fn test_store_sev_unlock_with_current_key_if_previous_key_does_not_work() {
         &fixture.partition_setup.store_partition_device,
         &fixture
             .sev_key_deriver
-            .derive_key(Key::StorePartitionEncryptionKey)
-            .unwrap(),
+            .derive_key(Key::DiskEncryptionKey {
+                device_path: &fixture.partition_setup.store_partition_device,
+            })
+            .unwrap()
+            .as_bytes(),
     )
     .unwrap();
 

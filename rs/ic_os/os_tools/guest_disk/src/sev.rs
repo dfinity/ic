@@ -14,7 +14,7 @@ pub struct SevDiskEncryption<'a> {
 }
 
 impl SevDiskEncryption<'_> {
-    fn setup_with_previous_key(&self, crypt_name: &str, new_key: &[u8]) -> Result<()> {
+    fn setup_store_with_previous_key(&self, crypt_name: &str, new_key: &[u8]) -> Result<()> {
         let previous_key = std::fs::read(&self.previous_key_path).with_context(|| {
             format!(
                 "Could not read previous key from {}",
@@ -51,27 +51,19 @@ impl SevDiskEncryption<'_> {
 
 impl DiskEncryption for SevDiskEncryption<'_> {
     fn open(&mut self, partition: Partition, crypt_name: &str) -> Result<()> {
+        let device_path = partition.device_path(self.partition_setup);
+        let key = self
+            .sev_key_deriver
+            .derive_key(Key::DiskEncryptionKey { device_path })
+            .context("Failed to derive SEV key for disk encryption")?;
+
         match partition {
             Partition::Var => {
-                let key = self
-                    .sev_key_deriver
-                    .derive_key(Key::VarPartitionEncryptionKey)
-                    .context("Failed to derive SEV key for var partition")?;
-
-                activate_crypt_device(
-                    &self.partition_setup.my_var_partition_device,
-                    crypt_name,
-                    key.as_bytes(),
-                )
-                .context("Failed to open crypt device for var partition")?;
+                activate_crypt_device(device_path, crypt_name, key.as_bytes())
+                    .context("Failed to open crypt device for var partition")?;
             }
 
             Partition::Store => {
-                let new_key = self
-                    .sev_key_deriver
-                    .derive_key(Key::StorePartitionEncryptionKey)
-                    .context("Failed to derive SEV key for store partition")?;
-
                 // Try to read the previous SEV key. This is the key that the previous version of the
                 // GuestOS used to unlock the store (data) partition. During the upgrade this key is
                 // written to `previous_key_path`. After the upgrade, when the GuestOS boots for the
@@ -81,7 +73,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                         "Unlocking store with existing key from {}",
                         self.previous_key_path.display()
                     );
-                    match self.setup_with_previous_key(crypt_name, new_key.as_bytes()) {
+                    match self.setup_store_with_previous_key(crypt_name, key.as_bytes()) {
                         Ok(()) => return Ok(()),
                         Err(err) => {
                             eprintln!(
@@ -92,12 +84,8 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     }
                 }
 
-                activate_crypt_device(
-                    &self.partition_setup.store_partition_device,
-                    crypt_name,
-                    new_key.as_bytes(),
-                )
-                .context("Failed to initialize crypt device for store partition")?;
+                activate_crypt_device(device_path, crypt_name, key.as_bytes())
+                    .context("Failed to initialize crypt device for store partition")?;
             }
         }
 
@@ -105,28 +93,13 @@ impl DiskEncryption for SevDiskEncryption<'_> {
     }
 
     fn format(&mut self, partition: Partition) -> Result<()> {
-        match partition {
-            Partition::Var => {
-                let key = self
-                    .sev_key_deriver
-                    .derive_key(Key::VarPartitionEncryptionKey)
-                    .context("Failed to derive SEV key for var partition")?;
-                format_crypt_device(
-                    &self.partition_setup.my_var_partition_device,
-                    key.as_bytes(),
-                )
-                .context("Failed to format var partition")?;
-            }
+        let device_path = partition.device_path(self.partition_setup);
+        let key = self
+            .sev_key_deriver
+            .derive_key(Key::DiskEncryptionKey { device_path })
+            .context("Failed to derive SEV key for disk encryption")?;
 
-            Partition::Store => {
-                let key = self
-                    .sev_key_deriver
-                    .derive_key(Key::StorePartitionEncryptionKey)
-                    .context("Failed to derive SEV key for store partition")?;
-                format_crypt_device(&self.partition_setup.store_partition_device, key.as_bytes())
-                    .context("Failed to format store partition")?;
-            }
-        }
+        format_crypt_device(device_path, key.as_bytes()).context("Failed to format partition")?;
 
         Ok(())
     }

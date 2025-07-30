@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "@crate_index//:reqwest",
     "@crate_index//:sev",
     "@crate_index//:sha2",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
 ]
 
@@ -23,7 +22,6 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
 ]
 
 ALIASES = {}
