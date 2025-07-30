@@ -105,8 +105,10 @@ fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
+        let guest_launch_measurements =
+            get_guestos_initial_launch_measurements().expect("no launch measurements");
 
         // prepare for the 1. proposal
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -122,7 +124,7 @@ fn test(env: TestEnv) {
             Some(new_replica_version.clone()),
             Some(sha256),
             vec![upgrade_url],
-            get_ic_os_launch_measurements().expect("Could not get guest launch measurements"),
+            guest_launch_measurements,
             vec![],
         )
         .await;

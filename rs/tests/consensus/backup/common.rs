@@ -107,10 +107,10 @@ pub fn test(env: TestEnv) {
     let target_version = get_guestos_update_img_version().expect("target IC version");
 
     // Bless target version
-    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
     let guest_launch_measurements =
-        get_ic_os_launch_measurements_test().expect("Failed to get guest launch measurements");
+        get_guestos_launch_measurements().expect("Failed to get guest launch measurements");
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
