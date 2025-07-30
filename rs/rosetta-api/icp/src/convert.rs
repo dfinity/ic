@@ -539,10 +539,10 @@ pub fn transaction_results_to_api_error(tr: TransactionResults, token_name: &str
 }
 
 pub fn from_account_ai_to_ai(
-    to_account: Option<ic_nns_governance_api::Account>,
-    to_account_identifier: Option<icp_ledger::protobuf::AccountIdentifier>,
+    account: Option<ic_nns_governance_api::Account>,
+    account_identifier: Option<icp_ledger::protobuf::AccountIdentifier>,
 ) -> Result<Option<icp_ledger::AccountIdentifier>, ApiError> {
-    let result = match (to_account, to_account_identifier) {
+    let result = match (account, account_identifier) {
         (None, None) => None,
         (Some(account), None) => {
             let owner = match account.owner {
@@ -566,7 +566,7 @@ pub fn from_account_ai_to_ai(
                 e
             ))
         })?),
-        (Some(_), Some(_)) => return Err(ApiError::invalid_request("Invalid DisburseMaturity command, cannot specify both to_account and to_account_identifier")),
+        (Some(_), Some(_)) => return Err(ApiError::invalid_request("Cannot specify both account and account_identifier")),
     };
     Ok(result)
 }
