@@ -1,9 +1,7 @@
-use crate::device_mapping::MappedDevice;
 use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
-use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{bail, Context, Error, Result};
@@ -11,6 +9,8 @@ use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use ic_device::device_mapping::MappedDevice;
+use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
 use ic_sev::HostSevCertificateProvider;
 use nix::unistd::getuid;
@@ -30,10 +30,8 @@ use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
-mod device_mapping;
 mod guest_direct_boot;
 mod guest_vm_config;
-mod mount;
 mod systemd_notifier;
 mod upgrade_device_mapper;
 
@@ -312,7 +310,7 @@ impl GuestVmService {
             console_tty: Box::new(console_tty),
             sev_certificate_provider,
             partition_provider: Box::new(
-                mount::GptPartitionProvider::new(disk_device.to_path_buf())
+                GptPartitionProvider::new(disk_device.to_path_buf())
                     .context("Failed to create partition provider")?,
             ),
             disk_device: disk_device.to_path_buf(),
@@ -345,7 +343,7 @@ impl GuestVmService {
                 virtual_machine
             }
             Err(err) => {
-                self.handle_startup_error(&err).await?;
+                self.handle_startup_error(&err).await;
                 self.metrics_writer
                     .write_metrics(&[Metric::with_annotation(
                         "hostos_guestos_service_start",
@@ -467,7 +465,7 @@ impl GuestVmService {
     }
 
     /// Handles errors that occur during VM startup
-    async fn handle_startup_error(&mut self, e: &Error) -> Result<()> {
+    async fn handle_startup_error(&mut self, e: &Error) {
         // Give QEMU time to clear the console before printing error messages
         // (but not in unit tests otherwise tests take too long to finish).
         #[cfg(not(test))]
@@ -483,7 +481,7 @@ impl GuestVmService {
         ));
         self.write_to_console("#################################################");
 
-        self.display_systemd_logs().await?;
+        let _ignore = self.display_systemd_logs().await;
 
         self.write_to_console("#################################################");
         self.write_to_console("###          TROUBLESHOOTING INFO...          ###");
@@ -494,14 +492,12 @@ impl GuestVmService {
         ));
 
         // Check for and display serial logs if they exist
-        self.display_serial_logs().await?;
+        let _ignore = self.display_serial_logs().await;
 
         self.write_to_console_and_stdout(&format!(
             "Exiting so that systemd can restart {}",
             self.systemd_service_name()
         ));
-
-        Ok(())
     }
 
     /// Captures and displays journalctl logs for the guestos service
@@ -602,13 +598,13 @@ impl Drop for GuestVmService {
 #[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
-    use crate::mount::testing::ExtractingFilesystemMounter;
-    use crate::mount::GptPartitionProvider;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,
     };
+    use ic_device::mount::testing::ExtractingFilesystemMounter;
+    use ic_device::mount::GptPartitionProvider;
     use ic_sev::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
@@ -787,7 +783,7 @@ mod tests {
                 libvirt_connection,
                 hostos_config,
                 guestos_device: GUESTOS_IMAGE.path().to_path_buf(),
-                mock_mounter: ExtractingFilesystemMounter::new(),
+                mock_mounter: ExtractingFilesystemMounter::default(),
                 _libvirt_definition: libvirt_definition,
             }
         }
