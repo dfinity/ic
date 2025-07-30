@@ -59,6 +59,7 @@ pub enum UpgradeContent {
     Orchestrator,
     Replica,
 }
+
 /// Detect whether a proposal is executed within `timeout`.
 ///
 /// # Arguments

@@ -1825,10 +1825,24 @@ pub struct NnsCustomizations {
     pub install_at_ids: bool,
 }
 
+impl NnsCustomizations {
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        if self.ledger_balances.is_none() {
+            self.ledger_balances = Some(HashMap::new());
+        }
+        let ledger_balances = self.ledger_balances
+            .as_mut()
+            .unwrap(); // This is infallible, due to the earlier code in this method.
+
+        ledger_balances.insert(account_identifier, amount);
+
+        self
+    }
+}
+
 pub struct NnsInstallationBuilder {
     customizations: NnsCustomizations,
     installation_timeout: Duration,
-    is_mock_exchange_rate_canister_enabled: bool,
     is_subnet_rental_canister_enabled: bool,
 }
 
@@ -1843,7 +1857,6 @@ impl NnsInstallationBuilder {
         Self {
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
-            is_mock_exchange_rate_canister_enabled: false,
             is_subnet_rental_canister_enabled: false,
         }
     }
@@ -1863,17 +1876,13 @@ impl NnsInstallationBuilder {
         self
     }
 
-    // Actually, it's a stub, but almost nobody remembers the fine distinctions
-    // between the various types of test doubles, and so even though it isn't
-    // technically a mock (as defined by Martin Fowler et. al.), it is called
-    // that, and this method is named accordingly.
-    pub fn with_mock_exchange_rate_canister(mut self) -> Self {
-        self.is_mock_exchange_rate_canister_enabled = true;
+    pub fn with_subnet_rental_canister(mut self) -> Self {
+        self.is_subnet_rental_canister_enabled = true;
         self
     }
 
-    pub fn with_subnet_rental_canister(mut self) -> Self {
-        self.is_subnet_rental_canister_enabled = true;
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        self.customizations = self.customizations.with_balance(account_identifier, amount);
         self
     }
 
@@ -2296,9 +2305,6 @@ pub async fn install_nns_canisters(
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
 
-    if nns_installation_builder.is_mock_exchange_rate_canister_enabled {
-        init_payloads.with_mock_exchange_rate_canister();
-    }
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();
     }

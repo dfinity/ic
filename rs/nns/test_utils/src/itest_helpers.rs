@@ -502,11 +502,28 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
     .await
 }
 
+/// Runtime must be built from a node belonging to a subnet that can host
+/// EXCHANGE_RATE_CANISTER_ID.
+///
+/// Warning: This assumes that canisters with ID smaller than that of the
+/// Exchange Rate canister have all already been created.
 pub async fn create_and_install_mock_exchange_rate_canister(runtime: &'_ Runtime, price_of_icp_in_xdr_cents: u64) {
-    // Step 1: Create the canister.
-    runtime.create_canister_at_id(PrincipalId::from(EXCHANGE_RATE_CANISTER_ID))
-        .await
-        .unwrap();
+    // Step 1: Create the canister. Loop until we hit the
+    // EXCHANGE_RATE_CANISTER_ID. Yes, this is a hack. It is required, because
+    // create_canister_at_id does not work in system tests (or so it seems at
+    // the time of writing). Hence the "Warning" in the triple slash comments of
+    // this function.
+    let mut found = false;
+    for _ in 0..100 {
+        let canister = runtime.create_canister(Some(0))
+            .await
+            .unwrap();
+        if canister.canister_id() == EXCHANGE_RATE_CANISTER_ID {
+            found = true;
+            break;
+        }
+    }
+    assert!(found);
 
     // Step 2: Install code into the canister.
 

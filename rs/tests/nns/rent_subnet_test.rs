@@ -20,15 +20,20 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
-use candid::Encode;
+use candid::{Encode, Principal};
 use canister_test::{RemoteTestRuntime, Runtime, Canister};
 use dfn_candid::candid_multi_arity; // DO NOT MERGE
 use ic_base_types::{CanisterId, SubnetId, PrincipalId};
 use ic_canister_client::{Agent, Sender};
+use ic_ledger_core::Tokens;
 // DO NOT MERGE use ic_nns_governance_api::{ProposalStatus, NnsFunction};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID, LEDGER_CANISTER_ID,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -41,6 +46,9 @@ use ic_system_test_driver::{
             IcNodeSnapshot, SubnetSnapshot,
         },
     },
+    ledger::{
+        BasicIcrc1Transfer,
+    },
     nns::{
         get_subnet_list_from_registry, execute_subnet_rental_request,
     },
@@ -50,6 +58,9 @@ use ic_system_test_driver::{
     },
 };
 use ic_types::{Height, RegistryVersion};
+use icp_ledger::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::icrc1::account::Account;
+use lazy_static::lazy_static;
 use registry_canister::mutations::reroute_canister_ranges::RerouteCanisterRangesPayload;
 use slog::info;
 use std::{
@@ -60,6 +71,13 @@ use std::{
 
 const DKG_INTERVAL_LENGTH: u64 = 29;
 const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 314;
+
+lazy_static! {
+    // This is the principal that will be able to create canisters in the
+    // "rented" subnet once it gets created. This principal is required to
+    // supply enough ICP to the Subnet Rental canister.
+    static ref SUBNET_USER_PRINCIPAL_ID: PrincipalId = PrincipalId::new_user_test_id(153_288_198);
+}
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -80,7 +98,15 @@ pub fn setup(env: TestEnv) {
     for _ in 0..32 {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
     }
-    let ic = ic.add_subnet(
+    ic = ic.add_subnet(
+        Subnet::new(SubnetType::System)
+            .with_features(SubnetFeatures {
+                http_requests:true,
+                ..SubnetFeatures::default()
+            })
+            .add_nodes(1),
+    );
+    ic = ic.add_subnet(
         Subnet::fast(
             SubnetType::System,
             1, // Node count.
@@ -125,23 +151,39 @@ pub fn test(env: TestEnv) {
 
     // [Phase II] Execute and validate the testnet changes
 
-    // This is the principal that will be able to create canisters in the
-    // "rented" subnet once it gets created. This principal is required to
-    // supply enough ICP to the Subnet Rental canister.
-    let subnet_user = PrincipalId::new_user_test_id(42);
-
     let client = RegistryCanister::new_with_query_timeout(
         vec![an_nns_subnet_node.get_public_url()],
         Duration::from_secs(10),
     );
 
     block_on(async move {
+        let runtime = new_node_runtime(&an_nns_subnet_node);
+
         let original_subnets = get_subnet_list_from_registry(&client).await;
         // Not sure why the NNS subnet is not in original_subnets...
         assert!(!original_subnets.is_empty(), "registry contains no subnets");
-        info!(log, "original subnets: {:?}", original_subnets);
 
-        execute_subnet_rental_request(&an_nns_subnet_node, subnet_user).await;
+        // The (prospective) subnet user sends an adequate amount of ICP to the
+        // Subnet Rental canister (to rent the subnet that is being offerred).
+        let icp_ledger = Canister::new(&runtime, LEDGER_CANISTER_ID);
+        let request = BasicIcrc1Transfer {
+            source: Account {
+                owner: Principal::from(*SUBNET_USER_PRINCIPAL_ID),
+                subaccount: None,
+            },
+
+            destination: Account {
+                owner: Principal::from(SUBNET_RENTAL_CANISTER_ID),
+                subaccount: Some(Subaccount::from(&*SUBNET_USER_PRINCIPAL_ID).0),
+            },
+
+            amount: Tokens::new(50_000, 0).unwrap(),
+        };
+        println!("\n\n DO NOT MERGE - Sending ICP to the Subnet Rental canister...\n\n");
+        let _block_index = request.execute_on(&icp_ledger).await;
+        println!("\n\n DO NOT MERGE - Success! ICP sent to the Subnet Rental canister.\n\n");
+
+        execute_subnet_rental_request(&an_nns_subnet_node, *SUBNET_USER_PRINCIPAL_ID).await;
 
         let new_topology_snapshot = topology_snapshot
             .block_for_min_registry_version(RegistryVersion::new(2))
@@ -254,14 +296,26 @@ pub fn install_nns_canisters(env: &TestEnv) {
         .next()
         .expect("there is no NNS node");
 
-    NnsInstallationBuilder::new()
-        .with_subnet_rental_canister()
+    let mut installer = NnsInstallationBuilder::new()
+        .with_subnet_rental_canister();
+
+    // Give SUBNET user an initial amount of ICP.
+    const DEFAULT_FEE: u64 = 10_000; // DO NOT MERGE
+    installer = installer.with_balance(
+        AccountIdentifier::new(
+            *SUBNET_USER_PRINCIPAL_ID,
+            None, // subaccount
+        ),
+        // This is slightly more than what's needed to pay for the subnet that
+        // is being offered for rent.
+        Tokens::new(50_000, DEFAULT_FEE).unwrap(),
+    );
+
+    installer
         .install(&nns_node, env)
         .expect("NNS canisters not installed");
 
     create_and_install_mock_exchange_rate_canister(env.topology_snapshot());
-
-    info!(&env.logger(), "NNS canisters installed");
 }
 
 fn new_node_runtime(node: &IcNodeSnapshot) -> Runtime {
@@ -308,10 +362,18 @@ fn find_subnet_that_hosts_canister_id(topology_snapshot: &TopologySnapshot, cani
     // Only one subnet.
     assert_eq!(
         subnets.len(), 1,
-        "{:#?}",
+        "{:#?}\n\n{:#?}",
         subnets
             .into_iter()
             .map(|subnet| subnet.subnet_id)
+            .collect::<Vec<_>>(),
+        topology_snapshot
+            .subnets()
+            .into_iter()
+            .map(|subnet| (
+                subnet.subnet_id,
+                subnet.subnet_canister_ranges(),
+            ))
             .collect::<Vec<_>>(),
     );
 
