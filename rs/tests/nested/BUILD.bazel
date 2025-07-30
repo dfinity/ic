@@ -140,7 +140,7 @@ system_test_nns(
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
     extra_head_nns_tags = [],
-    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
+    flaky = True,
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
