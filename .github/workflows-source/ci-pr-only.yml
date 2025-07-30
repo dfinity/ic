@@ -31,7 +31,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     timeout-minutes: 90
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     <<: *container
   checkout: &checkout
     name: Checkout
