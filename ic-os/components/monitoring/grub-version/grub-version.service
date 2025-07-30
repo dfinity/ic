@@ -1,6 +1,7 @@
 [Unit]
 Description=Grub version
 Before=node_exporter.service
+RequiresMountsFor=/boot/grub
 
 [Service]
 Type=oneshot

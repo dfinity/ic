@@ -5337,7 +5337,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "async-trait",
  "clap 4.5.27",
  "config",
  "config_types",
@@ -5347,13 +5346,11 @@ dependencies = [
  "gpt",
  "grub",
  "ic-metrics-tool",
+ "ic_device",
  "ic_sev",
- "loopdev-3",
  "macaddr",
  "nix 0.24.3",
- "partition_tools",
  "regex",
- "sys-mount",
  "systemd",
  "tempfile",
  "thiserror 2.0.12",
@@ -10818,6 +10815,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-utils 0.9.0",
  "icrc-ledger-client",
+ "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "num-traits",
  "rand 0.8.5",
@@ -11819,8 +11817,10 @@ dependencies = [
  "ic-cdk-timers",
  "ic-interfaces-registry",
  "ic-management-canister-types",
+ "ic-metrics-encoder",
  "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
+ "ic-nervous-system-common",
  "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
@@ -15199,6 +15199,23 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic_device"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "devicemapper",
+ "gpt",
+ "loopdev-3",
+ "nix 0.24.3",
+ "partition_tools",
+ "sys-mount",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

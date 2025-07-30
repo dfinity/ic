@@ -27,7 +27,7 @@ use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
     simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
-    wait_for_guest_version, wait_for_target_guest_version,
+    wait_for_expected_guest_version, wait_for_guest_version,
 };
 
 use anyhow::bail;
@@ -302,7 +302,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         let target_version =
             get_guestos_update_img_version().expect("Failed to get target guestos version");
         let target_short_hash =
-            &get_guestos_update_img_sha256(&env).expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
+            &get_guestos_update_img_sha256().expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
 
         info!(
             logger,
@@ -423,6 +423,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
 
         let original_version = get_setupos_img_version().expect("Failed to find initial version");
+        info!(logger, "Original GuestOS version: {}", original_version);
 
         // determine new GuestOS version
         let upgrade_url = get_guestos_update_img_url()
@@ -435,7 +436,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         let target_version = ReplicaVersion::try_from(target_version_str.as_str()).unwrap();
         info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_guestos_update_img_sha256(&env).expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)
@@ -444,7 +445,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             .build()
             .expect("Failed to build HTTP client");
 
-        wait_for_target_guest_version(
+        wait_for_expected_guest_version(
             &client,
             &guest_ipv6,
             &original_version,
@@ -489,7 +490,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
 
         // Check that GuestOS is on the expected version (upgrade version)
-        wait_for_target_guest_version(
+        wait_for_expected_guest_version(
             &client,
             &guest_ipv6,
             &target_version_str,
