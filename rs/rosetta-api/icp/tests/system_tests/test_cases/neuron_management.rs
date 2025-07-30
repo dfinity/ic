@@ -1588,11 +1588,8 @@ fn test_disburse_maturity() {
             env.pocket_ic.tick().await;
         }
 
-        let balance_after = account_balance(&env.pocket_ic, &receiver).await;
-
-        println!("balance_after 2: {}", balance_after.get_e8s());
-
-        assert_eq!(balance_after.get_e8s(), new_maturity / 2);
+        let receiver_balance_after = account_balance(&env.pocket_ic, &receiver).await;
+        assert_eq!(receiver_balance_after.get_e8s(), new_maturity / 2);
 
         let test_id_balance_after = account_balance(&env.pocket_ic, &test_identity_acc_id)
             .await
