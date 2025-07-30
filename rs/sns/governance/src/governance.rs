@@ -1,6 +1,12 @@
-use crate::extensions::{validate_extension_wasm, ExtensionKind, ExtensionOperationSpec, ExtensionSpec, ValidatedExecuteExtensionOperation, ValidatedRegisterExtension};
+use crate::extensions::{
+    validate_extension_wasm, ExtensionKind, ExtensionOperationSpec, ExtensionSpec,
+    ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::sns_root_types::{register_extension_response, CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse};
+use crate::pb::sns_root_types::{
+    register_extension_response, CanisterCallError, ListSnsCanistersRequest,
+    ListSnsCanistersResponse,
+};
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::{
     valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
@@ -2322,8 +2328,8 @@ impl Governance {
                 )
             })?;
 
-        let RegisterExtensionResponse { result } =
-            Decode!(&reply, RegisterExtensionResponse).map_err(|err| {
+        let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
+            .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!("Could not decode RegisterExtensionResponse: {err:?}"),
@@ -2400,7 +2406,8 @@ impl Governance {
 
         let treasury_manager_canister_id = extension_canister_id;
 
-        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init_payload(init)?;
+        let (arg, sns_amount_e8s, icp_amount_e8s) =
+            self.construct_treasury_manager_init_payload(init)?;
 
         self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;
@@ -2605,10 +2612,8 @@ impl Governance {
     async fn list_extensions(&self) -> Result<Vec<PrincipalId>, GovernanceError> {
         let list_extensions_arg = Encode!(&ListSnsCanistersRequest {}).unwrap();
 
-        let ListSnsCanistersResponse {
-            extensions,
-            ..
-        } = self.env
+        let ListSnsCanistersResponse { extensions, .. } = self
+            .env
             .call_canister(
                 self.proto.root_canister_id_or_panic(),
                 "list_extensions",
@@ -2618,7 +2623,10 @@ impl Governance {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Canister method call Root.list_extensions failed: {:?}", err),
+                    format!(
+                        "Canister method call Root.list_extensions failed: {:?}",
+                        err
+                    ),
                 )
             })
             .and_then(|blob| {
@@ -2630,45 +2638,42 @@ impl Governance {
                 })
             })?;
 
-        let extensions = extensions.map(|extensions| extensions.extension_canister_ids).unwrap_or_default();
+        let extensions = extensions
+            .map(|extensions| extensions.extension_canister_ids)
+            .unwrap_or_default();
 
         Ok(extensions)
     }
 
-    async fn canister_module_hash(&self, canister_id: CanisterId) -> Result<Vec<u8>, GovernanceError> {
-        let canister_info_arg = Encode!(
-            &CanisterInfoRequest::new(
-                canister_id,
-                Some(1),
-            )
-        ).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!("Error encoding canister_info request.\n{}", err)
-            )
-        })?;
+    async fn canister_module_hash(
+        &self,
+        canister_id: CanisterId,
+    ) -> Result<Vec<u8>, GovernanceError> {
+        let canister_info_arg =
+            Encode!(&CanisterInfoRequest::new(canister_id, Some(1),)).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error encoding canister_info request.\n{}", err),
+                )
+            })?;
 
-        let response = self.env
-            .call_canister(
-                CanisterId::ic_00(),
-                "canister_info",
-                canister_info_arg,
-            )
+        let response = self
+            .env
+            .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
             .await
             .map_err(|err: (Option<i32>, String)| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Canister method call IC00.canister_info failed: {:?}", err)
+                    format!("Canister method call IC00.canister_info failed: {:?}", err),
                 )
             })
             .and_then(|blob| {
-                Decode!(&blob, CanisterInfoResponse)
-                    .map_err(|err| {
-                        GovernanceError::new_with_message(
-                            ErrorType::External,
-                            format!("Error decoding IC00.canister_info response:\n{}", err)
-                        )
-                    })
+                Decode!(&blob, CanisterInfoResponse).map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error decoding IC00.canister_info response:\n{}", err),
+                    )
+                })
             })?;
 
         Ok(response.module_hash().unwrap_or_default())
@@ -2682,13 +2687,12 @@ impl Governance {
             extension_canister_id,
             operation_name,
             operation_arg,
-        } = execute_extension_operation.try_into()
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Invalid ExecuteExtensionOperation proposal: {:?}", err),
-                )
-            })?;
+        } = execute_extension_operation.try_into().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid ExecuteExtensionOperation proposal: {:?}", err),
+            )
+        })?;
 
         let registered_extensions = self.list_extensions().await?;
 
@@ -2704,23 +2708,22 @@ impl Governance {
 
         let wasm_module_hash = self.canister_module_hash(extension_canister_id).await?;
 
-        let (extension_kind, extension_operations) = match validate_extension_wasm(&wasm_module_hash) {
-            Ok(ExtensionSpec {
-                kind,
-                operations,
-                ..
-            }) => (kind, operations),
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "Extension canister {} does not have an extension spec despite being \
+        let (extension_kind, extension_operations) =
+            match validate_extension_wasm(&wasm_module_hash) {
+                Ok(ExtensionSpec {
+                    kind, operations, ..
+                }) => (kind, operations),
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "Extension canister {} does not have an extension spec despite being \
                          registered with Root: {}",
-                        extension_canister_id, err,
-                    ),
-                ));
-            }
-        };
+                            extension_canister_id, err,
+                        ),
+                    ));
+                }
+            };
 
         if extension_kind != ExtensionKind::TreasuryManager {
             return Err(GovernanceError::new_with_message(
@@ -2731,10 +2734,8 @@ impl Governance {
 
         let treasury_manager_canister_id = extension_canister_id;
 
-        let Some(ExtensionOperationSpec {
-            name,
-            ..
-        }) = extension_operations.get(&operation_name) else {
+        let Some(ExtensionOperationSpec { name, .. }) = extension_operations.get(&operation_name)
+        else {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
@@ -2751,12 +2752,15 @@ impl Governance {
             ));
         }
 
-        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_deposit_payload(operation_arg)?;
+        let (arg, sns_amount_e8s, icp_amount_e8s) =
+            self.construct_treasury_manager_deposit_payload(operation_arg)?;
 
         self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;
 
-        let balances = self.env.call_canister(treasury_manager_canister_id, "deposit", arg)
+        let balances = self
+            .env
+            .call_canister(treasury_manager_canister_id, "deposit", arg)
             .await
             .map_err(|(code, err)| {
                 GovernanceError::new_with_message(
@@ -2768,16 +2772,19 @@ impl Governance {
                 )
             })
             .and_then(|blob| {
-                Decode!(&blob, Balances)
-                    .map_err(|err| {
-                        GovernanceError::new_with_message(
-                            ErrorType::External,
-                            format!("Error decoding TreasuryManager.deposit response: {:?}", err),
-                        )
-                    })
+                Decode!(&blob, Balances).map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error decoding TreasuryManager.deposit response: {:?}", err),
+                    )
+                })
             })?;
 
-        log!(INFO, "TreasuryManager.deposit succeeded with response: {:?}", balances);
+        log!(
+            INFO,
+            "TreasuryManager.deposit succeeded with response: {:?}",
+            balances
+        );
 
         Ok(())
     }

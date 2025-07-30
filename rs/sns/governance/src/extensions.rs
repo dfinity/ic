@@ -1,16 +1,19 @@
-use std::{collections::BTreeMap, fmt::Display};
 use candid::Nat;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use sns_treasury_manager::{Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit};
+use sns_treasury_manager::{
+    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
+};
+use std::{collections::BTreeMap, fmt::Display};
 
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
     pb::v1::{
-        governance_error::ErrorType, ChunkedCanisterWasm, ExecuteExtensionOperation, ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, RegisterExtension, Topic
+        governance_error::ErrorType, ChunkedCanisterWasm, ExecuteExtensionOperation, ExtensionInit,
+        ExtensionOperationArg, GovernanceError, Precise, RegisterExtension, Topic,
     },
     types::Wasm,
 };
@@ -36,7 +39,6 @@ impl Display for ExtensionKind {
 pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
-
     // TODO: Add a way to specify argument schema for the extension operation.
 }
 
@@ -46,7 +48,6 @@ pub struct ExtensionSpec {
     pub topic: Topic,
     pub kind: ExtensionKind,
     pub operations: BTreeMap<String, ExtensionOperationSpec>,
-
     // TODO: Add a way to specify initialization arguments schema for the extension.
 }
 
@@ -58,7 +59,11 @@ impl Display for ExtensionSpec {
             self.name,
             self.topic,
             self.kind,
-            self.operations.keys().cloned().collect::<Vec<_>>().join(", ")
+            self.operations
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 }
@@ -94,33 +99,34 @@ impl Governance {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let (treasury_sns_subaccount, treasury_icp_subaccount) = self.treasury_subaccounts();
 
-        let (allowances, sns_amount_e8s, icp_amount_e8s) = treasury_manager::construct_deposit_allowances(
-            value,
-            Asset::Token {
-                symbol: "SNS".to_string(),
-                ledger_canister_id: self.ledger.canister_id().get().0,
-                ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
-            },
-            Asset::Token {
-                symbol: "ICP".to_string(),
-                ledger_canister_id: self.nns_ledger.canister_id().get().0,
-                ledger_fee_decimals: Nat::from(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
-            },
-            sns_treasury_manager::Account {
-                owner: self.env.canister_id().get().0,
-                subaccount: treasury_sns_subaccount,
-            },
-            sns_treasury_manager::Account {
-                owner: self.env.canister_id().get().0,
-                subaccount: treasury_icp_subaccount,
-            },
-        )
-        .map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Error extracting initial allowances: {}", err),
+        let (allowances, sns_amount_e8s, icp_amount_e8s) =
+            treasury_manager::construct_deposit_allowances(
+                value,
+                Asset::Token {
+                    symbol: "SNS".to_string(),
+                    ledger_canister_id: self.ledger.canister_id().get().0,
+                    ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
+                },
+                Asset::Token {
+                    symbol: "ICP".to_string(),
+                    ledger_canister_id: self.nns_ledger.canister_id().get().0,
+                    ledger_fee_decimals: Nat::from(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
+                },
+                sns_treasury_manager::Account {
+                    owner: self.env.canister_id().get().0,
+                    subaccount: treasury_sns_subaccount,
+                },
+                sns_treasury_manager::Account {
+                    owner: self.env.canister_id().get().0,
+                    subaccount: treasury_icp_subaccount,
+                },
             )
-        })?;
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Error extracting initial allowances: {}", err),
+                )
+            })?;
 
         Ok((allowances, sns_amount_e8s, icp_amount_e8s))
     }
@@ -130,7 +136,8 @@ impl Governance {
         &self,
         init: ExtensionInit,
     ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
-        let (allowances, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_deposit_allowances(init.value)?;
+        let (allowances, sns_amount_e8s, icp_amount_e8s) =
+            self.construct_treasury_manager_deposit_allowances(init.value)?;
 
         let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
         let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
@@ -148,7 +155,8 @@ impl Governance {
         &self,
         arg: ExtensionOperationArg,
     ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
-        let (allowances, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_deposit_allowances(arg.value)?;
+        let (allowances, sns_amount_e8s, icp_amount_e8s) =
+            self.construct_treasury_manager_deposit_allowances(arg.value)?;
 
         let arg = DepositRequest { allowances };
         let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
@@ -229,9 +237,10 @@ impl TryFrom<ExecuteExtensionOperation> for ValidatedExecuteExtensionOperation {
         let extension_canister_id = match CanisterId::try_from_principal_id(extension_canister_id) {
             Ok(id) => id,
             Err(err) => {
-                return Err(
-                    format!("Cannot interpret extension_canister_id as canister ID: {}", err)
-                );
+                return Err(format!(
+                    "Cannot interpret extension_canister_id as canister ID: {}",
+                    err
+                ));
             }
         };
 
@@ -243,7 +252,11 @@ impl TryFrom<ExecuteExtensionOperation> for ValidatedExecuteExtensionOperation {
             return Err("operation_arg is required.".to_string());
         };
 
-        Ok(Self { extension_canister_id, operation_name, operation_arg })
+        Ok(Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        })
     }
 }
 
@@ -306,11 +319,7 @@ pub mod treasury_manager {
                 owner_account: treasury_icp_account,
             },
         ];
-        Ok((
-            allowances,
-            sns_token_amount_e8s,
-            icp_token_amount_e8s,
-        ))
+        Ok((allowances, sns_token_amount_e8s, icp_token_amount_e8s))
     }
 }
 
@@ -372,7 +381,7 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
                     name: "withdraw".to_string(),
                     description: "Withdraw funds from the treasury manager.".to_string(),
                 },
-            }
+            },
         });
     }
 
