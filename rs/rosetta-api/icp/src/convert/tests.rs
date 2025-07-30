@@ -254,6 +254,14 @@ fn from_account_ai_to_ai_test() {
         .expect("should return an account identifier");
     assert_eq!(result, account_id);
 
+    // Incorrect account id
+    let incorrect_ai = icp_ledger::protobuf::AccountIdentifier { hash: vec![1u8; 2] };
+    let error = from_account_ai_to_ai(None, Some(incorrect_ai)).unwrap_err();
+    assert_eq!(
+        error,
+        ApiError::invalid_request("Could not parse recipient account identifier: Received an invalid AccountIdentifier with length 2 bytes instead of the expected 28 or 32.")
+    );
+
     // Only Account, no subaccount
     let result = from_account_ai_to_ai(Some(to_nns_account(account)), None)
         .unwrap()
@@ -270,4 +278,26 @@ fn from_account_ai_to_ai_test() {
         .unwrap()
         .expect("should return an account identifier");
     assert_eq!(result, account_id);
+
+    // Account without owner - Error
+    let no_owner = ic_nns_governance_api::Account {
+        owner: None,
+        subaccount: None,
+    };
+    let error = from_account_ai_to_ai(Some(no_owner), None).unwrap_err();
+    assert_eq!(
+        error,
+        ApiError::invalid_request("Invalid Account, the owner needs to be specified")
+    );
+
+    // Incorrect subaccount length - Error
+    let incorrect_sub = ic_nns_governance_api::Account {
+        owner: Some(PrincipalId::new_user_test_id(1)),
+        subaccount: Some(vec![1u8; 2]),
+    };
+    let error = from_account_ai_to_ai(Some(incorrect_sub), None).unwrap_err();
+    assert_eq!(
+        error,
+        ApiError::invalid_request("Invalid subaccount length: 2, should be 32")
+    );
 }

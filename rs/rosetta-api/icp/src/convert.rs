@@ -554,7 +554,7 @@ pub fn from_account_ai_to_ai(
                 subaccount: match account.subaccount {
                     None => None,
                     Some(subaccount) =>  Some(subaccount.try_into().map_err(|v: Vec<u8>| {
-                        ApiError::invalid_request(format!("Invalid subaccount length: {}", v.len()))
+                        ApiError::invalid_request(format!("Invalid subaccount length: {}, should be 32", v.len()))
                     })?),
                 },
             };
