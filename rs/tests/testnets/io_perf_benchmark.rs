@@ -203,7 +203,8 @@ pub fn setup(env: TestEnv, config: Config) {
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
-        .with_default_vm_resources(vm_resources);
+        .with_default_vm_resources(vm_resources)
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     // `HostFeature::IoPerformance` is required for the system subnet to use the performance hosts even if hosts are specified.
     let mut subnet = Subnet::new(SubnetType::Application)
@@ -232,7 +233,6 @@ pub fn setup(env: TestEnv, config: Config) {
     }
 
     ic = ic.add_subnet(subnet);
-    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     let vms = ic
         .setup_and_start_return_vms(&env)
@@ -240,20 +240,25 @@ pub fn setup(env: TestEnv, config: Config) {
 
     let topology_snapshot = env.topology_snapshot();
     let mut switch_to_ssd_handles = Vec::new();
-    for node in topology_snapshot.subnets().next().unwrap().nodes() {
-        let node_id = node.node_id.to_string();
-        let hostname = vms
-            .get(&node_id)
-            .expect("Failed to get VM for node")
-            .hostname
-            .clone();
+    for subnet in topology_snapshot.subnets() {
+        if subnet.subnet_type() != SubnetType::Application() {
+            continue;
+        }
+        for node in subnet.nodes() {
+            let node_id = node.node_id.to_string();
+            let hostname = vms
+                .get(&node_id)
+                .expect("Failed to get VM for node")
+                .hostname
+                .clone();
 
-        info!(
-            env.logger(),
-            "Node {} is allocated to host: {}", node_id, hostname
-        );
-        let log = logger.clone();
-        switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+            info!(
+                env.logger(),
+                "Node {} is allocated to host: {}", node_id, hostname
+            );
+            let log = logger.clone();
+            switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+        }
     }
     for handle in switch_to_ssd_handles {
         handle.join().unwrap();
