@@ -75,13 +75,13 @@ fi
 echo "Recovery artifact verified successfully"
 
 echo "Extracting recovery artifact..."
-tar zxf "recovery.tar.zst"
+tar -xf "recovery.tar.zst"
 
 echo "Preparing recovery artifacts..."
 TARGET_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/ic_registry_local_store)
 
 mkdir ic_registry_local_store
-tar zxf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
+tar -xf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
 
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups)
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups)

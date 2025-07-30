@@ -3184,11 +3184,13 @@ impl Payload<'_> for SubnetInfoArgs {}
 /// ```text
 /// record {
 ///     replica_version: text;
+///     registry_version: nat64;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct SubnetInfoResponse {
     pub replica_version: String,
+    pub registry_version: u64,
 }
 
 impl Payload<'_> for SubnetInfoResponse {}
