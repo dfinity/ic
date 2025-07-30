@@ -1265,8 +1265,8 @@ impl Governance {
             .values()
             .filter(|proposal_data| {
                 // Only consider open proposals where this neuron is the proposer
-                proposal_data.status() == ProposalDecisionStatus::Open
-                    && proposal_data.proposer.as_ref() == Some(neuron_id)
+                proposal_data.proposer.as_ref() == Some(neuron_id)
+                    && proposal_data.status() == ProposalDecisionStatus::Open
             })
             .map(|proposal_data| proposal_data.reject_cost_e8s)
             .sum::<u64>();
