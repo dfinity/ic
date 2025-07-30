@@ -1521,7 +1521,6 @@ fn test_disburse_maturity() {
             .build()
             .await;
 
-        // Stake the minimum amount 100 million e8s
         let staked_amount = 1_000_000_000u64;
         let neuron_index = 0;
 
