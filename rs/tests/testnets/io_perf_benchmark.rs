@@ -209,7 +209,7 @@ pub fn setup(env: TestEnv, config: Config) {
         .with_default_vm_resources(vm_resources);
 
     // `HostFeature::IoPerformance` is required for the system subnet to use the performance hosts even if hosts are specified.
-    let mut subnet = Subnet::new(SubnetType::System)
+    let mut subnet = Subnet::new(SubnetType::Application)
         .with_required_host_features(vec![HostFeature::IoPerformance]);
 
     let logger = env.logger();
@@ -235,6 +235,7 @@ pub fn setup(env: TestEnv, config: Config) {
     }
 
     ic = ic.add_subnet(subnet);
+    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     let vms = ic
         .setup_and_start_return_vms(&env)
