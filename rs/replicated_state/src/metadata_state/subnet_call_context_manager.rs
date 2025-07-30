@@ -1134,6 +1134,18 @@ impl SignWithThresholdContext {
         }
     }
 
+    pub fn requires_pre_signature(&self) -> bool {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => {
+                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+            }
+            ThresholdArguments::Schnorr(args) => {
+                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+            }
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
     /// Returns true if arguments are for ECDSA.
     pub fn is_ecdsa(&self) -> bool {
         matches!(&self.args, ThresholdArguments::Ecdsa(_))

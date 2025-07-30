@@ -10,13 +10,13 @@ path = "src/main.rs"
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
+ic_device = { path = "../../device" }
 grub = { path = "../../grub" }
 ic-metrics-tool = { path = "../../metrics_tool" }
 ic_sev = { path = "../../sev" }
 
 anyhow = { workspace = true }
 askama = { workspace = true }
-async-trait = { workspace = true }
 clap = { workspace = true }
 gpt = { workspace = true }
 macaddr = { workspace = true }
@@ -32,7 +32,6 @@ uuid = { workspace = true }
 loopdev-3 = "0.5"
 devicemapper = "0.34"
 systemd = { workspace = true }
-sys-mount = { workspace = true }
 virt = { workspace = true }
 
 [features]
@@ -42,7 +41,5 @@ integration_tests = []
 upgrade_device_mapper_test = []
 
 [dev-dependencies]
-partition_tools = { path = "../../build_tools/partition_tools" }
-
 goldenfile = { workspace = true }
 url = { workspace = true }
