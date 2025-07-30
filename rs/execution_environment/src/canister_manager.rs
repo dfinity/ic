@@ -1044,6 +1044,7 @@ impl CanisterManager {
                 ready_for_migration,
             },
         };
+        let version = canister.system_state.canister_version;
 
         let controller = canister.system_state.controller();
         let controllers = canister
@@ -1072,6 +1073,7 @@ impl CanisterManager {
 
         Ok(CanisterStatusResultV2::new(
             status,
+            version,
             canister
                 .execution_state
                 .as_ref()
