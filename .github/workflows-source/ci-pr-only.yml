@@ -37,7 +37,7 @@ anchors:
     name: Checkout
     uses: actions/checkout@v4
   skip-merge-group: &skip-merge-group
-    if: ${{ github.event_name != 'merge_group' }}
+    if: ${{ github.event_name != 'merge_group' && github.event.pull_request.head.repo.full_name == github.repository }}
 
 jobs:
   insta-tests:
@@ -117,8 +117,8 @@ jobs:
   generate-config-fixtures:
     name: Generate Config Fixtures
     <<: *dind-small-setup
+    <<: *skip-merge-group
     timeout-minutes: 5
-    if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -145,60 +145,6 @@ jobs:
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
         run: ./ci/scripts/generate-config-fixtures.sh
-
-  dependencies-check:
-    name: Dependency Scan for PR
-    <<: *dind-small-setup
-    <<: *skip-merge-group
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      pull-requests: write
-    env:
-      SHELL_WRAPPER: "/usr/bin/time"
-      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
-      CI_PROJECT_PATH: ${{ github.repository }}
-      CI_PIPELINE_ID: ${{ github.run_id }}
-      CI_COMMIT_SHA: ${{ github.sha }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
-      REPO_NAME: ${{ github.repository }}
-    steps:
-      - <<: *checkout
-        with:
-          fetch-depth: 256
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            depcheck:
-              - '.github/workflows/ci-pr-only.yml'
-              - 'bazel/external_crates.bzl'
-              - '**/*.lock'
-              - '**/*.toml'
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        if: steps.filter.outputs.depcheck == 'true'
-        with:
-          python-version: "3.12"
-      - name: Setup python deps
-        id: setup-python-deps
-        if: steps.filter.outputs.depcheck == 'true'
-        shell: bash
-        run: |
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
-      - name: Dependency Scan for Pull Request
-        id: dependencies-check
-        if: steps.filter.outputs.depcheck == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
 
   # CI job is also executed in Schedule Hourly
   bazel-test-coverage:

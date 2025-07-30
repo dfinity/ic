@@ -12,6 +12,7 @@ log() {
 }
 
 BUILDBUDDY_LINKS="${BUILDBUDDY_LINKS:-}"
+FORK_PR="${FORK_PR:-false}"
 
 # Remove ourselves from the PATH, in case the bazel command tries to call bazel as well
 PATH="$BAZEL_ACTION_OLDPATH"
@@ -68,14 +69,6 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         --remote_upload_local_results=true
 
         --color=yes # Nice CI output
-
-        # Write build events to the dedicated tempdir
-        --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
-        --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
-        # Associate each action in the profile with a target label.
-        # This helps analysis tools like https://github.com/EngFlow/bazel_invocation_analyzer
-        # break down bottlenecks.
-        --experimental_profile_include_target_label
     )
 
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
@@ -83,6 +76,24 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
             --build_metadata=BUILDBUDDY_LINKS="$BUILDBUDDY_LINKS"
         )
     fi
+
+     # Build without remote cache if this is a pull request run from a forked repo
+    if [ "$FORK_PR" = true ]; then
+        if [[ ! " ${bazel_args[*]} " =~ " --config=local " ]]; then
+            bazel_args+=("--config=local")
+        fi
+    else
+        bazel_args+=(
+            # Write build events to the dedicated tempdir
+            --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
+            --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
+            # Associate each action in the profile with a target label.
+            # This helps analysis tools like https://github.com/EngFlow/bazel_invocation_analyzer
+            # break down bottlenecks.
+            --experimental_profile_include_target_label
+        )
+    fi
+
 fi
 
 # Wrapper repeating the build metadata URL, useful for long builds with a lot of
