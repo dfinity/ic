@@ -1,6 +1,6 @@
-use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
+use crate::extensions::{validate_extension_wasm, ExtensionKind, ExtensionOperationSpec, ExtensionSpec, ValidatedExecuteExtensionOperation, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
+use crate::pb::sns_root_types::{register_extension_response, CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse};
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::{
     valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
@@ -126,6 +126,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use sns_treasury_manager::Balances;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2322,7 +2323,7 @@ impl Governance {
             })?;
 
         let RegisterExtensionResponse { result } =
-            candid::Decode!(&reply, RegisterExtensionResponse).map_err(|err| {
+            Decode!(&reply, RegisterExtensionResponse).map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!("Could not decode RegisterExtensionResponse: {err:?}"),
@@ -2399,7 +2400,7 @@ impl Governance {
 
         let treasury_manager_canister_id = extension_canister_id;
 
-        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init(init)?;
+        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init_payload(init)?;
 
         self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;
@@ -2444,7 +2445,7 @@ impl Governance {
             .map(|reply| {
                 // This line is to ensure we handle the reply properly if it's ever
                 // changed to not be empty.
-                match candid::Decode!(&reply, RegisterDappCanistersResponse) {
+                match Decode!(&reply, RegisterDappCanistersResponse) {
                     Ok(RegisterDappCanistersResponse {}) => {}
                     Err(_) => log!(ERROR, "Could not decode RegisterDappCanistersResponse!"),
                 };
@@ -2496,7 +2497,7 @@ impl Governance {
             .and_then(|reply| {
                 // This line is to ensure we handle the reply properly if it's ever
                 // changed to not be empty.
-                match candid::Decode!(&reply, SetDappControllersResponse) {
+                match Decode!(&reply, SetDappControllersResponse) {
                     Ok(SetDappControllersResponse { failed_updates }) => {
                         if failed_updates.is_empty() {
                             log!(
@@ -2601,14 +2602,184 @@ impl Governance {
         }
     }
 
+    async fn list_extensions(&self) -> Result<Vec<PrincipalId>, GovernanceError> {
+        let list_extensions_arg = Encode!(&ListSnsCanistersRequest {}).unwrap();
+
+        let ListSnsCanistersResponse {
+            extensions,
+            ..
+        } = self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "list_extensions",
+                list_extensions_arg,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call Root.list_extensions failed: {:?}", err),
+                )
+            })
+            .and_then(|blob| {
+                Decode!(&blob, ListSnsCanistersResponse).map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error decoding Root.list_extensions response: {:?}", err),
+                    )
+                })
+            })?;
+
+        let extensions = extensions.map(|extensions| extensions.extension_canister_ids).unwrap_or_default();
+
+        Ok(extensions)
+    }
+
+    async fn canister_module_hash(&self, canister_id: CanisterId) -> Result<Vec<u8>, GovernanceError> {
+        let canister_info_arg = Encode!(
+            &CanisterInfoRequest::new(
+                canister_id,
+                Some(1),
+            )
+        ).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Error encoding canister_info request.\n{}", err)
+            )
+        })?;
+
+        let response = self.env
+            .call_canister(
+                CanisterId::ic_00(),
+                "canister_info",
+                canister_info_arg,
+            )
+            .await
+            .map_err(|err: (Option<i32>, String)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call IC00.canister_info failed: {:?}", err)
+                )
+            })
+            .and_then(|blob| {
+                Decode!(&blob, CanisterInfoResponse)
+                    .map_err(|err| {
+                        GovernanceError::new_with_message(
+                            ErrorType::External,
+                            format!("Error decoding IC00.canister_info response:\n{}", err)
+                        )
+                    })
+            })?;
+
+        Ok(response.module_hash().unwrap_or_default())
+    }
+
     async fn perform_execute_extension_operation(
         &self,
-        _execute_extension_operation: ExecuteExtensionOperation,
+        execute_extension_operation: ExecuteExtensionOperation,
     ) -> Result<(), GovernanceError> {
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidCommand,
-            "ExecuteExtensionOperation is not supported yet.",
-        ))
+        let ValidatedExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = execute_extension_operation.try_into()
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid ExecuteExtensionOperation proposal: {:?}", err),
+                )
+            })?;
+
+        let registered_extensions = self.list_extensions().await?;
+
+        if !registered_extensions.contains(&extension_canister_id.get()) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "Extension canister {} is not registered with the SNS.",
+                    extension_canister_id
+                ),
+            ));
+        }
+
+        let wasm_module_hash = self.canister_module_hash(extension_canister_id).await?;
+
+        let (extension_kind, extension_operations) = match validate_extension_wasm(&wasm_module_hash) {
+            Ok(ExtensionSpec {
+                kind,
+                operations,
+                ..
+            }) => (kind, operations),
+            Err(err) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "Extension canister {} does not have an extension spec despite being \
+                         registered with Root: {}",
+                        extension_canister_id, err,
+                    ),
+                ));
+            }
+        };
+
+        if extension_kind != ExtensionKind::TreasuryManager {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Only TreasuryManager extensions are currently supported.",
+            ));
+        }
+
+        let treasury_manager_canister_id = extension_canister_id;
+
+        let Some(ExtensionOperationSpec {
+            name,
+            ..
+        }) = extension_operations.get(&operation_name) else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Extension canister {} does not have an operation named {}",
+                    extension_canister_id, operation_name
+                ),
+            ));
+        };
+
+        if name != "deposit" {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Only TreasuryManager.deposit extensions are currently supported.",
+            ));
+        }
+
+        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_deposit_payload(operation_arg)?;
+
+        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
+            .await?;
+
+        let balances = self.env.call_canister(treasury_manager_canister_id, "deposit", arg)
+            .await
+            .map_err(|(code, err)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Canister method call {}.canister_info failed with code {:?}: {}",
+                        treasury_manager_canister_id, code, err
+                    ),
+                )
+            })
+            .and_then(|blob| {
+                Decode!(&blob, Balances)
+                    .map_err(|err| {
+                        GovernanceError::new_with_message(
+                            ErrorType::External,
+                            format!("Error decoding TreasuryManager.deposit response: {:?}", err),
+                        )
+                    })
+            })?;
+
+        log!(INFO, "TreasuryManager.deposit succeeded with response: {:?}", balances);
+
+        Ok(())
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
@@ -3157,7 +3328,7 @@ impl Governance {
                 candid::decode_one::<CanisterInfoResponse>(&b)
                 .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{}", e)))
             })
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
+            .map_err(|err: (Option<i32>, String)| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
 
         let ledger_canister_info_version_number_before_upgrade: u64 =
             ledger_canister_info
@@ -3288,7 +3459,7 @@ impl Governance {
                 )
             })
             .and_then(
-                |reply| match candid::Decode!(&reply, ManageDappCanisterSettingsResponse) {
+                |reply| match Decode!(&reply, ManageDappCanisterSettingsResponse) {
                     Ok(ManageDappCanisterSettingsResponse { failure_reason }) => failure_reason
                         .map_or(Ok(()), |failure_reason| {
                             Err(GovernanceError::new_with_message(

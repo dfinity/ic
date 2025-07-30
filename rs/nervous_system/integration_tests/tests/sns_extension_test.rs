@@ -270,12 +270,6 @@ async fn test_treasury_manager() {
     .await
     .unwrap();
 
-    // 1. created the manager canister
-    // 2. installed the code -- sync init; async init is scheduled
-    // 3. await 100 blocks / seconds (should be enough for the async init to complete)
-    // 4. async init fully completed  ==>  init deposit took place
-    // 5. KongSwap Adaptor is ready to use.
-
     {
         let request = BalancesRequest {};
         let response = pocket_ic

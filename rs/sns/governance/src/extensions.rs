@@ -1,18 +1,16 @@
 use std::{collections::BTreeMap, fmt::Display};
-
 use candid::Nat;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use sns_treasury_manager::{Asset, TreasuryManagerArg};
+use sns_treasury_manager::{Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit};
 
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
     pb::v1::{
-        governance_error::ErrorType, ChunkedCanisterWasm, ExtensionInit, GovernanceError,
-        RegisterExtension, Topic,
+        governance_error::ErrorType, ChunkedCanisterWasm, ExecuteExtensionOperation, ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, RegisterExtension, Topic
     },
     types::Wasm,
 };
@@ -35,18 +33,32 @@ impl Display for ExtensionKind {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExtensionOperationSpec {
+    pub name: String,
+    pub description: String,
+
+    // TODO: Add a way to specify argument schema for the extension operation.
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionSpec {
     pub name: String,
     pub topic: Topic,
     pub kind: ExtensionKind,
+    pub operations: BTreeMap<String, ExtensionOperationSpec>,
+
+    // TODO: Add a way to specify initialization arguments schema for the extension.
 }
 
 impl Display for ExtensionSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SNS Extension {{ name: {}, topic: {}, kind: {} }}",
-            self.name, self.topic, self.kind,
+            "SNS Extension {{ name: {}, topic: {}, kind: {}, operations: {} }}",
+            self.name,
+            self.topic,
+            self.kind,
+            self.operations.keys().cloned().collect::<Vec<_>>().join(", ")
         )
     }
 }
@@ -55,6 +67,12 @@ pub struct ValidatedRegisterExtension {
     pub wasm: Wasm,
     pub spec: ExtensionSpec,
     pub init: ExtensionInit,
+}
+
+pub struct ValidatedExecuteExtensionOperation {
+    pub extension_canister_id: CanisterId,
+    pub operation_name: String,
+    pub operation_arg: ExtensionOperationArg,
 }
 
 impl Governance {
@@ -69,16 +87,15 @@ impl Governance {
         (treasury_sns_subaccount, treasury_icp_subaccount)
     }
 
-    /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
-    pub fn construct_treasury_manager_init(
+    fn construct_treasury_manager_deposit_allowances(
         &self,
-        init: ExtensionInit,
-    ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
+        value: Option<Precise>,
+    ) -> Result<(Vec<Allowance>, u64, u64), GovernanceError> {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let (treasury_sns_subaccount, treasury_icp_subaccount) = self.treasury_subaccounts();
 
-        let (init, sns_amount_e8s, icp_amount_e8s) = treasury_manager::construct_init(
-            init,
+        let (allowances, sns_amount_e8s, icp_amount_e8s) = treasury_manager::construct_deposit_allowances(
+            value,
             Asset::Token {
                 symbol: "SNS".to_string(),
                 ledger_canister_id: self.ledger.canister_id().get().0,
@@ -98,18 +115,46 @@ impl Governance {
                 subaccount: treasury_icp_subaccount,
             },
         )
-        .map_err(|e| {
+        .map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Error extracting initial allowances: {}", e),
+                format!("Error extracting initial allowances: {}", err),
             )
         })?;
 
-        let arg = TreasuryManagerArg::Init(init);
+        Ok((allowances, sns_amount_e8s, icp_amount_e8s))
+    }
+
+    /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
+    pub fn construct_treasury_manager_init_payload(
+        &self,
+        init: ExtensionInit,
+    ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
+        let (allowances, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_deposit_allowances(init.value)?;
+
+        let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
         let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!("Error encoding TreasuryManagerArg: {}", err),
+            )
+        })?;
+
+        Ok((arg, sns_amount_e8s, icp_amount_e8s))
+    }
+
+    /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
+    pub fn construct_treasury_manager_deposit_payload(
+        &self,
+        arg: ExtensionOperationArg,
+    ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
+        let (allowances, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_deposit_allowances(arg.value)?;
+
+        let arg = DepositRequest { allowances };
+        let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Error encoding DepositRequest: {}", err),
             )
         })?;
 
@@ -167,29 +212,61 @@ impl Governance {
     }
 }
 
+impl TryFrom<ExecuteExtensionOperation> for ValidatedExecuteExtensionOperation {
+    type Error = String;
+
+    fn try_from(value: ExecuteExtensionOperation) -> Result<Self, Self::Error> {
+        let ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = value;
+
+        let Some(extension_canister_id) = extension_canister_id else {
+            return Err("extension_canister_id is required.".to_string());
+        };
+
+        let extension_canister_id = match CanisterId::try_from_principal_id(extension_canister_id) {
+            Ok(id) => id,
+            Err(err) => {
+                return Err(
+                    format!("Cannot interpret extension_canister_id as canister ID: {}", err)
+                );
+            }
+        };
+
+        let Some(operation_name) = operation_name else {
+            return Err("operation_name is required.".to_string());
+        };
+
+        let Some(operation_arg) = operation_arg else {
+            return Err("operation_arg is required.".to_string());
+        };
+
+        Ok(Self { extension_canister_id, operation_name, operation_arg })
+    }
+}
+
 pub mod treasury_manager {
     use candid::Nat;
-    use sns_treasury_manager::{Account, Allowance, Asset, TreasuryManagerInit};
+    use sns_treasury_manager::{Account, Allowance, Asset};
 
-    use crate::pb::v1::{precise, ExtensionInit, Precise, PreciseMap};
+    use crate::pb::v1::{precise, Precise, PreciseMap};
 
     /// Returns `(init, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
-    pub fn construct_init(
-        init: ExtensionInit,
+    pub fn construct_deposit_allowances(
+        arg: Option<Precise>,
         sns_token: Asset,
         icp_token: Asset,
         treasury_sns_account: Account,
         treasury_icp_account: Account,
-    ) -> Result<(TreasuryManagerInit, u64, u64), String> {
+    ) -> Result<(Vec<Allowance>, u64, u64), String> {
         const PREFIX: &str = "Cannot parse ExtensionInit as TreasuryManagerInit: ";
 
-        let mut map = match init {
-            ExtensionInit {
-                value:
-                    Some(Precise {
-                        value: Some(precise::Value::Map(PreciseMap { map })),
-                    }),
-            } => map,
+        let mut map = match arg {
+            Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap { map })),
+            }) => map,
             _ => {
                 return Err(format!("{}Top-level type must be PreciseMap.", PREFIX));
             }
@@ -230,7 +307,7 @@ pub mod treasury_manager {
             },
         ];
         Ok((
-            TreasuryManagerInit { allowances },
+            allowances,
             sns_token_amount_e8s,
             icp_token_amount_e8s,
         ))
@@ -286,6 +363,16 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
             name: "My Test Extension".to_string(),
             topic: Topic::TreasuryAssetManagement,
             kind: ExtensionKind::TreasuryManager,
+            operations: btreemap! {
+                "deposit".to_string() => ExtensionOperationSpec {
+                    name: "deposit".to_string(),
+                    description: "Deposit funds into the treasury manager.".to_string(),
+                },
+                "withdraw".to_string() => ExtensionOperationSpec {
+                    name: "withdraw".to_string(),
+                    description: "Withdraw funds from the treasury manager.".to_string(),
+                },
+            }
         });
     }
 
