@@ -1036,7 +1036,6 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
-        let controller = canister.system_state.controller();
         let controllers = canister
             .controllers()
             .iter()
@@ -1067,7 +1066,6 @@ impl CanisterManager {
                 .execution_state
                 .as_ref()
                 .map(|es| es.wasm_binary.binary.module_hash().to_vec()),
-            *controller,
             controllers,
             canister_memory_usage,
             canister_wasm_memory_usage,
