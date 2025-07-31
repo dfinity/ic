@@ -218,19 +218,6 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
-// We could store, in a vector, the requests that are currently being processed....
-// and if a new request comes in, we do something with it... what do we do?
-// We would add it to the queue?  And then what happens?  Which thread would pick up the next one?
-// Maybe we would set a timer?
-// I need a task processor that can only do one thing at a time....
-// If there's work to do, it schedules another run.  Otherwise, it stops.
-
-// I could use a task processor that is activated on requests.  If it's already running, nothing happens.
-// When a request comes in,
-// 1. it adds the request to the queue,
-// 2. then ensures_task_processor_running
-// The task processor runs in timers, and executes the requests one at a time.
-
 pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
