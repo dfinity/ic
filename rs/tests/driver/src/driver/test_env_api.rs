@@ -139,7 +139,7 @@ use super::{
 };
 use crate::{
     driver::{
-        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
+        constants::{self, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -221,7 +221,6 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
-const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
@@ -1325,7 +1324,6 @@ impl HasGroupSetup for TestEnv {
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -2431,22 +2429,6 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         GroupName {
             message: "Created new InfraProvider group".to_string(),
             group: group.to_string(),
-        },
-    );
-    event.emit_log(log);
-}
-
-pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Deserialize, Serialize)]
-    pub struct KibanaUrl {
-        message: String,
-        url: String,
-    }
-    let event = log_events::LogEvent::new(
-        KIBANA_URL_CREATED_EVENT_NAME.to_string(),
-        KibanaUrl {
-            message: "Replica logs will appear in Kibana".to_string(),
-            url: kibana_url.to_string(),
         },
     );
     event.emit_log(log);
