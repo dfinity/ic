@@ -741,7 +741,7 @@ fn make_key_ids() -> Vec<IDkgMasterPublicKeyId> {
         }),
     ]
     .into_iter()
-    .flat_map(IDkgMasterPublicKeyId::try_from)
+    .map(|key_id| IDkgMasterPublicKeyId::try_from(key_id).unwrap())
     .collect()
 }
 
