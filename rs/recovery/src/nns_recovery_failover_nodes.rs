@@ -8,7 +8,7 @@ use crate::{
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    util::DataLocation,
+    util::{DataLocation, SshUser},
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
@@ -260,7 +260,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::DownloadCertifications => {
                 Ok(Box::new(self.recovery.get_download_certs_step(
                     self.params.subnet_id,
-                    true,
+                    SshUser::Admin,
                     !self.interactive(),
                 )))
             }
@@ -330,7 +330,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     .get_update_local_store_step(self.params.subnet_id, !self.interactive()),
             )),
 
-            StepType::CreateRegistryTar => Ok(Box::new(self.recovery.get_create_tars_step())),
+            StepType::CreateRegistryTar => {
+                Ok(Box::new(self.recovery.get_create_registry_tar_step()))
+            }
 
             StepType::UploadAndHostTar => {
                 let tar = self.get_local_store_tar();

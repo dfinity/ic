@@ -7,6 +7,7 @@ use crate::{
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
+    util::SshUser,
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
 };
 use clap::Parser;
@@ -338,7 +339,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 if self.params.pub_key.is_some() {
                     Ok(Box::new(self.recovery.get_download_certs_step(
                         self.params.subnet_id,
-                        false,
+                        SshUser::Readonly,
                         !self.interactive(),
                     )))
                 } else {

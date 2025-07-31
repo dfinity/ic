@@ -7,6 +7,7 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
+    util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -80,8 +81,6 @@ pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
-pub const ADMIN: &str = "admin";
-pub const READONLY: &str = "readonly";
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronArgs {
@@ -319,7 +318,7 @@ impl Recovery {
     pub fn get_download_certs_step(
         &self,
         subnet_id: SubnetId,
-        admin: bool,
+        ssh_user: SshUser,
         auto_retry: bool,
     ) -> impl Step {
         DownloadCertificationsStep {
@@ -330,7 +329,7 @@ impl Recovery {
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
             auto_retry,
-            admin,
+            ssh_user,
         }
     }
 
@@ -843,8 +842,8 @@ impl Recovery {
         })
     }
 
-    /// Return a [CreateTarsStep] to create tar files of the current registry local store and ic state
-    pub fn get_create_tars_step(&self) -> impl Step {
+    /// Return a [CreateRegistryTarStep] a tar file that contains the current registry local store
+    pub fn get_create_registry_tar_step(&self) -> impl Step {
         let mut tar = Command::new("tar");
         tar.arg("-C")
             .arg(self.work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE))
@@ -856,29 +855,46 @@ impl Recovery {
             )
             .arg(".");
 
-        CreateTarsStep {
+        CreateRegistryTarStep {
             logger: self.logger.clone(),
             store_tar_cmd: tar,
         }
     }
 
-    pub fn get_copy_ic_state(&self, new_state_dir: PathBuf) -> impl Step {
-        CopyIcStateStep {
-            logger: self.logger.clone(),
-            work_dir: self.work_dir.join(IC_STATE_DIR),
-            new_state_dir,
-        }
-    }
+    /// Return a [CreateFullTarStep] a tar file that contains a tar of the current registry local store and a recovery CUP
+    pub fn get_create_full_tar_step(&self) -> impl Step {
+        let commands_create = format!(
+            r#"
+            tar --zstd -cvf {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst -C {work_dir}/data/{IC_REGISTRY_LOCAL_STORE} .
+            tar --zstd -cvf recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst
 
-    /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
-    pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
-        UploadCUPAndTar {
+            artifacts_hash=$(sha256sum recovery.tar.zst | cut -d ' ' -f1)
+
+            # Move the recovery artifacts to a temporary directory that will not be deleted by the cleanup step
+            dest_dir=$(mktemp -d)
+            mv recovery.tar.zst $dest_dir
+        "#,
+            work_dir = self.work_dir.display(),
+        );
+
+        let commands_next_steps = format!(
+            r#"
+            echo "Recovery artifacts with checksum $artifacts_hash were successfully created in $dest_dir."
+            echo "Now please:"
+            echo "  - Upload $dest_dir/recovery.tar.zst to:"
+            echo "    - https://download.dfinity.systems/ic/$artifacts_hash/recovery.tar.zst"
+            echo "    - https://download.dfinity.network/ic/$artifacts_hash/recovery.tar.zst"
+            echo "  - Run the following command and commit + push to the master branch of dfinity/ic:"
+            echo "    sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"$artifacts_hash\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"
+            echo "  - Build a recovery image from master."
+            echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
+        "#,
+        );
+
+        CreateFullTarStep {
             logger: self.logger.clone(),
-            registry_helper: self.registry_helper.clone(),
-            subnet_id,
-            work_dir: self.work_dir.clone(),
-            require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            commands_create,
+            commands_next_steps,
         }
     }
 

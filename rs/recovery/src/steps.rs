@@ -7,10 +7,10 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{block_on, parse_hex_str},
-    DataLocation, Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
-    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES,
-    NEW_IC_STATE, OLD_IC_STATE, READONLY,
+    util::{block_on, parse_hex_str, SshUser},
+    DataLocation, Recovery, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
+    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE,
+    OLD_IC_STATE,
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -69,7 +69,7 @@ pub struct DownloadCertificationsStep {
     pub require_confirmation: bool,
     pub auto_retry: bool,
     pub key_file: Option<PathBuf>,
-    pub admin: bool,
+    pub ssh_user: SshUser,
 }
 
 impl Step for DownloadCertificationsStep {
@@ -81,11 +81,11 @@ impl Step for DownloadCertificationsStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let user = if self.admin { ADMIN } else { READONLY };
+        let ssh_user = self.ssh_user.to_string();
         let cert_path = format!("{IC_DATA_PATH}/{IC_CERTIFICATIONS_PATH}");
         let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
         let downloaded_at_least_once = ips.iter().fold(false, |success, ip| {
-            let data_src = format!("{user}@[{ip}]:{cert_path}");
+            let data_src = format!("{ssh_user}@[{ip}]:{cert_path}");
             let target = self.work_dir.join("certifications").join(ip.to_string());
             if let Err(e) = create_dir(&target) {
                 warn!(self.logger, "Failed to create target dir: {:?}", e);
@@ -286,9 +286,9 @@ impl Step for DownloadIcStateStep {
 
     fn exec(&self) -> RecoveryResult<()> {
         let account = if self.try_readonly {
-            READONLY.to_string()
+            SshUser::Readonly.to_string()
         } else {
-            ADMIN.to_string()
+            SshUser::Admin.to_string()
         };
         let mut ssh_helper = SshHelper::new(
             self.logger.clone(),
@@ -299,7 +299,7 @@ impl Step for DownloadIcStateStep {
         );
 
         if ssh_helper.wait_for_access().is_err() {
-            ssh_helper.account = ADMIN.to_string();
+            ssh_helper.account = SshUser::Admin.to_string();
             if !ssh_helper.can_connect() {
                 return Err(RecoveryError::invalid_output_error("SSH access denied"));
             }
@@ -638,7 +638,7 @@ impl Step for UploadAndRestartStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = ADMIN;
+        let account = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -900,12 +900,12 @@ impl Step for GetRecoveryCUPStep {
     }
 }
 
-pub struct CreateTarsStep {
+pub struct CreateRegistryTarStep {
     pub logger: Logger,
     pub store_tar_cmd: Command,
 }
 
-impl Step for CreateTarsStep {
+impl Step for CreateRegistryTarStep {
     fn descr(&self) -> String {
         format!("Creating tar files by executing:\n{:?}", self.store_tar_cmd,)
     }
@@ -920,131 +920,27 @@ impl Step for CreateTarsStep {
     }
 }
 
-pub struct CopyIcStateStep {
+pub struct CreateFullTarStep {
     pub logger: Logger,
-    pub work_dir: PathBuf,
-    pub new_state_dir: PathBuf,
+    pub commands_create: String,
+    pub commands_next_steps: String,
 }
 
-impl Step for CopyIcStateStep {
+impl Step for CreateFullTarStep {
     fn descr(&self) -> String {
         format!(
-            "Copying ic_state for upload to: {}",
-            self.new_state_dir.display()
+            "Creating recovery artifacts by executing:\n{}",
+            self.commands_create
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        rsync(
-            &self.logger,
-            Vec::<String>::default(),
-            &format!("{}/", self.work_dir.display()),
-            &format!("{}/", self.new_state_dir.display()),
-            false,
-            None,
-        )?;
-        Ok(())
-    }
-}
-
-pub struct UploadCUPAndTar {
-    pub logger: Logger,
-    pub registry_helper: RegistryHelper,
-    pub subnet_id: SubnetId,
-    pub require_confirmation: bool,
-    pub key_file: Option<PathBuf>,
-    pub work_dir: PathBuf,
-}
-
-impl UploadCUPAndTar {
-    pub fn get_restart_commands(&self) -> String {
-        format!(
-            r#"
-cd {};
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
-mkdir ic_registry_local_store;
-tar -xf ic_registry_local_store.tar.zst -C ic_registry_local_store;
-sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
-sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
-sudo systemctl stop ic-replica;
-sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
-sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions || true ;
-sudo systemctl start ic-replica;
-sudo systemctl status ic-replica;
-"#,
-            UploadCUPAndTar::get_upload_dir_name(),
-        )
-    }
-
-    pub fn get_upload_dir_name() -> String {
-        "/tmp/subnet_recovery".to_string()
-    }
-}
-
-impl Step for UploadCUPAndTar {
-    fn descr(&self) -> String {
-        format!("Uploading CUP and registry to {} on ALL nodes with admin access. Then execute on those nodes:\n{}", UploadCUPAndTar::get_upload_dir_name(), self.get_restart_commands())
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
-
-        ips.into_iter()
-            .map(|ip| {
-                let ssh_helper = SshHelper::new(
-                    self.logger.clone(),
-                    ADMIN.to_string(),
-                    ip,
-                    self.require_confirmation,
-                    self.key_file.clone(),
-                );
-
-                if !ssh_helper.can_connect() {
-                    info!(
-                        self.logger,
-                        "No admin access to: {}, skipping upload...", ip
-                    );
-                    return Ok(None);
-                }
-
-                info!(self.logger, "Uploading to {}", ip);
-                let upload_dir = UploadCUPAndTar::get_upload_dir_name();
-                ssh_helper.ssh(format!(
-                    "sudo rm -rf {} && mkdir {}",
-                    upload_dir, upload_dir
-                ))?;
-
-                let target = format!("{}@[{}]:{}/", ADMIN, ip, upload_dir);
-
-                rsync(
-                    &self.logger,
-                    Vec::<String>::default(),
-                    &format!("{}/cup.proto", self.work_dir.display()),
-                    &target,
-                    self.require_confirmation,
-                    self.key_file.as_ref(),
-                )?;
-
-                rsync(
-                    &self.logger,
-                    Vec::<String>::default(),
-                    &format!(
-                        "{}/ic_registry_local_store.tar.zst",
-                        self.work_dir.display()
-                    ),
-                    &target,
-                    self.require_confirmation,
-                    self.key_file.as_ref(),
-                )?;
-
-                ssh_helper.ssh(self.get_restart_commands())
-            })
-            .collect::<RecoveryResult<Vec<_>>>()?;
-
+        let script = format!("{}\n{}\n", self.commands_create, self.commands_next_steps);
+        let mut bash = Command::new("bash");
+        bash.arg("-c").arg(&script);
+        if let Some(res) = exec_cmd(&mut bash)? {
+            info!(self.logger, "{}", res);
+        }
         Ok(())
     }
 }
@@ -1069,7 +965,7 @@ impl Step for DownloadRegistryStoreStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = ADMIN.to_string();
+        let account = SshUser::Admin.to_string();
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
             account,
