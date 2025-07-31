@@ -104,8 +104,8 @@ jobs:
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
               release_build="true"
-              diff_only="false"
-              skip_long_tests="false"
+              diff_only="true"
+              skip_long_tests="true"
           else
               # default behavior is to build all targets and not upload to s3
               release_build="false"

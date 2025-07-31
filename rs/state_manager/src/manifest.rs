@@ -617,6 +617,10 @@ fn hash_plan(
     let mut rng = ChaChaRng::seed_from_u64(seed);
     let rehash_every_nth = rehash_every_nth.max(1); // 0 will behave like 1
     let offset = rng.gen_range(0..rehash_every_nth);
+    eprintln!(
+        "Rehash every {}th chunk, offset {}",
+        rehash_every_nth, offset
+    );
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 
