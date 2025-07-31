@@ -2,48 +2,59 @@ load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary
 
 package(default_visibility = ["//visibility:private"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/types/management_canister_types",
-    "@crate_index//:candid",
-    "@crate_index//:libfuzzer-sys",
-]
-
-MACRO_DEPENDENCIES = []
-
 rust_fuzz_test_binary(
     name = "decode_canister_http_request_args",
     srcs = ["fuzz_targets/decode_canister_http_request_args.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
 
 rust_fuzz_test_binary(
     name = "decode_ecdsa_public_key_args",
     srcs = ["fuzz_targets/decode_ecdsa_public_key_args.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
 
 rust_fuzz_test_binary(
     name = "decode_install_code_args_libfuzzer",
     srcs = ["fuzz_targets/decode_install_code_args.rs"],
     crate_root = "fuzz_targets/decode_install_code_args.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
 
 rust_fuzz_test_binary_afl(
     name = "decode_install_code_args_afl",
     srcs = ["fuzz_targets/decode_install_code_args.rs"],
     crate_root = "fuzz_targets/decode_install_code_args.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
 
 rust_fuzz_test_binary(
     name = "decode_sign_with_ecdsa_args",
     srcs = ["fuzz_targets/decode_sign_with_ecdsa_args.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
