@@ -493,9 +493,7 @@ fn test_disburse_neuron_with_open_proposals_burns_limited_fees() {
         .now_or_never()
         .unwrap();
 
-    assert!(result.is_ok());
-    let block_height = result.unwrap();
-    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+    assert_eq!(result, Ok(1)); // Mock ledger returns block height 1
 
     // Verify that the ledger burn was called
     let transfer_calls = ledger.get_transfer_calls();
@@ -542,9 +540,7 @@ fn test_disburse_neuron_small_fees_not_burned() {
         .now_or_never()
         .unwrap();
 
-    assert!(result.is_ok());
-    let block_height = result.unwrap();
-    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+    assert_eq!(result, Ok(1)); // Mock ledger returns block height 1
 
     // Verify that only one transfer was made (no burn), just the disburse transfer
     let transfer_calls = ledger.get_transfer_calls();
@@ -591,9 +587,7 @@ fn test_disburse_neuron_zero_burnable_fees_with_high_reject_costs() {
         .now_or_never()
         .unwrap();
 
-    assert!(result.is_ok());
-    let block_height = result.unwrap();
-    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+    assert_eq!(result, Ok(1)); // Mock ledger returns block height 1
 
     // Verify that only one transfer was made (no burn), just the disburse transfer
     let transfer_calls = ledger.get_transfer_calls();
@@ -642,9 +636,7 @@ fn test_disburse_neuron_partial_amount_with_non_burnable_fees() {
         .now_or_never()
         .unwrap();
 
-    assert!(result.is_ok());
-    let block_height = result.unwrap();
-    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+    assert_eq!(result, Ok(1)); // Mock ledger returns block height 1
 
     // Verify that the ledger burn and disburse were called
     let transfer_calls = ledger.get_transfer_calls();
@@ -705,9 +697,7 @@ fn test_disburse_neuron_caps_to_maximum_available_stake() {
         .unwrap();
 
     // Should succeed and disburse the maximum possible amount
-    assert!(result.is_ok());
-    let block_height = result.unwrap();
-    assert_eq!(block_height, 1); // Mock ledger returns block height 1
+    assert_eq!(result, Ok(1)); // Mock ledger returns block height 1
 
     // Verify that the ledger calls were made correctly
     let transfer_calls = ledger.get_transfer_calls();
