@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -8,7 +8,6 @@ system_test_nns(
     proc_macro_deps = [
         "@crate_index//:indoc",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",
         "//rs/registry/canister",
@@ -56,7 +55,6 @@ system_test(
         "k8s",
         "manual",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",

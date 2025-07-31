@@ -118,7 +118,8 @@ impl KernelCommandLine {
         Ok(())
     }
 
-    /// Returns the value of an argument if present in the command line.
+    /// Returns the value of an argument (without leading/trailing quotes) if present in the
+    /// command line.
     /// If the argument exists without a value, returns Some("").
     /// If the argument doesn't exist, returns None.
     pub fn get_argument(&self, argument_name: &str) -> Option<&str> {
@@ -277,7 +278,7 @@ mod tests {
             ),
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
-            let mut cmdline = KernelCommandLine::from_str(*input).unwrap();
+            let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.remove_argument(argument_to_remove);
             let result: String = cmdline.into();
             if result != *expected {
@@ -309,7 +310,7 @@ actual:   {result:?}",
             ),
         ];
         for (name, input) in table.iter() {
-            if KernelCommandLine::from_str(*input).is_ok() {
+            if KernelCommandLine::from_str(input).is_ok() {
                 panic!(
                     "During test {name}: input {input:?} intentionally misquoted argument did not trigger error",
                 )
@@ -400,6 +401,12 @@ Actual:
                 Some("/bin/bash"),
             ),
             (
+                "get existing argument with value",
+                "repeating=ab repeating=cd repeating=ef",
+                "repeating",
+                Some("ab"),
+            ),
+            (
                 "get existing argument with quoted value",
                 "rd.debug rd.initrd=\"/bin/bash with spaces\"",
                 "rd.initrd",
@@ -430,8 +437,8 @@ Actual:
             let result = cmdline.get_argument(argument);
             assert_eq!(
                 result, *expected,
-                "Test '{}' failed:\nInput: {}\nArgument: {}\nExpected: {:?}\nGot: {:?}",
-                test_name, input, argument, expected, result
+                "Test '{test_name}' failed:\nInput: {input}\nArgument: {argument}\n\
+                Expected: {expected:?}\nGot: {result:?}",
             );
         }
     }
