@@ -27,8 +27,12 @@ const STORE_CRYPT_NAME: &str = "vda10-crypt";
 
 #[derive(clap::Parser)]
 pub enum Args {
-    Open { partition: Partition },
-    Format { partition: Partition },
+    /// Opens an encrypted partition and activates it under /dev/mapper/.
+    CryptOpen { partition: Partition },
+    /// Formats an encrypted partition with LUKS2. This will lead to data loss on the partition.
+    /// The command does not open the partition, so a second call to open is necessary to use the
+    /// partition.
+    CryptFormat { partition: Partition },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -117,10 +121,10 @@ fn run(
     };
 
     match args {
-        Args::Open { partition } => encryption
+        Args::CryptOpen { partition } => encryption
             .open(partition, crypt_name(partition))
             .with_context(|| format!("Failed to open device for partition {partition:?}")),
-        Args::Format { partition } => encryption
+        Args::CryptFormat { partition } => encryption
             .format(partition)
             .with_context(|| format!("Failed to format device for partition {partition:?}")),
     }

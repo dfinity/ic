@@ -8,11 +8,13 @@ DEPENDENCIES = [
     "//rs/ic_os/config_types",
     "//rs/ic_os/device",
     "//rs/ic_os/grub",
+    "//rs/ic_os/linux_kernel_command_line",
     "//rs/ic_os/sev",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:itertools",
     "@crate_index//:libcryptsetup-rs",
+    "@crate_index//:nix",
     "@crate_index//:rand",
     "@crate_index//:tempfile",
 ]

@@ -31,8 +31,7 @@ pub fn activate_crypt_device(
     crypt_device
         .activate_handle()
         .activate_by_passphrase(Some(name), None, passphrase, CryptActivate::empty())
-        .context("Could not activate partition")?;
-    Ok(()).context("Failed to activate cryptographic device")?;
+        .context("Failed to activate cryptographic device")?;
 
     Ok(crypt_device)
 }
@@ -70,8 +69,7 @@ pub fn format_crypt_device(device_path: &Path, passphrase: &[u8]) -> Result<Cryp
     crypt_device
         .keyslot_handle()
         .add_by_key(None, None, passphrase, CryptVolumeKey::empty())
-        .context("Could not add key to partition")?;
-    Ok(()).context("Failed to format and initialize cryptographic device")?;
+        .context("Could not add key to cryptographic device")?;
 
     Ok(crypt_device)
 }

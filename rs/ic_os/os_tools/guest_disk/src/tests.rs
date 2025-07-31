@@ -166,10 +166,10 @@ fn test_generated_key_init_and_reopen() {
 
         // Test format & open
         fixture
-            .run(Args::Format { partition })
+            .run(Args::CryptFormat { partition })
             .expect("Failed to format device encryption with generated key");
         fixture
-            .run(Args::Open { partition })
+            .run(Args::CryptOpen { partition })
             .expect("Failed to open device encryption with generated key");
 
         assert!(device_path.exists());
@@ -179,7 +179,7 @@ fn test_generated_key_init_and_reopen() {
         // Test reopening
         fixture.detach_device(partition);
         fixture
-            .run(Args::Open { partition })
+            .run(Args::CryptOpen { partition })
             .expect("Failed to reopen partition with generated key");
 
         assert_device_has_content(device_path, b"test_data");
@@ -196,10 +196,10 @@ fn test_sev_key_init_and_reopen() {
 
         // Test format & open
         fixture
-            .run(Args::Format { partition })
+            .run(Args::CryptFormat { partition })
             .expect("Failed to format device encryption with generated key");
         fixture
-            .run(Args::Open { partition })
+            .run(Args::CryptOpen { partition })
             .expect("Failed to open device encryption with generated key");
 
         assert!(device_path.exists());
@@ -211,7 +211,7 @@ fn test_sev_key_init_and_reopen() {
         // Test reopening
         fixture.detach_device(partition);
         fixture
-            .run(Args::Open { partition })
+            .run(Args::CryptOpen { partition })
             .expect("Failed to reopen partition with SEV key");
 
         assert_device_has_content(device_path, b"test_data");
@@ -223,7 +223,7 @@ fn test_fail_to_open_if_device_is_not_formatted() {
     let mut fixture = TestFixture::new(false);
 
     fixture
-        .run(Args::Open {
+        .run(Args::CryptOpen {
             partition: Partition::Store,
         })
         .expect_err("Expected setup_disk_encryption to fail due to unformatted device");
@@ -271,7 +271,7 @@ fn test_store_sev_unlock_with_previous_key() {
 
     // Reopen
     fixture
-        .run(Args::Open {
+        .run(Args::CryptOpen {
             partition: Partition::Store,
         })
         .unwrap();
@@ -325,7 +325,7 @@ fn test_store_sev_unlock_with_current_key_if_previous_key_does_not_work() {
 
     // Opening it should succeed
     fixture
-        .run(Args::Open {
+        .run(Args::CryptOpen {
             partition: Partition::Store,
         })
         .expect("Failed to open store partition");
@@ -336,7 +336,7 @@ fn test_fails_to_open_store_if_key_doesnt_work() {
     let mut fixture = TestFixture::new(false);
 
     fixture
-        .run(Args::Format {
+        .run(Args::CryptFormat {
             partition: Partition::Var,
         })
         .unwrap();
@@ -348,7 +348,7 @@ fn test_fails_to_open_store_if_key_doesnt_work() {
     fs::write(&fixture.generated_key_path, "wrong key").unwrap();
 
     fixture
-        .run(Args::Open {
+        .run(Args::CryptOpen {
             partition: Partition::Var,
         })
         .expect_err("Expected setup_disk_encryption to fail due to wrong key");
