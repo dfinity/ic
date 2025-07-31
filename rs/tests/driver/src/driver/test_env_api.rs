@@ -184,7 +184,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     malicious_behavior::MaliciousBehavior,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
-    NodeId, RegistryVersion, SubnetId,
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
@@ -1157,31 +1157,47 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-pub fn get_current_branch_version() -> Result<String> {
-    read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+pub fn get_current_branch_version() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(read_dependency_from_env_to_string(
+        "ENV_DEPS__IC_VERSION_FILE",
+    )?)?;
+
+    Ok(replica_version)
 }
 
-pub fn get_mainnet_nns_revision() -> String {
-    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet nns version from environment")
+pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet nns version from environment"),
+    )?;
+
+    Ok(replica_version)
 }
 
-pub fn get_mainnet_application_subnet_revision() -> String {
-    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet application subnet version from environment")
+pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet application subnet version from environment"),
+    )?;
+
+    Ok(replica_version)
 }
 
 // The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
 
 /// Pull the version of the initial GuestOS image from the environment.
-pub fn get_guestos_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
+pub fn get_guestos_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the initial GuestOS image from the environment.
 pub fn get_guestos_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the initial GuestOS image from the environment.
@@ -1194,8 +1210,9 @@ pub fn get_guestos_img_sha256() -> Result<String> {
 /// With the initial image, there is also a corresponding initial update image.
 /// The version is shared, so only the URL and hash are provided.
 pub fn get_guestos_initial_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the initial GuestOS update image from the environment.
@@ -1207,14 +1224,18 @@ pub fn get_guestos_initial_update_img_sha256() -> Result<String> {
 }
 
 /// Pull the version of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
+pub fn get_guestos_update_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the target GuestOS update image from the environment.
@@ -1223,14 +1244,18 @@ pub fn get_guestos_update_img_sha256() -> Result<String> {
 }
 
 /// Pull the version of the initial SetupOS image from the environment.
-pub fn get_setupos_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
+pub fn get_setupos_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the initial SetupOS image from the environment.
 pub fn get_setupos_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the initial SetupOS image from the environment.
@@ -1239,14 +1264,18 @@ pub fn get_setupos_img_sha256() -> Result<String> {
 }
 
 /// Pull the version of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
+pub fn get_hostos_update_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the target HostOS update image from the environment.
@@ -1255,8 +1284,9 @@ pub fn get_hostos_update_img_sha256() -> Result<String> {
 }
 
 pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 pub fn get_empty_disk_img_sha256() -> Result<String> {
@@ -1264,8 +1294,9 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
