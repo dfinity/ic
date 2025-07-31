@@ -323,7 +323,10 @@ pub async fn wait_for_guest_version(
                 .await
                 .unwrap_or("unavailable".to_string());
             if current_version != "unavailable" {
-                info!(logger, "SUCCESS: Guest reported version '{}'", current_version);
+                info!(
+                    logger,
+                    "SUCCESS: Guest reported version '{}'", current_version
+                );
                 Ok(current_version)
             } else {
                 bail!("FAIL: Guest version is still unavailable")

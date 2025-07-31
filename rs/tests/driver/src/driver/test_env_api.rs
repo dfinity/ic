@@ -2240,10 +2240,7 @@ where
                         start.elapsed(),
                     )));
                 }
-                debug!(
-                    log,
-                    "Func=\"{msg}\" failed on attempt {attempt}",
-                );
+                debug!(log, "Func=\"{msg}\" failed on attempt {attempt}",);
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }
