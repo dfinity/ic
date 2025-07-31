@@ -113,7 +113,7 @@
 //! }
 //! ```
 
-mod job_processor;
+mod job_queue;
 mod metrics;
 
 pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
