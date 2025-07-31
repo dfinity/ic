@@ -125,8 +125,9 @@ pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
-        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterCyclesCostSchedule,
+        ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        ValidationContext, XNetPayload,
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
@@ -915,6 +916,7 @@ pub struct StateMachine {
     vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    cost_schedule: CanisterCyclesCostSchedule,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -994,6 +996,7 @@ pub struct StateMachineBuilder {
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
     create_at_registry_version: RegistryVersion,
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl StateMachineBuilder {
@@ -1033,6 +1036,14 @@ impl StateMachineBuilder {
             bitcoin_testnet_uds_path: None,
             remove_old_states: true,
             create_at_registry_version: INITIAL_REGISTRY_VERSION,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        }
+    }
+
+    pub fn with_cost_schedule(self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        Self {
+            cost_schedule,
+            ..self
         }
     }
 
@@ -1296,6 +1307,7 @@ impl StateMachineBuilder {
             self.log_level,
             self.remove_old_states,
             self.create_at_registry_version,
+            self.cost_schedule,
         )
     }
 
@@ -1638,6 +1650,7 @@ impl StateMachine {
         log_level: Option<Level>,
         remove_old_states: bool,
         create_at_registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -2020,6 +2033,7 @@ impl StateMachine {
             vetkd_payload_builder,
             remove_old_states,
             cycles_account_manager,
+            cost_schedule,
         }
     }
 
@@ -2319,6 +2333,7 @@ impl StateMachine {
                 timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
+                replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
                 .sign(&response_metadata, node.node_id, registry_version)
@@ -2671,13 +2686,7 @@ impl StateMachine {
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
-        assert_eq!(
-            self.state_manager
-                .latest_state_certification_hash()
-                .unwrap()
-                .0,
-            batch_number
-        );
+        assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
         self.check_critical_errors();
 
@@ -3825,6 +3834,7 @@ impl StateMachine {
             msg.content(),
             effective_canister_id,
             subnet_size,
+            self.cost_schedule,
         )
     }
 

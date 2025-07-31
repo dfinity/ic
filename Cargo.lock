@@ -4677,6 +4677,9 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-management-canister-types-private",
  "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-nns-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -4688,6 +4691,7 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "registry-canister",
  "reqwest 0.12.15",
  "serde_cbor",
  "slog",
@@ -5333,7 +5337,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "async-trait",
  "clap 4.5.27",
  "config",
  "config_types",
@@ -5343,13 +5346,11 @@ dependencies = [
  "gpt",
  "grub",
  "ic-metrics-tool",
+ "ic_device",
  "ic_sev",
- "loopdev-3",
  "macaddr",
  "nix 0.24.3",
- "partition_tools",
  "regex",
- "sys-mount",
  "systemd",
  "tempfile",
  "thiserror 2.0.12",
@@ -9700,6 +9701,7 @@ dependencies = [
 name = "ic-https-outcalls-consensus"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "hex",
  "ic-artifact-pool",
  "ic-consensus-mocks",
@@ -10813,6 +10815,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-utils 0.9.0",
  "icrc-ledger-client",
+ "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "num-traits",
  "rand 0.8.5",
@@ -11814,8 +11817,10 @@ dependencies = [
  "ic-cdk-timers",
  "ic-interfaces-registry",
  "ic-management-canister-types",
+ "ic-metrics-encoder",
  "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
+ "ic-nervous-system-common",
  "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
@@ -15197,6 +15202,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_device"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "devicemapper",
+ "gpt",
+ "loopdev-3",
+ "nix 0.24.3",
+ "partition_tools",
+ "sys-mount",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15215,12 +15237,15 @@ name = "ic_sev"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.1",
  "der 0.7.9",
+ "hkdf",
  "mockall",
  "pem 1.1.1",
  "rcgen",
  "reqwest 0.12.15",
  "sev",
+ "sha2 0.10.9",
  "tempfile",
 ]
 
@@ -16650,6 +16675,9 @@ checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
 [[package]]
 name = "linux_kernel_command_line"
 version = "0.9.0"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "litemap"

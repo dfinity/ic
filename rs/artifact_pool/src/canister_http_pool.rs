@@ -184,7 +184,7 @@ mod tests {
         messages::CallbackId,
         signature::BasicSignature,
         time::UNIX_EPOCH,
-        CanisterId, RegistryVersion,
+        CanisterId, RegistryVersion, ReplicaVersion,
     };
 
     use super::*;
@@ -206,6 +206,7 @@ mod tests {
                 timeout: UNIX_EPOCH,
                 content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
                 registry_version: RegistryVersion::from(id),
+                replica_version: ReplicaVersion::default(),
             },
             signature: BasicSignature::fake(node_test_id(id)),
         }

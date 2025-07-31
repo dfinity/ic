@@ -182,7 +182,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    malicious_behaviour::MaliciousBehaviour,
+    malicious_behavior::MaliciousBehavior,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
     NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
@@ -192,7 +192,7 @@ use itertools::Itertools;
 use prost::Message;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{debug, error, info, warn, Logger};
+use slog::{debug, info, warn, Logger};
 use ssh2::Session;
 use std::{
     cmp::max,
@@ -222,7 +222,7 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
-pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
+pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -786,7 +786,7 @@ impl IcNodeSnapshot {
         self.malicious_behavior().is_some()
     }
 
-    pub fn malicious_behavior(&self) -> Option<MaliciousBehaviour> {
+    pub fn malicious_behavior(&self) -> Option<MaliciousBehavior> {
         let nodes_info: NodesInfo = self
             .env
             .read_json_object(NODES_INFO)
@@ -1182,13 +1182,7 @@ pub fn get_mainnet_application_subnet_revision() -> String {
 
 /// Pull the version of the initial GuestOS image from the environment.
 pub fn get_guestos_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
 }
 
 /// Pull the URL of the initial GuestOS image from the environment.
@@ -1215,29 +1209,13 @@ pub fn get_guestos_initial_update_img_url() -> Result<Url> {
 ///
 /// With the initial image, there is also a corresponding initial update image.
 /// The version is shared, so only the URL and hash are provided.
-pub fn get_guestos_initial_update_img_sha256(env: &TestEnv) -> Result<String> {
-    // TODO: Until the update hash is stored in the repo, resolve from the passed URL, instead.
-    if let Ok(from_url) = fetch_sha256(
-        std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?,
-        "update-img.tar.zst",
-        env.logger(),
-    ) {
-        Ok(from_url)
-    } else {
-        Ok(std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?)
-    }
+pub fn get_guestos_initial_update_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?)
 }
 
 /// Pull the version of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) =
-        read_dependency_from_env_to_string("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
 }
 
 /// Pull the URL of the target GuestOS update image from the environment.
@@ -1247,28 +1225,13 @@ pub fn get_guestos_update_img_url() -> Result<Url> {
 }
 
 /// Pull the hash of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_sha256(env: &TestEnv) -> Result<String> {
-    // TODO: Until the update hash is stored in the repo, resolve from the passed URL, instead.
-    if let Ok(from_url) = fetch_sha256(
-        std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?,
-        "update-img.tar.zst",
-        env.logger(),
-    ) {
-        Ok(from_url)
-    } else {
-        Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
-    }
+pub fn get_guestos_update_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
 /// Pull the version of the initial SetupOS image from the environment.
 pub fn get_setupos_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
 }
 
 /// Pull the URL of the initial SetupOS image from the environment.
@@ -1284,13 +1247,7 @@ pub fn get_setupos_img_sha256() -> Result<String> {
 
 /// Pull the version of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_version() -> Result<String> {
-    // TODO: Until the version can be passed directly in the env variable, resolve it from a file, instead.
-    if let Ok(from_file) = read_dependency_from_env_to_string("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")
-    {
-        Ok(from_file)
-    } else {
-        Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
-    }
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
 }
 
 /// Pull the URL of the target HostOS update image from the environment.
@@ -1313,26 +1270,6 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
-pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
-}
-
-pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var(
-        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
-    )?)
-}
-
 pub fn get_boundary_node_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
@@ -1340,44 +1277,6 @@ pub fn get_boundary_node_img_url() -> Result<Url> {
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
-}
-
-pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
-pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
-
-fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let url = Url::parse(&format!("{base_url}SHA256SUMS"))?;
-    let response = retry_with_msg!(
-        format!("GET {url}"),
-        logger.clone(),
-        FETCH_SHA256SUMS_RETRY_TIMEOUT,
-        FETCH_SHA256SUMS_RETRY_BACKOFF,
-        || reqwest::blocking::get(url.clone()).map_err(|e| anyhow!("{:?}", e))
-    )?;
-
-    if !response.status().is_success() {
-        error!(
-            logger,
-            "Failed to fetch sha256. Remote address: {:?}, Headers: {:?}",
-            response.remote_addr(),
-            response.headers()
-        );
-        return Err(anyhow!("Failed to fetch sha256"));
-    }
-    let body = response.text()?;
-
-    // body should look like:
-    // 7348b0f4b0267da7424306efddd57e26dc5a858cd642d64afaeaa592c4974af8 *disk-img.tar.zst
-
-    let lines = body
-        .split('\n')
-        .filter(|line| line.ends_with(file))
-        .collect::<Vec<&str>>();
-    let line = lines.first().unwrap();
-    let parts = line.split(' ').collect::<Vec<&str>>();
-    let sha256 = parts.first().unwrap();
-    bail_if_sha256_invalid(sha256, &format!("{base_url}/{file}"))?;
-    Ok(sha256.to_string())
 }
 
 pub trait HasGroupSetup {
@@ -1581,7 +1480,9 @@ pub trait SshSession: HasTestEnv {
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
         let mut channel = session.channel_session()?;
-        channel.exec("bash").unwrap();
+        channel.exec("bash").map_err(|e| {
+            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+        })?;
 
         channel.write_all(script.as_bytes())?;
         channel.flush()?;

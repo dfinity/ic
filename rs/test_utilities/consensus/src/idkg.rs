@@ -92,6 +92,32 @@ pub fn key_transcript_for_tests(key_id: &MasterPublicKeyId) -> IDkgTranscript {
     generate_key_transcript(&env, &dealers, &receivers, alg, rng)
 }
 
+pub fn pre_signature_for_tests(key_id: &MasterPublicKeyId) -> PreSignature {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let alg = AlgorithmId::from(key_id);
+    match key_id {
+        MasterPublicKeyId::Ecdsa(_) => {
+            let key = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+            let pre_sig =
+                generate_ecdsa_presig_quadruple(&env, &dealers, &receivers, alg, &key, rng);
+            PreSignature::Ecdsa(Arc::new(pre_sig))
+        }
+        MasterPublicKeyId::Schnorr(_) => {
+            let blinder_params = setup_unmasked_random_params(&env, alg, &dealers, &receivers, rng);
+            let blinder_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&blinder_params, rng);
+            PreSignature::Schnorr(Arc::new(
+                SchnorrPreSignatureTranscript::new(blinder_transcript).unwrap(),
+            ))
+        }
+        MasterPublicKeyId::VetKd(_) => panic!("No pre-signatures for vetKD"),
+    }
+}
+
 pub fn fake_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> PreSignatureStash {
     let rng = &mut reproducible_rng();
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);
@@ -762,7 +788,7 @@ pub fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSig
 
 // Creates a test signature input
 pub fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
-    create_sig_inputs_with_height(caller, Height::new(0), key_id.clone())
+    create_sig_inputs_with_height(caller, Height::new(100), key_id.clone())
 }
 
 pub fn add_available_quadruple_to_payload(

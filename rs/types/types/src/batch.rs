@@ -11,8 +11,8 @@ mod xnet;
 pub use self::{
     canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     execution_environment::{
-        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
-        TotalQueryStats,
+        CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
+        QueryStatsPayload, RawQueryStats, TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
@@ -110,8 +110,7 @@ pub struct AvailablePreSignatures {
     /// The key transcript corresponding to these pre-signatures
     pub key_transcript: IDkgTranscript,
     /// Newly available pre-signatures to be delivered to execution
-    /// TODO(CON-1545): Remove `Option` once pre-signatures are resolved during batch delivery
-    pub pre_signatures: BTreeMap<PreSigId, Option<PreSignature>>,
+    pub pre_signatures: BTreeMap<PreSigId, PreSignature>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]

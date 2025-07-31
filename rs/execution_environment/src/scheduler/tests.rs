@@ -24,10 +24,13 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExecutionId};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
+use ic_replicated_state::{
+    canister_state::system_state::{CyclesUseCase, PausedExecutionId},
+    metadata_state::subnet_call_context_manager::EcdsaMatchedPreSignature,
+};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
-use ic_test_utilities_consensus::idkg::key_transcript_for_tests;
+use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
     fetch_int_gauge, fetch_int_gauge_vec, metric_vec, HistogramStats,
@@ -4168,6 +4171,70 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 }
 
 #[test]
+fn http_outcalls_free() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let caller_canister = test.create_canister();
+
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
+
+    let cycles_before = test.canister_state(caller_canister).system_state.balance();
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: Some(response_size_limit),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name,
+            }),
+            context: transform_context,
+        }),
+        is_replicated: None,
+    };
+
+    // Create request to `HttpRequest` method.
+    let payment = Cycles::new(0);
+    let payload = args.encode();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        payload,
+        payment,
+        caller_canister,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let fee = test.http_request_fee(
+        http_request_context.variable_parts_size(),
+        Some(NumBytes::from(response_size_limit)),
+    );
+    assert_eq!(fee, Cycles::new(0));
+    let cycles_after = test.canister_state(caller_canister).system_state.balance();
+    assert_eq!(cycles_before, cycles_after);
+}
+
+#[test]
 fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
@@ -5785,26 +5852,27 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
 
         // Check that quadruple and nonce are none
         assert!(sign_with_ecdsa_context.nonce.is_none());
-        assert!(sign_with_ecdsa_context.matched_pre_signature.is_none());
+        assert!(sign_with_ecdsa_context.requires_pre_signature());
     }
 }
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
+    let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
     let mut test = SchedulerTestBuilder::new()
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
-    // TODO(CON-1545): Update signature contexts with full pre-signatures
-    let pre_signatures = BTreeMap::from_iter([(pre_sig_id, None)]);
+    let pre_sig = pre_signature_for_tests(&master_key_id);
+    let pre_signatures = BTreeMap::from_iter([(pre_sig_id, pre_sig.clone())]);
     inject_ecdsa_signing_request(&mut test, &key_id);
-    let master_key_id = MasterPublicKeyId::Ecdsa(key_id);
+
     let key_transcript = key_transcript_for_tests(&master_key_id);
     test.deliver_pre_signatures(BTreeMap::from_iter([(
         master_key_id,
         AvailablePreSignatures {
-            key_transcript,
+            key_transcript: key_transcript.clone(),
             pre_signatures,
         },
     )]));
@@ -5824,6 +5892,20 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
         sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
     );
+    assert_eq!(
+        sign_with_ecdsa_context
+            .ecdsa_args()
+            .pre_signature
+            .clone()
+            .unwrap(),
+        EcdsaMatchedPreSignature {
+            id: pre_sig_id,
+            height: expected_height,
+            pre_signature: pre_sig.as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript.clone()),
+        }
+    );
+
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
@@ -5839,6 +5921,19 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert_eq!(
         sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
+    );
+    assert_eq!(
+        sign_with_ecdsa_context
+            .ecdsa_args()
+            .pre_signature
+            .clone()
+            .unwrap(),
+        EcdsaMatchedPreSignature {
+            id: pre_sig_id,
+            height: expected_height,
+            pre_signature: pre_sig.as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript),
+        }
     );
     // Check that nonce is set
     let nonce = sign_with_ecdsa_context.nonce;
@@ -5876,22 +5971,27 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
-    // TODO(CON-1545): Update signature contexts with full pre-signatures
-    let pre_sig_ids0 = BTreeMap::from_iter([(PreSigId(0), None), (PreSigId(1), None)]);
-    let pre_sig_ids1 = BTreeMap::from_iter([(PreSigId(2), None)]);
+    let pre_sigs0 = BTreeMap::from_iter([
+        (PreSigId(0), pre_signature_for_tests(&master_key_ids[0])),
+        (PreSigId(1), pre_signature_for_tests(&master_key_ids[0])),
+    ]);
+    let key_transcript0 = key_transcript_for_tests(&master_key_ids[0]);
+    let pre_sigs1 =
+        BTreeMap::from_iter([(PreSigId(2), pre_signature_for_tests(&master_key_ids[1]))]);
+    let key_transcript1 = key_transcript_for_tests(&master_key_ids[1]);
     let pre_signatures = BTreeMap::from_iter([
         (
             master_key_ids[0].clone(),
             AvailablePreSignatures {
-                key_transcript: key_transcript_for_tests(&master_key_ids[0]),
-                pre_signatures: pre_sig_ids0.clone(),
+                key_transcript: key_transcript0.clone(),
+                pre_signatures: pre_sigs0.clone(),
             },
         ),
         (
             master_key_ids[1].clone(),
             AvailablePreSignatures {
-                key_transcript: key_transcript_for_tests(&master_key_ids[1]),
-                pre_signatures: pre_sig_ids1.clone(),
+                key_transcript: key_transcript1.clone(),
+                pre_signatures: pre_sigs1.clone(),
             },
         ),
     ]);
@@ -5916,7 +6016,7 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();
     assert!(context0.nonce.is_none());
-    assert!(context0.matched_pre_signature.is_none());
+    assert!(context0.requires_pre_signature());
 
     // Remaining contexts should have been matched
     let expected_height = Height::from(test.last_round().get() - 1);
@@ -5924,14 +6024,32 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     assert!(context1.nonce.is_some());
     assert_eq!(
         context1.matched_pre_signature,
-        Some((*pre_sig_ids1.keys().next().unwrap(), expected_height))
+        Some((*pre_sigs1.keys().next().unwrap(), expected_height))
+    );
+    assert_eq!(
+        context1.ecdsa_args().pre_signature.clone().unwrap(),
+        EcdsaMatchedPreSignature {
+            id: *pre_sigs1.keys().next().unwrap(),
+            height: expected_height,
+            pre_signature: pre_sigs1.values().next().unwrap().as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript1),
+        }
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
         context2.matched_pre_signature,
-        Some((*pre_sig_ids0.keys().next().unwrap(), expected_height))
+        Some((*pre_sigs0.keys().next().unwrap(), expected_height))
+    );
+    assert_eq!(
+        context2.ecdsa_args().pre_signature.clone().unwrap(),
+        EcdsaMatchedPreSignature {
+            id: *pre_sigs0.keys().next().unwrap(),
+            height: expected_height,
+            pre_signature: pre_sigs0.values().next().unwrap().as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript0),
+        }
     );
 }
 
