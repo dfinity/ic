@@ -1,5 +1,7 @@
 use crate::metrics::{ICCanisterClient, MetricsManager};
-use crate::pb::rewards_calculator::v1::{NodeProviderRewards, NodeProviderRewardsKey};
+use crate::pb::rewards_calculator::v1::{
+    NodeProviderRewards, NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
+};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
@@ -46,7 +48,7 @@ thread_local! {
             StableBTreeMap::init(mm.get(HISTORICAL_REWARDS_MEMORY_ID))
         ));
 
-    pub static HISTORICAL_SUBNETS_FR: RefCell<StableBTreeMap<NodeProviderRewardsKey, NodeProviderRewards, VM>>
+    pub static HISTORICAL_SUBNETS_FR: RefCell<StableBTreeMap<SubnetsFailureRateKey, SubnetsFailureRateValue, VM>>
         = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
             StableBTreeMap::init(mm.get(HISTORICAL_SUBNETS_FR_MEMORY_ID))
         ));
@@ -70,19 +72,4 @@ impl RegistryDataStableMemory for RegistryStoreStableMemoryBorrower {
     ) -> R {
         REGISTRY_DATA_STORE_BTREE_MAP.with_borrow_mut(f)
     }
-}
-
-pub fn _clear_registry_store() {
-    MEMORY_MANAGER.with_borrow(|mm| {
-        let _cleared: StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM> =
-            StableBTreeMap::new(mm.get(REGISTRY_STORE_MEMORY_ID));
-    });
-}
-
-pub fn _clear_metrics_store() {
-    MEMORY_MANAGER.with_borrow(|mm| {
-        let _cleared = StableBTreeMap::new(mm.get(SUBNETS_TO_RETRY_MEMORY_ID));
-        let _cleared = StableBTreeMap::new(mm.get(SUBNETS_METRICS_MEMORY_ID));
-        let _cleared = StableBTreeMap::new(mm.get(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID));
-    });
 }

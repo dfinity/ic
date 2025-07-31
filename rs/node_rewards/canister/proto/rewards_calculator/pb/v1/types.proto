@@ -51,7 +51,7 @@ message NodeResults {
 }
 
 message NodeProviderRewards {
-  ic_nervous_system.pb.v1.Decimal rewards_total_xdr_permyriad = 1;
+  optional uint64 rewards_total_xdr_permyriad = 1;
   optional string computation_log = 2;
   repeated NodeResults nodes_results = 3;
 }
@@ -62,10 +62,10 @@ message NodeProviderRewardsKey {
 }
 
 message SubnetsFailureRateValue {
-   ic_nervous_system.pb.v1.Decimal subnet_fr_percent = 1;
+  ic_nervous_system.pb.v1.Decimal subnet_fr_percent = 1;
 }
 
 message SubnetsFailureRateKey {
-   DayUtc day = 1;
-   ic_base_types.pb.v1.PrincipalId subnet_id = 2;
+  DayUtc day = 1;
+  ic_base_types.pb.v1.PrincipalId subnet_id = 2;
 }

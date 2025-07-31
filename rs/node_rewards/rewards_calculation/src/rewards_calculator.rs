@@ -9,6 +9,7 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::max;
@@ -17,7 +18,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 pub struct RewardsCalculatorInput {
     pub reward_period: RewardPeriod,
     pub rewards_table: NodeRewardsTable,
-    pub daily_metrics_by_subnet: HashMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
+    pub daily_metrics_by_subnet: BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
     pub provider_rewardable_nodes: BTreeMap<PrincipalId, Vec<RewardableNode>>,
 }
 
@@ -125,7 +126,7 @@ struct Step0Results {
     nodes_metrics_daily: BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
 }
 fn step_0_subnets_nodes_fr(
-    daily_metrics_by_subnet: HashMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
+    daily_metrics_by_subnet: BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
 ) -> Step0Results {
     fn calculate_daily_node_fr(num_blocks_proposed: u64, num_blocks_failed: u64) -> Decimal {
         let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
@@ -589,6 +590,8 @@ fn step_6_construct_provider_results(
             daily_results,
         });
     }
+
+    let rewards_total_xdr_permyriad = rewards_total_xdr_permyriad.trunc().to_u64().unwrap();
 
     NodeProviderRewards {
         rewards_total_xdr_permyriad,

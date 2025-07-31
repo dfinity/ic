@@ -30,11 +30,19 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         );
     }
 
+    for message_name in ["NodeProviderRewardsKey", "DayUtc", "SubnetsFailureRateKey"] {
+        config.type_attribute(
+            format!("rewards_calculator.pb.v1.{message_name}"),
+            ["#[derive(PartialOrd, Ord, Eq)]"].join(" "),
+        );
+    }
+
     for message_name in [
         "DayUtc",
         "NodeMetricsDaily",
         "Assigned",
         "Unassigned",
+        "NodeStatus.status",
         "NodeStatus",
         "DailyResults",
         "NodeResults",

@@ -97,7 +97,7 @@ fn test_compute_subnets_nodes_fr() {
     let s2_node2 = test_node_id(22);
 
     // --- Data Setup ---
-    let daily_metrics_by_subnet = HashMap::from_iter(vec![
+    let daily_metrics_by_subnet = BTreeMap::from_iter(vec![
         // Day 1, Subnet 1
         build_daily_metrics(
             subnet1,
@@ -629,7 +629,7 @@ fn test_calculate_rewards_end_to_end() {
     let p2_node1 = test_node_id(21); // In Subnet2 on D1
 
     // --- Input Setup ---
-    let daily_metrics_by_subnet = HashMap::from_iter(vec![
+    let daily_metrics_by_subnet = BTreeMap::from_iter(vec![
         // Day 1, Subnet 1
         build_daily_metrics(
             subnet1,
@@ -780,19 +780,19 @@ Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient:
 
     assert_eq!(results.tabled(), expected);
 
-    let total_p1_rewards: Decimal = results
+    let total_p1_rewards = results
         .provider_results
         .get(&p1)
         .unwrap()
         .rewards_total_xdr_permyriad;
-    let expected_total_p1_rewards = dec!(87200) + dec!(50000);
+    let expected_total_p1_rewards = 87200 + 50000;
     assert_eq!(total_p1_rewards, expected_total_p1_rewards);
 
-    let total_p2_rewards: Decimal = results
+    let total_p2_rewards = results
         .provider_results
         .get(&p2)
         .unwrap()
         .rewards_total_xdr_permyriad;
-    let expected_total_p2_rewards = dec!(10000);
+    let expected_total_p2_rewards = 10000;
     assert_eq!(total_p2_rewards, expected_total_p2_rewards);
 }

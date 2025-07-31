@@ -112,7 +112,7 @@ pub struct NodeResults {
 }
 
 pub struct NodeProviderRewards {
-    pub rewards_total_xdr_permyriad: Decimal,
+    pub rewards_total_xdr_permyriad: u64,
     pub computation_log: String,
     pub nodes_results: Vec<NodeResults>,
 }

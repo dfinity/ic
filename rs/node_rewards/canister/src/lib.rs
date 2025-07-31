@@ -9,20 +9,15 @@ use crate::pb::ic_node_rewards::v1::{
     NodeMetrics as NodeMetricsProto, SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
 };
 use crate::pb::rewards_calculator::v1::{
-    DailyResults as DailyResultsProto, DayUtc as DayUtcProto,
-    NodeMetricsDaily as NodeMetricsDailyProto, NodeProviderRewards as NodeProviderRewardsProto,
-    NodeResults as NodeResultsProto,
+    DailyResults as DailyResultsProto, NodeProviderRewards as NodeProviderRewardsProto,
+    NodeProviderRewardsKey, NodeResults as NodeResultsProto, NodeStatus as NodeStatusProto,
+    SubnetsFailureRateKey, SubnetsFailureRateValue,
 };
 use candid::Principal;
-use ic_base_types::{PrincipalId, SubnetId};
-use ic_management_canister_types::NodeMetrics;
+use ic_base_types::PrincipalId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use prost::Message;
-use rewards_calculation::rewards_calculator_results::{
-    DailyResults, NodeProviderRewards, NodeResults,
-};
-use rewards_calculation::types::SubnetMetricsDailyKey;
 use std::borrow::Cow;
 
 pub mod canister;
@@ -42,74 +37,9 @@ pub const MAX_PRINCIPAL_ID: PrincipalId = PrincipalId(Principal::from_slice(
     &[0xFF_u8; PRINCIPAL_MAX_LENGTH_IN_BYTES],
 ));
 
-impl From<NodeMetrics> for NodeMetricsProto {
-    fn from(metrics: NodeMetrics) -> Self {
-        NodeMetricsProto {
-            node_id: Some(metrics.node_id.into()),
-            num_blocks_proposed_total: metrics.num_blocks_proposed_total,
-            num_blocks_failed_total: metrics.num_block_failures_total,
-        }
-    }
-}
-
-impl Storable for SubnetIdKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        let mut buf = Vec::with_capacity(self.encoded_len());
-        self.encode(&mut buf).unwrap();
-        Cow::Owned(self.encode_to_vec())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        SubnetIdKey::decode(bytes.as_ref()).unwrap()
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_BYTES_SUBNET_ID_STORED,
-        is_fixed_size: false,
-    };
-}
-
-impl From<SubnetId> for SubnetIdKey {
-    fn from(subnet_id: SubnetId) -> Self {
-        Self {
-            subnet_id: Some(subnet_id.get()),
-        }
-    }
-}
-
-impl From<SubnetIdKey> for SubnetId {
-    fn from(subnet_id: SubnetIdKey) -> Self {
-        subnet_id.subnet_id.unwrap().into()
-    }
-}
-
 pub trait KeyRange {
     fn min_key() -> Self;
     fn max_key() -> Self;
-}
-
-impl From<SubnetMetricsKey> for SubnetMetricsDailyKey {
-    fn from(key: SubnetMetricsKey) -> Self {
-        Self {
-            day: key.timestamp_nanos.into(),
-            subnet_id: SubnetId::from(key.subnet_id.unwrap()),
-        }
-    }
-}
-
-impl Storable for SubnetMetricsKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.encode_to_vec())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        SubnetMetricsKey::decode(bytes.as_ref()).unwrap()
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 2 * MAX_BYTES_NODE_METRICS_STORED_KEY,
-        is_fixed_size: false,
-    };
 }
 
 impl KeyRange for SubnetMetricsKey {
@@ -128,6 +58,40 @@ impl KeyRange for SubnetMetricsKey {
     }
 }
 
+///------------ Storable Implementations ------------///
+
+impl Storable for SubnetIdKey {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let mut buf = Vec::with_capacity(self.encoded_len());
+        self.encode(&mut buf).unwrap();
+        Cow::Owned(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        SubnetIdKey::decode(bytes.as_ref()).unwrap()
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: MAX_BYTES_SUBNET_ID_STORED,
+        is_fixed_size: false,
+    };
+}
+
+impl Storable for SubnetMetricsKey {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        SubnetMetricsKey::decode(bytes.as_ref()).unwrap()
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 2 * MAX_BYTES_NODE_METRICS_STORED_KEY,
+        is_fixed_size: false,
+    };
+}
+
 impl Storable for SubnetMetricsValue {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         Cow::Owned(self.encode_to_vec())
@@ -140,45 +104,84 @@ impl Storable for SubnetMetricsValue {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-impl From<NodeProviderRewards> for NodeProviderRewardsProto {
-    fn from(value: NodeProviderRewards) -> Self {
-        Self {
-            rewards_total_xdr_permyriad: value.rewards_total_xdr_permyriad.into(),
-            computation_log: Some(value.computation_log),
-            nodes_results: value.nodes_results.into_iter().map(Into::into).collect(),
-        }
+impl Storable for NodeMetricsProto {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
     }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        NodeMetricsProto::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
 }
 
-impl From<NodeResults> for NodeResultsProto {
-    fn from(value: NodeResults) -> Self {
-        Self {
-            node_id: Some(value.node_id.into()),
-            node_reward_type: Some(value.node_reward_type),
-            region: Some(value.region),
-            dc_id: Some(value.dc_id),
-            daily_results: value.daily_results.into_iter().map(Into::into).collect(),
-        }
+impl Storable for NodeProviderRewardsProto {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
     }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        NodeProviderRewardsProto::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
 }
 
-impl From<DailyResults> for DailyResultsProto {
-    fn from(value: DailyResults) -> Self {
-        Self {
-            day: Some(value.day.into()),
-            node_status: Some(value.node_status.into()),
-            performance_multiplier_percent: value
-                .performance_multiplier_percent
-                .map(Into::into)
-                .collect(),
-            rewards_reduction_percent: value.rewards_reduction_percent.map(Into::into).collect(),
-            base_rewards_xdr_permyriad: value.base_rewards_xdr_permyriad.map(Into::into).collect(),
-            adjusted_rewards_xdr_permyriad: value
-                .adjusted_rewards_xdr_permyriad
-                .map(Into::into)
-                .collect(),
-        }
+impl Storable for NodeResultsProto {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
     }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        NodeResultsProto::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for DailyResultsProto {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        DailyResultsProto::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for NodeStatusProto {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        NodeStatusProto::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for NodeProviderRewardsKey {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        NodeProviderRewardsKey::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for SubnetsFailureRateKey {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        SubnetsFailureRateKey::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for SubnetsFailureRateValue {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        SubnetsFailureRateValue::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 use crate::metrics::{MetricsManager, UnixTsNanos};
-use crate::pb::v1::SubnetMetricsKey;
+use crate::pb::ic_node_rewards::v1::SubnetMetricsKey;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
