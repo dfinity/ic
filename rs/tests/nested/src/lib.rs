@@ -495,7 +495,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             &guest_ipv6,
             &target_version_str,
             &logger,
-            Duration::from_secs(5 * 60),
+            Duration::from_secs(7 * 60), // Long wait for GuestOS upgrade to apply and reboot
             Duration::from_secs(5),
         )
         .await
