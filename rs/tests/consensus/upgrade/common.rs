@@ -17,6 +17,7 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
+use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -261,12 +262,24 @@ pub fn stop_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     app_node
         .await_status_is_healthy()
         .expect("Node not healthy");
-    info!(logger, "Kill node: {}", app_node.get_ip_addr());
-    app_node.vm().kill();
+    info!(
+        logger,
+        "Stoping orchestrator on node {}",
+        app_node.get_ip_addr()
+    );
+    let ssh = app_node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+    execute_bash_command(&ssh, "sudo systemctl stop ic-replica".into())
+        .expect("Failed to stop the Orchestrator");
     app_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
-    info!(logger, "Node killed: {}", app_node.get_ip_addr());
+    info!(
+        logger,
+        "Orchestrator stopped on node {}",
+        app_node.get_ip_addr()
+    );
 }
 
 // Starts a node and makes sure it becomes reachable
@@ -274,10 +287,22 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     app_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
-    info!(logger, "Starting node: {}", app_node.get_ip_addr());
-    app_node.vm().start();
+    info!(
+        logger,
+        "Starting Orchestrator on node {}",
+        app_node.get_ip_addr()
+    );
+    let ssh = app_node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+    execute_bash_command(&ssh, "sudo systemctl start ic-replica".into())
+        .expect("Failed to stop the Orchestrator");
     app_node
         .await_status_is_healthy()
         .expect("Node not healthy");
-    info!(logger, "Node started: {}", app_node.get_ip_addr());
+    info!(
+        logger,
+        "Orchestrator started on node {}",
+        app_node.get_ip_addr()
+    );
 }
