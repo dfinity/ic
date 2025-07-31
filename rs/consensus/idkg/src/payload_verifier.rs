@@ -110,8 +110,8 @@ pub enum InvalidIDkgPayloadReason {
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
-    IDkgVerifyTranscriptError(Box<IDkgVerifyTranscriptError>),
-    IDkgVerifyInitialDealingsError(Box<IDkgVerifyInitialDealingsError>),
+    IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
+    IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
     ChainKeyConfigNotFound,
@@ -187,7 +187,7 @@ impl From<idkg::TranscriptParamsError> for IDkgPayloadValidationFailure {
 
 impl From<IDkgVerifyTranscriptError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyTranscriptError) -> Self {
-        InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(Box::new(err))
+        InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(err)
     }
 }
 
@@ -199,7 +199,7 @@ impl From<IDkgVerifyTranscriptError> for IDkgPayloadValidationFailure {
 
 impl From<IDkgVerifyInitialDealingsError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyInitialDealingsError) -> Self {
-        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(Box::new(err))
+        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(err)
     }
 }
 
