@@ -10,11 +10,11 @@ readonly RETRY_DELAY=5
 
 echo "Starting GuestOS recovery engine with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
 
-perform_recovery() {
-    trap 'popd > /dev/null 2>&1 || true' RETURN
-    mkdir -p /tmp/subnet_recovery
-    pushd /tmp/subnet_recovery >/dev/null
+trap 'popd > /dev/null 2>&1 || true' EXIT
+mkdir -p /tmp/subnet_recovery
+pushd /tmp/subnet_recovery >/dev/null
 
+perform_recovery() {
     verify_file_hash() {
         local file="$1"
         local expected_hash="$2"
