@@ -148,7 +148,7 @@ use crate::{
         tnet::TNet,
         virtualmachine::{destroy_vm, restart_vm, start_vm},
     },
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -647,7 +647,7 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
-            latest_version = retry_with_msg_async!(
+            latest_version = retry_with_msg_async_quiet!(
                 format!(
                     "check if latest registry version >= {}",
                     min_version.to_string()
@@ -695,7 +695,7 @@ impl TopologySnapshot {
         let backoff = Duration::from_secs(2);
         let prev_version: Arc<TokioMutex<RegistryVersion>> =
             Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
-        let version = retry_with_msg_async!(
+        let version = retry_with_msg_async_quiet!(
             "block_for_newest_mainnet_registry_version",
             &self.env.logger(),
             duration,
@@ -2142,6 +2142,20 @@ macro_rules! retry_with_msg_async {
     };
 }
 
+/// This is a quieter version of retry_with_msg_async that only logs the initial attempt and final result, not every intermediate failure.
+#[macro_export]
+macro_rules! retry_with_msg_async_quiet {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::driver::test_env_api::retry_async_quiet(
+            format!("{} [{}:{}]", $msg, file!(), line!()),
+            $log,
+            $timeout,
+            $backoff,
+            $f,
+        )
+    };
+}
+
 pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
     msg: S,
     log: &slog::Logger,
@@ -2183,6 +2197,52 @@ where
                     "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
                     trunc_error(err_msg)
                 );
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+/// A quieter version of `retry_async` that only logs the initial attempt and final result.
+/// This reduces log noise when there are many retry attempts.
+pub async fn retry_async_quiet<S: AsRef<str>, F, Fut, R>(
+    msg: S,
+    log: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    f: F,
+) -> Result<R>
+where
+    Fut: Future<Output = Result<R>>,
+    F: Fn() -> Fut,
+{
+    let msg = msg.as_ref();
+    let mut attempt = 1;
+    let start = Instant::now();
+    debug!(
+        log,
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
+    );
+    loop {
+        match f().await {
+            Ok(v) => {
+                debug!(
+                    log,
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = format!("{:?}", err);
+                if start.elapsed() > timeout {
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. \n Last error: {err_msg}",
+                        start.elapsed(),
+                    )));
+                }
+                debug!(log, "Func=\"{msg}\" failed on attempt {attempt}",);
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }
