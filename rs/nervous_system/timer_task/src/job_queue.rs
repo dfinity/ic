@@ -30,7 +30,7 @@ pub fn add_to_queue<T: Send + 'static>(queue: &'static LocalKey<RefCell<JobQueue
     queue.with_borrow_mut(|queue| queue.enqueue(task));
 }
 
-pub fn process_queue<T: Send + 'static, Processor: JobProcessor<T> + 'static>(
+pub fn start_queue_processor<T: Send + 'static, Processor: JobProcessor<T> + 'static>(
     queue: &'static LocalKey<RefCell<JobQueue<T>>>,
     initial_delay: Duration,
     reschedule_delay: Duration,
@@ -244,7 +244,7 @@ mod tests {
         );
 
         // Create and start worker
-        process_queue(
+        start_queue_processor(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
@@ -289,7 +289,7 @@ mod tests {
             },
         );
 
-        process_queue(
+        start_queue_processor(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
@@ -337,7 +337,7 @@ mod tests {
             },
         );
 
-        process_queue(
+        start_queue_processor(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
@@ -384,14 +384,14 @@ mod tests {
         }
 
         // Start multiple workers
-        process_queue(
+        start_queue_processor(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(30),
             TestJobProcessor,
             &TEST_METRICS,
         );
-        process_queue(
+        start_queue_processor(
             &TEST_QUEUE,
             Duration::from_millis(20),
             Duration::from_millis(30),
@@ -458,7 +458,7 @@ mod tests {
             },
         );
 
-        process_queue(
+        start_queue_processor(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),

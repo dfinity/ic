@@ -116,7 +116,9 @@
 mod job_queue;
 mod metrics;
 
-pub use job_queue::{add_to_queue, process_queue, JobProcessor, JobProcessorError, JobQueue};
+pub use job_queue::{
+    add_to_queue, start_queue_processor, JobProcessor, JobProcessorError, JobQueue,
+};
 pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
 
 use async_trait::async_trait;

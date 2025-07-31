@@ -22,7 +22,8 @@ use ic_nervous_system_root::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_timer_task::{
-    add_to_queue, process_queue, timer_task_joq_queue, JobProcessor, JobProcessorError, JobQueue,
+    add_to_queue, start_queue_processor, timer_task_joq_queue, JobProcessor, JobProcessorError,
+    JobQueue,
 };
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
@@ -180,7 +181,7 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     //
     // We therefore use an async job queue to process the request.
     add_to_queue(&CHANGE_CANISTER_REQUEST_QUEUE, request);
-    process_queue(
+    start_queue_processor(
         &CHANGE_CANISTER_REQUEST_QUEUE,
         Duration::from_secs(0),
         Duration::from_secs(10),
