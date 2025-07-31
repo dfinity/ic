@@ -2168,6 +2168,7 @@ fn test_tip_of_chain() {
 fn test_remove_approval() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const APPROVE_AMOUNT: u64 = 1_000_000;
+    const SUBACCOUNT: [u8; 32] = [1u8; 32];
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
@@ -2175,11 +2176,18 @@ fn test_remove_approval() {
     let (env, canister_id) = setup(
         ledger_wasm_allowance_getter(),
         encode_init_args,
-        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (
+                Account {
+                    owner: p1.0,
+                    subaccount: Some(SUBACCOUNT),
+                },
+                INITIAL_BALANCE,
+            ),
+        ],
     );
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(0, balance_of(&env, canister_id, p2.0));
+
     let approve = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
         let approve_args = ApproveArgs {
             from_subaccount,
@@ -2201,24 +2209,26 @@ fn test_remove_approval() {
     };
 
     approve(None, p2);
-    approve(Some([1u8; 32]), p3);
+    approve(Some(SUBACCOUNT), p3);
     approve(None, p4);
 
     let verify_allowance =
         |from_subaccount: Option<Subaccount>, spender: PrincipalId, allowance: u64| {
-            let allowance_args = IcpAllowanceArgs {
+            let allowance_args = AllowanceArgs {
                 account: Account {
                     owner: p1.0,
                     subaccount: from_subaccount,
-                }
-                .into(),
-                spender: AccountIdentifier::from(spender.0),
+                },
+                spender: Account {
+                    owner: spender.0,
+                    subaccount: None,
+                },
             };
 
             let response = env.execute_ingress_as(
                 p1,
                 canister_id,
-                "allowance",
+                "icrc2_allowance",
                 Encode!(&allowance_args).unwrap(),
             );
 
@@ -2231,7 +2241,26 @@ fn test_remove_approval() {
         };
 
     verify_allowance(None, p2, APPROVE_AMOUNT);
-    verify_allowance(Some([1u8; 32]), p3, APPROVE_AMOUNT);
+    verify_allowance(Some(SUBACCOUNT), p3, APPROVE_AMOUNT);
+    verify_allowance(None, p4, APPROVE_AMOUNT);
+
+    let remove_approval = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let spender_address = AccountIdentifier::new(spender, None).to_address();
+        let response = env.execute_ingress_as(
+            p1,
+            canister_id,
+            "remove_approval",
+            Encode!(&from_subaccount, &spender_address).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    remove_approval(None, p2);
+    remove_approval(Some(SUBACCOUNT), p3);
+
+    verify_allowance(None, p2, 0);
+    verify_allowance(Some(SUBACCOUNT), p3, 0);
+    // The last one was not removed
     verify_allowance(None, p4, APPROVE_AMOUNT);
 }
 
