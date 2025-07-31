@@ -184,6 +184,7 @@ pub trait RecurringSyncTask: Sized + 'static {
             let (maybe_delay, new_task) = self.execute();
 
             let instructions_used = instruction_counter() - instructions_before;
+
             with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
                 metrics.record(instructions_used, now_seconds());
             });

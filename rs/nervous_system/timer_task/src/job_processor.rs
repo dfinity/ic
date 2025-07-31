@@ -3,7 +3,7 @@ use crate::RecurringAsyncTask;
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::marker::PhantomData;
+
 use std::thread::LocalKey;
 use std::time::Duration;
 
@@ -12,50 +12,49 @@ pub struct JobQueue<T> {
     tasks: VecDeque<T>,
 }
 
-enum JobProcessorError<T> {
+pub enum JobProcessorError<T: Send> {
     Requeue(T),
     TaskProcessingFailed(String),
 }
 
-pub fn add_to_queue<T: 'static>(queue: &'static LocalKey<RefCell<JobQueue<T>>>, task: T) {
+pub fn add_to_queue<T: Send + 'static>(queue: &'static LocalKey<RefCell<JobQueue<T>>>, task: T) {
     queue.with_borrow_mut(|queue| queue.enqueue(task));
 }
 
-pub fn process_queue<T: 'static, Processor: JobProcessor<T> + 'static>(
+pub fn process_queue<T: Send + 'static, Processor: JobProcessor<T> + 'static>(
     queue: &'static LocalKey<RefCell<JobQueue<T>>>,
     initial_delay: Duration,
     reschedule_delay: Duration,
     processor: Processor,
     metrics_registry: MetricsRegistryRef,
 ) {
-    JobWorker::new(queue, initial_delay, reschedule_delay, processor)
-        .schedule(metrics_registry)
+    JobWorker::new(queue, initial_delay, reschedule_delay, processor).schedule(metrics_registry)
 }
 
 #[async_trait]
-pub trait JobProcessor<T>: 'static {
+pub trait JobProcessor<T: Send>: Send + 'static {
     async fn process(&self, task: T) -> Result<(), JobProcessorError<T>>;
     fn handle_failure(&self, error: JobProcessorError<T>);
 }
 
-struct JobWorker<T: 'static, Processor: JobProcessor<T> + 'static> {
+struct JobWorker<T: 'static + Send, Processor: JobProcessor<T> + Send + 'static> {
     queue: &'static LocalKey<RefCell<JobQueue<T>>>,
     initial_delay: Duration,
-    reschedule_delay: Duration,
+    delay_between_runs: Duration,
     processor: Processor,
 }
 
-impl<T: 'static, Processor: JobProcessor<T> + 'static> JobWorker<T, Processor> {
+impl<T: Send + 'static, Processor: JobProcessor<T> + Send + 'static> JobWorker<T, Processor> {
     pub fn new(
         queue: &'static LocalKey<RefCell<JobQueue<T>>>,
         initial_delay: Duration,
-        reschedule_delay: Duration,
+        delay_between_runs: Duration,
         processor: Processor,
     ) -> Self {
         Self {
             queue,
             initial_delay,
-            reschedule_delay,
+            delay_between_runs,
             processor,
         }
     }
@@ -64,8 +63,8 @@ impl<T: 'static, Processor: JobProcessor<T> + 'static> JobWorker<T, Processor> {
         self.queue.with_borrow_mut(|queue| queue.dequeue())
     }
 
-    fn queue_empty(&self) -> bool {
-        self.queue.with_borrow(|queue| queue.is_empty())
+    fn queue_has_items(&self) -> bool {
+        !self.queue.with_borrow(|queue| queue.is_empty())
     }
 
     fn add_task(&self, task: T) {
@@ -74,7 +73,9 @@ impl<T: 'static, Processor: JobProcessor<T> + 'static> JobWorker<T, Processor> {
 }
 
 #[async_trait]
-impl<T: 'static, Processor: JobProcessor<T> + 'static> RecurringAsyncTask for JobWorker<T, Processor> {
+impl<T: Send + 'static, Processor: JobProcessor<T> + Send + 'static> RecurringAsyncTask
+    for JobWorker<T, Processor>
+{
     async fn execute(self) -> (Option<Duration>, Self) {
         let work_item = match self.next() {
             Some(task) => task,
@@ -85,19 +86,19 @@ impl<T: 'static, Processor: JobProcessor<T> + 'static> RecurringAsyncTask for Jo
         match self.processor.process(work_item).await {
             Ok(_) => {
                 // Successfully processed the task, return the next delay
-                let next_delay = self.queue_empty().then_some(self.reschedule_delay);
+                let next_delay = self.queue_has_items().then_some(self.delay_between_runs);
 
                 (next_delay, self)
             }
             Err(JobProcessorError::Requeue(task)) => {
                 // Requeue the task for later processing
                 self.add_task(task);
-                (Some(self.reschedule_delay), self)
+                (Some(self.delay_between_runs), self)
             }
             Err(JobProcessorError::TaskProcessingFailed(err)) => {
                 // Log the error and return the next delay
                 eprintln!("Task processing failed: {}", err);
-                (Some(self.reschedule_delay), self)
+                (Some(self.delay_between_runs), self)
             }
         }
     }
@@ -133,13 +134,17 @@ impl<T> JobQueue<T> {
 mod tests {
     use super::*;
     use crate::TimerTaskMetricsRegistry;
-    use ic_nervous_system_timers::test::advance_time_for_timers;
+    use ic_nervous_system_timers::test::{
+        existing_timer_ids, run_pending_timers_every_interval_for_count,
+    };
     use std::cell::RefCell;
     use std::time::Duration;
 
     thread_local! {
         static TEST_QUEUE: RefCell<JobQueue<TestJob>> = RefCell::new(JobQueue::new());
         static PROCESSED_JOBS: RefCell<Vec<String>> = RefCell::new(Vec::new());
+        static TEST_METRICS: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
+        static PROCESS_CALL_COUNT: RefCell<u32> = RefCell::new(0);
     }
 
     #[derive(Debug, Clone, PartialEq)]
@@ -160,6 +165,9 @@ mod tests {
     #[async_trait]
     impl JobProcessor<TestJob> for TestJobProcessor {
         async fn process(&self, job: TestJob) -> Result<(), JobProcessorError<TestJob>> {
+            // Increment the process call counter
+            PROCESS_CALL_COUNT.with_borrow_mut(|count| *count += 1);
+
             match job.action {
                 JobAction::Process => {
                     // Record successful processing
@@ -175,7 +183,7 @@ mod tests {
                         };
                         Err(JobProcessorError::Requeue(requeued_job))
                     } else {
-                        // Done requeuing, now process
+                        // Done re-queuing, now process
                         PROCESSED_JOBS.with_borrow_mut(|jobs| jobs.push(job.id));
                         Ok(())
                     }
@@ -187,7 +195,7 @@ mod tests {
             }
         }
 
-        fn handle_failure(_error: JobProcessorError<TestJob>) {
+        fn handle_failure(&self, _error: JobProcessorError<TestJob>) {
             // Test implementation - just ignore failures
         }
     }
@@ -195,6 +203,7 @@ mod tests {
     fn clear_test_state() {
         TEST_QUEUE.with_borrow_mut(|queue| *queue = JobQueue::new());
         PROCESSED_JOBS.with_borrow_mut(|jobs| jobs.clear());
+        PROCESS_CALL_COUNT.with_borrow_mut(|count| *count = 0);
     }
 
     #[tokio::test]
@@ -218,23 +227,36 @@ mod tests {
         );
 
         // Create and start worker
-        let metrics = TimerTaskMetricsRegistry::new();
-        let worker = process_queue::<TestJob, TestJobProcessor>(
+        process_queue(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
             TestJobProcessor,
-            &metrics,
+            &TEST_METRICS,
         );
 
-        worker.schedule(&metrics);
+        // Verify timer is running
+        let timer_ids = existing_timer_ids();
+        assert_eq!(timer_ids.len(), 1, "Should have exactly one timer running");
 
-        // Advance timer to let worker process jobs
-        advance_timer(Duration::from_millis(100)).await;
+        // Advance time to allow processing
+        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
 
         // Verify jobs were processed
         let processed = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
         assert_eq!(processed, vec!["job1", "job2"]);
+
+        // Verify process was called exactly twice (once per job)
+        let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
+        assert_eq!(call_count, 2, "Process should be called exactly twice");
+
+        // Verify timer is no longer running (worker stopped due to empty queue)
+        let timer_ids_after = existing_timer_ids();
+        assert_eq!(
+            timer_ids_after.len(),
+            0,
+            "Should have no timers running after queue is empty"
+        );
     }
 
     #[tokio::test]
@@ -250,22 +272,39 @@ mod tests {
             },
         );
 
-        let metrics = TimerTaskMetricsRegistry::new();
-        let worker = process_queue::<TestJob, TestJobProcessor>(
+        process_queue(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
-            &metrics,
+            TestJobProcessor,
+            &TEST_METRICS,
         );
 
-        worker.schedule(&metrics);
+        // Verify timer is running
+        let timer_ids = existing_timer_ids();
+        assert_eq!(timer_ids.len(), 1, "Should have exactly one timer running");
 
-        // Advance timer to allow multiple processing attempts
-        advance_timer(Duration::from_millis(200)).await;
+        // Advance time to allow processing
+        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
 
         // Verify job was eventually processed after requeuing
         let processed = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
         assert_eq!(processed, vec!["requeue_job"]);
+
+        // Verify process was called exactly 3 times (initial + 2 requeues)
+        let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
+        assert_eq!(
+            call_count, 3,
+            "Process should be called 3 times: initial attempt + 2 requeues"
+        );
+
+        // Verify timer is no longer running
+        let timer_ids_after = existing_timer_ids();
+        assert_eq!(
+            timer_ids_after.len(),
+            0,
+            "Should have no timers running after queue is empty"
+        );
     }
 
     #[tokio::test]
@@ -281,25 +320,31 @@ mod tests {
             },
         );
 
-        let metrics = TimerTaskMetricsRegistry::new();
-        let worker = process_queue::<TestJob, TestJobProcessor>(
+        process_queue(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
-            &metrics,
+            TestJobProcessor,
+            &TEST_METRICS,
         );
 
-        worker.schedule(&metrics);
+        // Verify timer is running
+        let timer_ids = existing_timer_ids();
+        assert_eq!(timer_ids.len(), 1, "Should have exactly one timer running");
 
-        // Advance timer to process the job
-        advance_timer(Duration::from_millis(100)).await;
+        // Advance time to allow processing
+        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
 
         // Verify job was processed
         let processed = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
         assert_eq!(processed, vec!["single_job"]);
 
-        // Advance timer further to ensure worker stopped (no additional processing)
-        advance_timer(Duration::from_millis(200)).await;
+        // Verify process was called exactly once
+        let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
+        assert_eq!(call_count, 1, "Process should be called exactly once");
+
+        // Advance time to allow processing
+        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
 
         // Should still only have the one job (worker stopped)
         let processed_after = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
@@ -322,30 +367,44 @@ mod tests {
         }
 
         // Start multiple workers
-        let metrics = TimerTaskMetricsRegistry::new();
-        let worker1 = process_queue::<TestJob, TestJobProcessor>(
+        process_queue(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(30),
-            &metrics,
+            TestJobProcessor,
+            &TEST_METRICS,
         );
-        let worker2 = process_queue::<TestJob, TestJobProcessor>(
+        process_queue(
             &TEST_QUEUE,
             Duration::from_millis(20),
             Duration::from_millis(30),
-            &metrics,
+            TestJobProcessor,
+            &TEST_METRICS,
         );
 
-        worker1.schedule(&metrics);
-        worker2.schedule(&metrics);
+        // Verify timers are running
+        let timer_ids = existing_timer_ids();
+        assert_eq!(timer_ids.len(), 2, "Should have exactly two timers running");
 
-        // Advance timer to let both workers process jobs
-        advance_timer(Duration::from_millis(150)).await;
+        // Advance time to allow processing
+        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
 
         // Verify all jobs were processed exactly once
         let mut processed = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
         processed.sort();
         assert_eq!(processed, vec!["job1", "job2", "job3", "job4", "job5"]);
+
+        // Verify process was called exactly 5 times (once per job)
+        let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
+        assert_eq!(call_count, 5, "Process should be called exactly 5 times");
+
+        // Verify timers are no longer running
+        let timer_ids_after = existing_timer_ids();
+        assert_eq!(
+            timer_ids_after.len(),
+            0,
+            "Should have no timers running after all queues are empty"
+        );
     }
 
     #[tokio::test]
@@ -382,22 +441,36 @@ mod tests {
             },
         );
 
-        let metrics = TimerTaskMetricsRegistry::new();
-        let worker = process_queue::<TestJob, TestJobProcessor>(
+        process_queue(
             &TEST_QUEUE,
             Duration::from_millis(10),
             Duration::from_millis(50),
-            &metrics,
+            TestJobProcessor,
+            &TEST_METRICS,
         );
 
-        worker.schedule(&metrics);
+        // Verify timer is running
+        let timer_ids = existing_timer_ids();
+        assert_eq!(timer_ids.len(), 1, "Should have exactly one timer running");
 
-        // Advance timer to allow processing
-        advance_timer(Duration::from_millis(300)).await;
+        // Advance time to allow processing
+        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
 
         // Verify successful jobs were processed (excluding failed ones)
         let mut processed = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
         processed.sort();
         assert_eq!(processed, vec!["process1", "process2", "requeue1"]);
+
+        // Verify process was called 5 times: process1(1) + requeue1(2) + fail1(1) + process2(1)
+        let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
+        assert_eq!(call_count, 5, "Process should be called 5 times: 2 immediate successes + 2 requeue attempts + 1 failure");
+
+        // Verify timer is no longer running
+        let timer_ids_after = existing_timer_ids();
+        assert_eq!(
+            timer_ids_after.len(),
+            0,
+            "Should have no timers running after queue is empty"
+        );
     }
 }

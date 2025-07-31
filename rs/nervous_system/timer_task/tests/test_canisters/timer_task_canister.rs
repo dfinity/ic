@@ -54,6 +54,9 @@ fn schedule(name: &str) {
         SuccessPeriodicAsyncTask::NAME => {
             SuccessPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
+        TerminatingRecurringAsyncTask::NAME => {
+            TerminatingRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
+        }
         PanicPeriodicAsyncTask::NAME => {
             PanicPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
@@ -230,6 +233,7 @@ struct OutOfInstructionsBeforeCallRecurringAsyncTask {}
 
 #[async_trait]
 impl RecurringAsyncTask for OutOfInstructionsBeforeCallRecurringAsyncTask {
+    #[allow(unreachable_code)]
     async fn execute(self) -> (Option<Duration>, Self) {
         increase_counter(Self::NAME);
 
@@ -253,9 +257,14 @@ struct OutOfInstructionsAfterCallRecurringAsyncTask {}
 
 #[async_trait]
 impl RecurringAsyncTask for OutOfInstructionsAfterCallRecurringAsyncTask {
+    #[allow(unreachable_code)]
     async fn execute(self) -> (Option<Duration>, Self) {
         increase_counter(Self::NAME);
         invoke_self_call().await;
+
+        loop {
+            ic_cdk::api::instruction_counter();
+        }
 
         (Some(Duration::from_secs(1)), self)
     }

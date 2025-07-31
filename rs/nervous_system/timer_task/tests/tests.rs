@@ -248,7 +248,7 @@ fn test_terminating_recurring_sync_task() {
     );
     assert_eq!(
         counter, 1,
-        "Terminating async task should have run exactly once"
+        "Terminating sync task should have run exactly once"
     );
 }
 
@@ -269,10 +269,10 @@ fn test_terminating_recurring_async_task() {
     let counter = get_counter(
         &state_machine,
         canister_id,
-        "terminating_recurring_sync_task",
+        "terminating_recurring_async_task",
     );
     assert_eq!(
         counter, 1,
-        "Terminating sync task should have run exactly once"
+        "Terminating async task should have run exactly once"
     );
 }
