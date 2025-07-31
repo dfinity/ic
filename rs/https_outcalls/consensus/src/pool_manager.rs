@@ -23,7 +23,6 @@ use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig, Height, ReplicaVersion,
 };
-use rand::Rng;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -34,9 +33,6 @@ use std::{
 
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
-
-/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
-const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 100;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -56,14 +52,6 @@ pub struct CanisterHttpPoolManagerImpl {
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
     metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
-}
-
-//TODO(SOCKS_PROXY_DL): Remove this function.
-fn should_dl_socks_proxy() -> bool {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
-    // This is a dark launch feature. We want to test the SOCKS proxy with some percentage of requests.
-    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 impl CanisterHttpPoolManagerImpl {
@@ -233,11 +221,7 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let socks_proxy_addrs = if should_dl_socks_proxy() {
-            self.get_socks_proxy_addrs()
-        } else {
-            Vec::new()
-        };
+        let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
         for (id, context) in http_requests {
             if let Replication::NonReplicated(delegated_node_id) = context.replication {
