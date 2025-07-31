@@ -580,8 +580,13 @@ pub fn setup_nested_vms(
                 let hash = get_setupos_img_sha256()?;
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
-                let config_image =
-                    create_setupos_config_image(env, group_name, vm_name, nns_url, nns_public_key_override)?;
+                let config_image = create_setupos_config_image(
+                    env,
+                    group_name,
+                    vm_name,
+                    nns_url,
+                    nns_public_key_override,
+                )?;
                 let config_image_spec = AttachImageSpec::new(farm.upload_file(
                     group_name,
                     config_image,
