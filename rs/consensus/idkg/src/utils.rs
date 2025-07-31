@@ -562,6 +562,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                 );
             }
             Err(err) => {
+                // TODO(CON-1549): Increment counter metric
                 warn!(
                     log,
                     "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
@@ -578,8 +579,15 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
 
         if entry.key_transcript.transcript_id == pre_signature.key_unmasked().as_ref().transcript_id
         {
-            // TODO(CON-1545) Resolve and deliver full pre-signature
-            entry.pre_signatures.insert(*pre_sig_id, None);
+            match pre_signature.translate(&block_reader) {
+                Ok(pre_sig) => {
+                    entry.pre_signatures.insert(*pre_sig_id, pre_sig);
+                }
+                Err(err) => {
+                    // TODO(CON-1549): Increment counter metric
+                    warn!(log, "Failed to translate Pre-signature ref: {:?}", err);
+                }
+            }
         }
     }
 
