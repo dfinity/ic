@@ -277,11 +277,15 @@ pub async fn bless_replica_version(
     guest_launch_measurements: GuestLaunchMeasurements,
     upgrade_url: Vec<String>,
 ) {
-    bless_replica_version_with_sha(nns_node, target_version,
+    bless_replica_version_with_sha(
+        nns_node,
+        target_version,
         logger,
         sha256,
         guest_launch_measurements,
-        upgrade_url).await;
+        upgrade_url,
+    )
+    .await;
 }
 
 pub async fn bless_public_replica_version(
