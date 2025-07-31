@@ -1195,16 +1195,6 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
-pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = Url::parse(&std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?)?;
-
-    Ok(url)
-}
-
-pub fn get_boundary_node_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
-}
-
 pub trait HasGroupSetup {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
