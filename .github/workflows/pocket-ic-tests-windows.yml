@@ -83,7 +83,7 @@ jobs:
       - name: Setup WSLv2
         uses: vedantmgoyal9/setup-wsl2@bf0f19100f71267dd1345180b8a678864793e53f
         with:
-          distro: Ubuntu-20.04
+          distro: Ubuntu-24.04
       - name: Tests
         run: |
           $env:WORKDIR=(Get-Location).Path

@@ -21,7 +21,9 @@ ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-management-canister-types = { workspace = true }
+ic-metrics-encoder = "1.1.1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }

@@ -1,10 +1,10 @@
 use crate::boot_args::read_boot_args;
 use crate::guest_vm_config::DirectBootConfig;
-use crate::mount::{FileSystem, MountOptions, PartitionProvider};
 use crate::GuestVMType;
 use anyhow::Context;
 use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
+use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
 use std::fs::File;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -206,8 +206,8 @@ fn refresh_grubenv(grub_env: &mut GrubEnv) -> Result<bool> {
 #[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
-    use crate::mount::testing::MockPartitionProvider;
     use grub::GrubEnvVariableError;
+    use ic_device::mount::testing::MockPartitionProvider;
     use std::collections::HashMap;
     use std::fs;
     use std::io::Write;

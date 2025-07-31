@@ -400,6 +400,8 @@ impl SystemStateModifications {
                             msg.method_name.as_str(),
                             msg.method_payload.as_slice(),
                             own_subnet_id,
+                            system_state.canister_id,
+                            logger,
                         )
                         .map(CanisterId::unchecked_from_principal)
                         {

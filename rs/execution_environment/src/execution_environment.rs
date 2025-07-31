@@ -83,8 +83,8 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, ReplicaVersion,
-    SubnetId, Time,
+    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
+    ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
@@ -563,11 +563,12 @@ impl ExecutionEnvironment {
 
                             info!(
                                 self.log,
-                                "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, request_id {}, process_id {}",
+                                "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
                                 registry_settings.subnet_size,
                                 context.request.sender_reply_callback,
+                                context.request.sender,
                                 std::process::id(),
                             );
                         }
@@ -1518,8 +1519,9 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::SubnetInfo) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
                 CanisterCall::Request(_) => {
-                    let res = SubnetInfoArgs::decode(payload)
-                        .and_then(|args| self.subnet_info(replica_version, args));
+                    let res = SubnetInfoArgs::decode(payload).and_then(|args| {
+                        self.subnet_info(replica_version, registry_settings.registry_version, args)
+                    });
                     ExecuteSubnetMessageResult::Finished {
                         response: res.map(|res| (res, None)),
                         refund: msg.take_cycles(),
@@ -2734,6 +2736,7 @@ impl ExecutionEnvironment {
     fn subnet_info(
         &self,
         replica_version: &ReplicaVersion,
+        registry_version: RegistryVersion,
         args: SubnetInfoArgs,
     ) -> Result<Vec<u8>, UserError> {
         if args.subnet_id != self.own_subnet_id.get() {
@@ -2747,6 +2750,7 @@ impl ExecutionEnvironment {
         }
         let res = SubnetInfoResponse {
             replica_version: replica_version.to_string(),
+            registry_version: registry_version.get(),
         };
         Ok(Encode!(&res).unwrap())
     }
