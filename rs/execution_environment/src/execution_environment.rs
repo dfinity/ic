@@ -3188,14 +3188,13 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> Result<(), UserError> {
         let args = VetKdDeriveKeyArgs::decode(payload)?;
-        let key_id = MasterPublicKeyId::VetKd(args.key_id.clone());
-        let nidkg_key_id = NiDkgMasterPublicKeyId::VetKd(args.key_id.clone());
+        let key_id = NiDkgMasterPublicKeyId::VetKd(args.key_id.clone());
         let _master_public_key_exists = get_master_public_key(
             &chain_key_data.master_public_keys,
             self.own_subnet_id,
-            &key_id,
+            &key_id.clone().into(),
         )?;
-        let Some(ni_dkg_id) = chain_key_data.nidkg_ids.get(&nidkg_key_id) else {
+        let Some(ni_dkg_id) = chain_key_data.nidkg_ids.get(&key_id) else {
             warn!(
                 self.log,
                 "No NiDkgId delivered to answer vetkd request for key {}.", key_id
@@ -3226,7 +3225,7 @@ impl ExecutionEnvironment {
             vec![args.context],
             registry_settings
                 .chain_key_settings
-                .get(&key_id)
+                .get(&key_id.into())
                 .map(|setting| setting.max_queue_size)
                 .unwrap_or_default(),
             state,
