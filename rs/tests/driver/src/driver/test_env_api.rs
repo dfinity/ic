@@ -1195,6 +1195,14 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
+pub fn get_build_setupos_config_image_tool() -> PathBuf {
+    get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG")
+}
+
+pub fn get_create_setupos_config_tool() -> PathBuf {
+    get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG")
+}
+
 pub trait HasGroupSetup {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
@@ -1309,7 +1317,7 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
-pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+fn get_dependency_path_from_env(v: &str) -> PathBuf {
     let runfiles =
         std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
 
@@ -1332,7 +1340,7 @@ pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     }
 }
 
-pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
+pub(crate) fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
     read_dependency_to_string(path_from_env)

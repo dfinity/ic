@@ -15,7 +15,8 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
+            get_build_setupos_config_image_tool, get_create_setupos_config_tool,
+            get_elasticsearch_hosts, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
             IcNodeContainer, NodesInfo,
@@ -629,8 +630,8 @@ fn create_setupos_config_image(
     let tmp_dir = env.get_path(format!("setupos_config_{}", name));
     fs::create_dir_all(&tmp_dir)?;
 
-    let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
-    let create_setupos_config = get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG");
+    let build_setupos_config_image = get_build_setupos_config_image_tool();
+    let create_setupos_config = get_create_setupos_config_tool();
 
     let nested_vm = env.get_nested_vm(name)?;
 
