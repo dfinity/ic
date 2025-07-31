@@ -8,10 +8,11 @@ use std::thread::LocalKey;
 use std::time::Duration;
 
 #[macro_export]
-macro_rules! timer_task_joq_queue {
+macro_rules! timer_task_job_queue {
     ($queue_name:ident, $queue_item_type:ident) => {
         thread_local! {
-            static $queue_name: RefCell<JobQueue<$queue_item_type>> = RefCell::new(JobQueue::new());
+            static $queue_name: std::cell::RefCell<ic_nervous_system_timer_task::JobQueue<$queue_item_type>>
+                = std::cell::RefCell::new(ic_nervous_system_timer_task::JobQueue::new());
         }
     };
 }
@@ -151,7 +152,7 @@ mod tests {
     use std::cell::RefCell;
     use std::time::Duration;
 
-    timer_task_joq_queue!(TEST_QUEUE, TestJob);
+    timer_task_job_queue!(TEST_QUEUE, TestJob);
 
     thread_local! {
         static PROCESSED_JOBS: RefCell<Vec<String>> = RefCell::new(Vec::new());

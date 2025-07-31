@@ -22,8 +22,7 @@ use ic_nervous_system_root::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_timer_task::{
-    add_to_queue, start_queue_processor, timer_task_joq_queue, JobProcessor, JobProcessorError,
-    JobQueue,
+    add_to_queue, start_queue_processor, timer_task_job_queue, JobProcessor, JobProcessorError,
 };
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
@@ -139,7 +138,7 @@ fn get_pending_root_proposals_to_upgrade_governance_canister() -> Vec<Governance
 }
 
 // Create job queues using the macro
-timer_task_joq_queue!(CHANGE_CANISTER_REQUEST_QUEUE, ChangeCanisterRequest);
+timer_task_job_queue!(CHANGE_CANISTER_REQUEST_QUEUE, ChangeCanisterRequest);
 
 struct ChangeCanisterRequestProcessor;
 
