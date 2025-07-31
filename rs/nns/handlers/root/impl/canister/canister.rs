@@ -149,6 +149,7 @@ impl JobProcessor<ChangeCanisterRequest> for ChangeCanisterRequestProcessor {
         &self,
         request: ChangeCanisterRequest,
     ) -> Result<(), JobProcessorError<ChangeCanisterRequest>> {
+        // TODO DO NOT MERGE - we need to add the locking feature here.
         let change_canister_result = change_canister::<CdkRuntime>(request.clone()).await;
         match change_canister_result {
             Ok(()) => {
