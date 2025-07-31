@@ -1289,6 +1289,8 @@ pub fn get_boundary_node_img_sha256() -> Result<String> {
 }
 
 fn read_guest_launch_measurements(v: &str) -> Result<GuestLaunchMeasurements> {
+    // The launch measurements are not always set.
+    // TODO(NODE-1652): Remove this check once the environment variable is always set.
     if std::env::var(v).is_ok() {
         serde_json::from_str(&read_dependency_from_env_to_string(v)?)
             .context("Could not deserialize guest launch measurements")
