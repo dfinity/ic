@@ -70,8 +70,11 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
     }
 
-    bootstrap_options.nns_public_key_override =
-        Some(PathBuf::from("/boot/config/nns_public_key_override.pem"));
+    // Only set NNS public key override if the file exists
+    let nns_key_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
+    if nns_key_path.exists() {
+        bootstrap_options.nns_public_key_override = Some(nns_key_path);
+    }
 
     if hostos_config.icos_settings.use_node_operator_private_key {
         bootstrap_options.node_operator_private_key =
@@ -216,9 +219,7 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key_override: Some(PathBuf::from(
-                    "/boot/config/nns_public_key_override.pem"
-                )),
+                nns_public_key_override: None,
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
                 )),
