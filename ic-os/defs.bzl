@@ -286,10 +286,10 @@ def icos_build(
                 visibility = visibility,
                 tools = ["//ic-os:sev-snp-measure"],
                 cmd = r"""
-                    source $(location """ + boot_args + """)
+                    source $(execpath """ + boot_args + """)
                     # Create GuestLaunchMeasurements JSON
                     (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                        hex=$$($(location //ic-os:sev-snp-measure) --mode snp --vcpus 64 --ovmf "$(location //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                        hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus 64 --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
                         # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                         measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
                         jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
