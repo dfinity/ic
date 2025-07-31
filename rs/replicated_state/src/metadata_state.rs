@@ -392,6 +392,9 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
             chain_keys_held: item.chain_keys_held.iter().map(|k| k.into()).collect(),
+            canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
+                item.cost_schedule,
+            )),
         }
     }
 }
@@ -408,6 +411,14 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
         for key in item.chain_keys_held {
             chain_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
+        let cost_schedule = CanisterCyclesCostSchedule::from(
+            CanisterCyclesCostScheduleProto::try_from(item.canister_cycles_cost_schedule).map_err(
+                |_| ProxyDecodeError::ValueOutOfRange {
+                    typ: "CanisterCyclesCostSchedule",
+                    err: String::new(),
+                },
+            )?,
+        );
 
         Ok(Self {
             public_key: item.public_key,
@@ -421,6 +432,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
             chain_keys_held,
+            cost_schedule,
         })
     }
 }
