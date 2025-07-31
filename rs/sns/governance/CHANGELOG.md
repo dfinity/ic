@@ -11,6 +11,22 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-25: Proposal 137584
+
+http://dashboard.internetcomputer.org/proposal/137584
+
+## Added
+
+RegisterExtension proposals can now be used in the test version of SNS Governance; submitting
+these proposals on mainnet is still disabled until further notice.
+
+
+## Fixed
+
+Fixed a bug due to which governance cached metrics could be recomputed once every 10 seconds
+rather than with the intended rate of once per hour.
+
+
 # 2025-07-08: Proposal 137282
 
 http://dashboard.internetcomputer.org/proposal/137282

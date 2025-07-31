@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,8 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 IC_GATEWAY_UVM_IMAGE = [
     "//rs/tests:ic_gateway_uvm_config_image",
 ]
-
-SYSTEM_TESTNET_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS
 
 # the "_test" postfixes in names are dropped on purpose since this target is meant for interactive use.
 
@@ -19,7 +17,7 @@ system_test(
         "manual",
     ],
     visibility = ["//visibility:public"],  # public because part of top-level manual test suite
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -35,7 +33,7 @@ system_test(
         "k8s",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -51,7 +49,7 @@ system_test_nns(
         "k8s",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -68,7 +66,7 @@ system_test(
         "k8s",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -83,7 +81,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -99,7 +97,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -116,7 +114,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -134,7 +132,7 @@ system_test(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/dre/utils:os_qualification_utils",
         "//rs/tests/driver:ic-system-test-driver",
@@ -155,7 +153,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -183,7 +181,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -210,7 +208,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -233,7 +231,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -255,7 +253,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -277,7 +275,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -302,7 +300,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SYSTEM_TESTNET_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",

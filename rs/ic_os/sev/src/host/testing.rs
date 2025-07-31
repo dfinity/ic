@@ -1,5 +1,5 @@
-use crate::firmware::MockSevHostFirmware;
-use crate::HostSevCertificateProvider;
+use crate::host::firmware::MockSevHostFirmware;
+use crate::host::HostSevCertificateProvider;
 use anyhow::Result;
 use sev::firmware::host::{Identifier, SnpPlatformStatus, TcbVersion};
 use tempfile::TempDir;
@@ -11,7 +11,7 @@ pub const MOCK_AMD_KEY_SERVER_URL: &str = "https://kdsintf.amd.com/vcek/v1/Milan
 
 /// Fetched from [MOCK_AMD_KEY_SERVER_URL]
 pub const MOCK_AMD_KEY_SERVER_RESPONSE: &[u8] =
-    include_bytes!("../fixtures/mock_amd_key_server_response.crt");
+    include_bytes!("../../fixtures/mock_amd_key_server_response.crt");
 
 pub fn mock_cert_cache_dir() -> Result<TempDir> {
     let tmpdir = TempDir::new()?;

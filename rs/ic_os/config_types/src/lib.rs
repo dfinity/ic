@@ -20,7 +20,7 @@
 //! ## Logging Safety
 //!
 //! All configuration objects defined in this file are safe to log. They do not contain any secret material.
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -199,7 +199,7 @@ pub struct GuestOSSettings {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSDevSettings {
     pub backup_spool: Option<BackupSpoolSettings>,
-    pub malicious_behavior: Option<MaliciousBehaviour>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
     pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,

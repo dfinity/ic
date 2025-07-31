@@ -16,7 +16,6 @@ use crate::{
         test_env_api::{
             get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
@@ -39,7 +38,7 @@ use ic_prep_lib::{
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
@@ -182,23 +181,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = {
-        if ic.has_malicious_behaviours() {
-            warn!(
-                logger,
-                "Using malicious guestos update image for IC config."
-            );
-            (
-                get_malicious_ic_os_update_img_sha256()?,
-                get_malicious_ic_os_update_img_url()?,
-            )
-        } else {
-            (
-                get_guestos_initial_update_img_sha256(test_env)?,
-                get_guestos_initial_update_img_url()?,
-            )
-        }
-    };
+    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+        get_guestos_initial_update_img_sha256()?,
+        get_guestos_initial_update_img_url()?,
+    );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
@@ -258,11 +244,11 @@ pub fn setup_and_start_vms(
         let t_farm = farm.clone();
         let t_env = env.clone();
         let ic_name = ic.name();
-        let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let malicious_behavior = ic.get_malicious_behavior_of_node(node.node_id);
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
-        nodes_info.insert(node.node_id, malicious_behaviour.clone());
+        nodes_info.insert(node.node_id, malicious_behavior.clone());
         let tnet_node = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => tnet
                 .nodes
@@ -276,7 +262,7 @@ pub fn setup_and_start_vms(
             create_config_disk_image(
                 &ic_name,
                 &node,
-                malicious_behaviour,
+                malicious_behavior,
                 query_stats_epoch_length,
                 ipv4_config,
                 domain,
@@ -367,7 +353,7 @@ pub fn upload_config_disk_image(
 fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
-    malicious_behavior: Option<MaliciousBehaviour>,
+    malicious_behavior: Option<MaliciousBehavior>,
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
