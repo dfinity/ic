@@ -1,6 +1,8 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::time;
+use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
+use ic_nervous_system_timer_task::TimerTaskMetricsRegistry;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
@@ -47,6 +49,13 @@ thread_local! {
     // constructor of TrackingManagementCanisterClient.
     pub static PROXIED_CANISTER_CALLS_TRACKER: RefCell<ProxiedCanisterCallsTracker> =
         RefCell::new(ProxiedCanisterCallsTracker::new(system_time_now));
+    // Metrics for timer tasks.
+    pub static TIMER_TASKS_METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
+}
+
+/// Encodes the metrics for timer tasks.
+pub fn encode_timer_task_metrics(encoder: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    TIMER_TASKS_METRICS_REGISTRY.with(|registry| registry.borrow().encode("governance", encoder))
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
@@ -136,6 +145,8 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
                 (*call_count) as f64,
             )?;
         }
+
+        encode_timer_task_metrics(w)?;
 
         std::io::Result::Ok(())
     })?;

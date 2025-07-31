@@ -1,4 +1,8 @@
+use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::println;
+use ic_cdk::{post_upgrade, query, spawn, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -17,6 +21,9 @@ use ic_nervous_system_root::{
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::CdkRuntime;
+use ic_nervous_system_timer_task::{
+    add_to_queue, process_queue, timer_task_joq_queue, JobProcessor, JobProcessorError, JobQueue,
+};
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
     types::CallCanisterProposal,
@@ -27,17 +34,14 @@ use ic_nns_constants::{
 use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
-    PROXIED_CANISTER_CALLS_TRACKER,
+    PROXIED_CANISTER_CALLS_TRACKER, TIMER_TASKS_METRICS_REGISTRY,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
     UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
-
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::println;
-use ic_cdk::{post_upgrade, query, spawn, update};
+use std::time::Duration;
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
@@ -133,6 +137,37 @@ fn get_pending_root_proposals_to_upgrade_governance_canister() -> Vec<Governance
     ic_nns_handler_root::root_proposals::get_pending_root_proposals_to_upgrade_governance_canister()
 }
 
+// Create job queues using the macro
+timer_task_joq_queue!(CHANGE_CANISTER_REQUEST_QUEUE, ChangeCanisterRequest);
+
+struct ChangeCanisterRequestProcessor;
+
+// Implement job processors
+#[async_trait]
+impl JobProcessor<ChangeCanisterRequest> for ChangeCanisterRequestProcessor {
+    async fn process(
+        &self,
+        request: ChangeCanisterRequest,
+    ) -> Result<(), JobProcessorError<ChangeCanisterRequest>> {
+        let change_canister_result = change_canister::<CdkRuntime>(request.clone()).await;
+        match change_canister_result {
+            Ok(()) => {
+                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
+                Ok(())
+            }
+            Err(err) => Err(JobProcessorError::FailedProcessing(
+                request,
+                format!("Canister change failed: {err}"),
+            )),
+        }
+    }
+
+    fn handle_failure(&self, _: ChangeCanisterRequest, error: String) {
+        // Error handling
+        println!("{LOG_PREFIX}change_canister: {error} ");
+    }
+}
+
 /// Executes a proposal to change an NNS canister.
 #[update]
 fn change_nns_canister(request: ChangeCanisterRequest) {
@@ -142,28 +177,15 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     // to it -- and therefore does not prevent the governance canister from being
     // stopped.
     //
-    // To do so, we use `over` instead of the more common `over_async`.
-    //
-    // This will effectively reply synchronously with the first call to the
-    // management canister in change_canister.
-
-    // Because change_canister is async, and because we can't directly use
-    // `await`, we need to use the `spawn` trick.
-    let future = async move {
-        let change_canister_result = change_canister::<CdkRuntime>(request).await;
-        match change_canister_result {
-            Ok(()) => {
-                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
-            }
-            Err(err) => {
-                println!("{LOG_PREFIX}change_canister: Canister change failed: {err}");
-            }
-        };
-    };
-
-    // Starts the proposal execution, which will continue after this function has
-    // returned.
-    spawn(future);
+    // We therefore use an async job queue to process the request.
+    add_to_queue(&CHANGE_CANISTER_REQUEST_QUEUE, request);
+    process_queue(
+        &CHANGE_CANISTER_REQUEST_QUEUE,
+        Duration::from_secs(0),
+        Duration::from_secs(10),
+        ChangeCanisterRequestProcessor,
+        &TIMER_TASKS_METRICS_REGISTRY,
+    );
 }
 
 #[update]

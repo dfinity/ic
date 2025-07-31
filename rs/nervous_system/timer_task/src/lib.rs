@@ -116,9 +116,8 @@
 mod job_queue;
 mod metrics;
 
-pub use job_queue::{add_to_queue, process_queue, JobProcessor, JobProcessorError};
+pub use job_queue::{add_to_queue, process_queue, JobProcessor, JobProcessorError, JobQueue};
 pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
-pub use timer_task_joq_queue;
 
 use async_trait::async_trait;
 #[cfg(not(target_arch = "wasm32"))]

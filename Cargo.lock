@@ -11518,6 +11518,7 @@ name = "ic-nns-handler-root"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "async-trait",
  "build-info",
  "build-info-build",
  "candid",
@@ -11537,6 +11538,7 @@ dependencies = [
  "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-timer-task",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-handler-root-interface",
@@ -13416,6 +13418,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-timer-task",
  "ic-sns-root-protobuf-generator",
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",

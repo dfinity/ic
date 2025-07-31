@@ -122,9 +122,9 @@ impl<T: Send + 'static, Processor: JobProcessor<T> + Send + 'static> RecurringAs
 }
 
 impl<T> JobQueue<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            tasks: Default::default(),
+            tasks: vec![].into(),
         }
     }
 
