@@ -512,6 +512,7 @@ pub enum HostFeature {
     AmdSevSnp,
     SnsLoadTest,
     Performance,
+    IoPerformance,
     Dell,
     Supermicro,
 }
@@ -535,6 +536,7 @@ impl Serialize for HostFeature {
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
             HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
             HostFeature::Performance => serializer.serialize_str(PERFORMANCE),
+            HostFeature::IoPerformance => serializer.serialize_str(IO_PERFORMANCE),
             HostFeature::Dell => serializer.serialize_str(DLL),
             HostFeature::Supermicro => serializer.serialize_str(SPM),
         }
@@ -544,6 +546,7 @@ impl Serialize for HostFeature {
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
 const SNS_LOAD_TEST: &str = "SNS-load-test";
 const PERFORMANCE: &str = "performance";
+const IO_PERFORMANCE: &str = "io-performance";
 const DLL: &str = "dll";
 const SPM: &str = "spm";
 
@@ -560,6 +563,7 @@ impl<'de> Deserialize<'de> for HostFeature {
                 AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
                 SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
                 PERFORMANCE => Ok(HostFeature::Performance),
+                IO_PERFORMANCE => Ok(HostFeature::IoPerformance),
                 DLL => Ok(HostFeature::Dell),
                 SPM => Ok(HostFeature::Supermicro),
                 _ => Err(Error::unknown_variant(

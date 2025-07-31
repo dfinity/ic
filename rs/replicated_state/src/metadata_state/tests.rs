@@ -748,7 +748,7 @@ fn make_key_ids() -> Vec<IDkgMasterPublicKeyId> {
 #[test]
 fn pre_signature_stash_roundtrip() {
     let rng = &mut reproducible_rng();
-    let env = CanisterThresholdSigTestEnvironment::new(34, rng);
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_ids = make_key_ids();
@@ -806,7 +806,7 @@ fn pre_signature_stash_roundtrip() {
 #[test]
 fn sign_with_threshold_context_roundtrip() {
     let rng = &mut reproducible_rng();
-    let env = CanisterThresholdSigTestEnvironment::new(34, rng);
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let transcripts = make_key_ids().into_iter().map(|key_id| {

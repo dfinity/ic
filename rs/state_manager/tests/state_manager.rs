@@ -38,6 +38,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
+    testing::StateManagerTesting,
     StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;

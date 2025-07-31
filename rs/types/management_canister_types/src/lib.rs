@@ -31,7 +31,6 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
-use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use num_traits::cast::ToPrimitive;
@@ -2039,7 +2038,7 @@ pub struct CanisterSettingsArgsBuilder {
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
-    environment_variables: Option<BTreeMap<String, String>>,
+    environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 #[allow(dead_code)]
@@ -2058,15 +2057,7 @@ impl CanisterSettingsArgsBuilder {
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
-            environment_variables: self.environment_variables.map(|variables| {
-                variables
-                    .iter()
-                    .map(|(name, value)| EnvironmentVariable {
-                        name: name.clone(),
-                        value: value.clone(),
-                    })
-                    .collect::<Vec<_>>()
-            }),
+            environment_variables: self.environment_variables,
         }
     }
 
@@ -2154,7 +2145,7 @@ impl CanisterSettingsArgsBuilder {
 
     pub fn with_environment_variables(
         self,
-        environment_variables: BTreeMap<String, String>,
+        environment_variables: Vec<EnvironmentVariable>,
     ) -> Self {
         Self {
             environment_variables: Some(environment_variables),
@@ -3193,11 +3184,13 @@ impl Payload<'_> for SubnetInfoArgs {}
 /// ```text
 /// record {
 ///     replica_version: text;
+///     registry_version: nat64;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct SubnetInfoResponse {
     pub replica_version: String,
+    pub registry_version: u64,
 }
 
 impl Payload<'_> for SubnetInfoResponse {}

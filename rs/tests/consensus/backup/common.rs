@@ -36,7 +36,7 @@ use ic_consensus_system_test_utils::{
     },
     upgrade::{
         assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
-        get_assigned_replica_version, UpdateImageType,
+        get_assigned_replica_version,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -89,6 +89,7 @@ pub fn setup(env: TestEnv) {
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
@@ -106,12 +107,11 @@ pub fn test(env: TestEnv) {
     let target_version = get_guestos_update_img_version().expect("target IC version");
 
     // Bless target version
-    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
-        UpdateImageType::Image,
         &log,
         &sha256,
         vec![upgrade_url.to_string()],

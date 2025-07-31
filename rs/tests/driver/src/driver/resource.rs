@@ -13,7 +13,6 @@ use crate::driver::nested::NestedNode;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
     get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-    get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
@@ -21,7 +20,6 @@ use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn};
 use std::collections::BTreeMap;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -142,6 +140,7 @@ impl ResourceGroup {
 pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,
+    pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
     pub ipv4: Option<Ipv4Addr>,
@@ -154,24 +153,8 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = {
-        if config.has_malicious_behaviours() {
-            warn!(
-                test_env.logger(),
-                "Using malicious guestos image for IC config."
-            );
-            (
-                get_malicious_ic_os_img_sha256()?,
-                get_malicious_ic_os_img_url()?,
-            )
-        } else {
-            info!(
-                test_env.logger(),
-                "Using guestos image from environment for IC config."
-            );
-            (get_guestos_img_sha256()?, get_guestos_img_url()?)
-        }
-    };
+    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256()?, get_guestos_img_url()?);
+
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let group_setup = GroupSetup::read_attribute(test_env);
     let default_vm_resources = group_setup.default_vm_resources;
@@ -335,10 +318,16 @@ pub fn allocate_resources(
                 let (vm_name, created_vm) = thread
                     .join()
                     .expect("Couldn't join on the associated thread");
-                let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
+                let VMCreateResponse {
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ..
+                } = created_vm?;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    hostname,
                     ipv4: None,
                     ipv6,
                     mac6,
@@ -348,11 +337,16 @@ pub fn allocate_resources(
         InfraProvider::K8s => {
             for (vm_name, created_vm) in vm_responses {
                 let VMCreateResponse {
-                    ipv6, mac6, ipv4, ..
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ipv4,
+                    ..
                 } = created_vm;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    hostname,
                     ipv4,
                     ipv6,
                     mac6,

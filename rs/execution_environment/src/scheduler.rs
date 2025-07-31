@@ -36,7 +36,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::{
-    batch::ChainKeyData,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
@@ -431,6 +431,7 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
+        let cost_schedule = state.metadata.cost_schedule;
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
         let mut ingress_execution_results = Vec::new();
@@ -533,6 +534,7 @@ impl SchedulerImpl {
                 &measurement_scope,
                 &mut round_limits,
                 registry_settings.subnet_size,
+                cost_schedule,
                 is_first_iteration,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
@@ -683,6 +685,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         is_first_iteration: bool,
     ) -> (
         Vec<CanisterState>,
@@ -755,6 +758,7 @@ impl SchedulerImpl {
                         deterministic_time_slicing,
                         round_limits,
                         subnet_size,
+                        cost_schedule,
                         is_first_iteration,
                     );
                 });
@@ -902,6 +906,7 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
+        let cost_schedule = state.metadata.cost_schedule;
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
@@ -933,6 +938,7 @@ impl SchedulerImpl {
                         canister,
                         duration_since_last_charge,
                         subnet_size,
+                        cost_schedule,
                     )
                     .is_err()
                 {
@@ -1240,6 +1246,9 @@ impl Scheduler for SchedulerImpl {
             state.time(),
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
+
+        // Copy state of registry flag over to ReplicatedState
+        state.metadata.cost_schedule = registry_settings.canister_cycles_cost_schedule;
 
         // Round preparation.
         let mut scheduler_round_limits = {
@@ -1767,6 +1776,7 @@ fn execute_canisters_on_thread(
     deterministic_time_slicing: FlagStatus,
     mut round_limits: RoundLimits,
     subnet_size: usize,
+    cost_schedule: CanisterCyclesCostSchedule,
     is_first_iteration: bool,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
@@ -1844,6 +1854,7 @@ fn execute_canisters_on_thread(
                 time,
                 &mut round_limits,
                 subnet_size,
+                cost_schedule,
             );
             if instructions_used.is_some_and(|instructions| instructions.get() > 0) {
                 // We only want to count the canister as executed if it used instructions.

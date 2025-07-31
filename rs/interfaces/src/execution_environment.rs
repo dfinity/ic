@@ -8,10 +8,11 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::ChainKeyData,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
+    ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1380,6 +1381,8 @@ pub struct RegistryExecutionSettings {
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
+    pub registry_version: RegistryVersion,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Chain key configuration of execution that comes from the registry.
