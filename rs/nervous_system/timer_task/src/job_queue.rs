@@ -482,44 +482,7 @@ mod tests {
         let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
         assert_eq!(call_count, 5, "Process should be called 5 times: 2 immediate successes + 2 requeue attempts + 1 failure");
 
-        // Verify timer is no longer running
-        let timer_ids_after = existing_timer_ids();
-        assert_eq!(
-            timer_ids_after.len(),
-            0,
-            "Should have no timers running after queue is empty"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_handle_failure_is_called() {
-        clear_test_state();
-
-        // Add a job that will fail
-        add_to_queue(
-            &TEST_QUEUE,
-            TestJob {
-                id: "failing_job".to_string(),
-                action: JobAction::Fail,
-            },
-        );
-
-        process_queue(
-            &TEST_QUEUE,
-            Duration::from_millis(10),
-            Duration::from_millis(50),
-            TestJobProcessor,
-            &TEST_METRICS,
-        );
-
-        // Verify timer is running
-        let timer_ids = existing_timer_ids();
-        assert_eq!(timer_ids.len(), 1, "Should have exactly one timer running");
-
-        // Advance time to allow processing
-        run_pending_timers_every_interval_for_count(Duration::from_millis(100), 5);
-
-        // Verify that handle_failure was called with the correct task and error
+        // Verify that handle_failure was called for the failing job
         let failure_calls = HANDLE_FAILURE_CALLS.with_borrow(|calls| calls.clone());
         assert_eq!(
             failure_calls.len(),
@@ -529,27 +492,12 @@ mod tests {
 
         let (task_id, error_msg) = &failure_calls[0];
         assert_eq!(
-            task_id, "failing_job",
+            task_id, "fail1",
             "handle_failure should be called with the correct task ID"
         );
         assert_eq!(
             error_msg, "Processing failed",
             "handle_failure should be called with the correct error message"
-        );
-
-        // Verify process was called once for the failing job
-        let call_count = PROCESS_CALL_COUNT.with_borrow(|count| *count);
-        assert_eq!(
-            call_count, 1,
-            "Process should be called exactly once for the failing job"
-        );
-
-        // Verify no jobs were successfully processed (since it failed)
-        let processed = PROCESSED_JOBS.with_borrow(|jobs| jobs.clone());
-        assert_eq!(
-            processed.len(),
-            0,
-            "No jobs should be successfully processed"
         );
 
         // Verify timer is no longer running
