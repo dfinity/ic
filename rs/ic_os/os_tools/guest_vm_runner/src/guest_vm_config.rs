@@ -71,9 +71,9 @@ fn make_bootstrap_options(
     }
 
     // Only set NNS public key override if the file exists
-    let nns_key_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
-    if nns_key_path.exists() {
-        bootstrap_options.nns_public_key_override = Some(nns_key_path);
+    let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
+    if nns_key_override_path.exists() {
+        bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
     }
 
     if hostos_config.icos_settings.use_node_operator_private_key {
