@@ -58,95 +58,98 @@ async fn test_acquire() {
     assert!(delayed_call(0, 1000).await);
 }
 
-// Example of how to use acquire_for with named locks.
-async fn disallow_concurrent_operations_per_canister(canister_id: u64, operation: u64) -> bool {
+// Dummy enum to represent file operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FileOperation {
+    Read,
+    Write,
+    Delete,
+}
+
+// Example of how to use acquire_for with named locks for file operations.
+async fn try_file_operation(file_path: String, operation: FileOperation) -> bool {
     thread_local! {
-        static CANISTER_LOCKS: RefCell<HashMap<u64, Option<u64>>> = RefCell::new(HashMap::new());
+        static FILE_LOCKS: RefCell<HashMap<String, Option<FileOperation>>> = RefCell::new(HashMap::new());
     }
-    let release_on_drop = acquire_for(&CANISTER_LOCKS, canister_id, operation);
+    let release_on_drop = acquire_for(&FILE_LOCKS, file_path.clone(), operation);
     if let Err(existing_operation) = release_on_drop {
         // Abort. Do not do real work.
         eprintln!(
-            "Canister {} already has operation {} in progress.",
-            canister_id, existing_operation
+            "File '{}' already has {:?} operation in progress.",
+            file_path, existing_operation
         );
         return false;
     }
 
-    // Do real work here.
+    // Do real work here (simulate file I/O).
     sleep(Duration::from_millis(133)).await;
     true
 }
 
 #[tokio::test]
 async fn test_acquire_for_named_locks() {
-    async fn delayed_canister_call(
+    async fn delayed_file_operation(
         pre_flight_delay_ms: u64,
-        canister_id: u64,
-        operation: u64,
+        file_path: &str,
+        operation: FileOperation,
     ) -> bool {
         sleep(Duration::from_millis(pre_flight_delay_ms)).await;
-        disallow_concurrent_operations_per_canister(canister_id, operation).await
+        try_file_operation(file_path.to_string(), operation).await
     }
 
-    // Test that different canisters can be operated on simultaneously
+    // Test that different files can be operated on simultaneously
     let results = join!(
-        delayed_canister_call(0, 1, 100),   // Canister 1, Operation 100
-        delayed_canister_call(0, 2, 200),   // Canister 2, Operation 200 (different canister)
-        delayed_canister_call(67, 1, 101), // Canister 1, Operation 101 (should fail - same canister)
-        delayed_canister_call(67, 2, 201), // Canister 2, Operation 201 (should fail - same canister)
-        delayed_canister_call(200, 1, 102), // Canister 1, Operation 102 (should succeed after first completes)
-        delayed_canister_call(200, 3, 300), // Canister 3, Operation 300 (different canister)
+        delayed_file_operation(0, "/tmp/file1.txt", FileOperation::Read), // Read file1
+        delayed_file_operation(0, "/tmp/file2.txt", FileOperation::Write), // Write file2 (different file)
+        delayed_file_operation(67, "/tmp/file1.txt", FileOperation::Write), // Write file1 (should fail - same file)
+        delayed_file_operation(67, "/tmp/file2.txt", FileOperation::Delete), // Delete file2 (should fail - same file)
+        delayed_file_operation(200, "/tmp/file1.txt", FileOperation::Delete), // Delete file1 (should succeed after read completes)
+        delayed_file_operation(200, "/tmp/file3.txt", FileOperation::Read), // Read file3 (different file)
     );
 
-    // First operations on each canister should succeed, overlapping ones should fail
+    // First operations on each file should succeed, overlapping ones should fail
     assert_eq!(results, (true, true, false, false, true, true));
 }
 
 #[tokio::test]
-async fn test_acquire_for_same_operation_different_canisters() {
-    async fn delayed_canister_call(
+async fn test_acquire_for_same_operation_different_targets() {
+    async fn delayed_file_operation(
         pre_flight_delay_ms: u64,
-        canister_id: u64,
-        operation: u64,
+        file_path: &str,
+        operation: FileOperation,
     ) -> bool {
         sleep(Duration::from_millis(pre_flight_delay_ms)).await;
-        disallow_concurrent_operations_per_canister(canister_id, operation).await
+        try_file_operation(file_path.to_string(), operation).await
     }
 
-    // Test that the same operation type can run on different canisters simultaneously
+    // Test that the same operation type can run on different files simultaneously
     let results = join!(
-        delayed_canister_call(0, 1, 999),  // Canister 1, Operation 999
-        delayed_canister_call(0, 2, 999), // Canister 2, Operation 999 (same operation, different canister)
-        delayed_canister_call(0, 3, 999), // Canister 3, Operation 999 (same operation, different canister)
-        delayed_canister_call(67, 1, 999), // Canister 1, Operation 999 (should fail - same canister)
+        delayed_file_operation(0, "/var/log/app1.log", FileOperation::Write), // Write to app1.log
+        delayed_file_operation(0, "/var/log/app2.log", FileOperation::Write), // Write to app2.log (same operation, different file)
+        delayed_file_operation(0, "/var/log/app3.log", FileOperation::Write), // Write to app3.log (same operation, different file)
+        delayed_file_operation(67, "/var/log/app1.log", FileOperation::Write), // Write to app1.log again (should fail - same file)
     );
 
-    // All different canisters should succeed, same canister should fail
+    // All different files should succeed, same file should fail
     assert_eq!(results, (true, true, true, false));
 }
 
 #[tokio::test]
-async fn test_acquire_for_with_string_keys() {
-    // Test with string keys to ensure the generic implementation works with different key types
-    async fn disallow_concurrent_operations_per_name(name: String, value: u32) -> bool {
-        thread_local! {
-            static NAME_LOCKS: RefCell<HashMap<String, Option<u32>>> = RefCell::new(HashMap::new());
-        }
-        let release_on_drop = acquire_for(&NAME_LOCKS, name, value);
-        if let Err(existing_value) = release_on_drop {
-            eprintln!("Name already has value {} in progress.", existing_value);
-            return false;
-        }
-
-        sleep(Duration::from_millis(100)).await;
-        true
+async fn test_acquire_for_mixed_targets_and_operations() {
+    async fn delayed_file_operation(
+        pre_flight_delay_ms: u64,
+        file_path: &str,
+        operation: FileOperation,
+    ) -> bool {
+        sleep(Duration::from_millis(pre_flight_delay_ms)).await;
+        try_file_operation(file_path.to_string(), operation).await
     }
 
+    // Test mixed operations on different files to ensure they don't interfere
     let results = join!(
-        disallow_concurrent_operations_per_name("alice".to_string(), 1),
-        disallow_concurrent_operations_per_name("bob".to_string(), 2),
-        disallow_concurrent_operations_per_name("alice".to_string(), 3), // Should fail - same name
+        delayed_file_operation(0, "/home/user/config.json", FileOperation::Read),
+        delayed_file_operation(0, "/tmp/cache.dat", FileOperation::Delete),
+        delayed_file_operation(0, "/home/user/config.json", FileOperation::Write), // Should fail - same file
     );
 
     assert_eq!(results, (true, true, false));
