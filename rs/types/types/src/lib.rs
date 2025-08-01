@@ -106,6 +106,7 @@ use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
@@ -584,25 +585,65 @@ pub trait CountBytes {
 /// Allow an object to report its own byte size on disk and in memory. Not
 /// necessarily exact.
 pub trait MemoryDiskBytes {
-    fn memory_bytes(&self) -> usize;
-    fn disk_bytes(&self) -> usize;
-}
-
-impl MemoryDiskBytes for Time {
-    fn memory_bytes(&self) -> usize {
-        8
+    /// Returns the number of bytes that this object occupies in heap memory.
+    fn heap_bytes(&self) -> usize {
+        // No heap allocations by default.
+        0
     }
 
+    /// Returns the total number of bytes that this object occupies
+    /// in stack and heap memory.
+    fn memory_bytes(&self) -> usize {
+        size_of_val(self) + self.heap_bytes()
+    }
+
+    /// Returns the number of bytes that this object occupies on disk.
     fn disk_bytes(&self) -> usize {
         0
     }
 }
 
-impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
-    fn memory_bytes(&self) -> usize {
+impl<T> MemoryDiskBytes for BTreeSet<T> {
+    /// Provides a shallow constant time size estimation by default.
+    fn heap_bytes(&self) -> usize {
+        self.len() * size_of::<T>()
+    }
+}
+
+impl<T> MemoryDiskBytes for Vec<T> {
+    /// Provides a shallow constant time size estimation by default.
+    fn heap_bytes(&self) -> usize {
+        size_of_val(&**self)
+    }
+}
+
+impl MemoryDiskBytes for String {
+    fn heap_bytes(&self) -> usize {
+        self.len()
+    }
+}
+
+impl<T: MemoryDiskBytes> MemoryDiskBytes for Option<T> {
+    fn heap_bytes(&self) -> usize {
         match self {
-            Ok(result) => result.memory_bytes(),
-            Err(err) => err.memory_bytes(),
+            Some(t) => t.heap_bytes(),
+            None => 0,
+        }
+    }
+
+    fn disk_bytes(&self) -> usize {
+        match self {
+            Some(t) => t.disk_bytes(),
+            None => 0,
+        }
+    }
+}
+
+impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
+    fn heap_bytes(&self) -> usize {
+        match self {
+            Ok(result) => result.heap_bytes(),
+            Err(err) => err.heap_bytes(),
         }
     }
 
@@ -615,8 +656,8 @@ impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
 }
 
 impl<T: MemoryDiskBytes> MemoryDiskBytes for Arc<T> {
-    fn memory_bytes(&self) -> usize {
-        self.as_ref().memory_bytes()
+    fn heap_bytes(&self) -> usize {
+        self.as_ref().heap_bytes()
     }
 
     fn disk_bytes(&self) -> usize {
@@ -626,11 +667,7 @@ impl<T: MemoryDiskBytes> MemoryDiskBytes for Arc<T> {
 
 // Implementing `MemoryDiskBytes` in `ic_error_types` introduces a circular dependency.
 impl MemoryDiskBytes for ic_error_types::UserError {
-    fn memory_bytes(&self) -> usize {
-        self.count_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
+    fn heap_bytes(&self) -> usize {
+        self.count_heap_bytes()
     }
 }
