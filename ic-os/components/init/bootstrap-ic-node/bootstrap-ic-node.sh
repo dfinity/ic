@@ -105,14 +105,14 @@ function process_bootstrap() {
     fi
 
     VARIANT_TYPE=$(/opt/ic/bin/config check-variant-type)
-    if [ -e "/opt/ic/share/nns_public_key.pem" ]; then
-        echo "Copying nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
-        cp -rL -T "/opt/ic/share/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
-        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
-    fi
+    NNS_KEY_DEST="${STATE_ROOT}/data/nns_public_key.pem"
     if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/nns_public_key_override.pem" ]; then
         echo "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
-        cp -rL -T "${TMPDIR}/nns_public_key_override.pem" "${STATE_ROOT}/data/nns_public_key.pem"
+        cp -rL -T "${TMPDIR}/nns_public_key_override.pem" "${NNS_KEY_DEST}"
+        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
+    elif [ -e "/opt/ic/share/nns_public_key.pem" ]; then
+        echo "Copying nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
+        cp -rL -T "/opt/ic/share/nns_public_key.pem" "${NNS_KEY_DEST}"
         chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
     fi
 
