@@ -10,7 +10,7 @@ pub trait LockStorage<V> {
     type Error;
 
     fn try_acquire(&self, key: Self::Key, value: V) -> Result<(), Self::Error>;
-    fn release(&self, key: Self::Key);
+    fn release(&self, key: &Self::Key);
 }
 
 // Implementation for single-lock storage (existing behavior)
@@ -29,7 +29,7 @@ impl<V: Debug + Copy> LockStorage<V> for &'static LocalKey<RefCell<Option<V>>> {
         })
     }
 
-    fn release(&self, _key: ()) {
+    fn release(&self, _key: &()) {
         self.with(|cell| *cell.borrow_mut() = None)
     }
 }
@@ -52,9 +52,9 @@ impl<K: Hash + Eq + Clone + Debug + 'static, V: Debug + Copy> LockStorage<V>
         })
     }
 
-    fn release(&self, key: K) {
+    fn release(&self, key: &K) {
         self.with(|cell| {
-            cell.borrow_mut().remove(&key);
+            cell.borrow_mut().remove(key);
         })
     }
 }
@@ -128,7 +128,7 @@ where
 {
     fn drop(&mut self) {
         if let Some(storage) = self.storage.take() {
-            storage.release(self.key.clone());
+            storage.release(&self.key);
         }
     }
 }
