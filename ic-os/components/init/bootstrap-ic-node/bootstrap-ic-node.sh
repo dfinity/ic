@@ -93,21 +93,27 @@ function process_bootstrap() {
         echo "Installing initial state"
         cp -rL -T "${TMPDIR}/ic_state" "${STATE_ROOT}/data/ic_state"
     fi
-    for ITEM in ic_registry_local_store node_operator_private_key.pem; do
-        if [ -e "${TMPDIR}/${ITEM}" ]; then
-            echo "Setting up initial ${ITEM}"
-            cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
-        fi
-    done
+    if [ -e "${TMPDIR}/ic_registry_local_store" ]; then
+        echo "Setting up initial ic_registry_local_store"
+        cp -rL -T "${TMPDIR}/ic_registry_local_store" "${STATE_ROOT}/data/ic_registry_local_store"
+    fi
+
+    if [ -e "${TMPDIR}/node_operator_private_key.pem" ]; then
+        echo "Setting up initial node_operator_private_key.pem"
+        cp -rL -T "${TMPDIR}/node_operator_private_key.pem" "${STATE_ROOT}/data/node_operator_private_key.pem"
+        chmod 400 "${STATE_ROOT}/data/node_operator_private_key.pem"
+    fi
 
     VARIANT_TYPE=$(/opt/ic/bin/config check-variant-type)
     if [ -e "/opt/ic/share/nns_public_key.pem" ]; then
         echo "Copying nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
         cp -rL -T "/opt/ic/share/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
+        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
     fi
     if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/nns_public_key_override.pem" ]; then
         echo "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
         cp -rL -T "${TMPDIR}/nns_public_key_override.pem" "${STATE_ROOT}/data/nns_public_key.pem"
+        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
     fi
 
     for DIR in accounts_ssh_authorized_keys; do
@@ -118,6 +124,11 @@ function process_bootstrap() {
     done
 
     rm -rf "${TMPDIR}"
+
+    # Fix up permissions. Ideally this is specific to only what is copied. If
+    # we do make this change, we need to make sure `data` itself has the
+    # correct permissions.
+    chown ic-replica:nogroup -R "${STATE_ROOT}/data"
 
     # Synchronize the above cached writes to persistent storage
     # to make sure the system can boot successfully after a hard shutdown.
@@ -138,6 +149,7 @@ function process_config_json() {
     if [ -e "${TMPDIR}/config.json" ]; then
         echo "Setting up config.json"
         cp "${TMPDIR}/config.json" "${CONFIG_ROOT}/config.json"
+        chown ic-replica:nogroup "${CONFIG_ROOT}/config.json"
     fi
 
     rm -rf "${TMPDIR}"
@@ -192,27 +204,33 @@ while [ ! -f /boot/config/CONFIGURED ]; do
         fi
     fi
 
-    # Fix up permissions. This is actually the wrong place.
-    chown ic-replica:nogroup -R /var/lib/ic/data
-
     if [ "${DEV}" != "" ]; then
         umount /mnt
     fi
 done
 
 # Process config.json every boot (not just on first bootstrap)
+# Even if nothing can be mounted, just try and see if something usable
+# is there already -- this might be useful when operating this thing as a
+# docker container instead of full-blown VM.
 echo "Checking for config.json updates"
 DEV="$(find_config_devices)"
 if [ "${DEV}" != "" ]; then
     echo "Found CONFIG device at ${DEV}"
     mount -t vfat -o ro "${DEV}" /mnt
     process_config_json /mnt/ic-bootstrap.tar /boot/config
-    umount /mnt
-elif [ -e /mnt/ic-bootstrap.tar ]; then
+fi
+
+if [ -e /mnt/ic-bootstrap.tar ]; then
     echo "Processing config.json from pre-mounted bootstrap"
     process_config_json /mnt/ic-bootstrap.tar /boot/config
 fi
 
+if [ "${DEV}" != "" ]; then
+    umount /mnt
+fi
+
+# Write metric on use of node_operator_private_key
 node_operator_private_key_exists=0
 if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
     node_operator_private_key_exists=1
