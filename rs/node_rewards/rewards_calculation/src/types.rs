@@ -1,4 +1,4 @@
-use crate::rewards_calculator_results::DayUTC;
+use crate::rewards_calculator_results::DayUtc;
 use ic_base_types::{NodeId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_types::Time;
@@ -30,8 +30,8 @@ fn current_time() -> Time {
 /// with the invariant defined in [`ic_replicated_state::metadata_state::BlockmakerMetricsTimeSeries`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct RewardPeriod {
-    pub from: DayUTC,
-    pub to: DayUTC,
+    pub from: DayUtc,
+    pub to: DayUtc,
 }
 
 impl Display for RewardPeriod {
@@ -58,12 +58,12 @@ impl RewardPeriod {
         if unaligned_start_ts > unaligned_end_ts {
             return Err(RewardPeriodError::StartTimestampAfterEndTimestamp);
         }
-        let start_day: DayUTC = unaligned_start_ts.into();
-        let end_day: DayUTC = unaligned_end_ts.into();
+        let start_day: DayUtc = unaligned_start_ts.into();
+        let end_day: DayUtc = unaligned_end_ts.into();
 
         // Metrics are collected at the end of the day, so we need to ensure that
         // the end timestamp is not later than the first ts of today.
-        let today: DayUTC = current_time().as_nanos_since_unix_epoch().into();
+        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
 
         if end_day >= today {
             return Err(RewardPeriodError::EndTimestampLaterThanToday);
@@ -75,7 +75,7 @@ impl RewardPeriod {
         })
     }
 
-    pub fn contains(&self, day: DayUTC) -> bool {
+    pub fn contains(&self, day: DayUtc) -> bool {
         day >= self.from && day <= self.to
     }
 }
@@ -107,7 +107,7 @@ impl Error for RewardPeriodError {}
 #[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug)]
 pub struct RewardableNode {
     pub node_id: NodeId,
-    pub rewardable_days: Vec<DayUTC>,
+    pub rewardable_days: Vec<DayUtc>,
     pub region: Region,
     pub node_reward_type: NodeRewardType,
     pub dc_id: String,
@@ -123,7 +123,7 @@ pub struct NodeMetricsDailyRaw {
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct SubnetMetricsDailyKey {
     pub subnet_id: SubnetId,
-    pub day: DayUTC,
+    pub day: DayUtc,
 }
 
 #[cfg(test)]

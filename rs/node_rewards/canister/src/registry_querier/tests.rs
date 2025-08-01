@@ -18,7 +18,7 @@ use ic_registry_keys::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::btreemap;
-use rewards_calculation::rewards_calculator_results::DayUTC;
+use rewards_calculation::rewards_calculator_results::DayUtc;
 use rewards_calculation::types::{RewardPeriod, RewardableNode};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -156,7 +156,7 @@ fn client_for_tests() -> RegistryQuerier {
     }
 }
 
-fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Vec<DayUTC> {
+fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Vec<DayUtc> {
     let node_id = NodeId::from(PrincipalId::new_node_test_id(node_id));
 
     rewardable_nodes
@@ -247,7 +247,7 @@ fn test_nodes_in_registry_returns_expected_days() {
     let node_3_id = NodeId::from(PrincipalId::new_node_test_id(3));
 
     let (_, _, node_1_days) = &nodes_map[&node_1_id];
-    let expected_node_1_days: Vec<DayUTC> = vec![
+    let expected_node_1_days: Vec<DayUtc> = vec![
         ts("2025-07-03").into(),
         ts("2025-07-04").into(),
         ts("2025-07-05").into(),
@@ -258,7 +258,7 @@ fn test_nodes_in_registry_returns_expected_days() {
     assert_eq!(node_1_days, &expected_node_1_days);
 
     let (_, _, node_2_days) = &nodes_map[&node_2_id];
-    let expected_node_2_days: Vec<DayUTC> = vec![
+    let expected_node_2_days: Vec<DayUtc> = vec![
         ts("2025-07-04").into(),
         ts("2025-07-05").into(),
         ts("2025-07-06").into(),
@@ -276,7 +276,7 @@ fn test_nodes_in_registry_returns_expected_days() {
     assert_eq!(node_2_days, &expected_node_2_days);
 
     let (_, _, node_3_days) = &nodes_map[&node_3_id];
-    let expected_node_3_days: Vec<DayUTC> = vec![
+    let expected_node_3_days: Vec<DayUtc> = vec![
         ts("2025-07-11").into(),
         ts("2025-07-12").into(),
         ts("2025-07-13").into(),
@@ -414,7 +414,7 @@ fn test_node_re_registered_after_deletion() {
 
     let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, node_1_id);
 
-    let expected_days: Vec<DayUTC> = vec![
+    let expected_days: Vec<DayUtc> = vec![
         ts("2025-07-07").into(),
         ts("2025-07-08").into(),
         // On 2025-07-08, node_1 was deleted, so it should not be rewardable until the 2025-07-11.
