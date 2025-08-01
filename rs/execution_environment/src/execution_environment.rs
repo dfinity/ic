@@ -66,12 +66,11 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    batch::ChainKeyData,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
-        threshold_sig::ni_dkg::NiDkgTargetId,
+        threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTargetId},
         ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -3189,11 +3188,11 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> Result<(), UserError> {
         let args = VetKdDeriveKeyArgs::decode(payload)?;
-        let key_id = MasterPublicKeyId::VetKd(args.key_id.clone());
+        let key_id = NiDkgMasterPublicKeyId::VetKd(args.key_id.clone());
         let _master_public_key_exists = get_master_public_key(
             &chain_key_data.master_public_keys,
             self.own_subnet_id,
-            &key_id,
+            &key_id.clone().into(),
         )?;
         let Some(ni_dkg_id) = chain_key_data.nidkg_ids.get(&key_id) else {
             warn!(
@@ -3226,7 +3225,7 @@ impl ExecutionEnvironment {
             vec![args.context],
             registry_settings
                 .chain_key_settings
-                .get(&key_id)
+                .get(&key_id.into())
                 .map(|setting| setting.max_queue_size)
                 .unwrap_or_default(),
             state,

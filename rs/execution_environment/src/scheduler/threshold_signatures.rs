@@ -2,13 +2,14 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
-use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaMatchedPreSignature, SchnorrMatchedPreSignature, SignWithThresholdContext,
     ThresholdArguments,
 };
 use ic_types::{
-    batch::AvailablePreSignatures, consensus::idkg::common::PreSignature, ExecutionRound, Height,
+    batch::AvailablePreSignatures,
+    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId},
+    ExecutionRound, Height,
 };
 use more_asserts::debug_unreachable;
 use rand::RngCore;
@@ -18,7 +19,7 @@ use super::SchedulerMetrics;
 /// Update [`SignatureRequestContext`]s by assigning randomness and matching pre-signatures.
 pub(crate) fn update_signature_request_contexts(
     current_round: ExecutionRound,
-    idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
+    idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     mut contexts: Vec<&mut SignWithThresholdContext>,
     csprng: &mut Csprng,
     registry_settings: &RegistryExecutionSettings,
@@ -72,7 +73,7 @@ pub(crate) fn update_signature_request_contexts(
 /// Match up to `max_ongoing_signatures` pre-signatures to unmatched signature request contexts
 /// of the given `key_id`.
 fn match_pre_signatures_by_key_id(
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     mut pre_sigs: AvailablePreSignatures,
     contexts: &mut [&mut SignWithThresholdContext],
     max_ongoing_signatures: usize,
@@ -82,7 +83,7 @@ fn match_pre_signatures_by_key_id(
     let mut matched = 0;
     for (pre_sig_id, _) in contexts
         .iter_mut()
-        .filter(|context| context.key_id() == key_id)
+        .filter(|context| context.key_id() == *key_id.inner())
         .flat_map(|context| context.matched_pre_signature)
     {
         pre_sigs.pre_signatures.remove(&pre_sig_id);
@@ -91,7 +92,7 @@ fn match_pre_signatures_by_key_id(
 
     // Assign pre-signatures to unmatched contexts until `max_ongoing_signatures` is reached.
     for context in contexts.iter_mut() {
-        if !(context.requires_pre_signature() && context.key_id() == key_id) {
+        if !(context.requires_pre_signature() && context.key_id() == *key_id.inner()) {
             continue;
         }
         if matched >= max_ongoing_signatures {
@@ -133,7 +134,7 @@ mod tests {
 
     use super::*;
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
@@ -142,27 +143,31 @@ mod tests {
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{consensus::idkg::PreSigId, messages::CallbackId, time::UNIX_EPOCH};
 
-    fn ecdsa_key_id(i: u8) -> MasterPublicKeyId {
+    fn ecdsa_key_id(i: u8) -> IDkgMasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: format!("ecdsa_key_id_{i}"),
         })
+        .try_into()
+        .unwrap()
     }
 
-    fn schnorr_key_id(i: u8) -> MasterPublicKeyId {
+    fn schnorr_key_id(i: u8) -> IDkgMasterPublicKeyId {
         MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Ed25519,
             name: format!("schnorr_key_id_{i}"),
         })
+        .try_into()
+        .unwrap()
     }
 
     fn fake_context(
         id: u64,
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         matched_pre_signature: Option<(u64, Height)>,
     ) -> (CallbackId, SignWithThresholdContext) {
         let callback_id = CallbackId::from(id);
-        let args = match key_id {
+        let args = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
                 key_id: ecdsa_key_id.clone(),
                 message_hash: [0; 32],
@@ -204,7 +209,7 @@ mod tests {
     }
 
     fn setup_pre_signatures<T: IntoIterator<Item = u64>>(
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         ids: T,
     ) -> AvailablePreSignatures {
         AvailablePreSignatures {
@@ -241,7 +246,7 @@ mod tests {
     }
 
     fn match_pre_signatures_basic_test(
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         pre_sigs: AvailablePreSignatures,
         mut contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         max_ongoing_signatures: usize,
@@ -281,8 +286,8 @@ mod tests {
     }
 
     fn test_match_pre_signatures_doesnt_match_other_key_ids(
-        key_id1: &MasterPublicKeyId,
-        key_id2: &MasterPublicKeyId,
+        key_id1: &IDkgMasterPublicKeyId,
+        key_id2: &IDkgMasterPublicKeyId,
     ) {
         // 2 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id1, 1..3);
@@ -298,7 +303,7 @@ mod tests {
         test_match_pre_signatures_doesnt_match_more_than_delivered(&schnorr_key_id(2));
     }
 
-    fn test_match_pre_signatures_doesnt_match_more_than_delivered(key_id: &MasterPublicKeyId) {
+    fn test_match_pre_signatures_doesnt_match_more_than_delivered(key_id: &IDkgMasterPublicKeyId) {
         // 2 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id, 1..3);
         // 4 contexts for key 1
@@ -313,7 +318,7 @@ mod tests {
         test_match_pre_signatures_doesnt_match_more_than_requested(&schnorr_key_id(2));
     }
 
-    fn test_match_pre_signatures_doesnt_match_more_than_requested(key_id: &MasterPublicKeyId) {
+    fn test_match_pre_signatures_doesnt_match_more_than_requested(key_id: &IDkgMasterPublicKeyId) {
         // 3 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id, 1..4);
         // 2 contexts for key 1
@@ -328,7 +333,7 @@ mod tests {
         test_match_pre_signatures_respects_max(&schnorr_key_id(2));
     }
 
-    fn test_match_pre_signatures_respects_max(key_id: &MasterPublicKeyId) {
+    fn test_match_pre_signatures_respects_max(key_id: &IDkgMasterPublicKeyId) {
         // 4 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id, 1..5);
         // 4 contexts for key 1
@@ -350,8 +355,8 @@ mod tests {
     }
 
     fn test_match_pre_signatures_respects_max_per_key_id(
-        key_id1: &MasterPublicKeyId,
-        key_id2: &MasterPublicKeyId,
+        key_id1: &IDkgMasterPublicKeyId,
+        key_id2: &IDkgMasterPublicKeyId,
     ) {
         // 4 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id1, [1, 3, 4, 5]);
@@ -374,7 +379,7 @@ mod tests {
         test_matched_pre_signatures_arent_matched_again(&schnorr_key_id(2));
     }
 
-    fn test_matched_pre_signatures_arent_matched_again(key_id: &MasterPublicKeyId) {
+    fn test_matched_pre_signatures_arent_matched_again(key_id: &IDkgMasterPublicKeyId) {
         // 4 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id, 1..5);
         let height = Height::from(1);
@@ -396,7 +401,7 @@ mod tests {
         test_matched_pre_signatures_arent_overwritten(&schnorr_key_id(2));
     }
 
-    fn test_matched_pre_signatures_arent_overwritten(key_id: &MasterPublicKeyId) {
+    fn test_matched_pre_signatures_arent_overwritten(key_id: &IDkgMasterPublicKeyId) {
         // 4 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id, 3..7);
         let height = Height::from(2);
@@ -417,7 +422,7 @@ mod tests {
         test_match_pre_signatures_doesnt_update_height(&schnorr_key_id(2));
     }
 
-    fn test_match_pre_signatures_doesnt_update_height(key_id: &MasterPublicKeyId) {
+    fn test_match_pre_signatures_doesnt_update_height(key_id: &IDkgMasterPublicKeyId) {
         // 2 pre-signatures for key 1
         let pre_sigs = setup_pre_signatures(key_id, 5..=6);
         // 2 contexts for key 1, the first was already matched to the first pre-signature

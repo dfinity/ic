@@ -39,7 +39,7 @@ use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_st
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::{AvailablePreSignatures, ConsensusResponse},
-    consensus::idkg::PreSigId,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::IngressStatus,
     messages::{
         CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
@@ -5859,7 +5859,7 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
 #[test]
 fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
-    let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
+    let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
     let mut test = SchedulerTestBuilder::new()
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
@@ -5959,6 +5959,7 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .iter()
         .cloned()
         .map(MasterPublicKeyId::Ecdsa)
+        .flat_map(IDkgMasterPublicKeyId::try_from)
         .collect();
     let mut test = SchedulerTestBuilder::new()
         .with_chain_keys(

@@ -525,7 +525,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
     log: &ReplicaLogger,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
+    BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
 ) {
     let Some(idkg_payload) = current_block.payload.as_ref().as_idkg() else {
         return (BTreeMap::new(), BTreeMap::new());
@@ -554,7 +554,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     public_keys.insert(key_id.clone().into(), public_key);
                 }
                 pre_signatures.insert(
-                    key_id.clone().into(),
+                    key_id.clone(),
                     AvailablePreSignatures {
                         key_transcript,
                         pre_signatures: BTreeMap::new(),

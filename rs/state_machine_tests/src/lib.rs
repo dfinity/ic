@@ -899,7 +899,7 @@ pub struct StateMachine {
     time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
-    ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
+    ni_dkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -1940,7 +1940,7 @@ impl StateMachine {
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
 
-                    ni_dkg_ids.insert(key_id.clone(), nidkg_id);
+                    ni_dkg_ids.insert(NiDkgMasterPublicKeyId::VetKd(id.clone()), nidkg_id);
 
                     (public_key, private_key)
                 }
