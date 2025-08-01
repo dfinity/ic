@@ -208,7 +208,6 @@ fn main() {
             deployment_environment: Some(DeploymentEnvironment::Testnet),
             elasticsearch_hosts: None,
             elasticsearch_tags: None,
-            use_nns_public_key: Some(true),
             nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
             enable_trusted_execution_environment: None,
             use_node_operator_private_key: Some(true),

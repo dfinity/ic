@@ -235,7 +235,7 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
         .expect("No HTTP gateway found");
     let ic_gateway_url = ic_gateway.get_public_url();
 
-    let nns_public_key =
+    let nns_public_key_override =
         std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
 
     setup_nested_vms(
@@ -244,7 +244,7 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
         &farm,
         &group_name,
         &ic_gateway_url,
-        &nns_public_key,
+        &nns_public_key_override,
     )
     .expect("Unable to setup nested VMs.");
 }
@@ -277,7 +277,7 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
 
     // Use dummy values for IC Gateway URL and NNS public key
     let dummy_ic_gateway_url = url::Url::parse("http://localhost:8080").unwrap();
-    let dummy_nns_public_key = "dummy_public_key_for_recovery_test";
+    let dummy_nns_public_key_override = "dummy_public_key_for_recovery_test";
 
     setup_nested_vms(
         &nodes,
@@ -285,7 +285,7 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
         &farm,
         &group_name,
         &dummy_ic_gateway_url,
-        dummy_nns_public_key,
+        dummy_nns_public_key_override,
     )
     .expect("Unable to setup nested VMs with minimal config.");
 

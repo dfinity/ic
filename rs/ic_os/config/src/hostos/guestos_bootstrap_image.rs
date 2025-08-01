@@ -24,8 +24,8 @@ pub struct BootstrapOptions {
     /// IC_PREP_OUT_PATH/ic_registry_local_store
     pub ic_registry_local_store: Option<PathBuf>,
 
-    /// NNS public key file.
-    pub nns_public_key: Option<PathBuf>,
+    /// NNS public key override file.
+    pub nns_public_key_override: Option<PathBuf>,
 
     /// Should point to a directory with files containing the authorized ssh
     /// keys for specific user accounts on the machine. The name of the
@@ -107,9 +107,15 @@ impl BootstrapOptions {
                 .context("Failed to write guestos config to config.json")?;
         }
 
-        if let Some(nns_public_key) = &self.nns_public_key {
+        if let Some(nns_public_key_override) = &self.nns_public_key_override {
             fs::copy(
-                nns_public_key,
+                nns_public_key_override,
+                bootstrap_dir.path().join("nns_public_key_override.pem"),
+            )
+            .context("Failed to copy NNS public key override")?;
+            // NODE-1653: remove once rolled out to all nodes. Exists to pass downgrade tests
+            fs::copy(
+                nns_public_key_override,
                 bootstrap_dir.path().join("nns_public_key.pem"),
             )
             .context("Failed to copy NNS public key")?;
@@ -261,8 +267,8 @@ mod tests {
             trusted_execution_environment_config: None,
         };
 
-        let nns_key_path = test_files_dir.join("nns.pem");
-        fs::write(&nns_key_path, "test_nns_key")?;
+        let nns_key_override_path = test_files_dir.join("nns_public_key_override.pem");
+        fs::write(&nns_key_override_path, "test_nns_key")?;
 
         let node_key_path = test_files_dir.join("node.pem");
         fs::write(&node_key_path, "test_node_key")?;
@@ -286,7 +292,7 @@ mod tests {
         // Create full configuration
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config.clone()),
-            nns_public_key: Some(nns_key_path),
+            nns_public_key_override: Some(nns_key_override_path),
             node_operator_private_key: Some(node_key_path),
             #[cfg(feature = "dev")]
             accounts_ssh_authorized_keys: Some(ssh_keys_dir),
@@ -312,7 +318,7 @@ mod tests {
             serde_json::to_string_pretty(&guestos_config)?
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("nns_public_key.pem"))?,
+            fs::read_to_string(extract_dir.join("nns_public_key_override.pem"))?,
             "test_nns_key"
         );
         assert_eq!(

@@ -150,7 +150,7 @@ def _custom_partitions(mode):
     pkg_tar(
         name = "data_tar",
         srcs = [
-            Label("//ic-os/setupos:data/nns_public_key.pem"),
+            Label("//ic-os/setupos:data/nns_public_key_override.pem"),
             ":deployment.json",
             ":guest-os.img.tar.zst",
             ":host-os.img.tar.zst",
