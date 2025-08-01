@@ -197,7 +197,7 @@ pub fn main() -> Result<()> {
                     elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
                     elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
                 },
-                use_nns_public_key: None,
+                use_nns_public_key: false,
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),

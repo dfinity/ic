@@ -183,7 +183,7 @@ mod tests {
                     elasticsearch_hosts: None,
                     elasticsearch_tags: None,
                 },
-                use_nns_public_key: None,
+                use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

@@ -13,7 +13,7 @@
 //!
 //! - **Adding Enum Variants (Forward Compatibility)**: When adding new variants to an enum, ensure older versions can handle unknown variants gracefully by using `#[serde(other)]` on a fallback variant.
 //!
-//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
+//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be deprecated, and code that reads the value must be removed. In a second step, after the first step has rolled out to all nodes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 //!
@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.5.0";
+pub const CONFIG_VERSION: &str = "1.4.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -114,8 +114,8 @@ pub struct ICOSSettings {
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
     pub logging: Logging,
-    // TODO: remove field after next HostOS/GuestOS upgrade
-    pub use_nns_public_key: Option<bool>,
+    // TODO: remove field after next HostOS/GuestOS upgrade reaches NNS
+    pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
@@ -343,7 +343,7 @@ mod tests {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
                 "logging": {},
-                "use_nns_public_key": null,
+                "use_nns_public_key": false,
                 "nns_urls": [],
                 "use_node_operator_private_key": false,
                 "use_ssh_authorized_keys": false,
@@ -381,7 +381,7 @@ mod tests {
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Logging::default(),
-                use_nns_public_key: None,
+                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

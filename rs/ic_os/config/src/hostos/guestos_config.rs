@@ -120,7 +120,7 @@ mod tests {
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Default::default(),
-                use_nns_public_key: None,
+                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

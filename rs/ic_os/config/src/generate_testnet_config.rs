@@ -192,7 +192,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         mgmt_mac,
         deployment_environment,
         logging,
-        use_nns_public_key: None,
+        use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key,
         enable_trusted_execution_environment,
