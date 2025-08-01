@@ -52,7 +52,7 @@ function copy_config_files() {
         cp /data/nns_public_key_override.pem /media/
         log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key override to hostOS config partition."
     else
-        log_and_halt_installation_on_error "1" "nns_public_key_override.pem does not exist."
+        echo >&2 "Warning: nns_public_key_override.pem does not exist, skipping."
     fi
 
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
