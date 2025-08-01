@@ -1722,7 +1722,7 @@ mod tests {
                 dkg: DkgSummary::fake(),
                 idkg: Some(summary.clone()),
             });
-            let b: Block = Block::new(
+            let b = Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(ic_types::crypto::crypto_hash, pl),
                 Height::from(123),
@@ -1737,8 +1737,7 @@ mod tests {
 
             // Convert to proto format and back
             let mut summary_proto: pb::IDkgPayload = (&summary).into();
-            let summary_from_proto: IDkgPayload =
-                (&summary_proto).try_into().unwrap();
+            let summary_from_proto: IDkgPayload = (&summary_proto).try_into().unwrap();
             assert_eq!(summary, summary_from_proto);
 
             // Check signature_agreement upgrade compatibility
@@ -1748,8 +1747,7 @@ mod tests {
                     pseudo_random_id: vec![4; 32],
                     unreported: None,
                 });
-            let summary_from_proto: idkg::IDkgPayload =
-                (&summary_proto).try_into().unwrap();
+            let summary_from_proto: idkg::IDkgPayload = (&summary_proto).try_into().unwrap();
             // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
             assert!(summary_from_proto
                 .signature_agreements
