@@ -24,7 +24,7 @@ use icp_ledger::{
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
-    account::Account,
+    account::{Account, Subaccount},
     transfer::{Memo, TransferArg, TransferError},
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -2162,6 +2162,106 @@ fn test_tip_of_chain() {
         .bytes();
     let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode TipOfChainRes");
     assert_eq!(tip, tip_candid);
+}
+
+#[test]
+fn test_remove_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    const SUBACCOUNT: [u8; 32] = [1u8; 32];
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+    let p4 = PrincipalId::new_user_test_id(4);
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (
+                Account {
+                    owner: p1.0,
+                    subaccount: Some(SUBACCOUNT),
+                },
+                INITIAL_BALANCE,
+            ),
+        ],
+    );
+
+    let approve = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let approve_args = ApproveArgs {
+            from_subaccount,
+            spender: spender.0.into(),
+            amount: Nat::from(APPROVE_AMOUNT),
+            fee: None,
+            memo: None,
+            expires_at: None,
+            expected_allowance: None,
+            created_at_time: None,
+        };
+        let response = env.execute_ingress_as(
+            p1,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    approve(None, p2);
+    approve(Some(SUBACCOUNT), p3);
+    approve(None, p4);
+
+    let verify_allowance =
+        |from_subaccount: Option<Subaccount>, spender: PrincipalId, allowance: u64| {
+            let allowance_args = AllowanceArgs {
+                account: Account {
+                    owner: p1.0,
+                    subaccount: from_subaccount,
+                },
+                spender: Account {
+                    owner: spender.0,
+                    subaccount: None,
+                },
+            };
+
+            let response = env.execute_ingress_as(
+                p1,
+                canister_id,
+                "icrc2_allowance",
+                Encode!(&allowance_args).unwrap(),
+            );
+
+            let result = Decode!(
+                &response.expect("failed to get allowance").bytes(),
+                Allowance
+            )
+            .expect("failed to decode allowance response");
+            assert_eq!(result.allowance.0.to_u64(), Some(allowance));
+        };
+
+    verify_allowance(None, p2, APPROVE_AMOUNT);
+    verify_allowance(Some(SUBACCOUNT), p3, APPROVE_AMOUNT);
+    verify_allowance(None, p4, APPROVE_AMOUNT);
+
+    let remove_approval = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let spender_address = AccountIdentifier::new(spender, None).to_address();
+        let response = env.execute_ingress_as(
+            p1,
+            canister_id,
+            "remove_approval",
+            Encode!(&from_subaccount, &spender_address).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    remove_approval(None, p2);
+    remove_approval(Some(SUBACCOUNT), p3);
+
+    verify_allowance(None, p2, 0);
+    verify_allowance(Some(SUBACCOUNT), p3, 0);
+    // The last one was not removed
+    verify_allowance(None, p4, APPROVE_AMOUNT);
 }
 
 mod metrics {

@@ -85,7 +85,8 @@ fn bench_endpoints() -> BenchResult {
                     expected_allowance: None,
                     created_at_time: Some(start_time + i + NUM_OPERATIONS),
                 };
-                let result = icrc2_approve_not_async(Principal::from_slice(&approver_id), arg);
+                let result =
+                    icrc2_approve_not_async(Principal::from_slice(&approver_id), arg, None);
                 assert!(result.is_ok());
             }
             assert_eq!(balances_len(), NUM_OPERATIONS + 1);

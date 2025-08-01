@@ -554,6 +554,8 @@ service: (LedgerCanisterPayload) -> {
     icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
     icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
 
+    remove_approval : (opt SubAccount, AccountIdentifier) -> (ApproveResult);
+
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
