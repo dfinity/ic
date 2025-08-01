@@ -12,6 +12,8 @@ NNS Root now returns the field `memory_metrics` from the `canister_status` API.
 
 ## Changed
 
+## Changed
+
 ## Deprecated
 
 ## Removed
