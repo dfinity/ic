@@ -1,7 +1,7 @@
 use super::{acquire, acquire_for};
 
 use futures::join;
-use std::{cell::RefCell, collections::HashMap, time::Duration};
+use std::{cell::RefCell, collections::BTreeMap, time::Duration};
 use tokio::time::sleep;
 
 // Example of how to use acquire.
@@ -69,7 +69,7 @@ enum FileOperation {
 // Example of how to use acquire_for with named locks for file operations.
 async fn try_file_operation(file_path: String, operation: FileOperation) -> bool {
     thread_local! {
-        static FILE_LOCKS: RefCell<HashMap<String, Option<FileOperation>>> = RefCell::new(HashMap::new());
+        static FILE_LOCKS: RefCell<BTreeMap<String, Option<FileOperation>>> = RefCell::new(BTreeMap::new());
     }
     let release_on_drop = acquire_for(&FILE_LOCKS, file_path.clone(), operation);
     if let Err(existing_operation) = release_on_drop {

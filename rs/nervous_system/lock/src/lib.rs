@@ -1,7 +1,7 @@
 //! This makes it easy to implement "fail if another async call is in progress".
 //!
 //! See tests.rs for an example of how to use this.
-use std::{cell::RefCell, collections::HashMap, fmt::Debug, hash::Hash, thread::LocalKey};
+use std::{cell::RefCell, collections::BTreeMap, fmt::Debug, thread::LocalKey};
 
 /// Internal trait for abstracting over different lock storage types.
 /// This is an implementation detail and should not be used directly.
@@ -14,7 +14,7 @@ pub trait LockStorage<V> {
 }
 
 // Implementation for single-lock storage (existing behavior)
-impl<V: Debug + Copy> LockStorage<V> for &'static LocalKey<RefCell<Option<V>>> {
+impl<V: Copy> LockStorage<V> for &'static LocalKey<RefCell<Option<V>>> {
     type Key = ();
     type Error = V;
 
@@ -35,8 +35,8 @@ impl<V: Debug + Copy> LockStorage<V> for &'static LocalKey<RefCell<Option<V>>> {
 }
 
 // Implementation for map-based storage (new functionality)
-impl<K: Hash + Eq + Clone + Debug + 'static, V: Debug + Copy> LockStorage<V>
-    for &'static LocalKey<RefCell<HashMap<K, Option<V>>>>
+impl<K: Ord + Clone, V: Copy> LockStorage<V>
+    for &'static LocalKey<RefCell<BTreeMap<K, Option<V>>>>
 {
     type Key = K;
     type Error = V;
@@ -62,7 +62,7 @@ impl<K: Hash + Eq + Clone + Debug + 'static, V: Debug + Copy> LockStorage<V>
 // Type aliases for cleaner public API
 pub type ResourceGuard<V> = GenericResourceGuard<&'static LocalKey<RefCell<Option<V>>>, V>;
 pub type NamedResourceGuard<K, V> =
-    GenericResourceGuard<&'static LocalKey<RefCell<HashMap<K, Option<V>>>>, V>;
+    GenericResourceGuard<&'static LocalKey<RefCell<BTreeMap<K, Option<V>>>>, V>;
 
 /// If current_resource_flag is None (the happy case), this does a few things:
 ///
@@ -86,13 +86,13 @@ pub fn acquire<ResourceFlag: Debug + Copy + 'static>(
 ///
 /// Returns immediately; does not wait for others to release.
 pub fn acquire_for<K, V>(
-    lock_map: &'static LocalKey<RefCell<HashMap<K, Option<V>>>>,
+    lock_map: &'static LocalKey<RefCell<BTreeMap<K, Option<V>>>>,
     lock_name: K,
     lock_object: V,
 ) -> Result<NamedResourceGuard<K, V>, V>
 where
-    K: Hash + Eq + Clone + Debug + 'static,
-    V: Debug + Copy + 'static,
+    K: Ord + Clone,
+    V: Copy,
 {
     GenericResourceGuard::new(lock_map, lock_name, lock_object)
 }
@@ -101,7 +101,7 @@ where
 pub struct GenericResourceGuard<S, V>
 where
     S: LockStorage<V>,
-    V: Debug + Copy + 'static,
+    V: Copy + 'static,
 {
     storage: Option<S>,
     key: S::Key,
@@ -110,7 +110,7 @@ where
 impl<S, V> GenericResourceGuard<S, V>
 where
     S: LockStorage<V>,
-    V: Debug + Copy + 'static,
+    V: Copy + 'static,
 {
     fn new(storage: S, key: S::Key, value: V) -> Result<Self, S::Error> {
         storage.try_acquire(key.clone(), value)?;
@@ -124,7 +124,7 @@ where
 impl<S, V> Drop for GenericResourceGuard<S, V>
 where
     S: LockStorage<V>,
-    V: Debug + Copy + 'static,
+    V: Copy + 'static,
 {
     fn drop(&mut self) {
         if let Some(storage) = self.storage.take() {
