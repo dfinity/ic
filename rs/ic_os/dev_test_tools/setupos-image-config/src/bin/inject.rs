@@ -165,6 +165,10 @@ async fn main() -> Result<(), Error> {
         data.write_file(nns_key.path(), Path::new("/nns_public_key_override.pem"))
             .await
             .context("failed to copy nns key file")?;
+        // NODE-1653: Remove once rolled out to all nodes. Exists to pass "latest_release" nested tests.
+        data.write_file(nns_key.path(), Path::new("/nns_public_key.pem"))
+            .await
+            .context("failed to copy nns key file")?;
 
         // Print updated NNS key
         println!("Updated nns_public_key_override.pem:\n---");
