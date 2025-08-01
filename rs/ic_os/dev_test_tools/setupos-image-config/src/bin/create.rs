@@ -97,7 +97,9 @@ async fn main() -> Result<(), Error> {
     // Write NNS key override
     if let Some(public_key) = cli.deployment.nns_public_key_override {
         let mut nns_key = fs::File::create(data_dir.join("nns_public_key_override.pem"))?;
-
+        nns_key.write_all(public_key.as_bytes())?;
+        // NODE-1653: Remove once rolled out to all nodes. Exists to pass "latest_release" nested tests.
+        let mut nns_key = fs::File::create(data_dir.join("nns_public_key.pem"))?;
         nns_key.write_all(public_key.as_bytes())?;
     }
 
