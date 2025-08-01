@@ -91,8 +91,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
                 chain_key_config: None,
-                chain_key_signing_enable: None,
-                chain_key_signing_disable: None,
+                chain_key_enable: None,
+                chain_key_disable: None,
                 // Deprecated section follows
                 max_artifact_streams_per_peer: None,
                 max_chunk_wait_ms: None,
