@@ -6401,6 +6401,7 @@ dependencies = [
  "slog-async",
  "slog-term",
  "tokio",
+ "tokio-util",
  "url",
 ]
 
@@ -8995,6 +8996,7 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -12430,6 +12432,7 @@ dependencies = [
  "clap 4.5.27",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-interfaces-registry",
  "ic-logger",
@@ -12449,6 +12452,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tokio-util",
  "url",
 ]
 
@@ -18207,6 +18211,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
+ "tokio-util",
  "url",
 ]
 

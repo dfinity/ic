@@ -5,11 +5,11 @@
 use async_trait::async_trait;
 use std::io::BufRead;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use tokio::sync::watch::Receiver;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
+use tokio_util::sync::CancellationToken;
 
 /// A simplest HTTP dashboard that listens to a port and responds to GET
 /// requests on a single thread.
@@ -17,11 +17,10 @@ use tokio::{
 pub trait Dashboard {
     /// Starts the HTTP server and monitors the exit signal. Exits on whenever the exit signal is
     /// changed.
-    async fn run(&self, mut exit_signal: Receiver<bool>) {
-        tokio::select! {
-            _ = self.serve_requests() => {}
-            _ = exit_signal.changed() => {}
-        };
+    async fn run(&self, cancellation_token: CancellationToken) {
+        cancellation_token
+            .run_until_cancelled(self.serve_requests())
+            .await;
     }
 
     /// Starts listening on the port and calls handle_connection on each
