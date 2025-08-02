@@ -11758,6 +11758,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
  "lifeline",
@@ -11770,6 +11771,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
+ "xrc-mock",
 ]
 
 [[package]]
@@ -17541,6 +17543,8 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-nns-data-provider",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-system-test-driver",
