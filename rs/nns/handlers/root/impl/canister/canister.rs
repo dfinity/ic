@@ -1,4 +1,4 @@
-use async_trait::async_trait;
+// No longer needed - removed async_trait import
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
@@ -15,15 +15,13 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
     change_canister::{
-        change_canister, AddCanisterRequest, CanisterAction, ChangeCanisterRequest,
+        AddCanisterRequest, CanisterAction, ChangeCanisterRequest, ChangeCanisterTask,
         StopOrStartCanisterRequest,
     },
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::CdkRuntime;
-use ic_nervous_system_timer_task::{
-    add_to_queue, start_queue_processor, timer_task_job_queue, JobProcessor, JobProcessorError,
-};
+use ic_nervous_system_timer_task::RecurringAsyncTask;
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
     types::CallCanisterProposal,
@@ -41,7 +39,6 @@ use ic_nns_handler_root_interface::{
     UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
-use std::time::Duration;
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
@@ -137,38 +134,6 @@ fn get_pending_root_proposals_to_upgrade_governance_canister() -> Vec<Governance
     ic_nns_handler_root::root_proposals::get_pending_root_proposals_to_upgrade_governance_canister()
 }
 
-// Create job queues using the macro
-timer_task_job_queue!(CHANGE_CANISTER_REQUEST_QUEUE, ChangeCanisterRequest);
-
-struct ChangeCanisterRequestProcessor;
-
-// Implement job processors
-#[async_trait]
-impl JobProcessor<ChangeCanisterRequest> for ChangeCanisterRequestProcessor {
-    async fn process(
-        &self,
-        request: ChangeCanisterRequest,
-    ) -> Result<(), JobProcessorError<ChangeCanisterRequest>> {
-        // TODO DO NOT MERGE - we need to add the locking feature here.
-        let change_canister_result = change_canister::<CdkRuntime>(request.clone()).await;
-        match change_canister_result {
-            Ok(()) => {
-                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
-                Ok(())
-            }
-            Err(err) => Err(JobProcessorError::FailedProcessing(
-                request,
-                format!("Canister change failed: {err}"),
-            )),
-        }
-    }
-
-    fn handle_failure(&self, _: ChangeCanisterRequest, error: String) {
-        // Error handling
-        println!("{LOG_PREFIX}change_canister: {error} ");
-    }
-}
-
 /// Executes a proposal to change an NNS canister.
 #[update]
 fn change_nns_canister(request: ChangeCanisterRequest) {
@@ -178,15 +143,10 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     // to it -- and therefore does not prevent the governance canister from being
     // stopped.
     //
-    // We therefore use an async job queue to process the request.
-    add_to_queue(&CHANGE_CANISTER_REQUEST_QUEUE, request);
-    start_queue_processor(
-        &CHANGE_CANISTER_REQUEST_QUEUE,
-        Duration::from_secs(0),
-        Duration::from_secs(10),
-        ChangeCanisterRequestProcessor,
-        &TIMER_TASKS_METRICS_REGISTRY,
-    );
+    // We therefore use a RecurringAsyncTask to process the request with proper
+    // per-canister locking and retry logic.
+    let task = ChangeCanisterTask::new(request);
+    task.schedule(&TIMER_TASKS_METRICS_REGISTRY);
 }
 
 #[update]

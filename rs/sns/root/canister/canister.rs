@@ -17,15 +17,9 @@ use ic_nervous_system_common::{
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
-use ic_nervous_system_root::{
-    change_canister::{change_canister as execute_change_canister, ChangeCanisterRequest},
-    LOG_PREFIX,
-};
+use ic_nervous_system_root::change_canister::{ChangeCanisterRequest, ChangeCanisterTask};
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nervous_system_timer_task::{
-    add_to_queue, start_queue_processor, timer_task_job_queue, JobProcessor, JobProcessorError,
-    TimerTaskMetricsRegistry,
-};
+use ic_nervous_system_timer_task::{RecurringAsyncTask, TimerTaskMetricsRegistry};
 use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
     logs::{ERROR, INFO},
@@ -63,9 +57,6 @@ thread_local! {
     // timer task queue to function correctly.
     static TIMER_TASKS_METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
 }
-
-// Create job queues using the macro
-timer_task_job_queue!(CHANGE_CANISTER_REQUEST_QUEUE, ChangeCanisterRequest);
 
 struct CanisterEnvironment {}
 
@@ -117,35 +108,7 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
     RealLedgerCanisterClient::new(ledger_canister_id)
 }
 
-struct ChangeCanisterRequestProcessor;
-
-#[async_trait]
-impl JobProcessor<ChangeCanisterRequest> for ChangeCanisterRequestProcessor {
-    async fn process(
-        &self,
-        request: ChangeCanisterRequest,
-    ) -> Result<(), JobProcessorError<ChangeCanisterRequest>> {
-        let change_canister_result = execute_change_canister::<CdkRuntime>(request.clone()).await;
-        match change_canister_result {
-            Ok(()) => {
-                log!(
-                    INFO,
-                    "{}change_canister: Canister change completed successfully.",
-                    LOG_PREFIX
-                );
-                Ok(())
-            }
-            Err(err) => Err(JobProcessorError::FailedProcessing(
-                request,
-                format!("Canister change failed: {err}"),
-            )),
-        }
-    }
-
-    fn handle_failure(&self, _: ChangeCanisterRequest, error: String) {
-        log!(ERROR, "{}change_canister: {error}", LOG_PREFIX);
-    }
-}
+// No longer needed - replaced with RecurringAsyncTask approach
 
 #[candid_method(init)]
 #[init]
@@ -264,15 +227,10 @@ fn change_canister(request: ChangeCanisterRequest) {
     // to it -- and therefore does not prevent the governance canister from being
     // stopped.
     //
-    // We therefore use an async job queue to process the request.
-    add_to_queue(&CHANGE_CANISTER_REQUEST_QUEUE, request);
-    start_queue_processor(
-        &CHANGE_CANISTER_REQUEST_QUEUE,
-        Duration::from_secs(0),
-        Duration::from_secs(10),
-        ChangeCanisterRequestProcessor,
-        &TIMER_TASKS_METRICS_REGISTRY,
-    );
+    // We therefore use a RecurringAsyncTask to process the request with proper
+    // per-canister locking and retry logic.
+    let task = ChangeCanisterTask::new(request);
+    task.schedule(&TIMER_TASKS_METRICS_REGISTRY);
 }
 
 #[candid_method(update)]
