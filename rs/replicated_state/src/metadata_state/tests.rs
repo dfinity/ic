@@ -15,6 +15,9 @@ use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, IC_00,
 };
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::state::queues::v1 as pb_queues;
+use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
