@@ -1206,7 +1206,14 @@ pub struct QueryStats {
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     status : variant { running; stopping; stopped };
+///     status : variant {
+///         running;
+///         stopping;
+///         stopped : record {
+///             ready_for_migration : bool;
+///         };
+///     };
+///     version : nat64;
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
 ///     controller: principal;
@@ -1234,7 +1241,8 @@ pub struct QueryStats {
 /// })`
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
-    status: CanisterStatusType,
+    status: CanisterStatusTypeExt,
+    version: u64,
     module_hash: Option<Vec<u8>>,
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
@@ -1264,7 +1272,8 @@ pub struct MemoryMetrics {
 impl CanisterStatusResultV2 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        status: CanisterStatusType,
+        status: CanisterStatusTypeExt,
+        version: u64,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1295,6 +1304,7 @@ impl CanisterStatusResultV2 {
     ) -> Self {
         Self {
             status,
+            version,
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
@@ -1336,8 +1346,12 @@ impl CanisterStatusResultV2 {
         }
     }
 
-    pub fn status(&self) -> CanisterStatusType {
+    pub fn status(&self) -> CanisterStatusTypeExt {
         self.status.clone()
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
     }
 
     pub fn module_hash(&self) -> Option<Vec<u8>> {
@@ -1450,6 +1464,29 @@ impl fmt::Display for CanisterStatusType {
             CanisterStatusType::Running => write!(f, "running"),
             CanisterStatusType::Stopping => write!(f, "stopping"),
             CanisterStatusType::Stopped => write!(f, "stopped"),
+        }
+    }
+}
+
+/// Indicates whether the canister is running, stopping, or stopped.
+/// In the stopped case, also contains a flag indicating whether the
+/// canister is ready for migration.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum CanisterStatusTypeExt {
+    #[serde(rename = "running")]
+    Running,
+    #[serde(rename = "stopping")]
+    Stopping,
+    #[serde(rename = "stopped")]
+    Stopped { ready_for_migration: bool },
+}
+
+impl From<CanisterStatusTypeExt> for CanisterStatusType {
+    fn from(value: CanisterStatusTypeExt) -> Self {
+        match value {
+            CanisterStatusTypeExt::Running => CanisterStatusType::Running,
+            CanisterStatusTypeExt::Stopping => CanisterStatusType::Stopping,
+            CanisterStatusTypeExt::Stopped { .. } => CanisterStatusType::Stopped,
         }
     }
 }

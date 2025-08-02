@@ -296,14 +296,20 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
 
     let status = get_root_canister_status(&state_machine).unwrap();
     // Assert root canister is still in a stopping state
-    assert_eq!(status.status(), CanisterStatusType::Stopping);
+    assert_eq!(
+        CanisterStatusType::from(status.status()),
+        CanisterStatusType::Stopping
+    );
     // After 60 seconds, canister is still trying to stop...
     state_machine.advance_time(Duration::from_secs(60));
     state_machine.tick();
 
     let status = get_root_canister_status(&state_machine).unwrap();
     // Assert root canister is still in a stopping state
-    assert_eq!(status.status(), CanisterStatusType::Stopping);
+    assert_eq!(
+        CanisterStatusType::from(status.status()),
+        CanisterStatusType::Stopping
+    );
 
     state_machine.advance_time(Duration::from_secs(241));
     state_machine.tick();
@@ -313,5 +319,8 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
     // Now it should be running
     let status = get_root_canister_status(&state_machine).unwrap();
     // Assert root canister is still in a stopping state
-    assert_eq!(status.status(), CanisterStatusType::Running);
+    assert_eq!(
+        CanisterStatusType::from(status.status()),
+        CanisterStatusType::Running
+    );
 }

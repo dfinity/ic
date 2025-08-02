@@ -101,7 +101,10 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     let stop_msg_id = ckerc20
         .env
         .stop_canister_non_blocking(ckerc20.cketh.minter_id);
-    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopping);
+    assert_eq!(
+        CanisterStatusType::from(ckerc20.cketh.minter_status()),
+        CanisterStatusType::Stopping
+    );
 
     ckerc20.orchestrator = ckerc20
         .orchestrator
@@ -118,12 +121,18 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     ckerc20.cketh.stop_ongoing_https_outcalls();
     let stop_res = ckerc20.env.await_ingress(stop_msg_id, 100);
     assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
-    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopped);
+    assert_eq!(
+        CanisterStatusType::from(ckerc20.cketh.minter_status()),
+        CanisterStatusType::Stopped
+    );
     ckerc20.env.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
 
     ckerc20.cketh.start_minter();
-    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Running);
+    assert_eq!(
+        CanisterStatusType::from(ckerc20.cketh.minter_status()),
+        CanisterStatusType::Running
+    );
     ckerc20.env.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
 

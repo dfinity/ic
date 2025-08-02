@@ -672,7 +672,10 @@ mod upgrade {
                 status.module_hash(),
                 Some(embedded_ledger_wasm_v2.hash().as_ref().to_vec())
             );
-            assert_eq!(status.status(), CanisterStatusType::Running);
+            assert_eq!(
+                CanisterStatusType::from(status.status()),
+                CanisterStatusType::Running
+            );
         }
     }
 

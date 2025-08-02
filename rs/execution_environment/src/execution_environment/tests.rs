@@ -4,12 +4,12 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
-    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
-    IC_00,
+    CanisterStatusType, CanisterStatusTypeExt, ClearChunkStoreArgs, DerivationPath, EcdsaCurve,
+    EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2,
+    MasterPublicKeyId, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -772,7 +772,7 @@ fn get_running_canister_status_from_another_canister() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
-    assert_eq!(csr.status(), CanisterStatusType::Running);
+    assert_eq!(csr.status(), CanisterStatusTypeExt::Running);
     assert_eq!(csr.controllers(), vec![controller.get()]);
     assert_eq!(
         Cycles::new(csr.cycles()),
@@ -851,7 +851,12 @@ fn get_stopped_canister_status_from_another_canister() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
-    assert_eq!(csr.status(), CanisterStatusType::Stopped);
+    assert_eq!(
+        csr.status(),
+        CanisterStatusTypeExt::Stopped {
+            ready_for_migration: true
+        }
+    );
 }
 
 #[test]
@@ -872,7 +877,7 @@ fn get_stopping_canister_status_from_another_canister() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
-    assert_eq!(csr.status(), CanisterStatusType::Stopping);
+    assert_eq!(csr.status(), CanisterStatusTypeExt::Stopping);
 }
 
 #[test]
