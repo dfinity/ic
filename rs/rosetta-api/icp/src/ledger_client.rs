@@ -1,6 +1,8 @@
+pub mod disburse_maturity_response;
 mod handle_add_hotkey;
 mod handle_change_auto_stake_maturity;
 mod handle_disburse;
+mod handle_disburse_maturity;
 mod handle_follow;
 mod handle_list_neurons;
 mod handle_neuron_info;
@@ -58,10 +60,10 @@ use crate::{
     convert,
     errors::{ApiError, Details, ICError},
     ledger_client::{
-        handle_add_hotkey::handle_add_hotkey,
+        disburse_maturity_response::DisburseMaturityResponse, handle_add_hotkey::handle_add_hotkey,
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
-        handle_disburse::handle_disburse, handle_follow::handle_follow,
-        handle_neuron_info::handle_neuron_info,
+        handle_disburse::handle_disburse, handle_disburse_maturity::handle_disburse_maturity,
+        handle_follow::handle_follow, handle_neuron_info::handle_neuron_info,
         handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
@@ -122,6 +124,7 @@ pub enum OperationOutput {
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
     ListNeuronsResponse(ListNeuronsResponse),
+    DisburseMaturityResponse(DisburseMaturityResponse),
 }
 
 impl TryFrom<ObjectMap> for OperationOutput {
@@ -727,6 +730,9 @@ impl LedgerClient {
                     OperationOutput::ListNeuronsResponse(response) => {
                         result.response = Some(ObjectMap::try_from(response)?)
                     }
+                    OperationOutput::DisburseMaturityResponse(response) => {
+                        result.response = Some(ObjectMap::try_from(response)?)
+                    }
                 }
                 result.status = Status::Completed;
                 Ok(())
@@ -822,6 +828,7 @@ impl LedgerClient {
         match request_type.clone() {
             RequestType::AddHotKey { .. } => handle_add_hotkey(bytes),
             RequestType::Disburse { .. } => handle_disburse(bytes),
+            RequestType::DisburseMaturity { .. } => handle_disburse_maturity(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
