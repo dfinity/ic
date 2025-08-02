@@ -6,6 +6,7 @@ use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     subnet::v1::{SubnetListRecord, SubnetRecord},
@@ -74,8 +75,7 @@ impl Registry {
                                 panic!("{LOG_PREFIX}Release package hash has to be provided")
                             }),
                         release_package_urls: payload.release_package_urls,
-                        guest_launch_measurement_sha256_hex: payload
-                            .guest_launch_measurement_sha256_hex,
+                        guest_launch_measurements: payload.guest_launch_measurements,
                     }
                     .encode_to_vec(),
                 },
@@ -208,8 +208,8 @@ pub struct ReviseElectedGuestosVersionsPayload {
     /// package that corresponds to this version
     pub release_package_urls: Vec<String>,
 
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    pub guest_launch_measurement_sha256_hex: Option<String>,
+    /// The SEV-SNP measurements that belong to this release
+    pub guest_launch_measurements: Option<GuestLaunchMeasurements>,
 
     /// Version IDs. These can be anything, they have no semantics.
     pub replica_versions_to_unelect: Vec<String>,

@@ -109,11 +109,14 @@ pub fn test(env: TestEnv) {
     // Bless target version
     let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
+    let guest_launch_measurements =
+        get_guestos_launch_measurements().expect("Failed to get guest launch measurements");
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
         &log,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);

@@ -88,6 +88,7 @@ fn test(env: TestEnv) {
         &target_version,
         release_package_urls,
         get_guestos_update_img_sha256().expect("no SHA256 hash"),
+        get_guestos_launch_measurements().expect("no launch measurements"),
         &logger,
     ));
 

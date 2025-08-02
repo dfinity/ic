@@ -48,11 +48,13 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     // Bless target version
     let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
+    let guest_launch_measurements = get_guestos_launch_measurements().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &target_version,
         &logger,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed target version");

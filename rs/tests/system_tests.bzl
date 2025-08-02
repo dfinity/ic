@@ -328,6 +328,7 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
+        # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_guestos_recovery_dev_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
@@ -338,14 +339,17 @@ def system_test(
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos_malicious + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos_malicious + "update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = _guestos_malicious + "launch-measurements.json"
 
     if uses_guestos_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos + "launch-measurements.json"
 
     if uses_guestos_test_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img-test.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos + "launch-measurements-test.json"
 
     if uses_guestos_mainnet_update:
         # NOTE: Uses the "NNS" subnet to determine mainnet version
@@ -353,9 +357,12 @@ def system_test(
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
+        # _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
+
     if uses_guestos_malicious_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos_malicious + "update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos_malicious + "launch-measurements-test.json"
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
