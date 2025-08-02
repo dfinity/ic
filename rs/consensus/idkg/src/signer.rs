@@ -225,7 +225,7 @@ impl ThresholdSignerImpl {
             .map(|(id, c)| {
                 let inputs = build_signature_inputs(*id, c, block_reader).map_err(|err| if err.is_fatal() {
                     warn!(every_n_seconds => 15, self.log,
-                        "validate_signature_shares(): failed to build signatures inputs: {:?}", 
+                        "validate_signature_shares(): failed to build signatures inputs: {:?}",
                         err
                     );
                     self.metrics.sign_errors_inc("signature_inputs_malformed");
@@ -687,15 +687,16 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .stats()
             .update_active_signature_requests(active_requests);
 
-        let mut changes = update_purge_height(&self.prev_certified_height, snapshot.get_height())
-            .then(|| {
-                timed_call(
-                    "purge_artifacts",
-                    || self.purge_artifacts(idkg_pool, snapshot.as_ref()),
-                    &metrics.on_state_change_duration,
-                )
-            })
-            .unwrap_or_default();
+        let mut changes = if update_purge_height(&self.prev_certified_height, snapshot.get_height())
+        {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(idkg_pool, snapshot.as_ref()),
+                &metrics.on_state_change_duration,
+            )
+        } else {
+            IDkgChangeSet::default()
+        };
 
         let send_signature_shares = || {
             timed_call(

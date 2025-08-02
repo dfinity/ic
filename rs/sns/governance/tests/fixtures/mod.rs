@@ -129,7 +129,7 @@ impl ICRC1Ledger for LedgerFixture {
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.ledger_fixture_state.try_lock().unwrap().accounts;
 
-        Ok(Tokens::from_e8s(accounts.iter().map(|(_, y)| y).sum()))
+        Ok(Tokens::from_e8s(accounts.values().sum()))
     }
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {

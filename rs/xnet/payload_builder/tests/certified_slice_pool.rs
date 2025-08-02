@@ -368,7 +368,7 @@ fn invalid_slice(
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 messages_vec.insert(0, (from.decrement().to_label(), LabeledTree::Leaf(vec![])));
-                std::mem::swap(messages_tree, &mut FlatMap::from_key_values(messages_vec));
+                *messages_tree = FlatMap::from_key_values(messages_vec);
             });
 
             if from > stream_begin {

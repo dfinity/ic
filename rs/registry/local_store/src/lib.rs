@@ -133,8 +133,7 @@ impl LocalStoreImpl {
 
     fn read_changelog_entry<P: AsRef<Path>>(p: P) -> io::Result<PbChangelogEntry> {
         let bytes = std::fs::read(p)?;
-        PbChangelogEntry::decode(bytes.as_slice())
-            .map_err(|e| io::Error::new(std::io::ErrorKind::Other, e))
+        PbChangelogEntry::decode(bytes.as_slice()).map_err(io::Error::other)
     }
 
     // precondition: version > 0

@@ -116,6 +116,7 @@ pub struct LedgerClient {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum OperationOutput {
     BlockIndex(BlockIndex),
     NeuronId(u64),

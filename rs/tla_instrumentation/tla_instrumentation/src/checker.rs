@@ -196,6 +196,7 @@ pub struct PredicateDescription {
     pub predicate_parameters: Vec<String>,
 }
 
+#[allow(clippy::result_large_err)]
 pub fn check_tla_code_link(
     apalache: &Path,
     predicate: PredicateDescription,

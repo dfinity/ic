@@ -308,9 +308,7 @@ mod tests {
     fn num_leaves(t: &RoseHashTree) -> usize {
         match t {
             RoseHashTree::Leaf(_) => 1,
-            RoseHashTree::Fork { children, .. } => {
-                children.iter().map(|(_, t)| num_leaves(t)).sum()
-            }
+            RoseHashTree::Fork { children, .. } => children.values().map(num_leaves).sum(),
         }
     }
 
@@ -318,7 +316,7 @@ mod tests {
         match t {
             RoseHashTree::Leaf(_) => 0,
             RoseHashTree::Fork { children, .. } => {
-                children.len() + children.iter().map(|(_, t)| num_edges(t)).sum::<usize>()
+                children.len() + children.values().map(num_edges).sum::<usize>()
             }
         }
     }

@@ -33,10 +33,9 @@ macro_rules! serialize_fallback_for {
         match &$log_entry.$field {
             Some(ctx) => {
                 let json = serde_json::to_string(&ctx).map_err(|e| {
-                    slog::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        std::format!("Serialization error: {}", e),
-                    ))
+                    slog::Error::Io(std::io::Error::other(std::format!(
+                        "Serialization error: {e}"
+                    )))
                 })?;
                 let key = std::stringify!($field);
                 $serializer.emit_str(key, json.as_str())?;

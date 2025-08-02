@@ -20,6 +20,7 @@
 //! algorithm) can be verified this way, but it is a simple and effective
 //! approach, similar to what we have been doing in verifying other kinds
 //! payloads.
+#![allow(clippy::result_large_err)]
 
 use crate::{
     metrics::timed_call,

@@ -160,6 +160,7 @@ impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
     }
 }
 
+#[allow(clippy::result_large_err)]
 pub fn verify_dealing_public<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
@@ -226,6 +227,7 @@ pub fn verify_dealing_public<C: CspSigner>(
     })
 }
 
+#[allow(clippy::result_large_err)]
 pub fn verify_initial_dealings<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
