@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/timer_task",
     "//rs/rust_canisters/canister_log",
     "//rs/sns/swap",  # TODO[NNS1-2282]
     "//rs/types/base_types",

@@ -28,7 +28,7 @@ impl SnapshotVotingPowerTask {
 }
 
 impl RecurringSyncTask for SnapshotVotingPowerTask {
-    fn execute(self) -> (Duration, Self) {
+    fn execute(self) -> (Option<Duration>, Self) {
         let now_seconds = self
             .governance
             .with_borrow(|governance| governance.env.now());
@@ -36,7 +36,7 @@ impl RecurringSyncTask for SnapshotVotingPowerTask {
             .snapshots
             .with_borrow(|snapshots| snapshots.is_latest_snapshot_a_spike(now_seconds))
         {
-            return (VOTING_POWER_SNAPSHOT_INTERVAL, self);
+            return (Some(VOTING_POWER_SNAPSHOT_INTERVAL), self);
         }
 
         let voting_power_snapshot = self.governance.with_borrow_mut(|governance| {
@@ -54,7 +54,7 @@ impl RecurringSyncTask for SnapshotVotingPowerTask {
             snapshots.record_voting_power_snapshot(now_seconds, voting_power_snapshot);
         });
 
-        (VOTING_POWER_SNAPSHOT_INTERVAL, self)
+        (Some(VOTING_POWER_SNAPSHOT_INTERVAL), self)
     }
 
     fn initial_delay(&self) -> Duration {
@@ -172,7 +172,7 @@ mod tests {
             now_seconds = i * ONE_DAY_SECONDS;
             set_time(now_seconds);
             let (delay, new_task) = task.execute();
-            assert_eq!(delay.as_secs(), ONE_DAY_SECONDS);
+            assert_eq!(delay.unwrap().as_secs(), ONE_DAY_SECONDS);
             task = new_task;
         }
 
@@ -236,7 +236,7 @@ mod tests {
 
         // After execution and a half day, the task should run after a half day.
         let (new_delay, task) = task.execute();
-        assert_eq!(new_delay, VOTING_POWER_SNAPSHOT_INTERVAL);
+        assert_eq!(new_delay.unwrap(), VOTING_POWER_SNAPSHOT_INTERVAL);
         set_time(one_day_seconds + one_day_seconds / 2);
         assert_eq!(
             task.initial_delay(),
@@ -246,7 +246,7 @@ mod tests {
         // After execution and 1.5 days (for some reason the task wasn't run), the task should run
         // immediately.
         let (new_delay, task) = task.execute();
-        assert_eq!(new_delay, VOTING_POWER_SNAPSHOT_INTERVAL);
+        assert_eq!(new_delay.unwrap(), VOTING_POWER_SNAPSHOT_INTERVAL);
         set_time(3 * one_day_seconds);
         assert_eq!(task.initial_delay(), Duration::from_secs(0));
     }
