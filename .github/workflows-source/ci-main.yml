@@ -37,7 +37,7 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-large
+      labels: dind-large-ipv6
     container:
       <<: *image
       options: >-
