@@ -864,13 +864,6 @@ impl CallContextManager {
             .map(|cc| cc.call_origin.clone())
     }
 
-    /// Returns if a call context was already responded or not.
-    pub fn call_responded(&self, call_context_id: CallContextId) -> Option<bool> {
-        self.call_contexts
-            .get(&call_context_id)
-            .map(|cc| cc.responded)
-    }
-
     /// Returns the number of outstanding calls for a given call context.
     pub fn outstanding_calls(&self, call_context_id: CallContextId) -> usize {
         *self
