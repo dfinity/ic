@@ -13,8 +13,6 @@ pub(crate) const LABEL_CONNECT: &str = "connect";
 pub(crate) const LABEL_URL_PARSE: &str = "url_parse";
 pub(crate) const LABEL_UPLOAD: &str = "up";
 pub(crate) const LABEL_DOWNLOAD: &str = "down";
-pub(crate) const LABEL_SOCKS_PROXY_OK: &str = "ok";
-pub(crate) const LABEL_SOCKS_PROXY_ERROR: &str = "error";
 
 #[derive(Clone, Debug)]
 pub struct AdapterMetrics {
@@ -32,9 +30,6 @@ pub struct AdapterMetrics {
     pub network_traffic: IntCounterVec,
     /// Request failure types.
     pub request_errors: IntCounterVec,
-    /// Socks dark launch metrics.
-    /// TODO(SOCKS_PROXY_DL): delete those
-    pub socks_proxy_dl_requests: IntCounterVec,
 }
 
 impl AdapterMetrics {
@@ -76,11 +71,6 @@ impl AdapterMetrics {
                 "request_errors_total",
                 "Error types encountered in the adapter.",
                 &["cause"],
-            ),
-            socks_proxy_dl_requests: metrics_registry.int_counter_vec(
-                "socks_proxy_dl_requests_total",
-                "Total number of requests served by the SOCKS proxy dark launch",
-                &["real_status", "dl_status"],
             ),
         }
     }
