@@ -1,7 +1,8 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
 use crate::extensions::validate_extension_wasm;
 use crate::pb::v1::{
-    AdvanceSnsTargetVersion, RegisterExtension, SetTopicsForCustomProposals, Topic,
+    AdvanceSnsTargetVersion, ExecuteExtensionOperation, RegisterExtension,
+    SetTopicsForCustomProposals, Topic,
 };
 use crate::treasury::assess_treasury_balance;
 use crate::types::Wasm;
@@ -445,6 +446,9 @@ pub(crate) async fn validate_and_render_action(
         proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
+        }
+        proposal::Action::ExecuteExtensionOperation(execute_extension_operation) => {
+            validate_and_render_execute_extension_operation(env, execute_extension_operation).await
         }
         proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
@@ -1499,6 +1503,13 @@ pub async fn validate_and_render_execute_nervous_system_function(
             }
         }
     }
+}
+
+async fn validate_and_render_execute_extension_operation(
+    _env: &dyn Environment,
+    _execute_extension_operation: &ExecuteExtensionOperation,
+) -> Result<String, String> {
+    Err("ExecuteExtensionOperation is not supported yet.".to_string())
 }
 
 async fn validate_and_render_register_extension(

@@ -950,6 +950,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 chain_key_settings,
                 subnet_size,
                 node_ids: nodes,
+                registry_version,
                 canister_cycles_cost_schedule,
             },
             node_public_keys,
