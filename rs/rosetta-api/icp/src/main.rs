@@ -19,41 +19,79 @@ use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
 #[derive(Debug, Parser)]
-#[clap(version)]
-struct Opt {
+#[clap(next_help_heading = "Server Configuration")]
+struct ServerConfig {
     #[clap(short = 'a', long = "address", default_value = "0.0.0.0")]
-    listen_address: String,
-    /// The listen port of Rosetta. If not set then the port used will be 8081 unless --listen-port-file is
+    address: String,
+    /// The listen port of Rosetta. If not set then the port used will be 8081 unless --port-file is
     /// defined in which case a random port is used.
     #[clap(short = 'p', long = "port")]
-    listen_port: Option<u16>,
+    port: Option<u16>,
     /// File where the port will be written. Useful when the port is set to 0 because a random port will be picked.
     #[clap(short = 'P', long = "port-file")]
-    listen_port_file: Option<PathBuf>,
-    /// Id of the ICP ledger canister.
-    #[clap(short = 'c', long = "canister-id")]
-    ic_canister_id: Option<String>,
-    #[clap(short = 't', long = "token-sybol")]
-    token_symbol: Option<String>,
-    /// Id of the governance canister to use for neuron management.
-    #[clap(short = 'g', long = "governance-canister-id")]
-    governance_canister_id: Option<String>,
-    /// The URL of the replica to connect to.
-    #[clap(long = "ic-url")]
-    ic_url: Option<String>,
-    #[clap(short = 'l', long = "log-config-file")]
-    log_config_file: Option<PathBuf>,
-    #[clap(short = 'L', long = "log-level", default_value = "INFO")]
-    log_level: Level,
-    #[clap(long = "root-key")]
-    root_key: Option<PathBuf>,
+    port_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Parser)]
+#[clap(next_help_heading = "Storage Configuration")]
+struct StorageConfig {
     /// Supported options: sqlite, sqlite-in-memory
     #[clap(long = "store-type", default_value = "sqlite")]
     store_type: String,
     #[clap(long = "store-location", default_value = "/data")]
-    store_location: PathBuf,
+    location: PathBuf,
     #[clap(long = "store-max-blocks")]
-    store_max_blocks: Option<u64>,
+    max_blocks: Option<u64>,
+    /// Enable optimization for search/transactions by creating additional indexes
+    #[clap(
+        long = "optimize-search-indexes",
+        help = "Create additional indexes to optimize transaction search performance. May increase the database size by ~30%."
+    )]
+    optimize_indexes: bool,
+}
+
+#[derive(Debug, Parser)]
+#[clap(next_help_heading = "Network Configuration")]
+struct NetworkConfig {
+    /// The URL of the replica to connect to.
+    #[clap(long = "ic-url")]
+    ic_url: Option<String>,
+    #[clap(long = "root-key")]
+    root_key: Option<PathBuf>,
+}
+
+#[derive(Debug, Parser)]
+#[clap(next_help_heading = "Canister Configuration")]
+struct CanisterConfig {
+    /// Id of the ICP ledger canister.
+    #[clap(short = 'c', long = "canister-id")]
+    ledger_canister_id: Option<String>,
+    #[clap(short = 't', long = "token-symbol")]
+    token_symbol: Option<String>,
+    /// Id of the governance canister to use for neuron management.
+    #[clap(short = 'g', long = "governance-canister-id")]
+    governance_canister_id: Option<String>,
+}
+
+#[derive(Debug, Parser)]
+#[clap(version)]
+struct Opt {
+    #[clap(flatten)]
+    server: ServerConfig,
+
+    #[clap(flatten)]
+    storage: StorageConfig,
+
+    #[clap(flatten)]
+    network: NetworkConfig,
+
+    #[clap(flatten)]
+    canister: CanisterConfig,
+
+    #[clap(short = 'l', long = "log-config-file")]
+    log_config_file: Option<PathBuf>,
+    #[clap(short = 'L', long = "log-level", default_value = "INFO")]
+    log_level: Level,
     #[clap(long = "exit-on-sync")]
     exit_on_sync: bool,
     #[clap(long = "offline")]
@@ -74,13 +112,6 @@ struct Opt {
     )]
     watchdog_timeout_seconds: u64,
 
-    /// Enable optimization for search/transactions by creating additional indexes
-    #[clap(
-        long = "optimize-search-indexes",
-        help = "Create additional indexes to optimize transaction search performance. May increase the database size by ~30%."
-    )]
-    optimize_search_indexes: bool,
-
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
     enable_rosetta_blocks: bool,
@@ -97,7 +128,7 @@ impl Opt {
     }
 
     fn ic_url(&self) -> Result<Url, String> {
-        match self.ic_url.as_ref() {
+        match self.network.ic_url.as_ref() {
             None => Ok(self.default_url()),
             Some(s) => Url::parse(s).map_err(|e| format!("Unable to parse --ic-url: {}", e)),
         }
@@ -158,18 +189,18 @@ async fn main() -> std::io::Result<()> {
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
     info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
-    let listen_port = match (opt.listen_port, &opt.listen_port_file) {
+    let listen_port = match (opt.server.port, &opt.server.port_file) {
         (None, None) => 8081,
         (None, Some(_)) => 0, // random port
         (Some(p), _) => p,
     };
-    info!("Listening on {}:{}", opt.listen_address, listen_port);
-    let addr = format!("{}:{}", opt.listen_address, listen_port);
+    info!("Listening on {}:{}", opt.server.address, listen_port);
+    let addr = format!("{}:{}", opt.server.address, listen_port);
     let url = opt.ic_url().unwrap();
     info!("Internet Computer URL set to {}", url);
 
     let (root_key, canister_id, governance_canister_id) = if opt.mainnet {
-        let root_key = match opt.root_key {
+        let root_key = match opt.network.root_key {
             Some(root_key_path) => parse_threshold_sig_key(root_key_path.as_path())?,
             None => {
                 // The mainnet root key
@@ -179,14 +210,14 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.ic_canister_id {
+        let canister_id = match opt.canister.ledger_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
-        let governance_canister_id = match opt.governance_canister_id {
+        let governance_canister_id = match opt.canister.governance_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
@@ -195,7 +226,7 @@ async fn main() -> std::io::Result<()> {
 
         (Some(root_key), canister_id, governance_canister_id)
     } else {
-        let root_key = match opt.root_key {
+        let root_key = match opt.network.root_key {
             Some(root_key_path) => Some(parse_threshold_sig_key(root_key_path.as_path())?),
             None => {
                 warn!("Data certificate will not be verified due to missing root key");
@@ -203,14 +234,14 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        let canister_id = match opt.ic_canister_id {
+        let canister_id = match opt.canister.ledger_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
-        let governance_canister_id = match opt.governance_canister_id {
+        let governance_canister_id = match opt.canister.governance_canister_id {
             Some(cid) => {
                 CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
             }
@@ -221,12 +252,13 @@ async fn main() -> std::io::Result<()> {
     };
 
     let token_symbol = opt
+        .canister
         .token_symbol
         .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
     info!("Token symbol set to {}", token_symbol);
 
-    let store_location: Option<&Path> = match opt.store_type.as_ref() {
-        "sqlite" => Some(&opt.store_location),
+    let store_location: Option<&Path> = match opt.storage.store_type.as_ref() {
+        "sqlite" => Some(&opt.storage.location),
         "sqlite-in-memory" | "in-memory" => {
             info!("Using in-memory block store");
             None
@@ -238,7 +270,6 @@ async fn main() -> std::io::Result<()> {
     };
 
     let Opt {
-        store_max_blocks,
         offline,
         exit_on_sync,
         mainnet,
@@ -246,7 +277,6 @@ async fn main() -> std::io::Result<()> {
         expose_metrics,
         blockchain,
         watchdog_timeout_seconds,
-        optimize_search_indexes,
         ..
     } = opt;
 
@@ -265,11 +295,11 @@ async fn main() -> std::io::Result<()> {
         token_symbol,
         governance_canister_id,
         store_location,
-        store_max_blocks,
+        opt.storage.max_blocks,
         offline,
         root_key,
         enable_rosetta_blocks,
-        optimize_search_indexes,
+        opt.storage.optimize_indexes,
     )
     .await
     .map_err(|e| {
@@ -294,7 +324,7 @@ async fn main() -> std::io::Result<()> {
         ledger,
         req_handler,
         addr,
-        opt.listen_port_file,
+        opt.server.port_file,
         expose_metrics,
         watchdog_timeout_seconds,
     )
