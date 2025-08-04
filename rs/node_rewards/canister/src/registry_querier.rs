@@ -15,11 +15,10 @@ use ic_registry_keys::{
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
 use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::{Region, RewardPeriod, RewardableNode, UnixTsNanos};
+use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread::LocalKey;
 
 pub struct RegistryQuerier {
     registry_client: Arc<dyn CanisterRegistryClient>,
@@ -78,12 +77,12 @@ impl RegistryQuerier {
     ///
     /// Nodes without a specified `node_reward_type` are excluded from the rewardable set.
     pub fn get_rewardable_nodes_per_provider<S: RegistryDataStableMemory>(
-        registry_client: &'static LocalKey<Arc<impl CanisterRegistryClient>>,
-        reward_period: RewardPeriod,
+        registry_client: &dyn CanisterRegistryClient,
+        start_day: DayUtc,
+        end_day: DayUtc,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
-        let nodes_in_range =
-            Self::nodes_in_registry_between::<S>(reward_period.from, reward_period.to);
+        let nodes_in_range = Self::nodes_in_registry_between::<S>(start_day, end_day);
 
         for (node_id, (node_record, latest_version, rewardable_days)) in nodes_in_range {
             let node_operator_id: PrincipalId = node_record
@@ -224,14 +223,13 @@ impl RegistryQuerier {
     }
 
     fn node_operator_data(
-        registry_client: &'static LocalKey<Arc<impl CanisterRegistryClient>>,
+        registry_client: &dyn CanisterRegistryClient,
         node_operator: PrincipalId,
         version: RegistryVersion,
     ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
         let node_operator_record_key = make_node_operator_record_key(node_operator);
-        let client = registry_client.with(|c| c.clone());
         let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
-            &*client,
+            &*registry_client,
             node_operator_record_key.as_str(),
             version,
         )
@@ -243,11 +241,14 @@ impl RegistryQuerier {
         };
 
         let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
-        let Some(data_center_record) =
-            get_decoded_value::<DataCenterRecord>(&*client, data_center_key.as_str(), version)
-                .map_err(|e| RegistryClientError::DecodeError {
-                    error: format!("Failed to decode DataCenterRecord: {}", e),
-                })?
+        let Some(data_center_record) = get_decoded_value::<DataCenterRecord>(
+            &*registry_client,
+            data_center_key.as_str(),
+            version,
+        )
+        .map_err(|e| RegistryClientError::DecodeError {
+            error: format!("Failed to decode DataCenterRecord: {}", e),
+        })?
         else {
             return Ok(None);
         };
