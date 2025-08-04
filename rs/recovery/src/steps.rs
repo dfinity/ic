@@ -819,7 +819,7 @@ impl Step for StopReplicaStep {
     fn exec(&self) -> RecoveryResult<()> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            ADMIN.to_string(),
+            SshUser::Admin.to_string(),
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -920,13 +920,141 @@ impl Step for CreateRegistryTarStep {
     }
 }
 
-pub struct CreateFullTarStep {
+pub struct CopyIcStateStep {
+    pub logger: Logger,
+    pub work_dir: PathBuf,
+    pub new_state_dir: PathBuf,
+}
+
+impl Step for CopyIcStateStep {
+    fn descr(&self) -> String {
+        format!(
+            "Copying ic_state for upload to: {}",
+            self.new_state_dir.display()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        rsync(
+            &self.logger,
+            Vec::<String>::default(),
+            &format!("{}/", self.work_dir.display()),
+            &format!("{}/", self.new_state_dir.display()),
+            false,
+            None,
+        )?;
+        Ok(())
+    }
+}
+
+pub struct UploadCUPAndTar {
+    pub logger: Logger,
+    pub registry_helper: RegistryHelper,
+    pub node_ip: IpAddr,
+    pub require_confirmation: bool,
+    pub key_file: Option<PathBuf>,
+    pub work_dir: PathBuf,
+}
+
+impl UploadCUPAndTar {
+    pub fn get_restart_commands(&self) -> String {
+        format!(
+            r#"
+cd {};
+OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
+GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
+mkdir ic_registry_local_store;
+tar -xf ic_registry_local_store.tar.zst -C ic_registry_local_store;
+sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
+OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
+GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
+sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
+sudo systemctl stop ic-replica;
+sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
+sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
+sudo systemctl restart setup-permissions || true ;
+sudo systemctl start ic-replica;
+sudo systemctl status ic-replica;
+"#,
+            UploadCUPAndTar::get_upload_dir_name(),
+        )
+    }
+
+    pub fn get_upload_dir_name() -> String {
+        "/tmp/subnet_recovery".to_string()
+    }
+}
+
+impl Step for UploadCUPAndTar {
+    fn descr(&self) -> String {
+        format!(
+            "Uploading CUP and registry to [{}]:{} and execute:\n{}",
+            self.node_ip,
+            UploadCUPAndTar::get_upload_dir_name(),
+            self.get_restart_commands()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            SshUser::Admin.to_string(),
+            self.node_ip,
+            self.require_confirmation,
+            self.key_file.clone(),
+        );
+
+        if !ssh_helper.can_connect() {
+            info!(
+                self.logger,
+                "No admin access to: {}, skipping upload...", self.node_ip
+            );
+            return Err(RecoveryError::invalid_output_error("SSH access denied"));
+        }
+
+        info!(self.logger, "Uploading to {}", self.node_ip);
+        let upload_dir = UploadCUPAndTar::get_upload_dir_name();
+        ssh_helper.ssh(format!(
+            "sudo rm -rf {} && mkdir {}",
+            upload_dir, upload_dir
+        ))?;
+
+        let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
+
+        rsync(
+            &self.logger,
+            Vec::<String>::default(),
+            &format!("{}/cup.proto", self.work_dir.display()),
+            &target,
+            self.require_confirmation,
+            self.key_file.as_ref(),
+        )?;
+
+        rsync(
+            &self.logger,
+            Vec::<String>::default(),
+            &format!(
+                "{}/ic_registry_local_store.tar.zst",
+                self.work_dir.display()
+            ),
+            &target,
+            self.require_confirmation,
+            self.key_file.as_ref(),
+        )?;
+
+        ssh_helper.ssh(self.get_restart_commands())?;
+
+        Ok(())
+    }
+}
+
+pub struct CreateNNSRecoveryTarStep {
     pub logger: Logger,
     pub commands_create: String,
     pub commands_next_steps: String,
 }
 
-impl Step for CreateFullTarStep {
+impl Step for CreateNNSRecoveryTarStep {
     fn descr(&self) -> String {
         format!(
             "Creating recovery artifacts by executing:\n{}",

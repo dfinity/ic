@@ -861,18 +861,37 @@ impl Recovery {
         }
     }
 
+    pub fn get_copy_ic_state(&self, new_state_dir: PathBuf) -> impl Step {
+        CopyIcStateStep {
+            logger: self.logger.clone(),
+            work_dir: self.work_dir.join(IC_STATE_DIR),
+            new_state_dir,
+        }
+    }
+
+    /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
+    pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step {
+        UploadCUPAndTar {
+            logger: self.logger.clone(),
+            registry_helper: self.registry_helper.clone(),
+            node_ip,
+            work_dir: self.work_dir.clone(),
+            require_confirmation: self.ssh_confirmation,
+            key_file: self.key_file.clone(),
+        }
+    }
+
     /// Return a [CreateFullTarStep] a tar file that contains a tar of the current registry local store and a recovery CUP
-    pub fn get_create_full_tar_step(&self) -> impl Step {
+    pub fn get_create_nns_recovery_tar_step(&self) -> impl Step {
         let commands_create = format!(
             r#"
-            tar --zstd -cvf {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst -C {work_dir}/data/{IC_REGISTRY_LOCAL_STORE} .
-            tar --zstd -cvf recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst
+            tar --zstd -cvf {work_dir}/recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst
 
-            artifacts_hash=$(sha256sum recovery.tar.zst | cut -d ' ' -f1)
+            artifacts_hash=$(sha256sum {work_dir}/recovery.tar.zst | cut -d ' ' -f1)
 
             # Move the recovery artifacts to a temporary directory that will not be deleted by the cleanup step
             dest_dir=$(mktemp -d)
-            mv recovery.tar.zst $dest_dir
+            mv {work_dir}/recovery.tar.zst $dest_dir
         "#,
             work_dir = self.work_dir.display(),
         );
@@ -884,14 +903,14 @@ impl Recovery {
             echo "  - Upload $dest_dir/recovery.tar.zst to:"
             echo "    - https://download.dfinity.systems/ic/$artifacts_hash/recovery.tar.zst"
             echo "    - https://download.dfinity.network/ic/$artifacts_hash/recovery.tar.zst"
-            echo "  - Run the following command and commit + push to the master branch of dfinity/ic:"
+            echo "  - Run the following command and commit + push to a branch of dfinity/ic:"
             echo "    sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"$artifacts_hash\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"
-            echo "  - Build a recovery image from master."
+            echo "  - Build a recovery image from that branch."
             echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
         "#,
         );
 
-        CreateFullTarStep {
+        CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
             commands_create,
             commands_next_steps,
