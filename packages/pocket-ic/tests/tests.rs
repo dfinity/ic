@@ -32,21 +32,14 @@ use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr};
 use std::{
-    io::Read,
-    net::SocketAddr,
-    sync::OnceLock,
-    time::{Duration, SystemTime},
-};
-#[cfg(not(windows))]
-use std::{
-    io::Write,
-    net::{TcpListener, TcpStream},
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
     thread::JoinHandle,
-    time::Instant,
+    time::{Duration, Instant, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
