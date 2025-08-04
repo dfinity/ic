@@ -141,34 +141,36 @@ impl Tag {
         let res = client.get(&release_url).bearer_auth(&token).send().await?;
 
         // not every tag must have a release so we do not report an error if it does not
-        if res.status().is_success() {
-            let release: Release = res.json().await?;
+        if !res.status().is_success() {
+            return Ok(None);
+        }
 
-            if release.tag_name != self.name {
-                return Err(anyhow!(
-                    "Unexpected release tag {}, expected {}",
-                    release.tag_name,
-                    self.name
-                ));
+        let release: Release = res.json().await?;
+
+        if release.tag_name != self.name {
+            return Err(anyhow!(
+                "Unexpected release tag {}, expected {}",
+                release.tag_name,
+                self.name
+            ));
+        }
+
+        let canister_sha256_filename = format!("{canister_filename}.sha256");
+        if let Some(prod_canister_sha256) = release.asset(&canister_sha256_filename) {
+            // The asset `{canister_filename}.sha256` has the form:
+            // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
+            // so we check if it starts with the expected module hash
+            // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
+            if prod_canister_sha256
+                .text()
+                .await?
+                .starts_with(&expected_module_hash_str)
+            {
+                return Ok(Some(release));
             }
-
-            let canister_sha256_filename = format!("{canister_filename}.sha256");
-            if let Some(prod_canister_sha256) = release.asset(&canister_sha256_filename) {
-                // The asset `{canister_filename}.sha256` has the form:
-                // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
-                // so we check if it starts with the expected module hash
-                // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
-                if prod_canister_sha256
-                    .text()
-                    .await?
-                    .starts_with(&expected_module_hash_str)
-                {
-                    return Ok(Some(release));
-                }
-            } else if let Some(prod_canister) = release.asset(&canister_filename) {
-                if prod_canister.sha256().await? == expected_module_hash_str {
-                    return Ok(Some(release));
-                }
+        } else if let Some(prod_canister) = release.asset(&canister_filename) {
+            if prod_canister.sha256().await? == expected_module_hash_str {
+                return Ok(Some(release));
             }
         }
 
