@@ -1,6 +1,6 @@
 [Unit]
 Description=Upgrade grub.cfg file
-RequiresMountsFor=/boot /grub
+RequiresMountsFor=/boot/grub
 
 [Service]
 Type=oneshot

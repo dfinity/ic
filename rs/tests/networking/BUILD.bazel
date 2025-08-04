@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -52,7 +52,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
@@ -66,7 +65,6 @@ system_test_nns(
     tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
@@ -93,7 +91,6 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
@@ -121,7 +118,6 @@ system_test_nns(
         "manual",
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
@@ -136,7 +132,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
@@ -165,7 +160,6 @@ system_test_nns(
         "manual",
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
@@ -187,7 +181,6 @@ system_test_nns(
         "k8s",
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
@@ -203,7 +196,6 @@ system_test_nns(
         "long_test",
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS,
@@ -215,7 +207,7 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -244,7 +236,7 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/crypto/tree_hash",
@@ -267,7 +259,7 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
@@ -279,7 +271,7 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/nns/governance/api",
         "//rs/protobuf",
@@ -295,7 +287,7 @@ system_test(
     name = "http_endpoints_public_spec_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = False,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
         "@crate_index//:ic-agent",
         "@crate_index//:tokio",
@@ -313,8 +305,9 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
+        "//rs/tests/consensus/utils",
         "//rs/types/types",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
@@ -330,7 +323,7 @@ system_test_nns(
         "k8s",
         "system_test_large",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/types/base_types",
         "@crate_index//:rand",
@@ -345,7 +338,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
     deps = COMMON_DEPS + [
@@ -362,7 +355,7 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
     ],
@@ -376,7 +369,7 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
     ],
@@ -391,7 +384,7 @@ system_test(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests/networking/canisters:cloner_canister",
     ],
     deps = [
