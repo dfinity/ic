@@ -2174,7 +2174,7 @@ fn test_remove_approval() {
     let p3 = PrincipalId::new_user_test_id(3);
     let p4 = PrincipalId::new_user_test_id(4);
     let (env, canister_id) = setup(
-        ledger_wasm_allowance_getter(),
+        ledger_wasm(),
         encode_init_args,
         vec![
             (Account::from(p1.0), INITIAL_BALANCE),
