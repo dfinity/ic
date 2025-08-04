@@ -147,6 +147,7 @@ pub fn generate_subnets(
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
         );
     }

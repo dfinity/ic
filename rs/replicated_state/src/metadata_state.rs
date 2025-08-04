@@ -260,6 +260,7 @@ pub struct SubnetTopology {
     /// a backup. An additional NNS proposal will be needed to allow the subnet
     /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
+    pub cost_schedule: CanisterCyclesCostSchedule,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
