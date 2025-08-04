@@ -28,7 +28,7 @@ use icrc_ledger_types::icrc1::{
     transfer::{Memo, TransferArg, TransferError},
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
@@ -2205,7 +2205,9 @@ fn test_remove_approval() {
             "icrc2_approve",
             Encode!(&approve_args).unwrap(),
         );
-        assert!(response.is_ok());
+        let result = Decode!(&response.expect("failed to create approval").bytes(), Result<Nat, ApproveError> )
+        .expect("failed to decode approve response");
+        assert!(result.is_ok());
     };
 
     approve(None, p2);
