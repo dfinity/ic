@@ -126,7 +126,13 @@ struct Tag {
 }
 
 impl Tag {
-    async fn canister_exists(
+    /// Returns the release for this tag if a release exists and contains a release artifact (canister WASM)
+    /// with a matching filename (`canister_filename`) and sha256 hash (`expected_module_hash_str`).
+    /// The sha256 hash is extracted from a release asset `{canister_filename}.sha256` if it exists.
+    /// The repository is passed separately (via `canister_repository`) because GitHub API does not include
+    /// the repository in the tag and we do not want to parse it from URLs of the form
+    /// `https://api.github.com/repos/dfinity/cycles-ledger/commits/93f5c0f5779e31673786c83aa50ff2bbf9650162`.
+    async fn release_for_canister(
         &self,
         canister_repository: String,
         canister_filename: String,
@@ -265,7 +271,7 @@ async fn get_mainnet_canister_release(
 
         for tag in &tags {
             match tag
-                .canister_exists(
+                .release_for_canister(
                     canister_repository.clone(),
                     canister_filename.clone(),
                     expected_module_hash_str.clone(),
