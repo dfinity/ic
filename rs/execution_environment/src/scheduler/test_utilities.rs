@@ -182,7 +182,9 @@ impl SchedulerTest {
     }
 
     pub fn set_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
-        self.state.as_mut().unwrap().metadata.cost_schedule = cost_schedule;
+        if let Some(state) = self.state.as_mut() {
+            state.set_own_cost_schedule(cost_schedule);
+        }
         self.registry_settings.canister_cycles_cost_schedule = cost_schedule;
     }
 
@@ -210,7 +212,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            self.state.as_ref().unwrap().metadata.cost_schedule,
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
             WasmExecutionMode::Wasm32,
         )
     }
@@ -647,7 +649,7 @@ impl SchedulerTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
-            self.state.as_ref().unwrap().metadata.cost_schedule,
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
         )
     }
 
@@ -656,7 +658,7 @@ impl SchedulerTest {
             bytes,
             duration,
             self.subnet_size(),
-            self.state.as_ref().unwrap().metadata.cost_schedule,
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
         )
     }
 

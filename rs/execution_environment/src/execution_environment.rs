@@ -518,7 +518,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let since = Instant::now(); // Start logging execution time.
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
             CanisterMessage::Response(response) => {
@@ -839,7 +839,7 @@ impl ExecutionEnvironment {
                         // decrease the freezing threshold if it was set too
                         // high that topping up the canister is not feasible.
                         if let CanisterCall::Ingress(ingress) = &msg {
-                            let cost_schedule = state.metadata.cost_schedule;
+                            let cost_schedule = state.get_own_cost_schedule();
                             if let Ok(canister) = get_canister_mut(canister_id, &mut state) {
                                 if is_delayed_ingress_induction_cost(&ingress.method_payload) {
                                     let bytes_to_charge =
@@ -1780,7 +1780,7 @@ impl ExecutionEnvironment {
             canister_http_request_context.variable_parts_size(),
             canister_http_request_context.max_response_bytes,
             registry_settings.subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         );
         // Here we make sure that we do not let upper layers open new
         // http calls while the maximum number of calls is in-flight.
@@ -2147,7 +2147,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
@@ -2228,7 +2228,7 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .get_canister_status(sender, canister, subnet_size, cost_schedule)
@@ -2322,7 +2322,7 @@ impl ExecutionEnvironment {
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(args.get_canister_id(), state)?;
         self.canister_manager
             .upload_chunk(
@@ -2855,7 +2855,7 @@ impl ExecutionEnvironment {
                 ingress,
                 effective_canister_id,
                 subnet_size,
-                state.metadata.cost_schedule,
+                state.get_own_cost_schedule(),
             );
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
@@ -2870,7 +2870,7 @@ impl ExecutionEnvironment {
                     paying_canister.message_memory_usage(),
                     paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
-                    state.metadata.cost_schedule,
+                    state.get_own_cost_schedule(),
                     reveal_top_up,
                 ) {
                     return Err(UserError::new(
@@ -2947,7 +2947,7 @@ impl ExecutionEnvironment {
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         )
         .1
     }
@@ -3586,7 +3586,7 @@ impl ExecutionEnvironment {
             compilation_cost_handling,
             round_counters,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             self.config.dirty_page_logging,
         );
         self.process_install_code_result(state, dts_result, dts_status, since)
@@ -3761,7 +3761,7 @@ impl ExecutionEnvironment {
                     counters: round_counters,
                     log: &self.log,
                     time: state.metadata.time(),
-                    cost_schedule: state.metadata.cost_schedule,
+                    cost_schedule: state.get_own_cost_schedule(),
                 };
                 let dts_result = paused.resume(canister, round, round_limits);
                 let dts_status = DtsInstallCodeStatus::ResumingPausedOrAbortedExecution;

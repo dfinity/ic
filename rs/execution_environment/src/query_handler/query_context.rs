@@ -1113,6 +1113,6 @@ impl<'a> QueryContext<'a> {
     }
 
     pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.state.get_ref().metadata.cost_schedule
+        self.state.get_ref().get_own_cost_schedule()
     }
 }

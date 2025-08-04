@@ -431,7 +431,7 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
         let mut ingress_execution_results = Vec::new();
@@ -906,7 +906,7 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
@@ -1248,7 +1248,7 @@ impl Scheduler for SchedulerImpl {
         );
 
         // Copy state of registry flag over to ReplicatedState
-        state.metadata.cost_schedule = registry_settings.canister_cycles_cost_schedule;
+        state.set_own_cost_schedule(registry_settings.canister_cycles_cost_schedule);
 
         // Round preparation.
         let mut scheduler_round_limits = {

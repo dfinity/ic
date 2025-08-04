@@ -680,6 +680,18 @@ impl ReplicatedState {
             .map(|x| x.cost_schedule)
     }
 
+    pub fn set_own_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        let own_subnet_id = self.metadata.own_subnet_id;
+        if let Some(subnet_topology) = self
+            .metadata
+            .network_topology
+            .subnets
+            .get_mut(&own_subnet_id)
+        {
+            subnet_topology.cost_schedule = cost_schedule
+        }
+    }
+
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
