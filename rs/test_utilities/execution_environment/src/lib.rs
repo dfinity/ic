@@ -55,8 +55,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
-use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::batch::ChainKeyData;
+use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
@@ -71,7 +70,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
-use ic_types::{ExecutionRound, ReplicaVersion};
+use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -184,6 +183,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
         node_ids: BTreeSet::new(),
+        registry_version: RegistryVersion::default(),
         canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }
 }
@@ -2417,7 +2417,10 @@ impl ExecutionTestBuilder {
                         )),
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
-                    Some((key_id.clone(), nidkg_id))
+                    Some((
+                        NiDkgMasterPublicKeyId::VetKd(vetkd_key_id.clone()),
+                        nidkg_id,
+                    ))
                 } else {
                     None
                 }
