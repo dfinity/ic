@@ -79,7 +79,7 @@ EOF
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        // .add_test(systest!(upgrade_vm_device_test))
+        .add_test(systest!(upgrade_vm_device_test))
         .add_test(systest!(guest_disk_test))
         .execute_from_args()?;
     Ok(())
