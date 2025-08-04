@@ -610,7 +610,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     if let Some(ref mut stats) = stats {
                         stats.transcript_resolution_errors += 1;
                     }
-                    warn!(
+                    error!(
                         log,
                         "{}: Failed to translate Pre-signature ref of key {}: {:?}",
                         CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
