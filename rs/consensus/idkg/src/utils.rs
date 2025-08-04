@@ -2,7 +2,7 @@
 
 use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
-    metrics::IDkgPayloadMetrics,
+    metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
@@ -523,6 +523,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
     last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
+    mut stats: Option<&mut IDkgPayloadStats>,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
@@ -550,8 +551,21 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
 
         match block_reader.transcript(&transcript_ref) {
             Ok(key_transcript) => {
-                if let Some(public_key) = get_subnet_master_public_key(&key_transcript, log) {
-                    public_keys.insert(key_id.clone().into(), public_key);
+                match get_master_public_key_from_transcript(&key_transcript) {
+                    Ok(public_key) => {
+                        public_keys.insert(key_id.clone().into(), public_key);
+                    }
+                    Err(err) => {
+                        if let Some(ref mut stats) = stats {
+                            stats.transcript_resolution_errors += 1;
+                        }
+                        warn!(
+                            log,
+                            "Failed to retrieve IDKg subnet master public key of key {}: {:?}",
+                            key_id,
+                            err
+                        );
+                    }
                 }
                 pre_signatures.insert(
                     key_id.clone().into(),
@@ -562,10 +576,15 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                 );
             }
             Err(err) => {
-                // TODO(CON-1549): Increment counter metric
+                if let Some(ref mut stats) = stats {
+                    stats.transcript_resolution_errors += 1;
+                }
                 warn!(
                     log,
-                    "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
+                    "Failed to translate key transcript ref {:?} of key {}: {:?}",
+                    transcript_ref,
+                    key_id,
+                    err
                 );
             }
         }
@@ -584,31 +603,19 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     entry.pre_signatures.insert(*pre_sig_id, pre_sig);
                 }
                 Err(err) => {
-                    // TODO(CON-1549): Increment counter metric
-                    warn!(log, "Failed to translate Pre-signature ref: {:?}", err);
+                    if let Some(ref mut stats) = stats {
+                        stats.transcript_resolution_errors += 1;
+                    }
+                    warn!(
+                        log,
+                        "Failed to translate Pre-signature ref of key {}: {:?}", key_id, err
+                    );
                 }
             }
         }
     }
 
     (public_keys, pre_signatures)
-}
-
-fn get_subnet_master_public_key(
-    transcript: &IDkgTranscript,
-    log: &ReplicaLogger,
-) -> Option<MasterPublicKey> {
-    match get_master_public_key_from_transcript(transcript) {
-        Ok(public_key) => Some(public_key),
-        Err(err) => {
-            warn!(
-                log,
-                "Failed to retrieve IDKg subnet master public key: {:?}", err
-            );
-
-            None
-        }
-    }
 }
 
 /// Updates the latest purge height, and returns true if
@@ -1022,8 +1029,13 @@ mod tests {
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
 
-            let (public_keys, pre_signatures) =
-                get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                None,
+            );
 
             assert_eq!(public_keys.len(), 1);
             assert!(public_keys.contains_key(key_id.inner()));
@@ -1056,8 +1068,13 @@ mod tests {
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let block = make_block(None);
-            let (public_keys, pre_signatures) =
-                get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                None,
+            );
 
             assert!(public_keys.is_empty());
             assert!(pre_signatures.is_empty());
@@ -1108,8 +1125,13 @@ mod tests {
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
 
-            let (public_keys, pre_signatures) =
-                get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                None,
+            );
 
             assert!(public_keys.is_empty());
             assert!(pre_signatures.is_empty());
