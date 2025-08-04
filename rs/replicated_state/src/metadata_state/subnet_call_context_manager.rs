@@ -7,7 +7,7 @@ use ic_management_canister_types_private::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::{common::PreSignature, PreSigId},
+    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
     crypto::{
         canister_threshold_sig::{
             idkg::IDkgTranscript, EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
@@ -226,7 +226,7 @@ pub struct SubnetCallContextManager {
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
     pub raw_rand_contexts: VecDeque<RawRandContext>,
-    pub pre_signature_stashes: BTreeMap<MasterPublicKeyId, PreSignatureStash>,
+    pub pre_signature_stashes: BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
 }
 
 impl SubnetCallContextManager {
