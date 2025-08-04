@@ -153,7 +153,10 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             CanisterCyclesCostScheduleProto::try_from(item.canister_cycles_cost_schedule).map_err(
                 |_| ProxyDecodeError::ValueOutOfRange {
                     typ: "CanisterCyclesCostSchedule",
-                    err: String::new(),
+                    err: format!(
+                        "'CanisterCyclesCostSchedule type from subnet record for subnet {}', err: {}",
+                        *subnet_id, err
+                    )
                 },
             )?,
         );
