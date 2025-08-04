@@ -2164,6 +2164,69 @@ fn test_tip_of_chain() {
     assert_eq!(tip, tip_candid);
 }
 
+#[test]
+fn test_burn_whole_balance() {
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let fee_e8s = 100u64;
+    let initial_balance = 150u64;
+    initial_balances.insert(
+        AccountIdentifier::from(Account::from(p1.0)),
+        Tokens::from_e8s(initial_balance),
+    );
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(fee_e8s))
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let burn = |amount: u64, error_tokens: Option<Tokens>| {
+        let args = icp_ledger::TransferArgs {
+            memo: icp_ledger::Memo(0u64),
+            amount: Tokens::from_e8s(amount),
+            fee: Tokens::ZERO,
+            from_subaccount: None,
+            to: AccountIdentifier::from(MINTER).to_address(),
+            created_at_time: None,
+        };
+        let response = env.execute_ingress_as(p1, canister_id, "transfer", Encode!(&args).unwrap());
+        if let Some(error_tokens) = error_tokens {
+            assert!(response.is_err());
+            assert!(response.unwrap_err().description().contains(
+                &format!("Burns lower than {} are not allowed", error_tokens).to_string()
+            ));
+        } else {
+            let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )
+        .expect("failed to decode approve response");
+            assert!(result.is_ok());
+        }
+    };
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), initial_balance);
+
+    // Balance is greater than fee, burning less than fee should not be allowed.
+    burn(fee_e8s / 2, Some(Tokens::from(fee_e8s)));
+
+    // Burning fee is ok.
+    burn(fee_e8s, None);
+
+    // Balance is now less than fee.
+    assert_eq!(balance_of(&env, canister_id, p1.0), fee_e8s / 2);
+
+    // Burning less than the whole balance is now allowed.
+    burn(fee_e8s / 2 - 1, Some(Tokens::from(fee_e8s / 2)));
+
+    // Burning whole balance is allowed, even if it is less than fee.
+    burn(fee_e8s / 2, None);
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), 0);
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
