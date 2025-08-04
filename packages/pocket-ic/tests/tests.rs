@@ -1416,8 +1416,7 @@ impl Default for HttpServer {
                         std::thread::sleep(Duration::from_millis(10));
                     }
                     Err(e) => {
-                        eprintln!("Unexpected error: {}", e);
-                        break;
+                        panic!("Unexpected error: {}", e);
                     }
                 }
             }
