@@ -533,7 +533,7 @@ pub(crate) async fn validate_execute_extension_operation(
     if name != "deposit" {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            "Only TreasuryManager.deposit extensions are currently supported.",
+            "Only TreasuryManager.deposit extension operations are currently supported.",
         ));
     }
 
