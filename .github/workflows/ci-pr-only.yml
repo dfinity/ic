@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 30
     runs-on:
       labels: dind-small
+      group: dm1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
@@ -67,6 +68,7 @@ jobs:
     timeout-minutes: 30
     runs-on:
       labels: dind-small
+      group: dm1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
@@ -109,6 +111,7 @@ jobs:
     name: Generate Config Fixtures
     runs-on:
       labels: dind-small
+      group: dm1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
@@ -145,6 +148,7 @@ jobs:
     name: Dependency Scan for PR
     runs-on:
       labels: dind-small
+      group: dm1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
