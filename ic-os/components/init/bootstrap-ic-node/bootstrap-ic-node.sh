@@ -116,7 +116,7 @@ function process_bootstrap() {
         echo "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
         cp -rL -T "${TMPDIR}/nns_public_key_override.pem" "${NNS_KEY_DEST}"
         chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
-    elif [ -e "/opt/ic/share/nns_public_key.pem" ]; then
+    elif [ "${VARIANT_TYPE}" = "prod" ] && [ -e "/opt/ic/share/nns_public_key.pem" ]; then
         echo "Copying nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
         cp -rL -T "/opt/ic/share/nns_public_key.pem" "${NNS_KEY_DEST}"
         chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
