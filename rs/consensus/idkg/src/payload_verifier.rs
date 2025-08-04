@@ -55,7 +55,7 @@ use ic_types::{
         idkg::{
             self,
             common::{CombinedSignature, ThresholdSigInputsRef},
-            ecdsa, schnorr, IDkgBlockReader, IDkgTranscriptParamsRef, TranscriptRef,
+            ecdsa, schnorr, IDkgBlockReader, TranscriptRef,
         },
         Block, BlockPayload, HasHeight,
     },
@@ -493,21 +493,13 @@ struct CachedBuilder {
 }
 
 impl IDkgTranscriptBuilder for CachedBuilder {
-    fn get_completed_transcript(
-        &self,
-        transcript_params_ref: &IDkgTranscriptParamsRef,
-    ) -> Option<IDkgTranscript> {
-        self.transcripts
-            .get(&transcript_params_ref.transcript_id)
-            .cloned()
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+        self.transcripts.get(&transcript_id).cloned()
     }
 
-    fn get_validated_dealings(
-        &self,
-        transcript_params_ref: &IDkgTranscriptParamsRef,
-    ) -> Vec<SignedIDkgDealing> {
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
         self.dealings
-            .get(&transcript_params_ref.transcript_id)
+            .get(&transcript_id)
             .cloned()
             .unwrap_or_default()
     }

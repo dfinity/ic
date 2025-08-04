@@ -91,7 +91,8 @@ pub(crate) fn update_completed_reshare_requests(
         }
 
         // Get the verified dealings for this transcript
-        let dealings = transcript_builder.get_validated_dealings(reshare_param.as_ref());
+        let transcript_id = reshare_param.as_ref().transcript_id;
+        let dealings = transcript_builder.get_validated_dealings(transcript_id);
 
         // Resolve the transcript param refs
         let transcript_params = match reshare_param.as_ref().translate(resolver) {

@@ -135,8 +135,8 @@ fn update_ecdsa_quadruple_in_creation(
     let receivers = key_transcript.receivers().clone();
     // Update quadruple with completed transcripts
     if quadruple.lambda_masked.is_none() {
-        if let Some(transcript) =
-            transcript_cache.get_completed_transcript(quadruple.lambda_config.as_ref())
+        if let Some(transcript) = transcript_cache
+            .get_completed_transcript(quadruple.lambda_config.as_ref().transcript_id)
         {
             debug!(
                 log,
@@ -149,8 +149,8 @@ fn update_ecdsa_quadruple_in_creation(
         }
     }
     if quadruple.kappa_unmasked.is_none() {
-        if let Some(transcript) =
-            transcript_cache.get_completed_transcript(quadruple.kappa_unmasked_config.as_ref())
+        if let Some(transcript) = transcript_cache
+            .get_completed_transcript(quadruple.kappa_unmasked_config.as_ref().transcript_id)
         {
             debug!(
                 log,
@@ -166,7 +166,9 @@ fn update_ecdsa_quadruple_in_creation(
     }
     if quadruple.key_times_lambda.is_none() {
         if let Some(config) = &quadruple.key_times_lambda_config {
-            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
+            if let Some(transcript) =
+                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+            {
                 debug!(
                     log,
                     "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
@@ -180,7 +182,9 @@ fn update_ecdsa_quadruple_in_creation(
     }
     if quadruple.kappa_times_lambda.is_none() {
         if let Some(config) = &quadruple.kappa_times_lambda_config {
-            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
+            if let Some(transcript) =
+                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+            {
                 debug!(
                     log,
                     "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
@@ -260,7 +264,7 @@ fn update_schnorr_transcript_in_creation(
     // Update pre_signature with completed transcripts
     if pre_signature.blinder_unmasked.is_none() {
         if let Some(transcript) = transcript_cache
-            .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref())
+            .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref().transcript_id)
         {
             debug!(
                 log,
