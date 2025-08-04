@@ -1401,7 +1401,7 @@ impl HttpServer {
 
         listener.set_nonblocking(true).unwrap();
 
-        // Extract the assigned port
+        // Extract the assigned bind address
         let addr = listener.local_addr().unwrap();
 
         let flag_in_thread = flag.clone();
@@ -1429,8 +1429,8 @@ impl HttpServer {
         }
     }
 
-    fn get_addr_str(&self) -> String {
-        self.addr.to_string()
+    fn port(&self) -> u16 {
+        self.addr.port()
     }
 }
 
@@ -1441,23 +1441,9 @@ impl Drop for HttpServer {
     }
 }
 
-// Using ipv4 fails on Windows:
-// ```Connecting to 127.0.0.1 failed: Request failed direct connect hyper_util::client::legacy::Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" })) and connect through socks hyper_util::client::legacy::Error(Connect, Connector(ConnectError(\"dns error\", Custom { kind: Uncategorized, error: \"failed to lookup address information: Name or service not known\" }))) (Please note that the canister HTTPS outcalls feature is an IPv6-only feature. While IPv4 is an experimental feature, it cannot be relied upon for this functionality. For more information, please consult the Internet Computer developer documentation)")```
-#[cfg(not(windows))]
 #[test]
-fn test_canister_http_ipv4() {
-    test_canister_http_impl("127.0.0.1");
-}
-
-#[test]
-fn test_canister_http_ipv6() {
-    test_canister_http_impl("[::1]");
-}
-
-fn test_canister_http_impl(bind_addr: &str) {
+fn test_canister_http() {
     let pic = PocketIc::new();
-
-    let http_server = HttpServer::new(bind_addr);
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1474,7 +1460,7 @@ fn test_canister_http_impl(bind_addr: &str) {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(http_server.get_addr_str()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
 
@@ -1523,7 +1509,8 @@ fn test_canister_http_in_live_mode() {
     // Enable the "live" mode.
     let _ = pic.make_live(None);
 
-    let http_server = HttpServer::new("[::1]");
+    let http_server = HttpServer::new("127.0.0.1");
+    let http_server_addr = format!("localhost:{}", http_server.port());
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1539,7 +1526,7 @@ fn test_canister_http_in_live_mode() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(http_server.get_addr_str()).unwrap(),
+            encode_one(http_server_addr).unwrap(),
         )
         .unwrap();
 
@@ -1554,8 +1541,6 @@ fn test_canister_http_in_live_mode() {
 #[test]
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
-
-    let http_server = HttpServer::new("[::1]");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1574,7 +1559,7 @@ fn test_canister_http_with_transform() {
             canister_id,
             Principal::anonymous(),
             "canister_http_with_transform",
-            encode_one(http_server.get_addr_str()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
     // We need a pair of ticks for the test canister method to make the http outcall
@@ -1617,8 +1602,6 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::new("[::1]");
-
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1634,7 +1617,7 @@ fn test_canister_http_with_diverging_responses() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(http_server.get_addr_str()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
 
@@ -1682,8 +1665,6 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::new("[::1]");
-
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1698,7 +1679,7 @@ fn test_canister_http_with_one_additional_response() {
         canister_id,
         Principal::anonymous(),
         "canister_http",
-        encode_one(http_server.get_addr_str()).unwrap(),
+        encode_one("example.com").unwrap(),
     )
     .unwrap();
 
@@ -1732,8 +1713,6 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::new("[::1]");
-
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1749,7 +1728,7 @@ fn test_canister_http_timeout() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(http_server.get_addr_str()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
 
