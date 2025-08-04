@@ -19,3 +19,7 @@ ic-nervous-system-lock = { path = "../lock" }
 ic-nervous-system-runtime = { path = "../runtime" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
