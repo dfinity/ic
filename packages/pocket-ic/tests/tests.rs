@@ -1380,8 +1380,8 @@ struct HttpServer {
     handle: Option<JoinHandle<()>>,
 }
 
-impl Default for HttpServer {
-    fn default() -> Self {
+impl HttpServer {
+    fn new(bind_addr: &str) -> Self {
         fn handle_connection(mut stream: TcpStream) {
             let mut buffer = [0; 1024];
             let _ = stream.read(&mut buffer).unwrap();
@@ -1397,7 +1397,7 @@ impl Default for HttpServer {
         let flag = Arc::new(AtomicBool::new(true));
 
         // Bind to port 0 (OS assigns a free port)
-        let listener = TcpListener::bind("[::1]:0").expect("Failed to bind");
+        let listener = TcpListener::bind(format!("{}:0", bind_addr)).expect("Failed to bind");
 
         listener.set_nonblocking(true).unwrap();
 
@@ -1428,9 +1428,7 @@ impl Default for HttpServer {
             handle: Some(handle),
         }
     }
-}
 
-impl HttpServer {
     fn get_addr_str(&self) -> String {
         self.addr.to_string()
     }
@@ -1443,11 +1441,21 @@ impl Drop for HttpServer {
     }
 }
 
+#[cfg(not(windows))]
 #[test]
-fn test_canister_http() {
+fn test_canister_http_ipv4() {
+    test_canister_http_impl("127.0.0.1");
+}
+
+#[test]
+fn test_canister_http_ipv6() {
+    test_canister_http_impl("[::1]");
+}
+
+fn test_canister_http_impl(bind_addr: &str) {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::default();
+    let http_server = HttpServer::new(bind_addr);
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1513,7 +1521,7 @@ fn test_canister_http_in_live_mode() {
     // Enable the "live" mode.
     let _ = pic.make_live(None);
 
-    let http_server = HttpServer::default();
+    let http_server = HttpServer::new("[::1]");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1545,7 +1553,7 @@ fn test_canister_http_in_live_mode() {
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::default();
+    let http_server = HttpServer::new("[::1]");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1607,7 +1615,7 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::default();
+    let http_server = HttpServer::new("[::1]");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1672,7 +1680,7 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::default();
+    let http_server = HttpServer::new("[::1]");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1722,7 +1730,7 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
-    let http_server = HttpServer::default();
+    let http_server = HttpServer::new("[::1]");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
