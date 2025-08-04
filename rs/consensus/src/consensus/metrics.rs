@@ -259,7 +259,7 @@ impl FinalizerMetrics {
             ),
             idkg_transcript_resolution_errors: metrics_registry.int_counter(
                 "consensus_idkg_transcript_resolution_errors",
-                "Number of IDkg transcript resolution errors occuring during batch delivery",
+                "Number of IDkg transcript resolution errors occurring during batch delivery",
             ),
             // canister http payload metrics
             canister_http_success_delivered: metrics_registry.int_counter_vec(
