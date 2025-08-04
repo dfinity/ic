@@ -1,4 +1,5 @@
 use super::*;
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
