@@ -17,12 +17,12 @@ async fn main() {
         Orchestrator::new(args, &config, cancellation_token.clone(), logger.clone())
             .await
             .expect("Failed to start orchestrator");
-    let join_handle =
+    let mut join_handle =
         tokio::spawn(async move { orchestrator.start_tasks(cancellation_token_clone).await });
 
     tokio::select! {
         _ = shutdown_signal(logger.clone()) => {},
-        _ = cancellation_token.cancelled() => {},
+        _ = &mut join_handle => {}
     }
 
     info!(logger, "Shutting down orchestrator...");
