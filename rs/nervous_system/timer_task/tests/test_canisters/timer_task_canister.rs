@@ -33,9 +33,6 @@ fn schedule(name: &str) {
         OutOfInstructionsRecurringSyncTask::NAME => {
             OutOfInstructionsRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
-        TerminatingRecurringSyncTask::NAME => {
-            TerminatingRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
-        }
         SuccessRecurringAsyncTask::NAME => {
             SuccessRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
@@ -53,9 +50,6 @@ fn schedule(name: &str) {
         }
         SuccessPeriodicAsyncTask::NAME => {
             SuccessPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
-        }
-        TerminatingRecurringAsyncTask::NAME => {
-            TerminatingRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         PanicPeriodicAsyncTask::NAME => {
             PanicPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
@@ -159,12 +153,12 @@ impl RecurringSyncTask for PanicRecurringSyncTask {
 struct OutOfInstructionsRecurringSyncTask {}
 
 impl RecurringSyncTask for OutOfInstructionsRecurringSyncTask {
+    #[allow(unreachable_code)]
     fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
         loop {
             ic_cdk::api::instruction_counter();
         }
-        #[allow(unreachable_code)]
         (Duration::from_secs(1), self)
     }
 
@@ -173,23 +167,6 @@ impl RecurringSyncTask for OutOfInstructionsRecurringSyncTask {
     }
 
     const NAME: &'static str = "out_of_instructions_recurring_sync_task";
-}
-
-#[derive(Default)]
-struct TerminatingRecurringSyncTask {}
-
-impl RecurringSyncTask for TerminatingRecurringSyncTask {
-    fn execute(self) -> (Duration, Self) {
-        increase_counter(Self::NAME);
-        // Return a very long delay to effectively terminate the task
-        (Duration::from_secs(365 * 24 * 60 * 60), self) // 1 year
-    }
-
-    fn initial_delay(&self) -> Duration {
-        Duration::from_secs(0)
-    }
-
-    const NAME: &'static str = "terminating_recurring_sync_task";
 }
 
 #[derive(Default)]
@@ -275,24 +252,6 @@ impl RecurringAsyncTask for OutOfInstructionsAfterCallRecurringAsyncTask {
     }
 
     const NAME: &'static str = "out_of_instructions_after_call_recurring_async_task";
-}
-
-#[derive(Default)]
-struct TerminatingRecurringAsyncTask {}
-
-#[async_trait]
-impl RecurringAsyncTask for TerminatingRecurringAsyncTask {
-    async fn execute(self) -> (Option<Duration>, Self) {
-        increase_counter(Self::NAME);
-        // Return None to terminate the task
-        (None, self)
-    }
-
-    fn initial_delay(&self) -> Duration {
-        Duration::from_secs(0)
-    }
-
-    const NAME: &'static str = "terminating_recurring_async_task";
 }
 
 #[derive(Default, Clone, Copy)]

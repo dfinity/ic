@@ -48,7 +48,7 @@ fn delay_until_next_run(
 
 #[async_trait]
 impl RecurringAsyncTask for CalculateDistributableRewardsTask {
-    async fn execute(self) -> (Option<Duration>, Self) {
+    async fn execute(self) -> (Duration, Self) {
         let total_supply = self
             .governance
             .with_borrow(|governance| governance.get_ledger())
@@ -70,7 +70,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
         }
 
         let next_run = self.next_reward_task_from_now();
-        (Some(next_run), self)
+        (next_run, self)
     }
 
     fn initial_delay(&self) -> Duration {

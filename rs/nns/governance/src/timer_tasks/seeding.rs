@@ -23,7 +23,7 @@ const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 
 #[async_trait]
 impl RecurringAsyncTask for SeedingTask {
-    async fn execute(self) -> (Option<Duration>, Self) {
+    async fn execute(self) -> (Duration, Self) {
         let env = self
             .governance
             .with_borrow(|governance| governance.env.clone());
@@ -49,7 +49,7 @@ impl RecurringAsyncTask for SeedingTask {
             }
         };
 
-        (Some(next_delay), self)
+        (next_delay, self)
     }
 
     fn initial_delay(&self) -> Duration {

@@ -23,7 +23,6 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
-    "//rs/nervous_system/timer_task",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
@@ -55,7 +54,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:async-trait",
 ]
 
 BUILD_DEPENDENCIES = [

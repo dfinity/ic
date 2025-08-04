@@ -41,14 +41,14 @@ impl PruneFollowingTask {
 }
 
 impl RecurringSyncTask for PruneFollowingTask {
-    fn execute(self) -> (Option<Duration>, Self) {
+    fn execute(self) -> (Duration, Self) {
         let new_begin = self.governance.with_borrow_mut(|governance| {
             let carry_on = || !is_message_over_threshold(MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS);
             governance.prune_some_following(self.begin, carry_on)
         });
 
         (
-            Some(PRUNE_FOLLOWING_INTERVAL),
+            PRUNE_FOLLOWING_INTERVAL,
             Self {
                 governance: self.governance,
                 begin: new_begin,

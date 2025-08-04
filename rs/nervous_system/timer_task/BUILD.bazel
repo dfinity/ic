@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 
@@ -24,7 +24,6 @@ DEV_DEPENDENCIES = DEPENDENCIES + select({
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/types",
-        "@crate_index//:tokio",
     ],
 })
 
@@ -53,15 +52,6 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
     deps = DEPENDENCIES,
-)
-
-rust_test(
-    name = "timer_task_unit_test",
-    srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        "@crate_index//:tokio",
-    ],
 )
 
 rust_ic_test_suite(

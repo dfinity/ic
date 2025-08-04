@@ -26,4 +26,3 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-types = { path = "../../types/types" }
-tokio = { workspace = true }

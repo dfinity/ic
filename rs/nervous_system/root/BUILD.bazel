@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/lock",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/management_canister_types",
