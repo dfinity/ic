@@ -1,5 +1,6 @@
-use ic_consensus_idkg::metrics::{
-    key_id_label, CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL,
+use ic_consensus_idkg::{
+    metrics::{key_id_label, CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL},
+    utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
@@ -257,9 +258,8 @@ impl FinalizerMetrics {
                 "Total number of IDKG reshare agreements created",
                 &[KEY_ID_LABEL],
             ),
-            idkg_transcript_resolution_errors: metrics_registry.int_counter(
-                "consensus_idkg_transcript_resolution_errors",
-                "Number of IDkg transcript resolution errors occurring during batch delivery",
+            idkg_transcript_resolution_errors: metrics_registry.error_counter(
+                CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
             ),
             // canister http payload metrics
             canister_http_success_delivered: metrics_registry.int_counter_vec(

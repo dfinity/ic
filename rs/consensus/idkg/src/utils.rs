@@ -11,7 +11,7 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -52,6 +52,8 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
 };
+
+pub const CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS: &str = "idkg_resolve_transcript_refs_error";
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct InvalidChainCacheError(String);
@@ -559,9 +561,10 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                         if let Some(ref mut stats) = stats {
                             stats.transcript_resolution_errors += 1;
                         }
-                        warn!(
+                        error!(
                             log,
-                            "Failed to retrieve IDKg subnet master public key of key {}: {:?}",
+                            "{}: Failed to retrieve IDKg subnet master public key of key {}: {:?}",
+                            CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
                             key_id,
                             err
                         );
@@ -579,9 +582,10 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                 if let Some(ref mut stats) = stats {
                     stats.transcript_resolution_errors += 1;
                 }
-                warn!(
+                error!(
                     log,
-                    "Failed to translate key transcript ref {:?} of key {}: {:?}",
+                    "{}: Failed to translate key transcript ref {:?} of key {}: {:?}",
+                    CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
                     transcript_ref,
                     key_id,
                     err
@@ -608,7 +612,10 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     }
                     warn!(
                         log,
-                        "Failed to translate Pre-signature ref of key {}: {:?}", key_id, err
+                        "{}: Failed to translate Pre-signature ref of key {}: {:?}",
+                        CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
+                        key_id,
+                        err
                     );
                 }
             }
