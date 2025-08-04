@@ -3,7 +3,7 @@
   <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
   <memory unit='GiB'>490</memory>
@@ -14,14 +14,18 @@
     <topology sockets='2' cores='14' threads='2'/>
     <feature policy='require' name='topoext'/>
   </cpu>
+  <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
+    <arg value='-cpu'/>
+    <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
+  </commandline>
   <resource>
     <partition>/machine</partition>
   </resource>
-  <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
+  <os type='efi'>
+    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
+    <boot dev='hd'/>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
-    <boot dev='hd'/>
   </os>
   <features>
     <acpi/>
@@ -32,18 +36,19 @@
     <timer name='pit' tickpolicy='delay'/>
     <timer name='hpet' present='no'/>
   </clock>
-  <on_poweroff>restart</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
+  <!-- Destroy the VM in all these cases and let the guest_vm_runner restart it -->
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
   <pm>
     <suspend-to-mem enabled='no'/>
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='/dev/hostlvm/guestos' index='1'/>
+      <source dev='/dev/guest_disk' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>

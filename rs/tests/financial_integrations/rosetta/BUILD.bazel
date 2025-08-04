@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,14 +6,12 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "rosetta_test",
     tags = ["experimental_system_test_colocation"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS + [
-            "//rs/rosetta-api/icp:ic-rosetta-api",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
+    runtime_deps = [
+        "//rs/rosetta-api/icp:ic-rosetta-api",
+        "//rs/tests:rosetta_workspace",
+        "@rosetta-cli//:rosetta-cli",
+    ],
     deps = [
         "//rs/canister_client",
         "//rs/ledger_suite/icp:icp_ledger",
@@ -42,9 +40,7 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             "//rs/rosetta-api/icp:ic-rosetta-api",
             "//rs/rosetta-api/icp:rosetta_image.tar",

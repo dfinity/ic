@@ -75,15 +75,13 @@ fi
 echo "Recovery artifact verified successfully"
 
 echo "Extracting recovery artifact..."
-tar zxf "recovery.tar.zst"
+tar -xf "recovery.tar.zst"
 
 echo "Preparing recovery artifacts..."
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store)
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store)
+TARGET_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/ic_registry_local_store)
 
 mkdir ic_registry_local_store
-tar zxf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
-sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store
+tar -xf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
 
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups)
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups)
@@ -92,6 +90,7 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" "cup.proto"
 echo "Applying recovery artifacts..."
 echo "Syncing ic_registry_local_store to target location..."
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/
+sudo chmod "$TARGET_PERMS" /var/lib/ic/data/ic_registry_local_store
 echo "Copying cup.proto to target location..."
 sudo cp "cup.proto" /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb
 

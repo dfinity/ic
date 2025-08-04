@@ -10,15 +10,20 @@ path = "src/main.rs"
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
+ic_device = { path = "../../device" }
 grub = { path = "../../grub" }
 ic-metrics-tool = { path = "../../metrics_tool" }
+ic_sev = { path = "../../sev" }
 
 anyhow = { workspace = true }
 askama = { workspace = true }
-async-trait = { workspace = true }
+clap = { workspace = true }
+devicemapper = "0.34"
 gpt = { workspace = true }
 macaddr = { workspace = true }
+nix = { workspace = true }
 regex = { workspace = true }
+thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -26,15 +31,14 @@ uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 systemd = { workspace = true }
-sys-mount = { workspace = true }
 virt = { workspace = true }
 
 [features]
 dev = ["config/dev"]
+skip_default_tests = []
 integration_tests = []
+upgrade_device_mapper_test = []
 
 [dev-dependencies]
-goldenfile = "*"
-nix = "*"
-partition_tools = { path = "../../build_tools/partition_tools" }
-url = "*"
+goldenfile = { workspace = true }
+url = { workspace = true }

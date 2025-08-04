@@ -72,31 +72,48 @@ type CompleteCanisterMigrationPayload = record {
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
-  gossip_registry_poll_period_ms : nat32;
   max_ingress_bytes_per_message : nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
   start_as_nns : bool;
   is_halted : bool;
-  gossip_pfn_evaluation_period_ms : nat32;
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
   chain_key_config : opt InitialChainKeyConfig;
-  gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
-  gossip_max_duplicity : nat32;
-  gossip_max_chunk_wait_ms : nat32;
   dkg_interval_length : nat64;
   subnet_id_override : opt principal;
   ssh_backup_access : vec text;
-  ingress_bytes_per_block_soft_cap : nat64;
   initial_notary_delay_millis : nat64;
-  gossip_max_chunk_size : nat32;
   subnet_type : SubnetType;
   ssh_readonly_access : vec text;
-  gossip_retransmission_request_ms : nat32;
-  gossip_receive_check_cache_size : nat32;
   node_ids : vec principal;
+
+  canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
+
+  // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+  ingress_bytes_per_block_soft_cap : nat64;
+  gossip_max_artifact_streams_per_peer : nat32;
+  gossip_max_chunk_size : nat32;
+  gossip_max_chunk_wait_ms : nat32;
+  gossip_max_duplicity : nat32;
+  gossip_pfn_evaluation_period_ms : nat32;
+  gossip_receive_check_cache_size : nat32;
+  gossip_registry_poll_period_ms : nat32;
+  gossip_retransmission_request_ms : nat32;
+};
+
+type CreateSubnetResponse = variant {
+  Ok : record {
+    new_subnet_id : opt principal;
+  };
+
+  Err: text;
+};
+
+type CanisterCyclesCostSchedule = variant {
+  Normal;
+  Free;
 };
 
 type DataCenterRecord = record {
@@ -119,6 +136,7 @@ type InitialChainKeyConfig = record {
   key_configs : vec KeyConfigRequest;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type KeyConfigRequest = record {
@@ -142,30 +160,9 @@ type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
 type VetKdCurve = variant { bls12_381_g2 };
 
-type EcdsaConfig = record {
-  quadruples_to_create_in_advance : nat32;
-  max_queue_size : opt nat32;
-  key_ids : vec EcdsaKeyId;
-  signature_request_timeout_ns : opt nat64;
-  idkg_key_rotation_period_ms : opt nat64;
-};
-
 type EcdsaCurve = variant { secp256k1 };
 
-type EcdsaInitialConfig = record {
-  quadruples_to_create_in_advance : nat32;
-  max_queue_size : opt nat32;
-  keys : vec EcdsaKeyRequest;
-  signature_request_timeout_ns : opt nat64;
-  idkg_key_rotation_period_ms : opt nat64;
-};
-
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
-
-type EcdsaKeyRequest = record {
-  key_id : EcdsaKeyId;
-  subnet_id : opt principal;
-};
 
 type FirewallRule = record {
   ipv4_prefixes : vec text;
@@ -454,6 +451,7 @@ type ChainKeyConfig = record {
   key_configs : vec KeyConfig;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type UpdateUnassignedNodesConfigPayload = record {
@@ -471,7 +469,7 @@ service : {
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
-  create_subnet : (CreateSubnetPayload) -> ();
+  create_subnet : (CreateSubnetPayload) -> (CreateSubnetResponse);
   deploy_guestos_to_all_subnet_nodes : (
     DeployGuestosToAllSubnetNodesPayload
   ) -> ();

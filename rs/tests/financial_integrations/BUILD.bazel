@@ -1,4 +1,3 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -16,9 +15,8 @@ system_test(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
+        LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//packages/icrc-ledger-agent:icrc_ledger_agent",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -50,8 +48,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/canister_client/sender",
         "//rs/ledger_suite/common/ledger_core",

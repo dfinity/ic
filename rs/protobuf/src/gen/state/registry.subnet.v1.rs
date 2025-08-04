@@ -70,6 +70,10 @@ pub struct SubnetRecord {
     /// key. If the removed key is not held by another subnet, it will be lost.
     #[prost(message, optional, tag = "29")]
     pub chain_key_config: ::core::option::Option<ChainKeyConfig>,
+    /// When set to UNSPECIFIED, this field behaves the same as NORMAL, which just
+    /// means to behave according to the `subnet_type` field.
+    #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -298,34 +302,13 @@ pub struct SubnetFeatures {
     #[prost(bool, optional, tag = "9")]
     pub sev_enabled: ::core::option::Option<bool>,
 }
-/// Per subnet ECDSA configuration
-///
-/// Deprecated; please use ChainKeyConfig instead.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaConfig {
-    /// Number of quadruples to create in advance.
-    #[prost(uint32, tag = "1")]
-    pub quadruples_to_create_in_advance: u32,
-    /// Identifiers for threshold ECDSA keys held by the subnet.
-    #[prost(message, repeated, tag = "3")]
-    pub key_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::EcdsaKeyId>,
-    /// The maximum number of signature requests that can be enqueued at once.
-    #[prost(uint32, tag = "4")]
-    pub max_queue_size: u32,
-    /// Signature requests will timeout after the given number of nano seconds.
-    #[prost(uint64, optional, tag = "5")]
-    pub signature_request_timeout_ns: ::core::option::Option<u64>,
-    /// Key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[prost(uint64, optional, tag = "6")]
-    pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyConfig {
     /// The key's identifier.
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
-    /// Number of pre-signatures to create in advance.
+    /// The size of the pre-signature stash, i.e. the maximum number of
+    /// pre-signatures that can be stored at once.
     #[prost(uint32, optional, tag = "3")]
     pub pre_signatures_to_create_in_advance: ::core::option::Option<u32>,
     /// The maximum number of signature requests that can be enqueued at once.
@@ -342,9 +325,13 @@ pub struct ChainKeyConfig {
     #[prost(uint64, optional, tag = "2")]
     pub signature_request_timeout_ns: ::core::option::Option<u64>,
     /// Key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
+    /// If none is specified, key rotation is disabled.
     #[prost(uint64, optional, tag = "3")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
+    /// Maximum number of pre-signature transcripts that can be worked on in
+    /// parallel to fill the pre-signature stash.
+    #[prost(uint32, optional, tag = "4")]
+    pub max_parallel_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -421,6 +408,40 @@ impl SubnetType {
             "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
             "SUBNET_TYPE_SYSTEM" => Some(Self::System),
             "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            _ => None,
+        }
+    }
+}
+/// How to charge canisters for their use of computational resources (such as
+/// executing instructions, storing data, network, etc.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CanisterCyclesCostSchedule {
+    /// This should be treated the same as NORMAL.
+    Unspecified = 0,
+    /// Behave according to SubnetType.
+    Normal = 1,
+    /// Canisters are not charged cycles.
+    Free = 2,
+}
+impl CanisterCyclesCostSchedule {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CANISTER_CYCLES_COST_SCHEDULE_UNSPECIFIED",
+            Self::Normal => "CANISTER_CYCLES_COST_SCHEDULE_NORMAL",
+            Self::Free => "CANISTER_CYCLES_COST_SCHEDULE_FREE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CANISTER_CYCLES_COST_SCHEDULE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CANISTER_CYCLES_COST_SCHEDULE_NORMAL" => Some(Self::Normal),
+            "CANISTER_CYCLES_COST_SCHEDULE_FREE" => Some(Self::Free),
             _ => None,
         }
     }

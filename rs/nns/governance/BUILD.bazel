@@ -72,6 +72,7 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/subnet_type",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
@@ -363,6 +364,9 @@ filegroup(
 
 rust_test_suite_with_extra_srcs(
     name = "governance_integration_test",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-04
+    timeout = "long",
     srcs = glob(
         ["tests/*.rs"],
         exclude = [

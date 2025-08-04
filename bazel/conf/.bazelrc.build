@@ -49,6 +49,18 @@ common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
 
+# configure some tests to retry automatically, best used unattened (not locally).
+# default all tests to fail ...
+#   ... after three attempts for tests marked as flaky
+#   ... after three attempts for all tests in //rs/tests
+#   ... after the first attempt for other tests
+#   see also:
+#     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+#
+# (NOTE: for convenience, applied to 'common' instead of just 'test' so that it doesn't
+# fail on 'bazel build')
+common:flaky_retry --flaky_test_attempts=default --flaky_test_attempts=//rs/tests/.*@3
+
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test,-fuzz_test"
@@ -79,8 +91,8 @@ build:dev --compilation_mode=fastbuild
 
 # Fuzzing configuration
 build:fuzzing --action_env="SANITIZERS_ENABLED=1"
-# sanitizers are only supported in nightly
-build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
+# fuzzers use nightly features so we tell rustc to allow nightly features
+build:fuzzing --@rules_rust//rust/settings:extra_rustc_env=RUSTC_BOOTSTRAP=1 --@rules_rust//rust/settings:extra_exec_rustc_env=RUSTC_BOOTSTRAP=1
 build:fuzzing --build_tag_filters=fuzz_test
 # Ignoring transitions for now since it doesn't add any additional improvement to current setup
 build:fuzzing --//bazel:enable_fuzzing_code=True

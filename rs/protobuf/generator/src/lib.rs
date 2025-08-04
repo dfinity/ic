@@ -161,9 +161,9 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        MaliciousBehaviourLogEntry,
-        "log.malicious_behaviour_log_entry.v1",
-        malicious_behaviour
+        MaliciousBehaviorLogEntry,
+        "log.malicious_behavior_log_entry.v1",
+        malicious_behavior
     );
 
     compile_protos(config, def, &[def.join("log/log_entry/v1/log_entry.proto")]);
@@ -212,10 +212,6 @@ fn build_registry_proto(def: &Path, out: &Path) {
     config.type_attribute(
         ".registry.subnet",
         "#[derive(serde::Serialize, serde::Deserialize)]",
-    );
-    config.type_attribute(
-        ".registry.subnet.v1.EcdsaConfig",
-        "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
         ".registry.subnet.v1.SubnetFeatures",
@@ -367,6 +363,10 @@ fn build_types_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".types.v1.PreSignatureInCreation",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.PreSignature",
         "#[allow(clippy::large_enum_variant)]",
     );
     config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");

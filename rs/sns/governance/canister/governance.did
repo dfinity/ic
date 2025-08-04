@@ -13,6 +13,7 @@ type Action = variant {
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   RegisterExtension : RegisterExtension;
+  ExecuteExtensionOperation : ExecuteExtensionOperation;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -50,9 +51,21 @@ type By = variant {
   NeuronId : record {};
 };
 
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
+};
+
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
   memory_size : nat;
+  memory_metrics : opt MemoryMetrics;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
@@ -253,9 +266,43 @@ type GetMetricsRequest = record {
   time_window_seconds : opt nat64;
 };
 
+type TreasuryMetrics = record {
+  // Same as, e.g., `TransferSnsTreasuryFunds.from_treasury`.
+  treasury : int32;
+
+  // A human-readable identified for this treasury, e.g., "ICP".
+  name : opt text;
+  
+  // The source of truth for the treasury balance is this ledger canister / account.
+  ledger_canister_id : opt principal;
+  account : opt Account;
+
+  // The regularly updated amount of tokens in this treasury.
+  amount_e8s : opt nat64;
+  // The amount of tokens in this treasury at the end of swap finalization.
+  original_amount_e8s : opt nat64;
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
+};
+
+type VotingPowerMetrics = record {
+  governance_total_potential_voting_power : opt nat64; 
+
+  // When the metrics were last updated.
+  timestamp_seconds : opt nat64;
+};
+
 type Metrics = record {
   num_recently_submitted_proposals : opt nat64;
+  num_recently_executed_proposals: opt nat64;
+
   last_ledger_block_timestamp : opt nat64;
+
+  // The metrics below are cached (albeit this is an implementation detail).
+  treasury_metrics : opt vec TreasuryMetrics;
+  voting_power_metrics : opt VotingPowerMetrics;
+  genesis_timestamp_seconds : opt nat64;
 };
 
 type GetMetricsResult = variant {
@@ -358,6 +405,8 @@ type GovernanceCachedMetrics = record {
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   timestamp_seconds : nat64;
+  treasury_metrics : vec TreasuryMetrics;
+  voting_power_metrics : opt VotingPowerMetrics;
 };
 
 type GovernanceError = record {
@@ -698,6 +747,18 @@ type RegisterExtension = record {
   extension_init : opt ExtensionInit;
 };
 
+type ExtensionOperationArg = record {
+  value : opt PreciseValue;
+};
+
+type ExecuteExtensionOperation = record {
+  extension_canister_id : opt principal;
+
+  operation_name : opt text;
+
+  operation_arg : opt ExtensionOperationArg;
+};
+
 type RegisterVote = record {
   vote : int32;
   proposal : opt ProposalId;
@@ -948,6 +1009,7 @@ service : (Governance) -> {
   get_maturity_modulation : (record {}) -> (GetMaturityModulationResponse);
   get_metadata : (record {}) -> (GetMetadataResponse) query;
   get_metrics : (GetMetricsRequest) -> (GetMetricsResponse) composite_query;
+  get_metrics_replicated : (GetMetricsRequest) -> (GetMetricsResponse);
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;

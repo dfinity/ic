@@ -2,7 +2,6 @@ use crate::{
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
-    utils::algorithm_for_key_id,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -639,7 +638,7 @@ pub(crate) fn create_transcript(
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: algorithm_for_key_id(key_id),
+        algorithm_id: AlgorithmId::from(key_id.inner()),
         internal_transcript_raw: vec![],
     }
 }
@@ -685,7 +684,7 @@ pub(crate) fn create_transcript_param_with_registry_version(
     idkg_transcripts.insert(*random_masked.as_ref(), random_transcript);
 
     let attrs =
-        IDkgTranscriptAttributes::new(dealers, algorithm_for_key_id(key_id), registry_version);
+        IDkgTranscriptAttributes::new(dealers, AlgorithmId::from(key_id.inner()), registry_version);
 
     // The transcript that points to the random transcript
     let transcript_params_ref = ReshareOfMaskedParams::new(
@@ -825,7 +824,7 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = setup_masked_random_params(
         &env,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
         &dealers,
         &receivers,
         rng,
@@ -1154,6 +1153,7 @@ pub fn create_available_pre_signature(
     )
 }
 
+// TODO(CON-1550): Parameterize by height that should be referenced by transcript refs
 pub fn create_available_pre_signature_with_key_transcript(
     idkg_payload: &mut IDkgPayload,
     caller: u8,
@@ -1231,7 +1231,7 @@ pub(crate) fn generate_key_transcript(
         env,
         &dealers,
         &receivers,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
         rng,
     );
     let key_transcript_ref = idkg::UnmaskedTranscript::try_from((height, &key_transcript)).unwrap();

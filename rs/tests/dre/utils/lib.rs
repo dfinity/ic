@@ -22,6 +22,7 @@ pub const IC_CONFIG: &str = "IC_CONFIG";
 
 pub fn setup(env: TestEnv, config: IcConfig) {
     let mut ic = InternetComputer::new();
+
     if let Some(v) = config.initial_version {
         ic = ic.with_initial_replica(NodeSoftwareVersion {
             replica_version: v.clone().try_into().unwrap(),

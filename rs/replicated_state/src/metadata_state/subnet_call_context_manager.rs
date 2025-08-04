@@ -5,14 +5,20 @@ use ic_management_canister_types_private::{
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
+    registry::subnet::v1 as pb_subnet,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
     types::v1 as pb_types,
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::PreSigId,
-    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+    consensus::idkg::{common::PreSignature, PreSigId},
+    crypto::{
+        canister_threshold_sig::{
+            idkg::IDkgTranscript, EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
+        },
+        threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+    },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
     RegistryVersion, Time,
@@ -205,6 +211,12 @@ impl CanisterManagementCalls {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PreSignatureStash {
+    pub key_transcript: Arc<IDkgTranscript>,
+    pub pre_signatures: BTreeMap<PreSigId, PreSignature>,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetCallContextManager {
     /// Should increase monotonically. This property is used to determine if a request
@@ -219,6 +231,7 @@ pub struct SubnetCallContextManager {
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
     pub raw_rand_contexts: VecDeque<RawRandContext>,
+    pub pre_signature_stashes: BTreeMap<MasterPublicKeyId, PreSignatureStash>,
 }
 
 impl SubnetCallContextManager {
@@ -493,6 +506,24 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            pre_signature_stashes: item
+                .pre_signature_stashes
+                .iter()
+                .map(
+                    |(key_id, pre_signature_stash)| pb_metadata::PreSignatureStashTree {
+                        key_id: Some(key_id.into()),
+                        key_transcript: Some(pre_signature_stash.key_transcript.as_ref().into()),
+                        pre_signatures: pre_signature_stash
+                            .pre_signatures
+                            .iter()
+                            .map(|(id, pre_sig)| pb_metadata::PreSignatureIdPair {
+                                pre_sig_id: id.0,
+                                pre_signature: Some(pre_sig.into()),
+                            })
+                            .collect(),
+                    },
+                )
+                .collect(),
             canister_http_request_contexts: item
                 .canister_http_request_contexts
                 .iter()
@@ -593,6 +624,35 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             sign_with_threshold_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut pre_signature_stashes = BTreeMap::<MasterPublicKeyId, PreSignatureStash>::new();
+        for entry in item.pre_signature_stashes {
+            let key_id: MasterPublicKeyId = try_from_option_field(
+                entry.key_id,
+                "SystemMetadata::PreSignatureStash::MasterPublicKeyId",
+            )?;
+            let key_transcript: IDkgTranscript = try_from_option_field(
+                entry.key_transcript.as_ref(),
+                "SystemMetadata::PreSignatureStash::IDkgTranscript",
+            )?;
+            let mut pre_signatures = BTreeMap::new();
+            for pre_signature in entry.pre_signatures {
+                pre_signatures.insert(
+                    PreSigId(pre_signature.pre_sig_id),
+                    try_from_option_field(
+                        pre_signature.pre_signature.as_ref(),
+                        "SystemMetadata::PreSignatureStash::PreSignature",
+                    )?,
+                );
+            }
+            pre_signature_stashes.insert(
+                key_id,
+                PreSignatureStash {
+                    key_transcript: Arc::new(key_transcript),
+                    pre_signatures,
+                },
+            );
+        }
+
         let mut canister_http_request_contexts =
             BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
         for entry in item.canister_http_request_contexts {
@@ -682,6 +742,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             },
             raw_rand_contexts,
             reshare_chain_key_contexts,
+            pre_signature_stashes,
         })
     }
 }
@@ -767,9 +828,51 @@ fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeE
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct EcdsaMatchedPreSignature {
+    pub id: PreSigId,
+    pub height: Height,
+    pub pre_signature: Arc<EcdsaPreSignatureQuadruple>,
+    pub key_transcript: Arc<IDkgTranscript>,
+}
+
+impl From<&EcdsaMatchedPreSignature> for pb_types::EcdsaMatchedPreSignature {
+    fn from(value: &EcdsaMatchedPreSignature) -> Self {
+        Self {
+            pre_signature_id: value.id.0,
+            height: value.height.get(),
+            pre_signature: Some(pb_types::EcdsaPreSignatureQuadruple::from(
+                value.pre_signature.as_ref(),
+            )),
+            key_transcript: Some(pb_subnet::IDkgTranscript::from(
+                value.key_transcript.as_ref(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<pb_types::EcdsaMatchedPreSignature> for EcdsaMatchedPreSignature {
+    type Error = ProxyDecodeError;
+    fn try_from(proto: pb_types::EcdsaMatchedPreSignature) -> Result<Self, Self::Error> {
+        Ok(EcdsaMatchedPreSignature {
+            id: PreSigId(proto.pre_signature_id),
+            height: Height::from(proto.height),
+            pre_signature: Arc::new(try_from_option_field(
+                proto.pre_signature.as_ref(),
+                "EcdsaMatchedPreSignature::pre_signature",
+            )?),
+            key_transcript: Arc::new(try_from_option_field(
+                proto.key_transcript.as_ref(),
+                "EcdsaMatchedPreSignature::key_transcript",
+            )?),
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EcdsaArguments {
     pub key_id: EcdsaKeyId,
     pub message_hash: [u8; MESSAGE_HASH_SIZE],
+    pub pre_signature: Option<EcdsaMatchedPreSignature>,
 }
 
 impl From<&EcdsaArguments> for pb_metadata::EcdsaArguments {
@@ -777,6 +880,10 @@ impl From<&EcdsaArguments> for pb_metadata::EcdsaArguments {
         Self {
             key_id: Some((&args.key_id).into()),
             message_hash: args.message_hash.to_vec(),
+            pre_signature: args
+                .pre_signature
+                .as_ref()
+                .map(pb_types::EcdsaMatchedPreSignature::from),
         }
     }
 }
@@ -787,6 +894,51 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
         Ok(EcdsaArguments {
             key_id: try_from_option_field(context.key_id, "EcdsaArguments::key_id")?,
             message_hash: try_into_array_message_hash(context.message_hash)?,
+            pre_signature: context
+                .pre_signature
+                .map(EcdsaMatchedPreSignature::try_from)
+                .transpose()?,
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct SchnorrMatchedPreSignature {
+    pub id: PreSigId,
+    pub height: Height,
+    pub pre_signature: Arc<SchnorrPreSignatureTranscript>,
+    pub key_transcript: Arc<IDkgTranscript>,
+}
+
+impl From<&SchnorrMatchedPreSignature> for pb_types::SchnorrMatchedPreSignature {
+    fn from(value: &SchnorrMatchedPreSignature) -> Self {
+        Self {
+            pre_signature_id: value.id.0,
+            height: value.height.get(),
+            pre_signature: Some(pb_types::SchnorrPreSignatureTranscript::from(
+                value.pre_signature.as_ref(),
+            )),
+            key_transcript: Some(pb_subnet::IDkgTranscript::from(
+                value.key_transcript.as_ref(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<pb_types::SchnorrMatchedPreSignature> for SchnorrMatchedPreSignature {
+    type Error = ProxyDecodeError;
+    fn try_from(proto: pb_types::SchnorrMatchedPreSignature) -> Result<Self, Self::Error> {
+        Ok(SchnorrMatchedPreSignature {
+            id: PreSigId(proto.pre_signature_id),
+            height: Height::from(proto.height),
+            pre_signature: Arc::new(try_from_option_field(
+                proto.pre_signature.as_ref(),
+                "SchnorrMatchedPreSignature::pre_signature",
+            )?),
+            key_transcript: Arc::new(try_from_option_field(
+                proto.key_transcript.as_ref(),
+                "SchnorrMatchedPreSignature::key_transcript",
+            )?),
         })
     }
 }
@@ -796,6 +948,7 @@ pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
     pub message: Arc<Vec<u8>>,
     pub taproot_tree_root: Option<Arc<Vec<u8>>>,
+    pub pre_signature: Option<SchnorrMatchedPreSignature>,
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
@@ -804,6 +957,10 @@ impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
             key_id: Some((&args.key_id).into()),
             message: args.message.to_vec(),
             taproot_tree_root: args.taproot_tree_root.as_ref().map(|v| v.to_vec()),
+            pre_signature: args
+                .pre_signature
+                .as_ref()
+                .map(pb_types::SchnorrMatchedPreSignature::from),
         }
     }
 }
@@ -815,6 +972,10 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
             key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
             message: Arc::new(context.message),
             taproot_tree_root: context.taproot_tree_root.map(Arc::new),
+            pre_signature: context
+                .pre_signature
+                .map(SchnorrMatchedPreSignature::try_from)
+                .transpose()?,
         })
     }
 }
@@ -973,6 +1134,18 @@ impl SignWithThresholdContext {
         }
     }
 
+    pub fn requires_pre_signature(&self) -> bool {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => {
+                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+            }
+            ThresholdArguments::Schnorr(args) => {
+                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+            }
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
     /// Returns true if arguments are for ECDSA.
     pub fn is_ecdsa(&self) -> bool {
         matches!(&self.args, ThresholdArguments::Ecdsa(_))
@@ -1024,6 +1197,37 @@ impl SignWithThresholdContext {
             ThresholdArguments::VetKd(args) => args,
             _ => panic!("VetKd arguments not found."),
         }
+    }
+
+    /// Return all IDkgTranscripts included in this context
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = match &self.args {
+            ThresholdArguments::Ecdsa(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| {
+                    vec![
+                        pre_sig.pre_signature.kappa_unmasked(),
+                        pre_sig.pre_signature.lambda_masked(),
+                        pre_sig.pre_signature.kappa_times_lambda(),
+                        pre_sig.pre_signature.key_times_lambda(),
+                        &pre_sig.key_transcript,
+                    ]
+                })
+                .unwrap_or_default(),
+            ThresholdArguments::Schnorr(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| {
+                    vec![
+                        pre_sig.pre_signature.blinder_unmasked(),
+                        &pre_sig.key_transcript,
+                    ]
+                })
+                .unwrap_or_default(),
+            ThresholdArguments::VetKd(_) => vec![],
+        };
+        refs.into_iter()
     }
 }
 
@@ -1115,19 +1319,10 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
             target_id: {
-                // The target id is empty, if we have a legacy IDkgDealingContext
-                // Since we don't need the target id for Idkg, this is safe
-                // TODO(CRP-2613): remove this case
-                if context.target_id.is_empty() {
-                    NiDkgTargetId::new([0; 32])
-                } else {
-                    match ni_dkg_target_id(context.target_id.as_slice()) {
-                        Ok(target_id) => target_id,
-                        Err(_) => {
-                            return Err(Self::Error::Other(
-                                "target_id is not 32 bytes.".to_string(),
-                            ))
-                        }
+                match ni_dkg_target_id(context.target_id.as_slice()) {
+                    Ok(target_id) => target_id,
+                    Err(_) => {
+                        return Err(Self::Error::Other("target_id is not 32 bytes.".to_string()))
                     }
                 }
             },
@@ -1428,6 +1623,7 @@ mod testing {
             bitcoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,
             raw_rand_contexts: Default::default(),
+            pre_signature_stashes: Default::default(),
         };
     }
 }

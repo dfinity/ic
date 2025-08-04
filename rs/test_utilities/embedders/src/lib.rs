@@ -27,6 +27,7 @@ use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -41,7 +42,6 @@ pub struct WasmtimeInstanceBuilder {
     subnet_type: SubnetType,
     network_topology: NetworkTopology,
     config: ic_config::embedders::Config,
-    canister_memory_limit: NumBytes,
     memory_usage: NumBytes,
     environment_variables: BTreeMap<String, String>,
 }
@@ -57,7 +57,6 @@ impl Default for WasmtimeInstanceBuilder {
             subnet_type: SubnetType::Application,
             network_topology: NetworkTopology::default(),
             config: ic_config::embedders::Config::default(),
-            canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
             memory_usage: NumBytes::from(0),
             environment_variables: BTreeMap::new(),
         }
@@ -105,13 +104,6 @@ impl WasmtimeInstanceBuilder {
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
         Self {
             subnet_type,
-            ..self
-        }
-    }
-
-    pub fn with_canister_memory_limit(self, canister_memory_limit: NumBytes) -> Self {
-        Self {
-            canister_memory_limit,
             ..self
         }
     }
@@ -170,6 +162,7 @@ impl WasmtimeInstanceBuilder {
             Default::default(),
             self.api_type.caller(),
             self.api_type.call_context_id(),
+            CanisterCyclesCostSchedule::Normal,
         );
 
         let subnet_memory_capacity = i64::MAX / 2;
@@ -185,7 +178,6 @@ impl WasmtimeInstanceBuilder {
                     self.num_instructions,
                     self.num_instructions,
                 ),
-                canister_memory_limit: self.canister_memory_limit,
                 wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
                 canister_guaranteed_callback_quota: canister_callback_quota,

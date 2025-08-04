@@ -67,6 +67,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
     "//rs/test_utilities/load_wasm",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
 ]
@@ -82,7 +83,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.3"
+ROSETTA_VERSION = "1.2.4"
 
 rust_library(
     name = "ic-icrc-rosetta",

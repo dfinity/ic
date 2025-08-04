@@ -35,6 +35,7 @@ type definite_canister_settings = record {
     log_visibility : log_visibility;
     wasm_memory_limit : nat;
     wasm_memory_threshold: nat;
+    environment_variables : vec environment_variable;
 };
 
 type change_origin = variant {
@@ -419,6 +420,7 @@ type subnet_info_args = record {
 
 type subnet_info_result = record {
     replica_version : text;
+    registry_version : nat64;
 };
 
 type provisional_create_canister_with_cycles_args = record {

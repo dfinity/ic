@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -9,9 +9,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -26,9 +25,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -43,9 +41,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -63,8 +60,7 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
@@ -81,9 +77,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -101,9 +96,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
@@ -122,9 +116,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
@@ -143,9 +136,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
@@ -162,9 +154,8 @@ system_test(
     tags = [
         "manual",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",  # TODO: consider removing this
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
