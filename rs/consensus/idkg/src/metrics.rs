@@ -440,6 +440,7 @@ impl ThresholdSignatureMetrics {
 }
 
 // IDkg payload stats
+#[derive(Default)]
 pub struct IDkgPayloadStats {
     pub signature_agreements: usize,
     pub key_transcripts_created: CounterPerMasterPublicKeyId,
