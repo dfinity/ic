@@ -1397,7 +1397,7 @@ impl Default for HttpServer {
         let flag = Arc::new(AtomicBool::new(true));
 
         // Bind to port 0 (OS assigns a free port)
-        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind");
+        let listener = TcpListener::bind("[::1]:0").expect("Failed to bind");
 
         listener.set_nonblocking(true).unwrap();
 
