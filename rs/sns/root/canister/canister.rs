@@ -17,9 +17,8 @@ use ic_nervous_system_common::{
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
-use ic_nervous_system_root::change_canister::{ChangeCanisterRequest, ChangeCanisterTask};
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nervous_system_timer_task::{RecurringAsyncTask, TimerTaskMetricsRegistry};
 use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
     logs::{ERROR, INFO},
@@ -52,10 +51,6 @@ thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 
     static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
-
-    // The metrics registry for timer tasks, not currently exposed, but required for the
-    // timer task queue to function correctly.
-    static TIMER_TASKS_METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
 }
 
 struct CanisterEnvironment {}
@@ -107,8 +102,6 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
 
     RealLedgerCanisterClient::new(ledger_canister_id)
 }
-
-// No longer needed - replaced with RecurringAsyncTask approach
 
 #[candid_method(init)]
 #[init]
@@ -222,15 +215,38 @@ fn change_canister(request: ChangeCanisterRequest) {
     log!(INFO, "change_canister");
     assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
 
-    // We want to reply first, so that in the case that we want to upgrade the
-    // governance canister, the root canister no longer holds a pending callback
-    // to it -- and therefore does not prevent the governance canister from being
-    // stopped.
+    // We do not want the reply to the Candid change_canister method call to be
+    // blocked on performing the canister change, because that could cause a
+    // deadlock. Specifically, deadlock would occur when upgrading governance,
+    // because one of the steps that we (root) would take when trying to upgrade
+    // governance is wait for governance to reach the "stopped" state, but that
+    // transition will never take place while the current Candid change_canister
+    // method call is outstanding.
     //
-    // We therefore use a RecurringAsyncTask to process the request with proper
-    // per-canister locking and retry logic.
-    let task = ChangeCanisterTask::new(request);
-    task.schedule(&TIMER_TASKS_METRICS_REGISTRY);
+    // The reply should then be considered merely an acknowledgement that the
+    // command has been accepted and will be executed, but has not actually
+    // completed yet. This is pretty unusual for Candid method calls.
+    //
+    // To implement "acknowledge without actually completing the work", we use
+    // spawn to do the real work in the background.
+    CanisterRuntime::spawn_future(async move {
+        let change_canister_result =
+            ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(request)
+                .await;
+        // We don't want to panic in here, or the log messages will be lost when
+        // the state rolls back.
+        match change_canister_result {
+            Ok(()) => {
+                log!(
+                    INFO,
+                    "change_canister: Canister change completed successfully."
+                );
+            }
+            Err(err) => {
+                log!(ERROR, "change_canister: Canister change failed: {err}");
+            }
+        };
+    });
 }
 
 #[candid_method(update)]

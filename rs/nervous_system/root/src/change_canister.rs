@@ -1,10 +1,8 @@
 use crate::LOG_PREFIX;
-use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_cdk::api::time;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
@@ -17,10 +15,9 @@ use ic_nervous_system_clients::{
     },
 };
 use ic_nervous_system_lock::acquire_for;
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nervous_system_timer_task::RecurringAsyncTask;
+use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
-use std::{cell::RefCell, collections::BTreeMap, time::Duration};
+use std::{cell::RefCell, collections::BTreeMap};
 
 /// The structure allows reconstructing a potentially large WASM from chunks needed to upgrade or
 /// reinstall some target canister.
@@ -223,12 +220,35 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
+// Thread-local storage for per-canister locks
+// Key: CanisterId, Value: ChangeCanisterRequest (for debugging/logging)
+thread_local! {
+    static CANISTER_CHANGE_LOCKS: RefCell<BTreeMap<CanisterId, ChangeCanisterRequest>> =
+        RefCell::new(BTreeMap::new());
+}
+
 pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
 {
     let canister_id = request.canister_id;
     let stop_before_installing = request.stop_before_installing;
+
+    // Try to acquire lock for this canister - fail immediately if locked
+    let _guard = match acquire_for(&CANISTER_CHANGE_LOCKS, canister_id, request.clone()) {
+        Ok(guard) => guard,
+        Err(conflicting_request) => {
+            return Err(format!(
+                "Canister {} is currently locked by another change operation. Conflicting request: {:?}",
+                canister_id, conflicting_request
+            ));
+        }
+    };
+
+    println!(
+        "{}change_canister: Starting canister change for {}. Request: {:?}",
+        LOG_PREFIX, canister_id, request
+    );
 
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
@@ -399,116 +419,4 @@ where
         Some(num) => serializer.serialize_str(&num.to_string()),
         None => serializer.serialize_none(),
     }
-}
-
-/// RecurringAsyncTask implementation for canister changes with per-canister locking
-#[derive(Clone)]
-pub struct ChangeCanisterTask {
-    request: ChangeCanisterRequest,
-    start_time: Duration,
-}
-
-impl ChangeCanisterTask {
-    pub fn new(request: ChangeCanisterRequest) -> Self {
-        Self {
-            request,
-            start_time: Duration::from_secs(0), // Will be set on first execution
-        }
-    }
-
-    fn with_start_time(mut self, start_time: Duration) -> Self {
-        self.start_time = start_time;
-        self
-    }
-}
-
-// Thread-local storage for per-canister locks
-// Key: CanisterId, Value: ChangeCanisterRequest (for debugging/logging)
-thread_local! {
-    static CANISTER_CHANGE_LOCKS: RefCell<BTreeMap<CanisterId, ChangeCanisterRequest>> =
-        RefCell::new(BTreeMap::new());
-}
-
-const MAX_WAIT_TIME_SECS: u64 = 600; // 10 minutes total wait time
-const BASE_RETRY_DELAY_SECS: u64 = 1;
-const MAX_RETRY_DELAY_SECS: u64 = 30;
-
-#[async_trait]
-impl RecurringAsyncTask for ChangeCanisterTask {
-    async fn execute(self) -> (Option<Duration>, Self) {
-        let canister_id = self.request.canister_id;
-        let current_time_nanos = time();
-        let current_time = Duration::from_nanos(current_time_nanos);
-
-        // Set start time on first execution
-        let start_time = if self.start_time.as_secs() == 0 {
-            current_time
-        } else {
-            self.start_time
-        };
-
-        // Check if we've exceeded the maximum wait time
-        let elapsed = current_time.saturating_sub(start_time);
-        if elapsed.as_secs() > MAX_WAIT_TIME_SECS {
-            println!(
-                "{}ChangeCanisterTask: Maximum wait time ({} seconds) exceeded for canister {}. Giving up.",
-                LOG_PREFIX, MAX_WAIT_TIME_SECS, canister_id
-            );
-            return (None, self); // Terminate - too much time elapsed
-        }
-
-        // Try to acquire lock for this canister
-        let _guard = match acquire_for(&CANISTER_CHANGE_LOCKS, canister_id, self.request.clone()) {
-            Ok(guard) => guard,
-            Err(conflicting_request) => {
-                // Another change is in progress for this canister
-                // Calculate exponential backoff delay based on elapsed time
-                let attempts = (elapsed.as_secs() / BASE_RETRY_DELAY_SECS).max(1);
-                let delay_secs = std::cmp::min(
-                    BASE_RETRY_DELAY_SECS * 2_u64.pow(attempts.min(10) as u32),
-                    MAX_RETRY_DELAY_SECS,
-                );
-
-                println!(
-                    "{}ChangeCanisterTask: Canister {} is locked by another change operation, retrying in {} seconds (elapsed: {}s). Conflicting request: {:?}",
-                    LOG_PREFIX, canister_id, delay_secs, elapsed.as_secs(), conflicting_request
-                );
-
-                let next_task = self.with_start_time(start_time);
-                return (Some(Duration::from_secs(delay_secs)), next_task);
-            }
-        };
-
-        // We got the lock - proceed with the canister change
-        println!(
-            "{}ChangeCanisterTask: Starting canister change for {} (waited {}s for lock). Request: {:?}",
-            LOG_PREFIX, canister_id, elapsed.as_secs(), self.request
-        );
-
-        let result = change_canister::<CdkRuntime>(self.request.clone()).await;
-
-        match result {
-            Ok(()) => {
-                println!(
-                    "{}ChangeCanisterTask: Successfully completed canister change for {}",
-                    LOG_PREFIX, canister_id
-                );
-                (None, self) // Success - terminate task
-            }
-            Err(err) => {
-                // Don't retry on change_canister failures - these are real errors that need attention
-                println!(
-                    "{}ChangeCanisterTask: Failed to change canister {}: {}. Task terminated - manual intervention required.",
-                    LOG_PREFIX, canister_id, err
-                );
-                (None, self) // Terminate - real failure, don't retry
-            }
-        }
-    }
-
-    fn initial_delay(&self) -> Duration {
-        Duration::from_secs(0) // Start immediately
-    }
-
-    const NAME: &'static str = "change_canister_task";
 }

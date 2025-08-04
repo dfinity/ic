@@ -1,8 +1,4 @@
-// No longer needed - removed async_trait import
 use ic_base_types::{CanisterId, PrincipalId};
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::println;
-use ic_cdk::{post_upgrade, query, spawn, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -15,13 +11,12 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
     change_canister::{
-        AddCanisterRequest, CanisterAction, ChangeCanisterRequest, ChangeCanisterTask,
+        change_canister, AddCanisterRequest, CanisterAction, ChangeCanisterRequest,
         StopOrStartCanisterRequest,
     },
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::CdkRuntime;
-use ic_nervous_system_timer_task::RecurringAsyncTask;
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
     types::CallCanisterProposal,
@@ -32,13 +27,17 @@ use ic_nns_constants::{
 use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
-    PROXIED_CANISTER_CALLS_TRACKER, TIMER_TASKS_METRICS_REGISTRY,
+    PROXIED_CANISTER_CALLS_TRACKER,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
     UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
+
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::println;
+use ic_cdk::{post_upgrade, query, spawn, update};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
@@ -143,10 +142,28 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     // to it -- and therefore does not prevent the governance canister from being
     // stopped.
     //
-    // We therefore use a RecurringAsyncTask to process the request with proper
-    // per-canister locking and retry logic.
-    let task = ChangeCanisterTask::new(request);
-    task.schedule(&TIMER_TASKS_METRICS_REGISTRY);
+    // To do so, we use `over` instead of the more common `over_async`.
+    //
+    // This will effectively reply synchronously with the first call to the
+    // management canister in change_canister.
+
+    // Because change_canister is async, and because we can't directly use
+    // `await`, we need to use the `spawn` trick.
+    let future = async move {
+        let change_canister_result = change_canister::<CdkRuntime>(request).await;
+        match change_canister_result {
+            Ok(()) => {
+                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
+            }
+            Err(err) => {
+                println!("{LOG_PREFIX}change_canister: Canister change failed: {err}");
+            }
+        };
+    };
+
+    // Starts the proposal execution, which will continue after this function has
+    // returned.
+    spawn(future);
 }
 
 #[update]
