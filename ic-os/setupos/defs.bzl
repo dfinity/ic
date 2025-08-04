@@ -80,18 +80,22 @@ def _custom_partitions(mode):
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
         nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
+        include_nns_public_key_override = True
     elif mode == "local-base-dev":
         guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
         nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
+        include_nns_public_key_override = True
     elif mode == "local-base-prod":
         guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
         nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
+        include_nns_public_key_override = False
     elif mode == "prod":
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
         nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
+        include_nns_public_key_override = False
     else:
         fail("Unkown mode detected: " + mode)
 
@@ -147,14 +151,18 @@ def _custom_partitions(mode):
         tags = ["manual"],
     )
 
+    data_srcs = [
+        ":deployment.json",
+        ":guest-os.img.tar.zst",
+        ":host-os.img.tar.zst",
+    ]
+
+    if include_nns_public_key_override:
+        data_srcs.append(Label("//ic-os/setupos:data/nns_public_key_override.pem"))
+
     pkg_tar(
         name = "data_tar",
-        srcs = [
-            Label("//ic-os/setupos:data/nns_public_key_override.pem"),
-            ":deployment.json",
-            ":guest-os.img.tar.zst",
-            ":host-os.img.tar.zst",
-        ],
+        srcs = data_srcs,
         mode = "0644",
         package_dir = "data",
         tags = ["manual", "no-cache"],
