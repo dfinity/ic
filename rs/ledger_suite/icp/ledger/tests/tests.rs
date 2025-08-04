@@ -2210,7 +2210,7 @@ fn test_burn_whole_balance() {
     assert_eq!(balance_of(&env, canister_id, p1.0), initial_balance);
 
     // Balance is greater than fee, burning less than fee should not be allowed.
-    burn(fee_e8s / 2, Some(Tokens::from(fee_e8s)));
+    burn(fee_e8s - 1, Some(Tokens::from(fee_e8s)));
 
     // Burning fee is ok.
     burn(fee_e8s, None);
