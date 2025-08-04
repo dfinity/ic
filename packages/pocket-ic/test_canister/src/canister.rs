@@ -318,16 +318,16 @@ async fn vetkd_derive_key(
 // canister HTTP outcalls
 
 #[update]
-async fn canister_http() -> Result<HttpResponse, (RejectionCode, String)> {
+async fn canister_http(http_server_addr: String) -> Result<HttpResponse, (RejectionCode, String)> {
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
-        url: "https://example.com".to_string(),
+        url: format!("http://{}", http_server_addr),
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],
         body: None,
         transform: None,
     };
-    let cycles = 20_849_238_800; // magic number derived from the error message when setting this to zero
+    let cycles = 100_000_000_000; // enough cycles for any canister http outcall
     canister_http_outcall(arg, cycles).await.map(|resp| resp.0)
 }
 
@@ -340,10 +340,10 @@ async fn transform(transform_args: TransformArgs) -> HttpResponse {
 }
 
 #[update]
-async fn canister_http_with_transform() -> HttpResponse {
+async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse {
     let context = b"this is my transform context".to_vec();
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
-        url: "https://example.com".to_string(),
+        url: format!("http://{}", http_server_addr),
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],
@@ -356,7 +356,7 @@ async fn canister_http_with_transform() -> HttpResponse {
             context,
         }),
     };
-    let cycles = 20_849_431_200; // magic number derived from the error message when setting this to zero
+    let cycles = 100_000_000_000; // enough cycles for any canister http outcall
     canister_http_outcall(arg, cycles).await.unwrap().0
 }
 

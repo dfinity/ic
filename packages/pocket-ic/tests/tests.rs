@@ -30,12 +30,17 @@ use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 #[cfg(not(windows))]
 use std::time::Instant;
 use std::{
-    io::Read,
-    sync::OnceLock,
+    io::{Read, Write},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock,
+    },
+    thread::JoinHandle,
     time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
@@ -1369,9 +1374,81 @@ fn test_vetkd() {
     }
 }
 
+struct HttpServer {
+    addr: SocketAddr,
+    flag: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Default for HttpServer {
+    fn default() -> Self {
+        fn handle_connection(mut stream: TcpStream) {
+            let mut buffer = [0; 1024];
+            let _ = stream.read(&mut buffer).unwrap();
+
+            let status_line = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+            let body = "Hello from dynamic-port Rust server!";
+            let response = format!("{status_line}{body}");
+
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        }
+
+        let flag = Arc::new(AtomicBool::new(true));
+
+        // Bind to port 0 (OS assigns a free port)
+        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind");
+
+        listener.set_nonblocking(true).unwrap();
+
+        // Extract the assigned port
+        let addr = listener.local_addr().unwrap();
+
+        let flag_in_thread = flag.clone();
+        let handle = std::thread::spawn(move || {
+            while flag_in_thread.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        handle_connection(stream);
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // No incoming connection; sleep briefly and retry
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => {
+                        eprintln!("Unexpected error: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
+        Self {
+            addr,
+            flag,
+            handle: Some(handle),
+        }
+    }
+}
+
+impl HttpServer {
+    fn get_addr_str(&self) -> String {
+        self.addr.to_string()
+    }
+}
+
+impl Drop for HttpServer {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::Relaxed);
+        self.handle.take().unwrap().join().unwrap();
+    }
+}
+
 #[test]
 fn test_canister_http() {
     let pic = PocketIc::new();
+
+    let http_server = HttpServer::default();
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1388,7 +1465,7 @@ fn test_canister_http() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one(http_server.get_addr_str()).unwrap(),
         )
         .unwrap();
 
@@ -1437,6 +1514,8 @@ fn test_canister_http_in_live_mode() {
     // Enable the "live" mode.
     let _ = pic.make_live(None);
 
+    let http_server = HttpServer::default();
+
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1451,7 +1530,7 @@ fn test_canister_http_in_live_mode() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one(http_server.get_addr_str()).unwrap(),
         )
         .unwrap();
 
@@ -1466,6 +1545,8 @@ fn test_canister_http_in_live_mode() {
 #[test]
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
+
+    let http_server = HttpServer::default();
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1484,7 +1565,7 @@ fn test_canister_http_with_transform() {
             canister_id,
             Principal::anonymous(),
             "canister_http_with_transform",
-            encode_one(()).unwrap(),
+            encode_one(http_server.get_addr_str()).unwrap(),
         )
         .unwrap();
     // We need a pair of ticks for the test canister method to make the http outcall
@@ -1527,6 +1608,8 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
+    let http_server = HttpServer::default();
+
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1542,7 +1625,7 @@ fn test_canister_http_with_diverging_responses() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one(http_server.get_addr_str()).unwrap(),
         )
         .unwrap();
 
@@ -1590,6 +1673,8 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
+    let http_server = HttpServer::default();
+
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1604,7 +1689,7 @@ fn test_canister_http_with_one_additional_response() {
         canister_id,
         Principal::anonymous(),
         "canister_http",
-        encode_one(()).unwrap(),
+        encode_one(http_server.get_addr_str()).unwrap(),
     )
     .unwrap();
 
@@ -1638,6 +1723,8 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
+    let http_server = HttpServer::default();
+
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -1653,7 +1740,7 @@ fn test_canister_http_timeout() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one(http_server.get_addr_str()).unwrap(),
         )
         .unwrap();
 
