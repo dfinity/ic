@@ -92,10 +92,16 @@ pub async fn main() -> Result<()> {
             Ok(()) => return Ok(()),
             // If the VM started but stopped, we restart it. Note that we recreate the entire
             // service in order to start the VM with fresh config.
-            Err(GuestVmServiceError::VirtualMachineStopped) => {
-                println!("Guest VM stopped, restarting");
-                continue;
-            }
+            Err(GuestVmServiceError::VirtualMachineStopped) => match args.vm_type {
+                GuestVMType::Default => {
+                    println!("Guest VM stopped, restarting");
+                    continue;
+                }
+                GuestVMType::Upgrade => {
+                    println!("Upgrade VM stopped, exiting");
+                    break Ok(());
+                }
+            },
             // If we encounter an unexpected error, we exit with the error and let systemd restart
             // the service.
             Err(GuestVmServiceError::Other(err)) => return Err(err),
