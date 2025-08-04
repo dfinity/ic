@@ -2254,7 +2254,9 @@ fn test_remove_approval() {
             "remove_approval",
             Encode!(&from_subaccount, &spender_address).unwrap(),
         );
-        assert!(response.is_ok());
+        let result = Decode!(&response.expect("failed to remove approval").bytes(), Result<Nat, ApproveError> )
+        .expect("failed to decode remove_approval response");
+        assert!(result.is_ok());
     };
 
     remove_approval(None, p2);
