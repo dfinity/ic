@@ -1441,6 +1441,8 @@ impl Drop for HttpServer {
     }
 }
 
+// Using ipv4 fails on Windows:
+// ```Connecting to 127.0.0.1 failed: Request failed direct connect hyper_util::client::legacy::Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" })) and connect through socks hyper_util::client::legacy::Error(Connect, Connector(ConnectError(\"dns error\", Custom { kind: Uncategorized, error: \"failed to lookup address information: Name or service not known\" }))) (Please note that the canister HTTPS outcalls feature is an IPv6-only feature. While IPv4 is an experimental feature, it cannot be relied upon for this functionality. For more information, please consult the Internet Computer developer documentation)")```
 #[cfg(not(windows))]
 #[test]
 fn test_canister_http_ipv4() {
