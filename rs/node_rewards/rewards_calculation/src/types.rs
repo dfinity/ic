@@ -1,12 +1,16 @@
-use crate::rewards_calculator_results::DayUTC;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use crate::rewards_calculator_results::DayUtc;
+use ic_base_types::{NodeId, SubnetId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_types::Time;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
 
 pub type UnixTsNanos = u64;
+pub type NodesCount = u64;
+
+pub type Region = String;
+
 pub const NANOS_PER_DAY: UnixTsNanos = 24 * 60 * 60 * 1_000_000_000;
 
 #[cfg(target_arch = "wasm32")]
@@ -20,31 +24,14 @@ fn current_time() -> Time {
     ic_types::time::current_time()
 }
 
-// Wrapper types for TimestampNanos.
-// Used to ensure that the wrapped timestamp is aligned to the end of the day.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
-pub struct DayEnd(UnixTsNanos);
-
-impl From<UnixTsNanos> for DayEnd {
-    fn from(ts: UnixTsNanos) -> Self {
-        Self(((ts / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1)
-    }
-}
-
-impl DayEnd {
-    pub fn get(&self) -> UnixTsNanos {
-        self.0
-    }
-}
-
 /// Reward period in which we want to reward the node providers
 ///
 /// This period ensures that all `BlockmakerMetrics` collected during the reward period are included consistently
 /// with the invariant defined in [`ic_replicated_state::metadata_state::BlockmakerMetricsTimeSeries`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct RewardPeriod {
-    pub from: DayUTC,
-    pub to: DayUTC,
+    pub from: DayUtc,
+    pub to: DayUtc,
 }
 
 impl Display for RewardPeriod {
@@ -71,24 +58,24 @@ impl RewardPeriod {
         if unaligned_start_ts > unaligned_end_ts {
             return Err(RewardPeriodError::StartTimestampAfterEndTimestamp);
         }
-        let start_ts: DayEnd = unaligned_start_ts.into();
-        let end_ts: DayEnd = unaligned_end_ts.into();
+        let start_day: DayUtc = unaligned_start_ts.into();
+        let end_day: DayUtc = unaligned_end_ts.into();
 
         // Metrics are collected at the end of the day, so we need to ensure that
         // the end timestamp is not later than the first ts of today.
-        let today: DayEnd = current_time().as_nanos_since_unix_epoch().into();
+        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
 
-        if end_ts.0 >= today.0 {
+        if end_day >= today {
             return Err(RewardPeriodError::EndTimestampLaterThanToday);
         }
 
         Ok(Self {
-            from: start_ts.into(),
-            to: end_ts.into(),
+            from: start_day,
+            to: end_day,
         })
     }
 
-    pub fn contains(&self, day: DayUTC) -> bool {
+    pub fn contains(&self, day: DayUtc) -> bool {
         day >= self.from && day <= self.to
     }
 }
@@ -117,24 +104,12 @@ impl fmt::Display for RewardPeriodError {
 
 impl Error for RewardPeriodError {}
 
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug, Default)]
-pub struct Region(pub String);
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug, Default)]
-pub struct NodeType(pub String);
-
-#[derive(Default)]
-pub struct ProviderRewardableNodes {
-    pub provider_id: PrincipalId,
-    pub rewardable_nodes_count: HashMap<(Region, NodeType), u32>,
-    pub rewardable_nodes: Vec<RewardableNode>,
-}
 #[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug)]
 pub struct RewardableNode {
     pub node_id: NodeId,
-    pub rewardable_from: DayUTC,
-    pub rewardable_to: DayUTC,
+    pub rewardable_days: Vec<DayUtc>,
     pub region: Region,
-    pub node_type: NodeType,
+    pub node_reward_type: NodeRewardType,
     pub dc_id: String,
 }
 
@@ -148,13 +123,12 @@ pub struct NodeMetricsDailyRaw {
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct SubnetMetricsDailyKey {
     pub subnet_id: SubnetId,
-    pub day: DayUTC,
+    pub day: DayUtc,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rewards_calculator_results::days_between;
     use crate::types::UnixTsNanos;
     use chrono::{TimeZone, Utc};
 
@@ -173,7 +147,7 @@ mod tests {
         let rp = RewardPeriod::new(unaligned_start_ts, unaligned_end_ts).unwrap();
         let expected_start_ts = ymdh_to_ts(2020, 1, 12, 0);
         let expected_end_ts = ymdh_to_ts(2020, 1, 16, 0) - 1;
-        let days = days_between(rp.from, rp.to);
+        let days = rp.from.days_until(&rp.to).unwrap().len();
 
         assert_eq!(rp.from.unix_ts_at_day_start(), expected_start_ts);
         assert_eq!(rp.to.unix_ts_at_day_end(), expected_end_ts);
@@ -182,7 +156,7 @@ mod tests {
         let unaligned_end_ts = ymdh_to_ts(2020, 1, 12, 13);
 
         let rp = RewardPeriod::new(unaligned_start_ts, unaligned_end_ts).unwrap();
-        let days = days_between(rp.from, rp.to);
+        let days = rp.from.days_until(&rp.to).unwrap().len();
 
         assert_eq!(days, 1);
     }

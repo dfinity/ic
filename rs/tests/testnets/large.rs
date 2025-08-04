@@ -74,7 +74,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),

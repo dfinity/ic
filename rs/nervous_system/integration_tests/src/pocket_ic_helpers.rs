@@ -35,11 +35,11 @@ use ic_nns_test_utils::{
         build_test_registry_wasm, NnsInitPayloadsBuilder,
     },
     sns_wasm::{
-        build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
-        build_ledger_sns_wasm, build_mainnet_archive_sns_wasm, build_mainnet_governance_sns_wasm,
-        build_mainnet_index_ng_sns_wasm, build_mainnet_ledger_sns_wasm,
-        build_mainnet_root_sns_wasm, build_mainnet_swap_sns_wasm, build_root_sns_wasm,
-        build_swap_sns_wasm, ensure_sns_wasm_gzipped,
+        build_archive_sns_wasm, build_governance_sns_wasm, build_governance_test_sns_wasm,
+        build_index_ng_sns_wasm, build_ledger_sns_wasm, build_mainnet_archive_sns_wasm,
+        build_mainnet_governance_sns_wasm, build_mainnet_index_ng_sns_wasm,
+        build_mainnet_ledger_sns_wasm, build_mainnet_root_sns_wasm, build_mainnet_swap_sns_wasm,
+        build_root_sns_wasm, build_swap_sns_wasm, ensure_sns_wasm_gzipped,
     },
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -284,7 +284,7 @@ impl SnsWasmCanistersInstaller {
             } else {
                 (
                     ensure_sns_wasm_gzipped(build_root_sns_wasm()),
-                    ensure_sns_wasm_gzipped(build_governance_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_governance_test_sns_wasm()),
                     ensure_sns_wasm_gzipped(build_swap_sns_wasm()),
                     ensure_sns_wasm_gzipped(build_index_ng_sns_wasm()),
                     ensure_sns_wasm_gzipped(build_ledger_sns_wasm()),

@@ -61,6 +61,7 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -79,6 +80,7 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     set_authorized_subnets(&env);
 }

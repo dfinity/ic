@@ -26,6 +26,7 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
@@ -136,6 +137,7 @@ pub(crate) fn get_system_state(api_type: ApiType) -> SandboxSafeSystemState {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     )
 }
 
@@ -146,7 +148,6 @@ pub(crate) fn get_execution_parameters() -> ExecutionParameters {
             DEFAULT_NUM_INSTRUCTIONS,
             DEFAULT_NUM_INSTRUCTIONS,
         ),
-        canister_memory_limit: NumBytes::from(4 << 30),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: HypervisorConfig::default()

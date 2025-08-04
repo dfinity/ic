@@ -17,7 +17,7 @@ jobs:
   bazel-build-pocket-ic:
     name: Bazel Build PocketIC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
+      image: ghcr.io/dfinity/ic-build@sha256:d8f7308e97e095a9c9b0cdb1b6f260f459424e3792ebd49bb7c6ff6098941a34
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -83,7 +83,7 @@ jobs:
       - name: Setup WSLv2
         uses: vedantmgoyal9/setup-wsl2@bf0f19100f71267dd1345180b8a678864793e53f
         with:
-          distro: Ubuntu-20.04
+          distro: Ubuntu-24.04
       - name: Tests
         run: |
           $env:WORKDIR=(Get-Location).Path

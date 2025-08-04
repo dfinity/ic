@@ -8,6 +8,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_replicated_state::{CanisterState, NetworkTopology};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{NumInstructions, Time};
@@ -29,6 +30,7 @@ pub fn execute_inspect_message(
     logger: &ReplicaLogger,
     state_changes_error: &IntCounter,
     ingress_filter_metrics: &IngressFilterMetrics,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
     let memory_usage = canister.memory_usage();
@@ -88,6 +90,7 @@ pub fn execute_inspect_message(
         state_changes_error,
         &CallTreeMetricsNoOp,
         time,
+        cost_schedule,
     );
     drop(inspect_message_timer);
     ingress_filter_metrics.inspect_message_count.inc();

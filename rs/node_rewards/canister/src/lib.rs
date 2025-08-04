@@ -20,11 +20,9 @@ use std::borrow::Cow;
 pub mod canister;
 pub mod metrics;
 pub mod pb;
+pub mod registry_querier;
 pub mod storage;
-
-const HOUR_IN_SECONDS: u64 = 60 * 60;
-const DAY_IN_SECONDS: u64 = HOUR_IN_SECONDS * 24;
-const DAY_IN_NANOS: u64 = DAY_IN_SECONDS * 1_000_000_000;
+pub mod telemetry;
 
 // Maximum sizes for the storable types chosen as result of test `max_bound_size`
 const MAX_BYTES_SUBNET_ID_STORED: u32 = 33;

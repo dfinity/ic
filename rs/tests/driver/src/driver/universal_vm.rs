@@ -13,20 +13,17 @@ use crate::driver::resource::{
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_dependency_path, get_ssh_session_from_env, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-    SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
+    get_dependency_path, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::upload_image;
 use crate::k8s::tnet::TNet;
-use crate::retry_with_msg;
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
-use ssh2::Session;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -382,20 +379,8 @@ impl DeployedUniversalVm {
 }
 
 impl SshSession for DeployedUniversalVm {
-    fn get_ssh_session(&self) -> Result<Session> {
-        let vm = self.get_vm()?;
-        get_ssh_session_from_env(&self.env, IpAddr::V6(vm.ipv6))
-    }
-
-    fn block_on_ssh_session(&self) -> Result<Session> {
-        let vm = self.get_vm()?;
-        retry_with_msg!(
-            format!("get_ssh_session to {}", vm.ipv6.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session() }
-        )
+    fn get_host_ip(&self) -> Result<IpAddr> {
+        Ok(self.get_vm()?.ipv6.into())
     }
 }
 
