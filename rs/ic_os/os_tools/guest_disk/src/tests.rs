@@ -15,6 +15,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use tempfile::{tempdir, TempDir};
 
+// All tests interact with the same device mapper and use shared crypt device names, so we must run
+// the tests sequentially.
 static TEST_MUTEX: parking_lot::Mutex<()> = parking_lot::const_mutex(());
 
 struct TestFixture<'a> {

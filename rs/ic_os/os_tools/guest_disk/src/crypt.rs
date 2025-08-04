@@ -52,6 +52,7 @@ pub fn format_crypt_device(device_path: &Path, passphrase: &[u8]) -> Result<Cryp
         "Formatting {} with LUKS2 and initializing it with a passphrase",
         device_path.display()
     );
+    // TODO: We should revisit the use of Pbkdf2 and consider using the LUKS2 default KDF, Argon2i
     let mut pbkdf_params = CryptSettingsHandle::get_pbkdf_type_params(&CryptKdf::Pbkdf2)
         .context("Failed to get PBKDF2 params")?;
     // Set minimal iteration count -- we already use a random key with
