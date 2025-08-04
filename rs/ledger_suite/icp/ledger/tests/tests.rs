@@ -2202,7 +2202,7 @@ fn test_burn_whole_balance() {
             ));
         } else {
             let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )
-        .expect("failed to decode approve response");
+        .expect("failed to decode transfer response");
             assert!(result.is_ok());
         }
     };
