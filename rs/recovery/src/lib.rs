@@ -869,7 +869,7 @@ impl Recovery {
         }
     }
 
-    /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
+    /// Return an [UploadCUPAndTar] uploading CUP and registry tar to the given node IP
     pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step {
         UploadCUPAndTar {
             logger: self.logger.clone(),
