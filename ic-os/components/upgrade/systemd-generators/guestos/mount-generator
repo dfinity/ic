@@ -76,8 +76,10 @@ function make_var_cryptsetup() {
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
     echo "Conflicts=umount.target"
     echo "Before=cryptsetup.target"
+    echo "Requires=init-config.service"
+    echo "After=init-config.service"
+    # We need /boot/config for the decryption key (unless SEV is enabled)
     echo "RequiresMountsFor=/boot/config"
-    # TODO: Requires copying config.json
     echo "BindsTo=dev-${DEVICE}.device"
     echo "After=dev-${DEVICE}.device"
     echo "Before=umount.target"
