@@ -151,12 +151,12 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
         }
         let cost_schedule = CanisterCyclesCostSchedule::from(
             CanisterCyclesCostScheduleProto::try_from(item.canister_cycles_cost_schedule).map_err(
-                |_| ProxyDecodeError::ValueOutOfRange {
+                |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "CanisterCyclesCostSchedule",
                     err: format!(
-                        "'CanisterCyclesCostSchedule type from subnet record for subnet {}', err: {}",
-                        *subnet_id, err
-                    )
+                        "Failed to convert CanisterCyclesCostSchedule type for SubnetTopology: {:?}",
+                        e
+                    ),
                 },
             )?,
         );
