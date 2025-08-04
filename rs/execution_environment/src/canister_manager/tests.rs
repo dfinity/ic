@@ -1325,6 +1325,7 @@ fn get_canister_status_of_stopped_canister() {
                 canister,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                false,
             )
             .unwrap()
             .status();
@@ -1347,6 +1348,7 @@ fn get_canister_status_of_stopping_canister() {
                 canister,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                false,
             )
             .unwrap()
             .status();
