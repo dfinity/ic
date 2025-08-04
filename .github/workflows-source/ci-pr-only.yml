@@ -27,6 +27,7 @@ anchors:
     timeout-minutes: 30
     runs-on:
       labels: dind-small
+      group: dm1
     <<: *container
   dind-large-setup: &dind-large-setup
     timeout-minutes: 90
