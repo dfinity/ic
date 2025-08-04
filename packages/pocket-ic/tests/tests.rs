@@ -1510,6 +1510,9 @@ fn test_canister_http_in_live_mode() {
     let _ = pic.make_live(None);
 
     let http_server = HttpServer::new("127.0.0.1");
+
+    // We use `localhost` instead of `127.0.0.1` in the canister HTTP outcall URL
+    // so that HTTP requests from WSL can be routed to the Windows host.
     let http_server_addr = format!("localhost:{}", http_server.port());
 
     // Create a canister and charge it with 2T cycles.
