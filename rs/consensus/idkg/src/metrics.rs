@@ -497,7 +497,7 @@ impl From<&IDkgPayload> for IDkgPayloadStats {
                     .filter(|(_, status)| matches!(status, CompletedReshareRequest::Unreported(_))),
                 &keys,
             ),
-            transcript_resolution_errors: 0, // These errors may occure during batch delivery
+            transcript_resolution_errors: 0, // These errors may occur during batch delivery
         }
     }
 }
