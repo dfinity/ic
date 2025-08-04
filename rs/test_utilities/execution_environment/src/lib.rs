@@ -55,8 +55,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
-use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::batch::ChainKeyData;
+use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
@@ -2419,7 +2418,10 @@ impl ExecutionTestBuilder {
                         )),
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
-                    Some((key_id.clone(), nidkg_id))
+                    Some((
+                        NiDkgMasterPublicKeyId::VetKd(vetkd_key_id.clone()),
+                        nidkg_id,
+                    ))
                 } else {
                     None
                 }

@@ -52,8 +52,8 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    batch::{AvailablePreSignatures, ChainKeyData},
+    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
+    consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -118,7 +118,7 @@ pub(crate) struct SchedulerTest {
     // Chain key subnet public keys.
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // Available pre-signatures.
-    idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
+    idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     // Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
 }
@@ -662,7 +662,7 @@ impl SchedulerTest {
 
     pub(crate) fn deliver_pre_signatures(
         &mut self,
-        idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
+        idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     ) {
         self.idkg_pre_signatures = idkg_pre_signatures;
     }
