@@ -735,36 +735,34 @@ impl CyclesAccountManager {
     }
 
     /// Amount to charge for an ECDSA signature.
-    pub fn ecdsa_signature_fee(&self, subnet_size: usize) -> Cycles {
-        self.scale_cost(
-            self.config.ecdsa_signature_fee,
-            subnet_size,
-            // If ecdsa keys are ever hosted on a rental subnet, this needs to be passed
-            // as an argument from the target subnet, just like subnet_size.
-            CanisterCyclesCostSchedule::Normal,
-        )
+    pub fn ecdsa_signature_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.scale_cost(self.config.ecdsa_signature_fee, subnet_size, cost_schedule)
     }
 
     /// Amount to charge for a Schnorr signature.
-    pub fn schnorr_signature_fee(&self, subnet_size: usize) -> Cycles {
+    pub fn schnorr_signature_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
         self.scale_cost(
             self.config.schnorr_signature_fee,
             subnet_size,
-            // If schnorr keys are ever hosted on a rental subnet, this needs to be passed
-            // as an argument from the target subnet, just like subnet_size.
-            CanisterCyclesCostSchedule::Normal,
+            cost_schedule,
         )
     }
 
     /// Amount to charge for vet KD.
-    pub fn vetkd_fee(&self, subnet_size: usize) -> Cycles {
-        self.scale_cost(
-            self.config.vetkd_fee,
-            subnet_size,
-            // If vetkd keys are ever hosted on a rental subnet, this needs to be passed
-            // as an argument from the target subnet, just like subnet_size.
-            CanisterCyclesCostSchedule::Normal,
-        )
+    pub fn vetkd_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.scale_cost(self.config.vetkd_fee, subnet_size, cost_schedule)
     }
 
     ////////////////////////////////////////////////////////////////////////////

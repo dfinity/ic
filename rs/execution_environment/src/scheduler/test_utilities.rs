@@ -625,15 +625,17 @@ impl SchedulerTest {
     }
 
     pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .ecdsa_signature_fee(self.registry_settings.subnet_size)
+        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
+            self.registry_settings.subnet_size,
+            self.state().get_own_cost_schedule(),
+        )
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .schnorr_signature_fee(self.registry_settings.subnet_size)
+        self.scheduler.cycles_account_manager.schnorr_signature_fee(
+            self.registry_settings.subnet_size,
+            self.state().get_own_cost_schedule(),
+        )
     }
 
     pub fn http_request_fee(

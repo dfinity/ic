@@ -25,7 +25,7 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats},
+    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
@@ -656,6 +656,28 @@ impl ReplicatedState {
 
     pub fn system_metadata(&self) -> &SystemMetadata {
         &self.metadata
+    }
+
+    /// Returns the cost schedule of this subnet.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        let subnet_id = self.metadata.own_subnet_id;
+        // unwrap: our own subnet_id is contained in network_topology
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .unwrap()
+            .cost_schedule
+    }
+
+    /// Returns the cost schedule of the provided subnet, if it exists.
+    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        // unwrap: our own subnet_id is contained in network_topology
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {

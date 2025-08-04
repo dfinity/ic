@@ -3235,12 +3235,17 @@ impl ExecutionEnvironment {
         )
     }
 
-    fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
+    fn calculate_signature_fee(
+        &self,
+        args: &ThresholdArguments,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
         let cam = &self.cycles_account_manager;
         match args {
-            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
-            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
-            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size),
+            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size, cost_schedule),
+            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size, cost_schedule),
+            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size, cost_schedule),
         }
     }
 
@@ -3280,7 +3285,8 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self.calculate_signature_fee(&args, subnet_size);
+            let cost_schedule = state.get_own_cost_schedule();
+            let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
