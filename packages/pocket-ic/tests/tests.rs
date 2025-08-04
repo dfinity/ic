@@ -31,17 +31,22 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-#[cfg(not(windows))]
-use std::time::Instant;
 use std::{
-    io::{Read, Write},
+    io::Read,
+    net::SocketAddr,
+    sync::OnceLock,
+    time::{Duration, SystemTime},
+};
+#[cfg(not(windows))]
+use std::{
+    io::Write,
+    net::{TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, OnceLock,
+        Arc,
     },
     thread::JoinHandle,
-    time::{Duration, SystemTime},
+    time::Instant,
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
@@ -1429,8 +1434,8 @@ impl HttpServer {
         }
     }
 
-    fn port(&self) -> u16 {
-        self.addr.port()
+    fn addr(&self) -> SocketAddr {
+        self.addr
     }
 }
 
@@ -1497,6 +1502,9 @@ fn test_canister_http() {
     assert_eq!(http_response.unwrap().body, body);
 }
 
+// This test does not work on Windows since the test HTTP webserver is spawned by the test driver
+// on the Windows host while the PocketIC server (making the canister HTTP outcall) runs in WSL.
+#[cfg(not(windows))]
 #[test]
 fn test_canister_http_in_live_mode() {
     // We create a PocketIC instance with an NNS subnet
@@ -1510,10 +1518,6 @@ fn test_canister_http_in_live_mode() {
     let _ = pic.make_live(None);
 
     let http_server = HttpServer::new("127.0.0.1");
-
-    // We use `localhost` instead of `127.0.0.1` in the canister HTTP outcall URL
-    // so that HTTP requests from WSL can be routed to the Windows host.
-    let http_server_addr = format!("localhost:{}", http_server.port());
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1529,7 +1533,7 @@ fn test_canister_http_in_live_mode() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(http_server_addr).unwrap(),
+            encode_one(http_server.addr().to_string()).unwrap(),
         )
         .unwrap();
 
