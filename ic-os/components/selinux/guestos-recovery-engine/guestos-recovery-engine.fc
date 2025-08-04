@@ -1,0 +1,1 @@
+/opt/ic/bin/guestos-recovery-engine.sh     -- gen_context(system_u:object_r:ic_guestos_recovery_engine_exec_t,s0) 

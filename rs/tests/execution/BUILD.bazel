@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -9,7 +9,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
         "//rs/registry/subnet_type",
@@ -30,7 +30,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -42,6 +42,32 @@ system_test(
 )
 
 system_test(
+    name = "cycles_cost_schedule_test",
+    env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "k8s",
+        "long_test",
+    ],
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
     name = "general_execution_test",
     srcs = glob(["general_execution_tests/*.rs"]),
     crate_root = "general_execution_test.rs",
@@ -49,7 +75,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
         "//rs/crypto/sha2",
@@ -87,7 +113,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -106,7 +132,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -123,7 +149,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -142,7 +167,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -159,7 +184,7 @@ system_test(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
     deps = [
@@ -213,7 +238,6 @@ system_test_nns(
         "k8s",
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         UNIVERSAL_CANISTER_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,

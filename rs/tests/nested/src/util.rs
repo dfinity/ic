@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -29,6 +29,7 @@ use ic_system_test_driver::{
         submit_update_nodes_hostos_version_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
+    retry_with_msg_async_quiet,
     util::runtime_from_url,
 };
 use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
@@ -36,8 +37,9 @@ use prost::Message;
 use regex::Regex;
 use reqwest::Client;
 use std::net::Ipv6Addr;
+use std::time::Duration;
 
-use slog::info;
+use slog::{info, Logger};
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
@@ -46,7 +48,7 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
         .expect("Could not reach HostOS VM.");
     let mut channel = session.channel_session().unwrap();
 
-    channel.exec("cat /boot/version.txt").unwrap();
+    channel.exec("cat /opt/ic/share/version.txt").unwrap();
     let mut s = String::new();
     channel.read_to_string(&mut s).unwrap();
     channel.close().ok();
@@ -247,6 +249,49 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
     .expect("Unable to setup nested VMs.");
 }
 
+/// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
+pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
+    let logger = env.logger();
+    info!(
+        logger,
+        "Setup minimal nested VM without IC infrastructure..."
+    );
+
+    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
+    let farm = Farm::new(farm_url, logger.clone());
+    let group_setup = GroupSetup::read_attribute(&env);
+    let group_name: String = group_setup.infra_group_name;
+
+    let nodes = vec![NestedNode::new(name.to_owned())];
+
+    // Allocate VM resources
+    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
+        .expect("Failed to build resource request for nested test.");
+    let res_group = allocate_resources(&farm, &res_request, &env)
+        .expect("Failed to allocate resources for nested test.");
+
+    for (name, vm) in res_group.vms.iter() {
+        env.write_nested_vm(name, vm)
+            .expect("Unable to write nested VM.");
+    }
+
+    // Use dummy values for IC Gateway URL and NNS public key
+    let dummy_ic_gateway_url = url::Url::parse("http://localhost:8080").unwrap();
+    let dummy_nns_public_key = "dummy_public_key_for_recovery_test";
+
+    setup_nested_vms(
+        &nodes,
+        &env,
+        &farm,
+        &group_name,
+        &dummy_ic_gateway_url,
+        dummy_nns_public_key,
+    )
+    .expect("Unable to setup nested VMs with minimal config.");
+
+    info!(logger, "Minimal nested VM setup complete!");
+}
+
 pub(crate) fn start_nested_vm(env: TestEnv) {
     let logger = env.logger();
     info!(logger, "Setup nested VMs ...");
@@ -257,4 +302,79 @@ pub(crate) fn start_nested_vm(env: TestEnv) {
     let group_name: String = group_setup.infra_group_name;
 
     start_nested_vms(&env, &farm, &group_name).expect("Unable to start nested VMs.");
+}
+
+/// Wait for the guest to return any available version (not "unavailable").
+/// Returns the version string when available.
+pub async fn wait_for_guest_version(
+    client: &Client,
+    guest_ipv6: &Ipv6Addr,
+    logger: &Logger,
+    timeout: Duration,
+    backoff: Duration,
+) -> Result<String> {
+    retry_with_msg_async_quiet!(
+        "Waiting until the guest returns a version",
+        logger,
+        timeout,
+        backoff,
+        || async {
+            let current_version = check_guestos_version(client, guest_ipv6)
+                .await
+                .unwrap_or("unavailable".to_string());
+            if current_version != "unavailable" {
+                info!(
+                    logger,
+                    "SUCCESS: Guest reported version '{}'", current_version
+                );
+                Ok(current_version)
+            } else {
+                bail!("FAIL: Guest version is still unavailable")
+            }
+        }
+    )
+    .await
+}
+
+/// Wait for the guest to reach a specific version.
+pub async fn wait_for_expected_guest_version(
+    client: &Client,
+    guest_ipv6: &Ipv6Addr,
+    expected_version: &str,
+    logger: &Logger,
+    timeout: Duration,
+    backoff: Duration,
+) -> Result<()> {
+    retry_with_msg_async_quiet!(
+        format!(
+            "Waiting until the guest is on the expected version '{}'",
+            expected_version
+        ),
+        logger,
+        timeout,
+        backoff,
+        || async {
+            let current_version = check_guestos_version(client, guest_ipv6)
+                .await
+                .unwrap_or("unavailable".to_string());
+            if current_version == expected_version {
+                info!(
+                    logger,
+                    "SUCCESS: Guest is now on expected version '{}'", current_version
+                );
+                Ok(())
+            } else {
+                bail!("FAIL: Guest is still on version '{}'", current_version)
+            }
+        }
+    )
+    .await
+}
+
+/// Get the current boot ID from a HostOS node.
+pub(crate) fn get_host_boot_id(node: &NestedVm) -> String {
+    node.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+        .expect("Failed to retrieve boot ID")
+        .trim()
+        .to_string()
 }

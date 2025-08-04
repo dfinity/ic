@@ -73,6 +73,7 @@ def icos_build(
             srcs = [":copy_version_txt"],
             outs = ["version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
+            visibility = ["//visibility:public"],
             tags = ["manual"],
         )
 

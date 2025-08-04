@@ -47,6 +47,14 @@ impl EnvironmentVariables {
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.map.iter()
     }
+
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
 }
 
 impl From<EnvironmentVariables> for BTreeMap<String, String> {

@@ -29,6 +29,10 @@ name = "large"
 path = "large.rs"
 
 [[bin]]
+name = "io_perf_benchmark"
+path = "io_perf_benchmark.rs"
+
+[[bin]]
 name = "medium"
 path = "medium.rs"
 

@@ -512,6 +512,9 @@ pub enum HostFeature {
     AmdSevSnp,
     SnsLoadTest,
     Performance,
+    IoPerformance,
+    Dell,
+    Supermicro,
 }
 
 impl Serialize for HostFeature {
@@ -533,6 +536,9 @@ impl Serialize for HostFeature {
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
             HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
             HostFeature::Performance => serializer.serialize_str(PERFORMANCE),
+            HostFeature::IoPerformance => serializer.serialize_str(IO_PERFORMANCE),
+            HostFeature::Dell => serializer.serialize_str(DLL),
+            HostFeature::Supermicro => serializer.serialize_str(SPM),
         }
     }
 }
@@ -540,6 +546,9 @@ impl Serialize for HostFeature {
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
 const SNS_LOAD_TEST: &str = "SNS-load-test";
 const PERFORMANCE: &str = "performance";
+const IO_PERFORMANCE: &str = "io-performance";
+const DLL: &str = "dll";
+const SPM: &str = "spm";
 
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -547,27 +556,29 @@ impl<'de> Deserialize<'de> for HostFeature {
         D: Deserializer<'de>,
     {
         let input: String = Deserialize::deserialize(deserializer)?;
-        if let Some(("", dc)) = input.split_once("dc=") {
-            Ok(HostFeature::DC(dc.to_owned()))
-        } else if let Some(("", host)) = input.split_once("host=") {
-            Ok(HostFeature::Host(host.to_owned()))
-        } else if input == AMD_SEV_SNP {
-            Ok(HostFeature::AmdSevSnp)
-        } else if input == SNS_LOAD_TEST {
-            Ok(HostFeature::SnsLoadTest)
-        } else if input == PERFORMANCE {
-            Ok(HostFeature::Performance)
-        } else {
-            Err(Error::unknown_variant(
-                &input,
-                &[
-                    "dc=<dc-name>",
-                    "host=<host-name>",
-                    AMD_SEV_SNP,
-                    SNS_LOAD_TEST,
-                    PERFORMANCE,
-                ],
-            ))
+        match input.split_once('=') {
+            Some(("dc", dc)) => Ok(HostFeature::DC(dc.to_owned())),
+            Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
+            _ => match input.as_str() {
+                AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
+                SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
+                PERFORMANCE => Ok(HostFeature::Performance),
+                IO_PERFORMANCE => Ok(HostFeature::IoPerformance),
+                DLL => Ok(HostFeature::Dell),
+                SPM => Ok(HostFeature::Supermicro),
+                _ => Err(Error::unknown_variant(
+                    &input,
+                    &[
+                        "dc=<dc-name>",
+                        "host=<host-name>",
+                        AMD_SEV_SNP,
+                        SNS_LOAD_TEST,
+                        PERFORMANCE,
+                        DLL,
+                        SPM,
+                    ],
+                )),
+            },
         }
     }
 }

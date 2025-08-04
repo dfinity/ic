@@ -91,6 +91,9 @@ pub struct EcdsaArguments {
     pub key_id: ::core::option::Option<super::super::super::types::v1::EcdsaKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::EcdsaMatchedPreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SchnorrArguments {
@@ -100,6 +103,9 @@ pub struct SchnorrArguments {
     pub message: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", optional, tag = "3")]
     pub taproot_tree_root: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "4")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::SchnorrMatchedPreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VetKdArguments {
@@ -524,6 +530,11 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(
+        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
+        tag = "22"
+    )]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

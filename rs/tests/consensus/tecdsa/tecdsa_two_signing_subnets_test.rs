@@ -36,12 +36,12 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-    SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    get_guestos_img_version, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
+    IcNodeContainer, SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::{Height, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
 
@@ -63,6 +63,7 @@ fn setup(env: TestEnv) {
                     }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
         )
         .with_unassigned_nodes(NODES_COUNT)
@@ -164,7 +165,8 @@ fn test(env: TestEnv) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    let replica_version = env.get_initial_replica_version().unwrap();
+    let replica_version = get_guestos_img_version().unwrap();
+    let replica_version = ReplicaVersion::try_from(replica_version).unwrap();
     let mut registry_version = snapshot.get_registry_version();
     let root_subnet_id = snapshot.root_subnet_id();
 
