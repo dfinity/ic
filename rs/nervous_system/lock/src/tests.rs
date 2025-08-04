@@ -85,17 +85,17 @@ async fn try_file_operation(file_path: String, operation: FileOperation) -> bool
     true
 }
 
+async fn delayed_file_operation(
+    pre_flight_delay_ms: u64,
+    file_path: &str,
+    operation: FileOperation,
+) -> bool {
+    sleep(Duration::from_millis(pre_flight_delay_ms)).await;
+    try_file_operation(file_path.to_string(), operation).await
+}
+
 #[tokio::test]
 async fn test_acquire_for_named_locks() {
-    async fn delayed_file_operation(
-        pre_flight_delay_ms: u64,
-        file_path: &str,
-        operation: FileOperation,
-    ) -> bool {
-        sleep(Duration::from_millis(pre_flight_delay_ms)).await;
-        try_file_operation(file_path.to_string(), operation).await
-    }
-
     // Test that different files can be operated on simultaneously
     let results = join!(
         delayed_file_operation(0, "/tmp/file1.txt", FileOperation::Read), // Read file1
@@ -112,15 +112,6 @@ async fn test_acquire_for_named_locks() {
 
 #[tokio::test]
 async fn test_acquire_for_same_operation_different_targets() {
-    async fn delayed_file_operation(
-        pre_flight_delay_ms: u64,
-        file_path: &str,
-        operation: FileOperation,
-    ) -> bool {
-        sleep(Duration::from_millis(pre_flight_delay_ms)).await;
-        try_file_operation(file_path.to_string(), operation).await
-    }
-
     // Test that the same operation type can run on different files simultaneously
     let results = join!(
         delayed_file_operation(0, "/var/log/app1.log", FileOperation::Write), // Write to app1.log
@@ -135,15 +126,6 @@ async fn test_acquire_for_same_operation_different_targets() {
 
 #[tokio::test]
 async fn test_acquire_for_mixed_targets_and_operations() {
-    async fn delayed_file_operation(
-        pre_flight_delay_ms: u64,
-        file_path: &str,
-        operation: FileOperation,
-    ) -> bool {
-        sleep(Duration::from_millis(pre_flight_delay_ms)).await;
-        try_file_operation(file_path.to_string(), operation).await
-    }
-
     // Test mixed operations on different files to ensure they don't interfere
     let results = join!(
         delayed_file_operation(0, "/home/user/config.json", FileOperation::Read),

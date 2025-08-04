@@ -245,11 +245,6 @@ where
         }
     };
 
-    println!(
-        "{}change_canister: Starting canister change for {}. Request: {:?}",
-        LOG_PREFIX, canister_id, request
-    );
-
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
         if stop_result.is_err() {
@@ -523,10 +518,5 @@ mod tests {
         let error_msg = result.unwrap_err();
         assert!(error_msg.contains("currently locked by another change operation"));
         assert!(error_msg.contains(&format!("{}", canister_id)));
-
-        // Clean up the lock for other tests
-        CANISTER_CHANGE_LOCKS.with(|locks| {
-            locks.borrow_mut().clear();
-        });
     }
 }
