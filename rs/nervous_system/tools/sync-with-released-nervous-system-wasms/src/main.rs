@@ -285,6 +285,8 @@ async fn get_mainnet_canister_release(
         }
 
         // Proceed with the next page.
+        // That page migth be empty if the current page is already the last (full) page,
+        // but this is fine with GitHub API.
         page += 1;
     }
 
