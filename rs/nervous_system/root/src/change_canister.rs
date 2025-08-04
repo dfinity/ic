@@ -1,4 +1,5 @@
 use crate::LOG_PREFIX;
+use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
@@ -15,9 +16,10 @@ use ic_nervous_system_clients::{
     },
 };
 use ic_nervous_system_lock::acquire_for;
-use ic_nervous_system_runtime::Runtime;
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_timer_task::RecurringAsyncTask;
 use serde::Serialize;
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{cell::RefCell, collections::BTreeMap, time::Duration};
 
 /// The structure allows reconstructing a potentially large WASM from chunks needed to upgrade or
 /// reinstall some target canister.

@@ -102,9 +102,9 @@ fn main() {}
 struct SuccessRecurringSyncTask {}
 
 impl RecurringSyncTask for SuccessRecurringSyncTask {
-    fn execute(self) -> (Option<Duration>, Self) {
+    fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
-        (Some(Duration::from_secs(1)), self)
+        (Duration::from_secs(1), self)
     }
 
     fn initial_delay(&self) -> Duration {
@@ -120,12 +120,12 @@ struct IncrementalDelayRecurringSyncTask {
 }
 
 impl RecurringSyncTask for IncrementalDelayRecurringSyncTask {
-    fn execute(self) -> (Option<Duration>, Self) {
+    fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
         let new_counter = self.counter + 1;
         let delay = Duration::from_secs(new_counter);
         (
-            Some(delay),
+            delay,
             Self {
                 counter: new_counter,
             },
@@ -143,7 +143,7 @@ impl RecurringSyncTask for IncrementalDelayRecurringSyncTask {
 struct PanicRecurringSyncTask {}
 
 impl RecurringSyncTask for PanicRecurringSyncTask {
-    fn execute(self) -> (Option<Duration>, Self) {
+    fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
         panic!("This task always panics");
     }
@@ -159,12 +159,13 @@ impl RecurringSyncTask for PanicRecurringSyncTask {
 struct OutOfInstructionsRecurringSyncTask {}
 
 impl RecurringSyncTask for OutOfInstructionsRecurringSyncTask {
-    fn execute(self) -> (Option<Duration>, Self) {
+    fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
         loop {
             ic_cdk::api::instruction_counter();
         }
-        (Some(Duration::from_secs(1)), self)
+        #[allow(unreachable_code)]
+        (Duration::from_secs(1), self)
     }
 
     fn initial_delay(&self) -> Duration {
@@ -178,10 +179,10 @@ impl RecurringSyncTask for OutOfInstructionsRecurringSyncTask {
 struct TerminatingRecurringSyncTask {}
 
 impl RecurringSyncTask for TerminatingRecurringSyncTask {
-    fn execute(self) -> (Option<Duration>, Self) {
+    fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
-        // Return None to terminate the task
-        (None, self)
+        // Return a very long delay to effectively terminate the task
+        (Duration::from_secs(365 * 24 * 60 * 60), self) // 1 year
     }
 
     fn initial_delay(&self) -> Duration {
@@ -196,11 +197,11 @@ struct SuccessRecurringAsyncTask {}
 
 #[async_trait]
 impl RecurringAsyncTask for SuccessRecurringAsyncTask {
-    async fn execute(self) -> (Option<Duration>, Self) {
+    async fn execute(self) -> (Duration, Self) {
         invoke_self_call().await;
 
         increase_counter(Self::NAME);
-        (Some(Duration::from_secs(1)), self)
+        (Duration::from_secs(1), self)
     }
 
     fn initial_delay(&self) -> Duration {
@@ -215,7 +216,7 @@ struct PanicRecurringAsyncTask {}
 
 #[async_trait]
 impl RecurringAsyncTask for PanicRecurringAsyncTask {
-    async fn execute(self) -> (Option<Duration>, Self) {
+    async fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
         invoke_self_call().await;
         panic!("This task always panics");
@@ -234,7 +235,7 @@ struct OutOfInstructionsBeforeCallRecurringAsyncTask {}
 #[async_trait]
 impl RecurringAsyncTask for OutOfInstructionsBeforeCallRecurringAsyncTask {
     #[allow(unreachable_code)]
-    async fn execute(self) -> (Option<Duration>, Self) {
+    async fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
 
         loop {
@@ -242,7 +243,7 @@ impl RecurringAsyncTask for OutOfInstructionsBeforeCallRecurringAsyncTask {
         }
 
         invoke_self_call().await;
-        (Some(Duration::from_secs(1)), self)
+        (Duration::from_secs(1), self)
     }
 
     fn initial_delay(&self) -> Duration {
@@ -258,7 +259,7 @@ struct OutOfInstructionsAfterCallRecurringAsyncTask {}
 #[async_trait]
 impl RecurringAsyncTask for OutOfInstructionsAfterCallRecurringAsyncTask {
     #[allow(unreachable_code)]
-    async fn execute(self) -> (Option<Duration>, Self) {
+    async fn execute(self) -> (Duration, Self) {
         increase_counter(Self::NAME);
         invoke_self_call().await;
 
@@ -266,7 +267,7 @@ impl RecurringAsyncTask for OutOfInstructionsAfterCallRecurringAsyncTask {
             ic_cdk::api::instruction_counter();
         }
 
-        (Some(Duration::from_secs(1)), self)
+        (Duration::from_secs(1), self)
     }
 
     fn initial_delay(&self) -> Duration {
