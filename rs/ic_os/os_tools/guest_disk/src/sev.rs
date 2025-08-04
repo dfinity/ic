@@ -1,32 +1,33 @@
 use crate::crypt::{activate_crypt_device, destroy_key_slots_except, format_crypt_device};
-use crate::partitions::PartitionSetup;
 use crate::{DiskEncryption, Partition};
 use anyhow::{Context, Result};
+use config_types::GuestVMType;
 use ic_sev::guest::key_deriver::{Key, SevKeyDeriver};
 use std::path::Path;
 
 pub const PREVIOUS_KEY_PATH: &'static str = "/var/alternative_store.keyfile";
 
 pub struct SevDiskEncryption<'a> {
-    pub partition_setup: &'a PartitionSetup,
     pub sev_key_deriver: &'a mut SevKeyDeriver,
     pub previous_key_path: &'a Path,
+    pub guest_vm_type: GuestVMType,
 }
 
 impl SevDiskEncryption<'_> {
-    fn setup_store_with_previous_key(&self, crypt_name: &str, new_key: &[u8]) -> Result<()> {
+    fn setup_store_with_previous_key(
+        &self,
+        device_path: &Path,
+        crypt_name: &str,
+        new_key: &[u8],
+    ) -> Result<()> {
         let previous_key = std::fs::read(&self.previous_key_path).with_context(|| {
             format!(
                 "Could not read previous key from {}",
                 self.previous_key_path.display()
             )
         })?;
-        let mut crypt_device = activate_crypt_device(
-            &self.partition_setup.store_partition_device,
-            crypt_name,
-            &previous_key,
-        )
-        .context("Failed to unlock store partition with previous key")?;
+        let mut crypt_device = activate_crypt_device(&device_path, crypt_name, &previous_key)
+            .context("Failed to unlock store partition with previous key")?;
 
         // Keep the key slot that was used to unlock the partition with the previous key.
         // Delete all other key slots and add the new key.
@@ -45,13 +46,21 @@ impl SevDiskEncryption<'_> {
             .add_by_passphrase(None, &previous_key, new_key)
             .context("Failed to add new key to store partition")?;
 
+        // Clean up the previous key on the first boot after upgrade if own key was added
+        // successfully.
+        if self.guest_vm_type == GuestVMType::Default {
+            if let Err(err) = std::fs::remove_file(self.previous_key_path) {
+                debug_assert!(false, "Failed to remove previous key file: {err:?}");
+                eprintln!("Failed to remove previous key file: {err:?}");
+            }
+        }
+
         Ok(())
     }
 }
 
 impl DiskEncryption for SevDiskEncryption<'_> {
-    fn open(&mut self, partition: Partition, crypt_name: &str) -> Result<()> {
-        let device_path = partition.device_path(self.partition_setup);
+    fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let key = self
             .sev_key_deriver
             .derive_key(Key::DiskEncryptionKey { device_path })
@@ -73,7 +82,11 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                         "Unlocking store with existing key from {}",
                         self.previous_key_path.display()
                     );
-                    match self.setup_store_with_previous_key(crypt_name, key.as_bytes()) {
+                    match self.setup_store_with_previous_key(
+                        device_path,
+                        crypt_name,
+                        key.as_bytes(),
+                    ) {
                         Ok(()) => return Ok(()),
                         Err(err) => {
                             eprintln!(
@@ -92,8 +105,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
         Ok(())
     }
 
-    fn format(&mut self, partition: Partition) -> Result<()> {
-        let device_path = partition.device_path(self.partition_setup);
+    fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
         let key = self
             .sev_key_deriver
             .derive_key(Key::DiskEncryptionKey { device_path })

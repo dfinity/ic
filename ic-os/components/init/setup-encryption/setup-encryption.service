@@ -1,7 +1,10 @@
 [Unit]
-Description=Set up encrypted storage on first boot
+Description=Set up and activate encrypted storage
 DefaultDependencies=no
+# When SEV is disabled, the key is read from /boot/config.
 RequiresMountsFor=/boot/config
+# When SEV is enabled, the key is read from /var during the first boot after an upgrade.
+RequiresMountsFor=/var
 Before=cryptsetup-pre.target
 Wants=cryptsetup-pre.target
 

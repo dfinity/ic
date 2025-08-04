@@ -1,10 +1,8 @@
 use anyhow::{bail, Context, Result};
 use itertools::Either::Right;
-use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
+use libcryptsetup_rs::consts::flags::{CryptActivate, CryptDeactivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
-use libcryptsetup_rs::{
-    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, LibcryptErr,
-};
+use libcryptsetup_rs::{CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use std::path::Path;
 
 /// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
@@ -34,6 +32,14 @@ pub fn activate_crypt_device(
         .context("Failed to activate cryptographic device")?;
 
     Ok(crypt_device)
+}
+
+pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
+    CryptDevice::from_ptr(std::ptr::null_mut())
+        .activate_handle()
+        .deactivate(crypt_name, CryptDeactivate::empty())
+        .context("Failed to deactivate cryptographic device")?;
+    Ok(())
 }
 
 /// Formats the given cryptographic device with LUKS2 and initializes it with the provided

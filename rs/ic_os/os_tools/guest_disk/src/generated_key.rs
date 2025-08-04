@@ -1,5 +1,4 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
-use crate::partitions::PartitionSetup;
 use crate::{DiskEncryption, Partition};
 use anyhow::{Context, Result};
 use std::io::Write;
@@ -9,28 +8,20 @@ use tempfile::NamedTempFile;
 pub const DEFAULT_GENERATED_KEY_PATH: &'static str = "/boot/config/store.keyfile";
 
 pub struct GeneratedKeyDiskEncryption<'a> {
-    pub partition_setup: &'a PartitionSetup,
     pub key_path: &'a Path,
 }
 
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
-    fn open(&mut self, partition: Partition, crypt_name: &str) -> Result<()> {
-        activate_crypt_device(
-            partition.device_path(&self.partition_setup),
-            crypt_name,
-            &self.generate_or_read_key()?,
-        )
-        .context("Failed to initialize crypt device")?;
+    fn open(&mut self, device_path: &Path, _partition: Partition, crypt_name: &str) -> Result<()> {
+        activate_crypt_device(device_path, crypt_name, &self.generate_or_read_key()?)
+            .context("Failed to initialize crypt device")?;
 
         Ok(())
     }
 
-    fn format(&mut self, partition: Partition) -> Result<()> {
-        format_crypt_device(
-            partition.device_path(&self.partition_setup),
-            &self.generate_or_read_key()?,
-        )
-        .context("Failed to format crypt device")?;
+    fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
+        format_crypt_device(device_path, &self.generate_or_read_key()?)
+            .context("Failed to format crypt device")?;
 
         Ok(())
     }
