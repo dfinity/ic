@@ -1379,12 +1379,14 @@ fn test_vetkd() {
     }
 }
 
+#[cfg(not(windows))]
 struct HttpServer {
     addr: SocketAddr,
     flag: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
+#[cfg(not(windows))]
 impl HttpServer {
     fn new(bind_addr: &str) -> Self {
         fn handle_connection(mut stream: TcpStream) {
@@ -1439,6 +1441,7 @@ impl HttpServer {
     }
 }
 
+#[cfg(not(windows))]
 impl Drop for HttpServer {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::Relaxed);
