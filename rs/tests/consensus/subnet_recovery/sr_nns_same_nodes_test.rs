@@ -52,12 +52,13 @@ use std::{cmp, convert::TryFrom};
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 
-fn overwrite_recovery_engine_with_correct_hash(node: &IcNodeSnapshot, artifacts_hash: String) {
+fn overwrite_recovery_engine_with_correct_hash(node: &IcNodeSnapshot, artifacts_hash: &str) {
     let recovery_engine_path = "/opt/ic/bin/guestos-recovery-engine.sh";
     let command = format!(
         r#"sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"{artifacts_hash}\"/" {recovery_engine_path}"#,
     );
-    node.block_on_bash_script(&command);
+    node.block_on_bash_script(&command)
+        .expect("Failed to overwrite recovery engine with correct hash");
 }
 
 pub fn setup(env: TestEnv) {
@@ -269,7 +270,7 @@ pub fn test(env: TestEnv) {
             node.node_id,
             artifacts_hash
         );
-        overwrite_recovery_engine_with_correct_hash(&node, artifacts_hash);
+        overwrite_recovery_engine_with_correct_hash(&node, &artifacts_hash);
         info!(
             logger,
             "Spoofing node {} DNS to point to the UVM at {}", node.node_id, server_ipv6
