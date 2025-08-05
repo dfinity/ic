@@ -707,7 +707,7 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap() == CanisterStatusResultV2::new(
                 CanisterStatusType::Running,
                 false,
-                0,
+                1,
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
