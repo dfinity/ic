@@ -1,11 +1,11 @@
 use assert_matches::assert_matches;
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions,
-    OnLowWasmMemoryHookStatus, Payload, WasmMemoryPersistence, IC_00,
+    CanisterSettingsArgsBuilder, CanisterStatusType, OnLowWasmMemoryHookStatus,
 };
+use ic_management_canister_types_private::{CanisterUpgradeOptions, WasmMemoryPersistence};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -18,7 +18,8 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::CanisterTask;
 use ic_types::Cycles;
 use ic_types::{CanisterId, NumBytes};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::wasm;
+use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -234,10 +235,9 @@ fn global_timer_can_be_cancelled() {
     env.advance_time(Duration::from_secs(1));
     // Setup global timer to increase a global counter
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
-    let deadline = now_nanos + 10; // set the deadline in 10 rounds from now
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(deadline)
+        .api_global_timer_set(now_nanos + 3) // set the deadline in three rounds from now
         .get_global_counter()
         .reply_int64()
         .build();
@@ -260,17 +260,17 @@ fn global_timer_can_be_cancelled() {
     let result = env
         .execute_ingress(canister_id, "update", cancel_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(deadline.to_le_bytes().into()));
+    assert_eq!(
+        result,
+        WasmResult::Reply((now_nanos + 3).to_le_bytes().into())
+    );
 
     // The timer should not be called
     env.advance_time(Duration::from_secs(1));
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        let result = env
-            .execute_ingress(canister_id, "update", get_global_counter.clone())
-            .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
-    }
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
 }
 
 #[test]
@@ -299,13 +299,10 @@ fn global_timer_can_be_immediately_cancelled() {
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
     // The counter must be zero as the timer should have been immediately cancelled
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        let result = env
-            .execute_ingress(canister_id, "update", get_global_counter.clone())
-            .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
-    }
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
 }
 
 #[test]
@@ -346,49 +343,12 @@ fn global_timer_is_one_off() {
     assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
 
     // The timer should be called just once
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        env.advance_time(Duration::from_secs(1));
-        env.tick();
-        let result = env
-            .execute_ingress(canister_id, "update", get_global_counter.clone())
-            .unwrap();
-        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
-    }
-}
-
-#[test]
-fn global_timer_in_far_future_does_not_run() {
-    let env = StateMachine::new();
-    let canister_id = env
-        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
-        .unwrap();
-
-    // advance time so that time does not grow implicitly when executing a round
     env.advance_time(Duration::from_secs(1));
-    // Setup global timer to increase a global counter
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
-    let set_global_timer = wasm()
-        .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(now_nanos + 1_000_000) // set the deadline in many rounds from now
-        .get_global_counter()
-        .reply_int64()
-        .build();
+    env.tick();
     let result = env
-        .execute_ingress(canister_id, "update", set_global_timer)
+        .execute_ingress(canister_id, "update", get_global_counter)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
-
-    let get_global_counter = wasm().get_global_counter().reply_int64().build();
-
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        env.tick();
-        let result = env
-            .execute_ingress(canister_id, "update", get_global_counter.clone())
-            .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
-    }
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
 }
 
 #[test]
@@ -420,13 +380,10 @@ fn global_timer_can_be_reactivated() {
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        let result = env
-            .execute_ingress(canister_id, "update", get_global_counter.clone())
-            .unwrap();
-        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
-    }
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter.clone())
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
 
     let set_global_timer = wasm()
         .api_global_timer_set(1)
@@ -744,236 +701,6 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
 }
 
 #[test]
-fn global_timer_in_pre_and_post_upgrade() {
-    let env = StateMachine::new();
-
-    // Pre-upgrade pushes the timer it sees into stable memory and sets the timer into the past.
-    let canister_id = env
-        .install_canister(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            wasm()
-                .set_pre_upgrade(
-                    wasm()
-                        .stable_grow(1)
-                        .push_int(0)
-                        .api_global_timer_set(1)
-                        .int64_to_blob()
-                        .stable_write_offset_blob()
-                        .build(),
-                )
-                .build(),
-            None,
-        )
-        .unwrap();
-
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
-    let far_future_time = now_nanos + 1_000_000;
-    let other_far_future_time = now_nanos + 2_000_000;
-
-    // We set the timer (to confirm that pre-upgrade sees the timer) into far future (so that it does not actually run).
-    env.execute_ingress(
-        canister_id,
-        "update",
-        wasm().api_global_timer_set(far_future_time).reply().build(),
-    )
-    .unwrap();
-
-    // Upgrade the canister to trigger pre-upgrade and post-upgrade.
-    // Post-upgrade pushes the timer it sees into stable memory and sets the timer (to confirm that post-upgrade set the timer) into far future (so that it does not actually run).
-    let set_global_timer_in_post_upgrade = wasm()
-        .push_int(8)
-        .api_global_timer_set(other_far_future_time)
-        .int64_to_blob()
-        .stable_write_offset_blob()
-        .build();
-    let result = env.upgrade_canister(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        set_global_timer_in_post_upgrade,
-    );
-    assert_eq!(result, Ok(()));
-
-    // We fetch the two timers from stable memory:
-    // - the first timer is the custom timer seen in pre-upgrade;
-    // - the second timer is the cleared timer seen in post-uprade.
-    let result = env
-        .execute_ingress(
-            canister_id,
-            "update",
-            wasm().stable_read(0, 16).append_and_reply().build(),
-        )
-        .unwrap();
-    match result {
-        WasmResult::Reply(data) => {
-            assert_eq!(
-                data,
-                [far_future_time.to_le_bytes(), 0_u64.to_le_bytes()].concat()
-            );
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
-
-    // We confirm that post-upgrade set the timer by resetting the timer and checking its previous value.
-    let result = env
-        .execute_ingress(
-            canister_id,
-            "update",
-            wasm()
-                .api_global_timer_set(far_future_time)
-                .reply_int64()
-                .build(),
-        )
-        .unwrap();
-    match result {
-        WasmResult::Reply(data) => {
-            assert_eq!(data, other_far_future_time.to_le_bytes());
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
-}
-
-#[test]
-fn global_timer_in_init() {
-    let env = StateMachine::new();
-    let canister_id = env
-        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), wasm().build(), None)
-        .unwrap();
-
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
-    let far_future_time = now_nanos + 1_000_000;
-    let other_far_future_time = now_nanos + 2_000_000;
-
-    // We set the timer (to confirm that init sees the cleared timer) into far future (so that it does not actually run).
-    env.execute_ingress(
-        canister_id,
-        "update",
-        wasm().api_global_timer_set(far_future_time).reply().build(),
-    )
-    .unwrap();
-
-    // Reinstall the canister to trigger init.
-    // Init pushes the timer it sees into stable memory and sets the timer (to confirm that init set the timer) into far future (so that it does not actually run).
-    let set_global_timer_in_init = wasm()
-        .stable_grow(1)
-        .push_int(0)
-        .api_global_timer_set(other_far_future_time)
-        .int64_to_blob()
-        .stable_write_offset_blob()
-        .build();
-    let result = env.reinstall_canister(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        set_global_timer_in_init,
-    );
-    assert_eq!(result, Ok(()));
-
-    // We fetch the cleared timer seen in init from stable memory.
-    let result = env
-        .execute_ingress(
-            canister_id,
-            "update",
-            wasm().stable_read(0, 8).append_and_reply().build(),
-        )
-        .unwrap();
-    match result {
-        WasmResult::Reply(data) => {
-            assert_eq!(data, 0_u64.to_le_bytes(),);
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
-
-    // We confirm that init set the timer by resetting the timer and checking its previous value.
-    let result = env
-        .execute_ingress(
-            canister_id,
-            "update",
-            wasm()
-                .api_global_timer_set(far_future_time)
-                .reply_int64()
-                .build(),
-        )
-        .unwrap();
-    match result {
-        WasmResult::Reply(data) => {
-            assert_eq!(data, other_far_future_time.to_le_bytes());
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
-}
-
-#[test]
-fn global_timer_runs_if_set_in_stopping_canister_post_upgrade() {
-    let env = StateMachine::new();
-    let canister_id = env
-        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), wasm().build(), None)
-        .unwrap();
-
-    // Make the canister control itself so that it can try to stop itself.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_controllers(vec![PrincipalId::new_anonymous(), canister_id.get()])
-        .build();
-    env.update_settings(&canister_id, settings).unwrap();
-
-    // Make the canister stopping (not stopped) by trying to stop itself.
-    let stop_arg: CanisterIdRecord = canister_id.into();
-    let result = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm()
-            .call_simple(
-                IC_00,
-                "stop_canister",
-                call_args().other_side(stop_arg.encode()),
-            )
-            .reply()
-            .build(),
-    );
-    assert_matches!(result, Ok(_));
-
-    // Make sure the canister is indeed stopping.
-    let status = env.canister_status(canister_id).unwrap().unwrap();
-    assert_eq!(status.status(), CanisterStatusType::Stopping);
-
-    // Upgrade the canister.
-    let set_global_timer_in_post_upgrade = wasm()
-        .set_global_timer_method(wasm().inc_global_counter().api_global_timer_set(1))
-        .api_global_timer_set(1)
-        .build();
-    let result = env.upgrade_canister(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        set_global_timer_in_post_upgrade,
-    );
-    assert_eq!(result, Ok(()));
-
-    // The timer should not be triggered as the canister is stopping.
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        env.advance_time(Duration::from_secs(1));
-        env.tick();
-    }
-
-    // Any update calls should fail as the canister is stopping.
-    let result = env.execute_ingress(canister_id, "update", vec![]);
-    assert_matches!(result, Err(_));
-
-    // Start the canister.
-    let result = env.start_canister(canister_id);
-    assert_matches!(result, Ok(_));
-
-    // The timer should be triggered and reactivated each round.
-    for _ in 1..5 {
-        env.advance_time(Duration::from_secs(1));
-        env.tick();
-    }
-
-    // Assert the global timer is running.
-    let get_global_counter = wasm().get_global_counter().reply_int64().build();
-    let result = env.query(canister_id, "query", get_global_counter).unwrap();
-    assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
-}
-
-#[test]
 fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
     let env = StateMachine::new();
     let canister_id = env.install_canister_wat("(module)", vec![], None);
@@ -995,11 +722,8 @@ fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
     assert_eq!(result, Ok(()));
 
     // The timer should not be triggered as the canister is stopped.
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
-        env.advance_time(Duration::from_secs(1));
-        env.tick();
-    }
+    env.advance_time(Duration::from_secs(1));
+    env.tick();
 
     // Any update calls should fail as the canister is stopped.
     let result = env.execute_ingress(canister_id, "update", vec![]);

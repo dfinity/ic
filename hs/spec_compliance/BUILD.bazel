@@ -125,6 +125,7 @@ haskell_binary(
         ":IC-Test-Options",
         ":IC-Test-Secp256k1",
         ":IC-Test-Spec",
+        ":IC-Test-Spec-Timer",
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
         ":IC-Test-WebAuthn",
@@ -592,6 +593,7 @@ haskell_library(
         ":IC-Test-Agent-SafeCalls",
         ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-UserCalls",
+        ":IC-Test-Spec-Timer",
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
         ":IC-Types",
@@ -628,6 +630,22 @@ haskell_library(
         ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Universal",
         ":IC-Utils",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
+    ],
+)
+
+haskell_library(
+    name = "IC-Test-Spec-Timer",
+    srcs = ["src/IC/Test/Spec/Timer.hs"],
+    src_strip_prefix = "src",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = STACK_DEPS + [
+        ":IC-Management",
+        ":IC-Test-Agent",
+        ":IC-Test-Agent-UnsafeCalls",
+        ":IC-Test-Spec-Utils",
+        ":IC-Test-Universal",
         "@haskell-candid//:candid",
         "@miracl-core//:lib",
     ],

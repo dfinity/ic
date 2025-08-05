@@ -1510,28 +1510,21 @@ fn ic0_global_timer_deactivated() {
     let set_timer = wasm().api_global_timer_set(1).reply_int64().build();
     let unset_timer = wasm().api_global_timer_set(0).reply_int64().build();
 
-    // The timer is initially inactive.
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
-
-    // Setting the timer in update call works and sets the timer.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
-
-    // Unsetting the timer in update call works and makes the timer inactive.
     test.ingress(canister_id, "update", unset_timer).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
-
-    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
@@ -1539,22 +1532,18 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Failed upgrade does not unset the timer.
     test.upgrade_canister(canister_id, vec![]).unwrap_err();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Successful upgrade unsets the timer.
     test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
-
-    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
@@ -1562,22 +1551,18 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Uninstalling code unsets the timer.
     test.uninstall_code(canister_id).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
 
-    // The timer stays unset after installing code.
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
-
-    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
@@ -1585,29 +1570,24 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Failed reinstall does not unset the timer.
     test.reinstall_canister(canister_id, vec![]).unwrap_err();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Successful reinstall unsets the timer.
     test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
-
-    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Changing canister settings does not unset the timer.
     test.canister_update_allocations_settings(canister_id, None, None)
         .unwrap();
     assert_eq!(
@@ -1622,21 +1602,18 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Stopping the canister does not unset the timer.
     test.stop_canister(canister_id);
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Starting the canister does not unset the timer.
     test.start_canister(canister_id).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // We change the controller to trigger a failed uninstall in the following test.
     test.set_controller(canister_id, canister_id.into())
         .unwrap();
     assert_eq!(
@@ -1644,7 +1621,6 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
-    // Failed uninstall does not unset the timer.
     test.uninstall_code(canister_id).unwrap_err();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
