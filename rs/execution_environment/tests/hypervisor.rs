@@ -8722,7 +8722,7 @@ fn invoke_cost_sign_with_ecdsa() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .ecdsa_signature_fee(subnet_size);
+        .ecdsa_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
@@ -8802,7 +8802,7 @@ fn invoke_cost_sign_with_schnorr() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .schnorr_signature_fee(subnet_size);
+        .schnorr_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
@@ -8880,7 +8880,9 @@ fn invoke_cost_vetkd_derive_key() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost = test.cycles_account_manager().vetkd_fee(subnet_size);
+    let expected_cost = test
+        .cycles_account_manager()
+        .vetkd_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };

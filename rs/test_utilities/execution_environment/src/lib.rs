@@ -2511,7 +2511,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         );
-        state.metadata.cost_schedule = self.cost_schedule;
+        state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
             state: Some(state),
