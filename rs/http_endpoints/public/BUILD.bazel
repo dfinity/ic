@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/http_endpoints/async_utils",
+    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",

@@ -28,6 +28,7 @@ pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, Ingres
 pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
 use ic_http_endpoints_async_utils::start_tcp_listener;
+use ic_nns_delegation_manager::NNSDelegationReader;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
@@ -143,7 +144,7 @@ fn start_server_initialization(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    mut delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    mut delegation_from_nns: NNSDelegationReader,
 ) {
     rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
@@ -171,7 +172,7 @@ fn start_server_initialization(
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
         info!(log, "Waiting for the NNS certificate delegation...");
-        let _ = delegation_from_nns.changed().await;
+        let _ = delegation_from_nns.wait_for_delegation().await;
         info!(log, "NNS certificate delegation is now available.");
 
         metrics
@@ -258,7 +259,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,

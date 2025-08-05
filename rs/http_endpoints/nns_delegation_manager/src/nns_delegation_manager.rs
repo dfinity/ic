@@ -37,7 +37,7 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::metrics::DelegationManagerMetrics;
+use crate::{metrics::DelegationManagerMetrics, NNSDelegationReader};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -76,10 +76,7 @@ pub fn start_nns_delegation_manager(
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     cancellation_token: CancellationToken,
-) -> (
-    JoinHandle<()>,
-    DelegationReader
-) {
+) -> (JoinHandle<()>, NNSDelegationReader) {
     let manager = DelegationManager {
         config,
         log,
@@ -100,12 +97,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader { receiver: rx })
-}
-
-#[derive(Clone)]
-pub struct NNSDelegationReader {
-    receiver: watch::Receiver<Option<CertificateDelegation>>,
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 struct DelegationManager {

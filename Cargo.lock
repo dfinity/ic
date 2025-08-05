@@ -9477,6 +9477,7 @@ dependencies = [
  "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
+ "ic-nns-delegation-manager",
  "ic-pprof",
  "ic-protobuf",
  "ic-read-state-response-parser",

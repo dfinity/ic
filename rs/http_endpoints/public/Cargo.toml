@@ -23,6 +23,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-nns-delegation-manager = { path = "../../http_endpoints/nns_delegation_manager" }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
