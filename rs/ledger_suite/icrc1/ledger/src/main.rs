@@ -825,10 +825,10 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                     "Total number of archives.",
                 )?;
             }
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to read number of archives: {}", err),
-            ))?,
+            Err(err) => Err(std::io::Error::other(format!(
+                "Failed to read number of archives: {}",
+                err
+            )))?,
         }
         if is_ready() {
             w.encode_gauge(

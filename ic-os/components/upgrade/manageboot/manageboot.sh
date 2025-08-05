@@ -66,7 +66,7 @@ usage() {
 Usage:
   manageboot.sh [ -f grubenvfile] system_type action
 
-  -f specify alternative grubenv file (defaults to /grub/grubenv).
+  -f specify alternative grubenv file (defaults to /boot/grub/grubenv).
      Primarily useful for testing
 
   Arguments:
@@ -127,7 +127,7 @@ if [ $(id -u) != 0 ]; then
 fi
 
 # Parsing options first
-GRUBENV_FILE=/grub/grubenv
+GRUBENV_FILE=/boot/grub/grubenv
 while getopts ":f:" OPT; do
     case "${OPT}" in
         f)
@@ -279,7 +279,6 @@ case "${ACTION}" in
             "gauge"
 
         write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
-        sync
         # Ignore termination signals from the following reboot, so that
         # the script exits without error.
         trap -- '' SIGTERM
