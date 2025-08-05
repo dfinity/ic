@@ -43,7 +43,9 @@ use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
     ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
 };
-use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage, FieldsDisplay};
+use icrc_ledger_types::icrc21::responses::{
+    ConsentInfo, ConsentMessage, FieldsDisplay, Value as Icrc21Value,
+};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
@@ -4626,7 +4628,7 @@ fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest
 fn modify_field(
     fields_message: &FieldsDisplay,
     field_name: String,
-    new_value: String,
+    new_value: Option<Icrc21Value>,
 ) -> FieldsDisplay {
     let mut result = FieldsDisplay {
         intent: fields_message.intent.clone(),
@@ -4634,14 +4636,13 @@ fn modify_field(
     };
     for (f_name, f_value) in &fields_message.fields {
         if *f_name == field_name {
-            if new_value == *"" {
-                continue;
+            if new_value.is_some() {
+                result
+                    .fields
+                    .push((f_name.to_string(), new_value.clone().unwrap().clone()));
             }
-            result.fields.push((f_name.to_string(), new_value.clone()));
         } else {
-            result
-                .fields
-                .push((f_name.to_string(), f_value.to_string()));
+            result.fields.push((f_name.to_string(), f_value.clone()));
         }
     }
     result
@@ -4694,13 +4695,14 @@ Charged for processing the transfer.
 `test_bytes`";
 
     let expected_fields_message = FieldsDisplay {
-        intent: "Send Test Token".to_string(), 
+        intent: "Send Test Token".to_string(),
         fields: vec![
-            ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
-            ("Amount".to_string(), "0.01 XTST".to_string()),
-            ("To".to_string(), "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()),
-            ("Fees".to_string(), "0.0001 XTST".to_string()), 
-            ("Memo".to_string(), "test_bytes".to_string())]};
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Amount".to_string(),  Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}), // "0.01 XTST".to_string()),
+            ("To".to_string(), Icrc21Value::Text{content: "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()}),
+            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}), 
+            ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})],
+    };
 
     let consent_info =
         icrc21_consent_message(env, canister_id, from_account.owner, args.clone()).unwrap();
@@ -4757,7 +4759,7 @@ Charged for processing the transfer.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(), "".to_string());
+    let new_exp_fields_message = modify_field(&expected_fields_message, "Memo".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4791,9 +4793,11 @@ Charged for processing the transfer.
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message = modify_field(
-        &fields_message,
+        &expected_fields_message,
         "Memo".to_string(),
-        hex::encode(vec![0, 159, 146, 150]),
+        Some(Icrc21Value::Text {
+            content: hex::encode(vec![0, 159, 146, 150]),
+        }),
     );
     assert_eq!(
         fields_message, new_exp_fields_message,
@@ -4822,7 +4826,7 @@ Charged for processing the transfer.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "From".to_string(), "".to_string());
+    let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -4905,14 +4909,14 @@ Charged for processing the approval.
     let expected_fields_message = FieldsDisplay {
         intent: "Approve spending".to_string(), 
         fields: vec![
-            ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
-            ("Approve to spender".to_string(), "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()),
-            ("Requested allowance".to_string(), "0.01 XTST".to_string()),
-            ("Existing allowance".to_string(), "0.01 XTST".to_string()),
-            ("Approval expiration".to_string(), "Thu, 06 May 2021 20:17:10 +0000".to_string()),
-            ("Approval fees".to_string(), "0.0001 XTST".to_string()),
-            ("Fees paid by".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
-            ("Memo".to_string(), "test_bytes".to_string())]};
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Approve to spender".to_string(), Icrc21Value::Text{content: "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()}),
+            ("Requested allowance".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
+            ("Existing allowance".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
+            ("Approval expiration".to_string(), Icrc21Value::TimestampSeconds { amount: 1620332230 }),
+            ("Approval fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}),
+            ("Fees paid by".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})]};
 
     let mut args = ConsentMessageRequest {
         method: "icrc2_approve".to_owned(),
@@ -4976,9 +4980,9 @@ Charged for processing the approval.
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message = modify_field(
-        &fields_message,
+        &expected_fields_message,
         "Existing allowance".to_string(),
-        "".to_string(),
+        None,
     );
     assert_eq!(
         fields_message, new_exp_fields_message,
@@ -5016,9 +5020,11 @@ Charged for processing the approval.
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message = modify_field(
-        &fields_message,
+        &expected_fields_message,
         "Approval expiration".to_string(),
-        "This approval does not have an expiration.".to_string(),
+        Some(Icrc21Value::Text {
+            content: "This approval does not have an expiration.".to_string(),
+        }),
     );
     assert_eq!(
         fields_message, new_exp_fields_message,
@@ -5049,7 +5055,9 @@ Charged for processing the approval.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "From".to_string(), "".to_string());
+    let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
+    let new_exp_fields_message =
+        modify_field(&new_exp_fields_message, "Fees paid by".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -5080,13 +5088,8 @@ Charged for processing the approval.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(
-        &fields_message,
-        "Approval expiration".to_string(),
-        "Thu, 06 May 2021 21:17:10 +0100".to_string(),
-    );
     assert_eq!(
-        fields_message, new_exp_fields_message,
+        fields_message, expected_fields_message,
         "Expected: {:?}, got: {:?}",
         new_exp_fields_message, fields_message
     );
@@ -5119,7 +5122,7 @@ Charged for processing the approval.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(), "".to_string());
+    let new_exp_fields_message = modify_field(&expected_fields_message, "Memo".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -5181,12 +5184,12 @@ Charged for processing the transfer.
     let expected_fields_message = FieldsDisplay {
         intent: "Spend Test Token".to_string(), 
         fields: vec![
-            ("From".to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()), 
-            ("Amount".to_string(), "0.01 XTST".to_string()),
-            ("Spender".to_string(), "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()),
-            ("To".to_string(), "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()),
-            ("Fees".to_string(), "0.0001 XTST".to_string()), 
-            ("Memo".to_string(), "test_bytes".to_string())]};
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Amount".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
+            ("Spender".to_string(), Icrc21Value::Text{content: "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()}),
+            ("To".to_string(), Icrc21Value::Text{content: "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()}),
+            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}), 
+            ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})]};
 
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, spender_account.owner, args.clone())
@@ -5237,7 +5240,7 @@ Charged for processing the transfer.
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     let new_exp_fields_message =
-        modify_field(&fields_message, "Spender".to_string(), "".to_string());
+        modify_field(&expected_fields_message, "Spender".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
@@ -5272,7 +5275,7 @@ Charged for processing the transfer.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(&fields_message, "Memo".to_string(), "".to_string());
+    let new_exp_fields_message = modify_field(&expected_fields_message, "Memo".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
