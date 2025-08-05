@@ -15,11 +15,15 @@ use ic_types_test_utils::ids::user_test_id;
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
 fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
-    env.get_latest_state()
+    let returned_version = env.canister_status(canister_id).unwrap().unwrap().version();
+    let system_version = env
+        .get_latest_state()
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version
+        .canister_version;
+    assert_eq!(returned_version, system_version);
+    system_version
 }
 
 /// This function implements the functionality of `StateMachine::execute_ingress_as`

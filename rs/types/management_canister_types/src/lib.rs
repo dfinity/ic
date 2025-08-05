@@ -1208,7 +1208,7 @@ pub struct QueryStats {
 /// `(record {
 ///     status : variant { running; stopping; stopped };
 ///     ready_for_migration: bool,
-///     version: u64,
+///     version: nat64,
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
 ///     controller: principal;
