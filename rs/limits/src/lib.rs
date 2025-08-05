@@ -78,3 +78,9 @@ pub const DKG_INTERVAL_HEIGHT: u64 = 499;
 /// The default upper bound for the number of allowed dkg dealings in a
 /// block.
 pub const DKG_DEALINGS_PER_BLOCK: usize = 1;
+/// The maximum number of artifacts we must support in the validated consensus pool. This
+/// number is based on the function [`get_maximum_validated_artifacts`] in the consensus
+/// component, which is kept in sync with the implementation. The calculation is done
+/// for a 40-node subnet with a DKG interval of 499, a minimum chain length of 50, and a
+/// notarization notarization-CUP gap of 70.
+pub const MAX_VALIDATED_CONSENSUS_ARTIFACTS: usize = 97750;
