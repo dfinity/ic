@@ -35,7 +35,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-management-canister-types = { workspace = true }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

@@ -45,7 +45,8 @@ DEPENDENCIES = [
     "//rs/sns/governance/token_valuation",
     "//rs/sns/treasury_manager",
     "//rs/types/base_types",
-    "//rs/types/management_canister_types",
+    
+    "@crate_index//:ic-management-canister-types",
     "//rs/utils",
     "@crate_index//:base64",
     "@crate_index//:build-info",

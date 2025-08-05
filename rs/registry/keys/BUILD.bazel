@@ -10,7 +10,8 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
+        
+    "@crate_index//:ic-management-canister-types",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:hex",
