@@ -597,7 +597,7 @@ impl BackupArtifact {
             RandomBeacon(artifact) => pb::RandomBeacon::from(artifact).encode(&mut buf),
             CatchUpPackage((_, artifact)) => artifact.encode(&mut buf),
         }
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+        .map_err(|err| io::Error::other(err.to_string()))?;
         Ok(buf)
     }
 
