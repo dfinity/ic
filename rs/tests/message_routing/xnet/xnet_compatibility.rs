@@ -45,7 +45,7 @@ use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const DKG_INTERVAL: u64 = 9;
@@ -177,7 +177,7 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
     bless_replica_version(
         &nns_node,

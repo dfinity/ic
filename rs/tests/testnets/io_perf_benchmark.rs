@@ -53,7 +53,6 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
-use ic_system_test_driver::driver::vector_vm::VectorVm;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     group::SystemTestGroup,
@@ -195,8 +194,6 @@ pub fn setup(env: TestEnv, config: Config) {
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new().with_required_host_features(vec![HostFeature::Performance]);
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
@@ -206,10 +203,11 @@ pub fn setup(env: TestEnv, config: Config) {
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
-        .with_default_vm_resources(vm_resources);
+        .with_default_vm_resources(vm_resources)
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     // `HostFeature::IoPerformance` is required for the system subnet to use the performance hosts even if hosts are specified.
-    let mut subnet = Subnet::new(SubnetType::System)
+    let mut subnet = Subnet::new(SubnetType::Application)
         .with_required_host_features(vec![HostFeature::IoPerformance]);
 
     let logger = env.logger();
@@ -242,20 +240,25 @@ pub fn setup(env: TestEnv, config: Config) {
 
     let topology_snapshot = env.topology_snapshot();
     let mut switch_to_ssd_handles = Vec::new();
-    for node in topology_snapshot.subnets().next().unwrap().nodes() {
-        let node_id = node.node_id.to_string();
-        let hostname = vms
-            .get(&node_id)
-            .expect("Failed to get VM for node")
-            .hostname
-            .clone();
+    for subnet in topology_snapshot.subnets() {
+        if subnet.subnet_type() != SubnetType::Application {
+            continue;
+        }
+        for node in subnet.nodes() {
+            let node_id = node.node_id.to_string();
+            let hostname = vms
+                .get(&node_id)
+                .expect("Failed to get VM for node")
+                .hostname
+                .clone();
 
-        info!(
-            env.logger(),
-            "Node {} is allocated to host: {}", node_id, hostname
-        );
-        let log = logger.clone();
-        switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+            info!(
+                env.logger(),
+                "Node {} is allocated to host: {}", node_id, hostname
+            );
+            let log = logger.clone();
+            switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+        }
     }
     for handle in switch_to_ssd_handles {
         handle.join().unwrap();
@@ -285,7 +288,4 @@ pub fn setup(env: TestEnv, config: Config) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 }
