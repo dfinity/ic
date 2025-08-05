@@ -136,9 +136,7 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> Man
     let proposal_file_content = std::fs::read_to_string(proposal_file_path).unwrap();
 
     let divider = "-".repeat(80) + "\n";
-    let mut sections = proposal_file_content.splitn(2, &divider);
-    let header = sections.next().unwrap();
-    let summary = sections.next().unwrap();
+    let (header, summary) = proposal_file_content.split_once(&divider).unwrap();
 
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -147,7 +145,7 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> Man
         url: String,
     }
 
-    let Header { title, url } = serde_yaml::from_str::<Header>(&header).unwrap();
+    let Header { title, url } = serde_yaml::from_str::<Header>(header).unwrap();
     println!("Title: {}", title);
     if verbose {
         println!("URL: {}", url);
