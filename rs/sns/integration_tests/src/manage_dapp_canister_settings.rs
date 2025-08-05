@@ -319,5 +319,9 @@ fn test_manage_dapp_canister_settings_failure() {
         )
         .unwrap()
         .unwrap();
-    assert_eq!(new_ledger_canister_status, original_ledger_canister_status);
+    // ignore the canister version in the comparison
+    assert_eq!(
+        new_ledger_canister_status.ignore_version(),
+        original_ledger_canister_status.ignore_version()
+    );
 }

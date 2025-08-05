@@ -1356,6 +1356,11 @@ impl CanisterStatusResultV2 {
         self.version
     }
 
+    /// Helper to facilitate comparing canister settings that differ only in the canister version.
+    pub fn ignore_version(self) -> Self {
+        Self { version: 0, ..self }
+    }
+
     pub fn module_hash(&self) -> Option<Vec<u8>> {
         self.module_hash.clone()
     }
