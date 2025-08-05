@@ -23,19 +23,17 @@ use ic_types::{
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::{
         idkg::{
-            common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef},
-            ecdsa::ThresholdEcdsaSigInputsRef,
-            schnorr::ThresholdSchnorrSigInputsRef,
-            CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
-            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
-            TranscriptLookupError, TranscriptRef,
+            common::ThresholdSigInputs, CompletedSignature, HasIDkgMasterPublicKeyId,
+            IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage, IDkgPayload,
+            IDkgTranscriptParamsRef, PreSigId, RequestId, TranscriptLookupError, TranscriptRef,
         },
         Block, HasHeight,
     },
     crypto::{
         canister_threshold_sig::{
+            error::{ThresholdEcdsaSigInputsCreationError, ThresholdSchnorrSigInputsCreationError},
             idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
-            MasterPublicKey,
+            MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
         vetkd::{VetKdArgs, VetKdDerivationContext},
         ExtendedDerivationPath,
@@ -102,15 +100,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
                 )
             },
         )
-    }
-
-    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
-        self.chain
-            .tip()
-            .payload
-            .as_ref()
-            .as_idkg()
-            .and_then(|idkg_payload| idkg_payload.available_pre_signatures.get(id))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
@@ -238,10 +227,8 @@ pub(super) fn block_chain_cache(
 pub enum BuildSignatureInputsError {
     /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
     ContextIncomplete,
-    /// The context was matched to a pre-signature which cannot be found in the latest block payload
-    MissingPreSignature(RequestId),
-    /// The context was matched to a pre-signature of the wrong signature scheme
-    SignatureSchemeMismatch(RequestId, SignatureScheme),
+    ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
+    ThresholdSchnorrSigInputsCreationError(ThresholdSchnorrSigInputsCreationError),
 }
 
 impl BuildSignatureInputsError {
@@ -250,86 +237,75 @@ impl BuildSignatureInputsError {
     pub(crate) fn is_fatal(&self) -> bool {
         matches!(
             self,
-            BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
+            BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError(_)
+                | BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(_)
         )
     }
 }
 
-/// Helper to build threshold signature inputs from the context and
-/// the pre-signature
+/// Helper to build threshold signature inputs from the context
 pub(super) fn build_signature_inputs(
     callback_id: CallbackId,
     context: &SignWithThresholdContext,
-    block_reader: &dyn IDkgBlockReader,
-) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
+) -> Result<(RequestId, ThresholdSigInputs), BuildSignatureInputsError> {
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
-            let (pre_sig_id, height) = context
-                .matched_pre_signature
+            let matched_data = args
+                .pre_signature
+                .as_ref()
                 .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
-            let request_id = RequestId {
-                callback_id,
-                height,
-            };
-            let PreSignatureRef::Ecdsa(pre_sig) = block_reader
-                .available_pre_signature(&pre_sig_id)
-                .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
-                .clone()
-            else {
-                return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                    request_id,
-                    SignatureScheme::Schnorr,
-                ));
-            };
             let nonce = Id::from(
                 context
                     .nonce
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
-            let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                ExtendedDerivationPath {
-                    caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.to_vec(),
-                },
-                args.message_hash,
-                nonce,
-                pre_sig,
-            ));
+            let request_id = RequestId {
+                callback_id,
+                height: matched_data.height,
+            };
+            let inputs = ThresholdSigInputs::Ecdsa(
+                ThresholdEcdsaSigInputs::new(
+                    &ExtendedDerivationPath {
+                        caller: context.request.sender.into(),
+                        derivation_path: context.derivation_path.to_vec(),
+                    },
+                    &args.message_hash,
+                    nonce,
+                    matched_data.pre_signature.as_ref().clone(),
+                    matched_data.key_transcript.as_ref().clone(),
+                )
+                .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
+            );
             Ok((request_id, inputs))
         }
         ThresholdArguments::Schnorr(args) => {
-            let (pre_sig_id, height) = context
-                .matched_pre_signature
+            let matched_data = args
+                .pre_signature
+                .as_ref()
                 .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
-            let request_id = RequestId {
-                callback_id,
-                height,
-            };
-            let PreSignatureRef::Schnorr(pre_sig) = block_reader
-                .available_pre_signature(&pre_sig_id)
-                .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
-                .clone()
-            else {
-                return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                    request_id,
-                    SignatureScheme::Ecdsa,
-                ));
-            };
             let nonce = Id::from(
                 context
                     .nonce
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
-            let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                ExtendedDerivationPath {
-                    caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.to_vec(),
-                },
-                args.message.clone(),
-                nonce,
-                pre_sig,
-                args.taproot_tree_root.clone(),
-            ));
+            let request_id = RequestId {
+                callback_id,
+                height: matched_data.height,
+            };
+            let inputs = ThresholdSigInputs::Schnorr(
+                ThresholdSchnorrSigInputs::new(
+                    &ExtendedDerivationPath {
+                        caller: context.request.sender.into(),
+                        derivation_path: context.derivation_path.to_vec(),
+                    },
+                    &args.message,
+                    args.taproot_tree_root.as_ref().map(|v| &***v),
+                    nonce,
+                    matched_data.pre_signature.as_ref().clone(),
+                    matched_data.key_transcript.as_ref().clone(),
+                )
+                .map_err(BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError)?,
+            );
             Ok((request_id, inputs))
         }
         ThresholdArguments::VetKd(args) => {
@@ -337,7 +313,7 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: args.height,
             };
-            let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
+            let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
                 context: VetKdDerivationContext {
                     caller: context.request.sender.into(),
                     context: context.derivation_path.iter().flatten().cloned().collect(),

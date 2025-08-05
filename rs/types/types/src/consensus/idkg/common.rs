@@ -36,14 +36,8 @@ use std::{
 };
 
 use super::{
-    ecdsa::{
-        PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsError,
-        ThresholdEcdsaSigInputsRef,
-    },
-    schnorr::{
-        PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
-        TranscriptInCreation,
-    },
+    ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
+    schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
     IDkgMasterPublicKeyId,
 };
 
@@ -653,9 +647,6 @@ pub trait IDkgBlockReader: Send + Sync {
         &self,
     ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_>;
 
-    /// For the given pre-signature ID, returns the pre-signature ref if available.
-    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;
-
     /// Returns the set of all the active references.
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;
 
@@ -1036,19 +1027,19 @@ pub enum PreSignatureError {
 
 type PreSignatureResult = Result<PreSignature, PreSignatureError>;
 
-fn ok_ecdsa_pre_sig(pre_sig: EcdsaPreSignatureQuadruple) -> PreSignatureResult {
+fn ok_ecdsa(pre_sig: EcdsaPreSignatureQuadruple) -> PreSignatureResult {
     Ok(PreSignature::Ecdsa(Arc::new(pre_sig)))
 }
 
-fn ok_schnorr_pre_sig(pre_sig: SchnorrPreSignatureTranscript) -> PreSignatureResult {
+fn ok_schnorr(pre_sig: SchnorrPreSignatureTranscript) -> PreSignatureResult {
     Ok(PreSignature::Schnorr(Arc::new(pre_sig)))
 }
 
-fn err_ecdsa_pre_sig(err: PreSignatureQuadrupleError) -> PreSignatureResult {
+fn err_ecdsa(err: PreSignatureQuadrupleError) -> PreSignatureResult {
     Err(PreSignatureError::Ecdsa(err))
 }
 
-fn err_schnorr_pre_sig(err: PreSignatureTranscriptError) -> PreSignatureResult {
+fn err_schnorr(err: PreSignatureTranscriptError) -> PreSignatureResult {
     Err(PreSignatureError::Schnorr(err))
 }
 
@@ -1087,10 +1078,10 @@ impl PreSignatureRef {
         match self {
             PreSignatureRef::Ecdsa(quadruple_ref) => quadruple_ref
                 .translate(resolver)
-                .map_or_else(err_ecdsa_pre_sig, ok_ecdsa_pre_sig),
+                .map_or_else(err_ecdsa, ok_ecdsa),
             PreSignatureRef::Schnorr(transcript_ref) => transcript_ref
                 .translate(resolver)
-                .map_or_else(err_schnorr_pre_sig, ok_schnorr_pre_sig),
+                .map_or_else(err_schnorr, ok_schnorr),
         }
     }
 }
@@ -1122,70 +1113,6 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum ThresholdSigInputsError {
-    Ecdsa(ThresholdEcdsaSigInputsError),
-    Schnorr(ThresholdSchnorrSigInputsError),
-}
-
-type ThresholdSigInputsResult = Result<ThresholdSigInputs, ThresholdSigInputsError>;
-
-fn ok_ecdsa(inputs: ThresholdEcdsaSigInputs) -> ThresholdSigInputsResult {
-    Ok(ThresholdSigInputs::Ecdsa(inputs))
-}
-
-fn ok_schnorr(inputs: ThresholdSchnorrSigInputs) -> ThresholdSigInputsResult {
-    Ok(ThresholdSigInputs::Schnorr(inputs))
-}
-
-fn err_ecdsa(err: ThresholdEcdsaSigInputsError) -> ThresholdSigInputsResult {
-    Err(ThresholdSigInputsError::Ecdsa(err))
-}
-
-fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult {
-    Err(ThresholdSigInputsError::Schnorr(err))
-}
-
-// This warning is suppressed because Clippy incorrectly reports the size of the
-// `ThresholdEcdsaSigInputsRef` and `ThresholdSchnorrSigInputsRef` variants to be "at least 0 bytes".
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum ThresholdSigInputsRef {
-    Ecdsa(ThresholdEcdsaSigInputsRef),
-    Schnorr(ThresholdSchnorrSigInputsRef),
-    VetKd(VetKdArgs),
-}
-
-impl ThresholdSigInputsRef {
-    pub fn caller(&self) -> PrincipalId {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
-            ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
-            ThresholdSigInputsRef::VetKd(inputs) => inputs.context.caller,
-        }
-    }
-
-    pub fn scheme(&self) -> SignatureScheme {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(_) => SignatureScheme::Ecdsa,
-            ThresholdSigInputsRef::Schnorr(_) => SignatureScheme::Schnorr,
-            ThresholdSigInputsRef::VetKd(_) => SignatureScheme::VetKd,
-        }
-    }
-
-    pub fn translate(&self, resolver: &dyn IDkgBlockReader) -> ThresholdSigInputsResult {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(inputs_ref) => inputs_ref
-                .translate(resolver)
-                .map_or_else(err_ecdsa, ok_ecdsa),
-            ThresholdSigInputsRef::Schnorr(inputs_ref) => inputs_ref
-                .translate(resolver)
-                .map_or_else(err_schnorr, ok_schnorr),
-            ThresholdSigInputsRef::VetKd(inputs) => Ok(ThresholdSigInputs::VetKd(inputs.clone())),
-        }
-    }
-}
-
 // This warning is suppressed because Clippy incorrectly reports the size of the
 // `ThresholdEcdsaSigInputs` and `ThresholdSchnorrSigInputs` variants to be "at least 0 bytes".
 #[allow(clippy::large_enum_variant)]
@@ -1193,6 +1120,24 @@ pub enum ThresholdSigInputs {
     Ecdsa(ThresholdEcdsaSigInputs),
     Schnorr(ThresholdSchnorrSigInputs),
     VetKd(VetKdArgs),
+}
+
+impl ThresholdSigInputs {
+    pub fn caller(&self) -> PrincipalId {
+        match self {
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.derivation_path().caller,
+            ThresholdSigInputs::Schnorr(inputs) => inputs.derivation_path().caller,
+            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
+        }
+    }
+
+    pub fn scheme(&self) -> SignatureScheme {
+        match self {
+            ThresholdSigInputs::Ecdsa(_) => SignatureScheme::Ecdsa,
+            ThresholdSigInputs::Schnorr(_) => SignatureScheme::Schnorr,
+            ThresholdSigInputs::VetKd(_) => SignatureScheme::VetKd,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]

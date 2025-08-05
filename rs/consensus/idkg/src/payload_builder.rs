@@ -495,7 +495,6 @@ pub fn create_data_payload(
     let idkg_pool = idkg_pool.read().unwrap();
 
     let signature_builder = ThresholdSignatureBuilderImpl::new(
-        &block_reader,
         crypto,
         idkg_pool.deref(),
         idkg_payload_metrics,
@@ -1280,7 +1279,7 @@ mod tests {
                 ],
             );
             add_block(summary_block, summary_height.get(), &mut pool);
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_1 = inputs_2.pre_signature_ref;
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
@@ -1307,7 +1306,7 @@ mod tests {
                 payload_height_1.get() - summary_height.get(),
                 &mut pool,
             );
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_2 = inputs_2.pre_signature_ref;
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1537,7 +1536,7 @@ mod tests {
             let b = add_block(summary_block, summary_height.get(), &mut pool);
             assert_proposal_conversion(b);
 
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_1 = inputs_2.pre_signature_ref;
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
@@ -1567,7 +1566,7 @@ mod tests {
             );
             assert_proposal_conversion(b);
 
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_2 = inputs_2.pre_signature_ref;
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -2026,7 +2025,7 @@ mod tests {
             };
             payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_pre_signature_id(),
-                test_inputs.sig_inputs_ref.pre_signature().unwrap(),
+                test_inputs.pre_signature_ref,
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);

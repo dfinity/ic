@@ -108,26 +108,6 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        // In case of subnet recoveries, available pre-signatures are purged.
-        // This means that pre-existing requests that were already matched
-        // cannot be completed, and we should reject them.
-        if !payload.available_pre_signatures.contains_key(&pre_sig_id) {
-            payload.signature_agreements.insert(
-                context.pseudo_random_id,
-                idkg::CompletedSignature::Unreported(reject_response(
-                    callback_id,
-                    RejectCode::CanisterError,
-                    "Signature request was matched to non-existent pre-signature.",
-                )),
-            );
-
-            if let Some(metrics) = idkg_payload_metrics {
-                metrics.payload_errors_inc("missing_pre_signature");
-            }
-
-            continue;
-        }
-
         let signature = match signature_builder.get_completed_signature(callback_id, context) {
             Some(CombinedSignature::Ecdsa(signature)) => SignWithECDSAReply {
                 signature: signature.signature.clone(),
@@ -267,10 +247,9 @@ mod tests {
         let pre_sig_ids = (0..4)
             .map(|i| create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
-        let ids = (0..5)
+        let ids = (0..4)
             .map(|i| request_id(i, Height::from(0)))
             .collect::<Vec<_>>();
-        let missing_pre_signature = idkg_payload.uid_generator.next_pre_signature_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
@@ -281,12 +260,6 @@ mod tests {
             fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_ids[2], ids[2]),
             // insert request without a matched pre-signature
             fake_signature_request_context_with_pre_sig(ids[3], key_id.clone(), None),
-            // insert request matched to a non-existent pre-signature
-            fake_signature_request_context_with_pre_sig(
-                ids[4],
-                key_id.clone(),
-                Some(missing_pre_signature),
-            ),
         ]);
         let contexts = into_idkg_contexts(&contexts);
 
@@ -333,7 +306,7 @@ mod tests {
             .available_pre_signatures
             .contains_key(&pre_sig_ids[1]));
 
-        assert_eq!(idkg_payload.signature_agreements.len(), 3);
+        assert_eq!(idkg_payload.signature_agreements.len(), 2);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =
             idkg_payload.signature_agreements.get(&[1; 32])
         else {
@@ -344,17 +317,6 @@ mod tests {
         assert_matches!(
             idkg_payload.signature_agreements.get(&[2; 32]),
             Some(idkg::CompletedSignature::ReportedToExecution)
-        );
-
-        let Some(idkg::CompletedSignature::Unreported(response_3)) =
-            idkg_payload.signature_agreements.get(&[4; 32])
-        else {
-            panic!("Request 3 should have a response");
-        };
-        assert_matches!(
-            &response_3.payload,
-            ic_types::messages::Payload::Reject(context)
-            if context.message().contains("matched to non-existent pre-signature")
         );
     }
 

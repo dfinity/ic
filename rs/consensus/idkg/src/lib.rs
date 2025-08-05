@@ -278,7 +278,6 @@ impl IDkgImpl {
         ));
         let signer = Box::new(ThresholdSignerImpl::new(
             node_id,
-            consensus_block_cache.clone(),
             crypto.clone(),
             state_reader.clone(),
             metrics_registry.clone(),
@@ -746,7 +745,7 @@ mod tests {
             .expect_latest_certified_height()
             .returning(move || height);
 
-        let block_reader = TestIDkgBlockReader::for_signer_test(height.increment(), vec![]);
+        let block_reader = TestIDkgBlockReader::new_with_height(height.increment());
 
         let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);

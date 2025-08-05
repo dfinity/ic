@@ -69,29 +69,6 @@ pub fn into_idkg_contexts(
         .collect()
 }
 
-pub fn insert_test_sig_inputs<T>(
-    block_reader: &mut TestIDkgBlockReader,
-    idkg_payload: &mut IDkgPayload,
-    inputs: T,
-) where
-    T: IntoIterator<Item = (PreSigId, TestSigInputs)>,
-{
-    for (pre_sig_id, inputs) in inputs {
-        inputs
-            .idkg_transcripts
-            .iter()
-            .for_each(|(transcript_ref, transcript)| {
-                block_reader.add_transcript(*transcript_ref, transcript.clone())
-            });
-        if let Some(pre_signature) = inputs.sig_inputs_ref.pre_signature() {
-            idkg_payload
-                .available_pre_signatures
-                .insert(pre_sig_id, pre_signature.clone());
-            block_reader.add_available_pre_signature(pre_sig_id, pre_signature);
-        }
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct TestTranscriptParams {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
@@ -143,7 +120,6 @@ pub(crate) struct TestIDkgBlockReader {
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
-    available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
 }
@@ -174,25 +150,10 @@ impl TestIDkgBlockReader {
         }
     }
 
-    pub(crate) fn for_signer_test(
-        height: Height,
-        sig_inputs: Vec<(PreSigId, TestSigInputs)>,
-    ) -> Self {
-        let mut idkg_transcripts = BTreeMap::new();
-        let mut available_pre_signatures = BTreeMap::new();
-        for (pre_sig_id, sig_inputs) in sig_inputs {
-            for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
-                idkg_transcripts.insert(transcript_ref, transcript);
-            }
-            if let Some(pre_signature) = sig_inputs.sig_inputs_ref.pre_signature() {
-                available_pre_signatures.insert(pre_sig_id, pre_signature);
-            }
-        }
-
+    pub(crate) fn new_with_height(height: Height) -> Self {
         Self {
             height,
-            available_pre_signatures,
-            idkg_transcripts,
+
             ..Default::default()
         }
     }
@@ -245,15 +206,6 @@ impl TestIDkgBlockReader {
     ) {
         self.idkg_transcripts.insert(transcript_ref, transcript);
     }
-
-    pub(crate) fn add_available_pre_signature(
-        &mut self,
-        pre_signature_id: PreSigId,
-        pre_signature: PreSignatureRef,
-    ) {
-        self.available_pre_signatures
-            .insert(pre_signature_id, pre_signature);
-    }
 }
 
 impl IDkgBlockReader for TestIDkgBlockReader {
@@ -269,10 +221,6 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         &self,
     ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_> {
         Box::new(std::iter::empty())
-    }
-
-    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
-        self.available_pre_signatures.get(id)
     }
 
     fn source_subnet_xnet_transcripts(
@@ -513,7 +461,6 @@ pub(crate) fn create_signer_dependencies_with_crypto(
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
-        pool,
         crypto,
         state_manager,
         ..
@@ -521,7 +468,6 @@ pub(crate) fn create_signer_dependencies_with_crypto(
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
-        pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
         state_manager as Arc<_>,
         metrics_registry.clone(),
@@ -546,7 +492,6 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
 ) -> (IDkgPoolImpl, ThresholdSignerImpl, Arc<RefMockStateManager>) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
-        pool,
         crypto,
         state_manager,
         ..
@@ -554,7 +499,6 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
-        pool.get_block_cache(),
         crypto,
         state_manager.clone(),
         metrics_registry.clone(),
@@ -1162,7 +1106,7 @@ pub fn create_available_pre_signature_with_key_transcript(
 ) -> PreSigId {
     let sig_inputs = create_sig_inputs(caller, &key_id);
     let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
-    let mut pre_signature_ref = sig_inputs.sig_inputs_ref.pre_signature().unwrap();
+    let mut pre_signature_ref = sig_inputs.pre_signature_ref;
     if let Some(transcript) = key_transcript {
         match pre_signature_ref {
             PreSignatureRef::Ecdsa(ref mut pre_sig) => {

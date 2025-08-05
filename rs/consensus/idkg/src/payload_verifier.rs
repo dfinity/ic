@@ -54,8 +54,8 @@ use ic_types::{
     consensus::{
         idkg::{
             self,
-            common::{CombinedSignature, ThresholdSigInputsRef},
-            ecdsa, schnorr, IDkgBlockReader, TranscriptRef,
+            common::{CombinedSignature, ThresholdSigInputs},
+            IDkgBlockReader, TranscriptRef,
         },
         Block, BlockPayload, HasHeight,
     },
@@ -85,8 +85,6 @@ use std::{collections::BTreeMap, convert::TryFrom};
 pub enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
-    ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
-    ThresholdSchnorrSigInputsError(schnorr::ThresholdSchnorrSigInputsError),
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
@@ -104,8 +102,6 @@ pub enum InvalidIDkgPayloadReason {
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
-    ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
-    ThresholdSchnorrSigInputsError(schnorr::ThresholdSchnorrSigInputsError),
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
@@ -145,30 +141,6 @@ impl From<IDkgPayloadValidationFailure> for IDkgValidationError {
 impl From<InvalidChainCacheError> for InvalidIDkgPayloadReason {
     fn from(err: InvalidChainCacheError) -> Self {
         InvalidIDkgPayloadReason::InvalidChainCacheError(err)
-    }
-}
-
-impl From<ecdsa::ThresholdEcdsaSigInputsError> for InvalidIDkgPayloadReason {
-    fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
-        InvalidIDkgPayloadReason::ThresholdEcdsaSigInputsError(err)
-    }
-}
-
-impl From<ecdsa::ThresholdEcdsaSigInputsError> for IDkgPayloadValidationFailure {
-    fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdEcdsaSigInputsError(err)
-    }
-}
-
-impl From<schnorr::ThresholdSchnorrSigInputsError> for InvalidIDkgPayloadReason {
-    fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
-        InvalidIDkgPayloadReason::ThresholdSchnorrSigInputsError(err)
-    }
-}
-
-impl From<schnorr::ThresholdSchnorrSigInputsError> for IDkgPayloadValidationFailure {
-    fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdSchnorrSigInputsError(err)
     }
 }
 
@@ -438,15 +410,7 @@ fn validate_data_payload(
         .map_err(IDkgPayloadValidationFailure::StateManagerError)?;
     let signatures = timed_call(
         "validate_new_signature_agreements",
-        || {
-            validate_new_signature_agreements(
-                crypto,
-                &block_reader,
-                state.get_ref(),
-                &prev_payload,
-                curr_payload,
-            )
-        },
+        || validate_new_signature_agreements(crypto, state.get_ref(), &prev_payload, curr_payload),
         metrics,
     )?;
 
@@ -620,7 +584,6 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
 // New signatures are those that are Unreported in the curr_payload and not in prev_payload.
 fn validate_new_signature_agreements(
     crypto: &dyn ConsensusCrypto,
-    block_reader: &dyn IDkgBlockReader,
     state: &ReplicatedState,
     prev_payload: &idkg::IDkgPayload,
     curr_payload: &idkg::IDkgPayload,
@@ -643,11 +606,10 @@ fn validate_new_signature_agreements(
                 let (id, context) = context_map.get(random_id).ok_or(
                     InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input_ref) = build_signature_inputs(*id, context, block_reader)
+                let (_, input) = build_signature_inputs(*id, context)
                     .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
-                match input_ref {
-                    ThresholdSigInputsRef::Ecdsa(input_ref) => {
-                        let input = input_ref.translate(block_reader)?;
+                match input {
+                    ThresholdSigInputs::Ecdsa(input) => {
                         let reply = SignWithECDSAReply::decode(data).map_err(|err| {
                             InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
@@ -657,8 +619,7 @@ fn validate_new_signature_agreements(
                         ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
                         new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
                     }
-                    ThresholdSigInputsRef::Schnorr(input_ref) => {
-                        let input = input_ref.translate(block_reader)?;
+                    ThresholdSigInputs::Schnorr(input) => {
                         let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
                             InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
@@ -670,7 +631,7 @@ fn validate_new_signature_agreements(
                         )?;
                         new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
                     }
-                    ThresholdSigInputsRef::VetKd(_) => {
+                    ThresholdSigInputs::VetKd(_) => {
                         // We don't expect to find agreements for vet KD contexts in the IDKG payload
                         return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
                     }
@@ -699,9 +660,7 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types_private::{
-        MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
-    };
+    use ic_management_canister_types_private::{MasterPublicKeyId, Payload, SignWithECDSAReply};
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
@@ -953,12 +912,8 @@ mod test {
     }
 
     fn test_validate_new_signature_agreements(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        let num_nodes = 4;
         let subnet_id = subnet_test_id(0);
-        let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
         let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestIDkgBlockReader::new();
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
         valid_keys.insert(key_id.clone());
@@ -994,33 +949,6 @@ mod test {
                 .pseudo_random_id
         };
 
-        let (key_transcript, key_transcript_ref) =
-            idkg_payload.generate_current_key(&key_id, &env, &mut rng);
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
-
-        // Add the pre-signatures and transcripts to block reader and payload
-        let sig_inputs = (0..signature_request_contexts.len())
-            .map(|i| {
-                create_sig_inputs_with_args(
-                    i as u8,
-                    &env.nodes.ids(),
-                    key_transcript.clone(),
-                    Height::from(44),
-                    &key_id,
-                )
-            })
-            .collect::<Vec<_>>();
-
-        insert_test_sig_inputs(
-            &mut block_reader,
-            &mut idkg_payload,
-            [
-                (pre_sig_id1, sig_inputs[0].clone()),
-                (pre_sig_id2, sig_inputs[1].clone()),
-                (pre_sig_id3, sig_inputs[2].clone()),
-            ],
-        );
-
         // Only the first context has a completed signature so far
         let mut signature_builder = TestThresholdSignatureBuilder::new();
         signature_builder.signatures.insert(
@@ -1039,6 +967,10 @@ mod test {
             None,
         );
         // First signature should now be in "unreported" agreement
+        println!(
+            "Signature agreements: {:?}",
+            idkg_payload.signature_agreements
+        );
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
         assert_matches!(
             idkg_payload
@@ -1084,7 +1016,6 @@ mod test {
         // Only unreported signatures are validated.
         let res = validate_new_signature_agreements(
             crypto,
-            &block_reader,
             snapshot.get_state(),
             &prev_payload,
             &idkg_payload,
@@ -1096,7 +1027,6 @@ mod test {
         // Repeated signature leads to error
         let res = validate_new_signature_agreements(
             crypto,
-            &block_reader,
             snapshot.get_state(),
             &idkg_payload,
             &idkg_payload,
@@ -1122,7 +1052,6 @@ mod test {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestIDkgBlockReader::new();
 
         let mut prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
@@ -1161,7 +1090,6 @@ mod test {
             .insert([1; 32], fake_response.clone());
         let res = validate_new_signature_agreements(
             crypto,
-            &block_reader,
             snapshot.get_state(),
             &prev_payload,
             &idkg_payload_incomplete_context,
@@ -1170,43 +1098,7 @@ mod test {
             res,
             Err(ValidationError::InvalidArtifact(
                 InvalidIDkgPayloadReason::NewSignatureBuildInputsError(
-                    BuildSignatureInputsError::MissingPreSignature(_)
-                )
-            ))
-        );
-
-        // Insert agreement for context matched with pre-signature of different scheme
-        let mut idkg_payload_mismatched_context =
-            empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let wrong_key_id = match key_id.inner() {
-            MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
-            }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
-        };
-        // Add a pre-signature for the "wrong_key_id"
-        insert_test_sig_inputs(
-            &mut block_reader,
-            &mut idkg_payload_mismatched_context,
-            [(pre_sig_id2, create_sig_inputs(2, &wrong_key_id))],
-        );
-        let pseudo_random_id = signature_request_contexts[&id2.callback_id].pseudo_random_id;
-        idkg_payload_mismatched_context
-            .signature_agreements
-            .insert(pseudo_random_id, fake_response.clone());
-        let res = validate_new_signature_agreements(
-            crypto,
-            &block_reader,
-            snapshot.get_state(),
-            &prev_payload,
-            &idkg_payload_mismatched_context,
-        );
-        assert_matches!(
-            res,
-            Err(ValidationError::InvalidArtifact(
-                InvalidIDkgPayloadReason::NewSignatureBuildInputsError(
-                    BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
+                    BuildSignatureInputsError::ContextIncomplete
                 )
             ))
         );
@@ -1219,7 +1111,6 @@ mod test {
             .insert(fake_context.pseudo_random_id, fake_response);
         let res = validate_new_signature_agreements(
             crypto,
-            &block_reader,
             snapshot.get_state(),
             &prev_payload,
             &idkg_payload_missing_context,
@@ -1237,7 +1128,6 @@ mod test {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
-        let block_reader = TestIDkgBlockReader::new();
         // Create a parent block payload for a subnet with a single ECDSA key
         let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
         let prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id.clone()]);
@@ -1274,7 +1164,6 @@ mod test {
         // for vetKD in the IDKG payload
         let res = validate_new_signature_agreements(
             crypto,
-            &block_reader,
             snapshot.get_state(),
             &prev_payload,
             &idkg_payload_vetkd_context,
