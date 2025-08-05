@@ -9,6 +9,7 @@ use ic_recovery::{
 };
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
+use ic_state_layout::UNVERIFIED_CHECKPOINT_MARKER;
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
 use slog::{debug, error, info, warn, Logger};
@@ -40,7 +41,7 @@ pub(crate) struct BackupHelper {
     pub(crate) excluded_dirs: Vec<String>,
     pub(crate) ssh_private_key: String,
     pub(crate) registry_client: Arc<RegistryClientImpl>,
-    pub(crate) notification_client: NotificationClient,
+    pub(crate) notification_client: Box<dyn NotificationClient + Sync + Send>,
     pub(crate) downloads_guard: Arc<Mutex<bool>>,
     pub(crate) hot_disk_resource_threshold_percentage: u32,
     pub(crate) cold_disk_resource_threshold_percentage: u32,
@@ -399,7 +400,7 @@ impl BackupHelper {
             match self.replay_current_version(&current_replica_version) {
                 Ok(ReplayResult::UpgradeRequired(upgrade_version)) => {
                     // replayed the current version, but if there is upgrade try to do it again
-                    self.notification_client.message_slack(format!(
+                    self.notification_client.report_info_slack(format!(
                         "Replica version upgrade detected (current: {} new: {}): \
                         upgrading the ic-replay tool to retry... 🤞",
                         current_replica_version, upgrade_version
@@ -419,7 +420,7 @@ impl BackupHelper {
             info!(self.log, "[#{}] Replay was successful!", self.thread_id);
 
             if self.archive_state(finish_height).is_ok() {
-                self.notification_client.message_slack(format!(
+                self.notification_client.report_info_slack(format!(
                     "✅ Successfully restored the state at height *{}*",
                     finish_height
                 ));
@@ -643,6 +644,23 @@ impl BackupHelper {
         if archived_checkpoint == 0 {
             return Err("No proper archived checkpoint".to_string());
         }
+
+        let last_checkpoint_path = checkpoints_dir.join(format!("{:016x}", archived_checkpoint));
+        match self.is_checkpoint_verified(&last_checkpoint_path) {
+            Ok(true) => info!(
+                self.log,
+                "The checkpoint {} is varified",
+                last_checkpoint_path.display()
+            ),
+            Ok(false) => self.notification_client.report_warning_slack(format!(
+                "The checkpoint {archived_checkpoint} is NOT verified!"
+            )),
+            Err(err) => warn!(
+                self.log,
+                "Failed to check if the checkpoint {archived_checkpoint} is verified: {err}"
+            ),
+        }
+
         // delete the older checkpoint(s)
         match read_dir(checkpoints_dir) {
             Ok(dirs) => dirs
@@ -659,6 +677,14 @@ impl BackupHelper {
         let now: DateTime<Utc> = Utc::now();
         write_timestamp(&archive_last_dir, now).map_err(|err| err.to_string())?;
         self.log_disk_stats(true)
+    }
+
+    fn is_checkpoint_verified(&self, checkpoint_path: &Path) -> anyhow::Result<bool> {
+        let marker_path = checkpoint_path.join(UNVERIFIED_CHECKPOINT_MARKER);
+
+        marker_path
+            .try_exists()
+            .with_context(|| format!("Failed to check if path {} exists", marker_path.display()))
     }
 
     pub(crate) fn log_disk_stats(&self, notify_if_exceeds_threshold: bool) -> Result<(), String> {
@@ -1081,12 +1107,76 @@ mod tests {
     use std::str::FromStr;
 
     use ic_registry_local_store::LocalStoreImpl;
+    use ic_state_layout::CHECKPOINTS_DIR;
     use ic_test_utilities_tmpdir::tmpdir;
     use ic_types::PrincipalId;
 
     use super::*;
 
     const FAKE_SUBNET_ID: &str = "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe";
+
+    #[test]
+    fn archives_state_test() {
+        let dir = tmpdir("test_dir");
+
+        let slack_messages_queue = Arc::new(Mutex::default());
+
+        let backup_helper = fake_backup_helper_with_slack_messages(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+            slack_messages_queue.clone(),
+        );
+
+        let verified_checkpoint_height = 500;
+        let unverified_checkpoint_height = 1000;
+        let latest_checkpoint =
+            std::cmp::max(unverified_checkpoint_height, verified_checkpoint_height);
+        let oldest_checkpoint =
+            std::cmp::min(unverified_checkpoint_height, verified_checkpoint_height);
+        let checkpoints_dir = backup_helper.state_dir().join(CHECKPOINTS_DIR);
+
+        create_dir_all(&backup_helper.cold_storage_dir).unwrap();
+        create_dir_all(checkpoints_dir.join(format!("{verified_checkpoint_height:016x}"))).unwrap();
+        create_dir_all(checkpoints_dir.join(format!("{unverified_checkpoint_height:016x}")))
+            .unwrap();
+
+        backup_helper
+            .archive_state(unverified_checkpoint_height)
+            .unwrap();
+
+        let expected_archive_dir = backup_helper
+            .archive_dir()
+            .join(unverified_checkpoint_height.to_string());
+        assert!(
+            expected_archive_dir.try_exists().unwrap(),
+            "The archive directory with the correct height should have been created"
+        );
+
+        assert!(
+            expected_archive_dir
+                .join("ic_state")
+                .join(CHECKPOINTS_DIR)
+                .join(format!("{latest_checkpoint:016x}"))
+                .exists(),
+            "The latest checkpoint should have been kept"
+        );
+        assert!(
+            !expected_archive_dir
+                .join("ic_state")
+                .join(CHECKPOINTS_DIR)
+                .join(format!("{oldest_checkpoint:016x}"))
+                .exists(),
+            "The oldest checkpoint should have been deleted"
+        );
+
+        assert_eq!(
+            *slack_messages_queue.lock().unwrap(),
+            vec![format!(
+                "The checkpoint {unverified_checkpoint_height} is NOT verified!"
+            )]
+        );
+    }
 
     #[test]
     fn need_cold_storage_move_test() {
@@ -1315,11 +1405,24 @@ mod tests {
             .unwrap();
         }
     }
-
     fn fake_backup_helper(
         temp_dir: &Path,
         versions_hot: usize,
         daily_replays: usize,
+    ) -> BackupHelper {
+        fake_backup_helper_with_slack_messages(
+            temp_dir,
+            versions_hot,
+            daily_replays,
+            Arc::new(Mutex::default()),
+        )
+    }
+
+    fn fake_backup_helper_with_slack_messages(
+        temp_dir: &Path,
+        versions_hot: usize,
+        daily_replays: usize,
+        slack_messages_queue: Arc<Mutex<Vec<String>>>,
     ) -> BackupHelper {
         let data_provider = Arc::new(LocalStoreImpl::new(
             temp_dir.join("ic_registry_local_store"),
@@ -1329,14 +1432,8 @@ mod tests {
             /*metrics_registry=*/ None,
         ));
 
-        let notification_client = NotificationClient {
-            push_metrics: false,
-            metrics_urls: vec![],
-            network_name: "fake_network_name".into(),
-            backup_instance: "fake_backup_instance".into(),
-            slack_token: "fake_slack_token".into(),
-            subnet: "fake_subnet".into(),
-            log: ic_recovery::util::make_logger(),
+        let notification_client = FakeNotificationClient {
+            slack_messages: slack_messages_queue,
         };
 
         BackupHelper {
@@ -1348,7 +1445,7 @@ mod tests {
             excluded_dirs: vec![],
             ssh_private_key: "fake_ssh_private_key".into(),
             registry_client,
-            notification_client,
+            notification_client: Box::new(notification_client),
             downloads_guard: Mutex::new(true).into(),
             hot_disk_resource_threshold_percentage: 75,
             cold_disk_resource_threshold_percentage: 95,
@@ -1380,5 +1477,44 @@ mod tests {
         dirs.sort();
 
         dirs
+    }
+
+    struct FakeNotificationClient {
+        slack_messages: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl NotificationClient for FakeNotificationClient {
+        fn report_failure_slack(&self, message: String) {
+            self.slack_messages.lock().unwrap().push(message);
+        }
+
+        fn report_warning_slack(&self, message: String) {
+            self.slack_messages.lock().unwrap().push(message);
+        }
+
+        fn report_info_slack(&self, message: String) {
+            self.slack_messages.lock().unwrap().push(message)
+        }
+
+        fn push_metrics_restored_height(&self, _height: u64) {}
+
+        fn push_metrics_synced_height(&self, _height: u64) {}
+
+        fn push_metrics_replay_time(&self, _minutes: u64) {}
+
+        fn push_metrics_sync_time(&self, _minutes: u64) {}
+
+        fn push_metrics_disk_stats(
+            &self,
+            _stats: &[(
+                &Path,
+                /*space % usage*/ u32,
+                /*inodes % usage*/ u32,
+                /*storage type*/ &str,
+            )],
+        ) {
+        }
+
+        fn push_metrics_version(&self) {}
     }
 }

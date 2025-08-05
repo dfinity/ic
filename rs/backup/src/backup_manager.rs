@@ -23,7 +23,7 @@ use crate::{
     backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
     cmd::BackupArgs,
     config::{ColdStorage, Config, SubnetConfig},
-    notification_client::NotificationClient,
+    notification_client::NotificationClientImpl,
     util::sleep_secs,
 };
 
@@ -107,7 +107,7 @@ impl BackupManager {
         for subnet_config in config.subnets {
             let subnet_log =
                 log.new(o!("subnet" => subnet_config.subnet_id.to_string()[..5].to_string()));
-            let notification_client = NotificationClient {
+            let notification_client = NotificationClientImpl {
                 push_metrics: config.push_metrics,
                 metrics_urls: config.metrics_urls.clone(),
                 network_name: config.network_name.clone(),
@@ -126,7 +126,7 @@ impl BackupManager {
                 excluded_dirs: config.excluded_dirs.clone(),
                 ssh_private_key: ssh_credentials_file.clone(),
                 registry_client: registry_client.clone(),
-                notification_client,
+                notification_client: Box::new(notification_client),
                 downloads_guard: downloads.clone(),
                 hot_disk_resource_threshold_percentage: config
                     .hot_disk_resource_threshold_percentage,
