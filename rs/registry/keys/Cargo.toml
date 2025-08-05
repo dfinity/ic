@@ -10,7 +10,6 @@ documentation.workspace = true
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types = { workspace = true }
-
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 hex = { workspace = true }

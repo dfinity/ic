@@ -26,7 +26,6 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-management-canister-types = { workspace = true }
-
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
