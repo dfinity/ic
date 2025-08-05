@@ -14,8 +14,16 @@ use ic_types_test_utils::ids::user_test_id;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
-fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
-    let returned_version = env.canister_status(canister_id).unwrap().unwrap().version();
+fn get_canister_version(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    controller: PrincipalId,
+) -> u64 {
+    let returned_version = env
+        .canister_status_as(controller, canister_id)
+        .unwrap()
+        .unwrap()
+        .version();
     let system_version = env
         .get_latest_state()
         .canister_state(&canister_id)
@@ -114,7 +122,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
         WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
     };
     // check canister_version
-    assert_eq!(get_canister_version(&env, canister_id), 0);
+    assert_eq!(get_canister_version(&env, canister_id, user_id), 0);
 
     // install test_canister via ingress from user_id
     execute_ingress_with_dts(
@@ -127,7 +135,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
     )
     .unwrap();
     // check canister_version
-    assert_eq!(get_canister_version(&env, canister_id), 1);
+    assert_eq!(get_canister_version(&env, canister_id, user_id), 1);
 
     if mode != CanisterInstallMode::Install {
         let dts = match mode {
@@ -146,7 +154,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
         )
         .unwrap();
         // check canister_version
-        assert_eq!(get_canister_version(&env, canister_id), 2);
+        assert_eq!(get_canister_version(&env, canister_id, user_id), 2);
     }
 }
 
