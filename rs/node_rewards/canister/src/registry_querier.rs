@@ -239,7 +239,7 @@ impl RegistryQuerier {
     ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
         let node_operator_record_key = make_node_operator_record_key(node_operator);
         let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
-            &*registry_client,
+            registry_client,
             node_operator_record_key.as_str(),
             version,
         )
@@ -252,7 +252,7 @@ impl RegistryQuerier {
 
         let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
         let Some(data_center_record) = get_decoded_value::<DataCenterRecord>(
-            &*registry_client,
+            registry_client,
             data_center_key.as_str(),
             version,
         )

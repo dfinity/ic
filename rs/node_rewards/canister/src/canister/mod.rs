@@ -252,10 +252,7 @@ impl NodeRewardsCanister {
             let rewards_xdr_permyriad = provider_results
                 .iter()
                 .map(|(provider_id, provider_rewards)| {
-                    (
-                        provider_id.0.clone(),
-                        provider_rewards.rewards_total_xdr_permyriad,
-                    )
+                    (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
                 })
                 .collect();
 
