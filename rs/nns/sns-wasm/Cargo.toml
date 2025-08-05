@@ -20,7 +20,6 @@ ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
-
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -52,7 +51,6 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-management-canister-types = { workspace = true }
-
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-test-utils = { path = "../test_utils" }

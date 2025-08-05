@@ -79,7 +79,6 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
-
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-constants = { path = "../constants" }
