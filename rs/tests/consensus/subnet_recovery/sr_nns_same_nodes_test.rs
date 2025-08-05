@@ -52,6 +52,14 @@ use std::{cmp, convert::TryFrom};
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 
+fn overwrite_recovery_engine_with_correct_hash(node: &IcNodeSnapshot, artifacts_hash: String) {
+    let recovery_engine_path = "/opt/ic/bin/guestos-recovery-engine.sh";
+    let command = format!(
+        r#"sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"{artifacts_hash}\"/" {recovery_engine_path}"#,
+    );
+    node.block_on_bash_script(&command);
+}
+
 pub fn setup(env: TestEnv) {
     setup_upstreams_uvm(&env);
 
@@ -242,12 +250,11 @@ pub fn test(env: TestEnv) {
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
 
-    uvm_serve_recovery_artifacts(
-        &env,
-        std::fs::read(output_dir.join("recovery.tar.zst")).unwrap(),
-        std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256")).unwrap(),
-    )
-    .expect("Failed to serve recovery artifacts from UVM");
+    let artifacts = std::fs::read(output_dir.join("recovery.tar.zst")).unwrap();
+    let artifacts_hash =
+        std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256")).unwrap();
+    uvm_serve_recovery_artifacts(&env, artifacts, artifacts_hash.clone())
+        .expect("Failed to serve recovery artifacts from UVM");
 
     // TODO: Host recovery GuestOS image on UVM (this involves some additional dependencies in Bazel)
     // TODO: Spoof every node's HostOS DNS (with spoof_node_dns) to point the upstreams to the UVM
@@ -256,6 +263,13 @@ pub fn test(env: TestEnv) {
 
     let server_ipv6 = get_upstreams_uvm_ipv6(&env);
     for node in topo_snapshot.root_subnet().nodes() {
+        info!(
+            logger,
+            "Manually overwriting recovery engine on node {} with artifacts expected hash {}",
+            node.node_id,
+            artifacts_hash
+        );
+        overwrite_recovery_engine_with_correct_hash(&node, artifacts_hash);
         info!(
             logger,
             "Spoofing node {} DNS to point to the UVM at {}", node.node_id, server_ipv6
