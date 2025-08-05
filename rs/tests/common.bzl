@@ -185,3 +185,11 @@ SIGNER_CANISTER_RUNTIME_DEPS = [
 SIGNER_CANISTER_ENV = {
     "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
 }
+
+IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+    "//rs/tests:impersonate_upstreams_uvm_config_image",
+]
+
+IMPERSONATE_UPSTREAMS_ENV = {
+    "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "$(rootpath //rs/tests:impersonate_upstreams_uvm_config_image)",
+}

@@ -227,13 +227,12 @@ uvm_config_image(
 )
 
 uvm_config_image(
-    name = "guestos_recovery_engine_uvm_config_image",
+    name = "impersonate_upstreams_uvm_config_image",
     srcs = [
         ":minica.tar",
         ":static-file-server.tar",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
-        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst",
     ],
     remap_paths = {
         "canister_http_test_ca.cert": "minica.pem",
