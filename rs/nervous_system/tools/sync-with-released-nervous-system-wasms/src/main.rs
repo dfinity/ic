@@ -49,7 +49,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         },
     ),
     (
-        "internet_identity",
+        "internet_identity_test",
         ExternalCanisterInfo {
             repository: "dfinity/internet-identity",
             filename: "internet_identity_production.wasm.gz",
@@ -58,7 +58,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         },
     ),
     (
-        "nns_dapp",
+        "nns_dapp_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
             filename: "nns-dapp_production.wasm.gz",
@@ -67,7 +67,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         },
     ),
     (
-        "sns_aggregator",
+        "sns_aggregator_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
             filename: "sns_aggregator.wasm.gz",
