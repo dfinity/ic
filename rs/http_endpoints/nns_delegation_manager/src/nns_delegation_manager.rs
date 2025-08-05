@@ -78,7 +78,7 @@ pub fn start_nns_delegation_manager(
     cancellation_token: CancellationToken,
 ) -> (
     JoinHandle<()>,
-    watch::Receiver<Option<CertificateDelegation>>,
+    DelegationReader
 ) {
     let manager = DelegationManager {
         config,
@@ -100,7 +100,12 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, rx)
+    (join_handle, NNSDelegationReader { receiver: rx })
+}
+
+#[derive(Clone)]
+pub struct NNSDelegationReader {
+    receiver: watch::Receiver<Option<CertificateDelegation>>,
 }
 
 struct DelegationManager {
