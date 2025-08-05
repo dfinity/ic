@@ -9,7 +9,7 @@ Runbook::
 . Start IC with NNS and then break the NNS subnet.
 . Use ic-replay to update registry to include a new replica version, and produce a new CUP.
   Note: ic-replay is not used directly in this test; NNSRecoverySameNodes provides most of its functionality. See enum StepType for the list of steps
-. Load the new CUP (together with registry local store and canister states) manually on all NNS nodes.
+. Let each NNS node download the new CUP (together with registry local store and canister states) from a known upstream, simulated here by a UVM.
 . Observe that NNS subnet restarts and continues functioning.
 
 Success::
@@ -248,8 +248,8 @@ pub fn test(env: TestEnv) {
     .expect("Failed to serve recovery artifacts from UVM");
 
     // TODO: Host recovery GuestOS image on UVM (this involves some additional dependencies in Bazel)
-    // TODO: Spoof the node HostOS DNS (with spoof_node_dns) to point the upstreams to the UVM
-    // TODO: Make every replica reboot into GuestOS-recovery-upgrader specifying the version of that
+    // TODO: Spoof every node's HostOS DNS (with spoof_node_dns) to point the upstreams to the UVM
+    // TODO: Make every node reboot into GuestOS-recovery-upgrader specifying the version of that
     // image
     // TODO: Once GuestOS is launched, spoof the node GuestOS DNS (with spoof_node_dns) to point the
     // upstreams to the UVM
