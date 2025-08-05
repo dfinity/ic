@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 help() {
-    print_green "
+    echo "
 Usage: $0 <NEURON_ID> <DIRECTORY>
     NEURON_ID: The ID of the neuron that you want to submit with.
     DIRECTORY: Path to a directory containing all the proposal files that you
