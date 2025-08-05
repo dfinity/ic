@@ -1,4 +1,5 @@
 use crate::pb::v1::Subaccount as SubaccountProto;
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 use ic_nervous_system_temporary::Temporary;
 use std::{cell::Cell, convert::TryInto};
 
