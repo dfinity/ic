@@ -276,8 +276,8 @@ impl DkgSummary {
     /// Returns the oldest registry version that is still relevant to DKG.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         self.current_transcripts()
-            .iter()
-            .map(|(_id, transcript)| transcript.registry_version)
+            .values()
+            .map(|transcript| transcript.registry_version)
             .min()
             .expect("No current transcripts available")
     }

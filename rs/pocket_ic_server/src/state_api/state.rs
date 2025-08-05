@@ -364,6 +364,7 @@ pub type Computations = HashMap<OpId, (StateLabel, OpOut)>;
 /// vector is replaced by a Busy variant which contains information about the
 /// computation that is currently running. Afterwards, the instance is put back as
 /// Available.
+#[allow(clippy::large_enum_variant)]
 pub enum InstanceState {
     Busy {
         state_label: StateLabel,

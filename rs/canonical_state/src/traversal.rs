@@ -70,6 +70,7 @@ mod tests {
         canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
+        batch::CanisterCyclesCostSchedule,
         xnet::{StreamFlags, StreamHeader},
         CanisterId, Cycles,
     };
@@ -696,6 +697,7 @@ mod tests {
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
@@ -703,6 +705,7 @@ mod tests {
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             }
         };
         state.metadata.network_topology.routing_table = Arc::new(
@@ -861,6 +864,7 @@ mod tests {
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
@@ -868,6 +872,7 @@ mod tests {
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             }
         };
         state.metadata.network_topology.routing_table = Arc::new(
