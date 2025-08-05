@@ -27,7 +27,6 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -46,7 +45,7 @@ use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const DKG_INTERVAL: u64 = 9;
@@ -178,12 +177,11 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
     bless_replica_version(
         &nns_node,
         &branch_version,
-        UpdateImageType::Image,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],
