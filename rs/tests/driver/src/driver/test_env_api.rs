@@ -231,26 +231,6 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Checks whether the input string as the form [hostname:port{,hostname:port}]
-pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
-    const HOST_START: &str = r"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*";
-    const HOST_STOP: &str = r"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])";
-    const PORT: &str = r#":[[:digit:]]{2,5}$"#;
-    let s = match s {
-        Some(s) => s,
-        None => return Ok(vec![]),
-    };
-    let rgx = format!("{}{}{}", HOST_START, HOST_STOP, PORT);
-    let rgx = Regex::new(&rgx).unwrap();
-    let mut res = vec![];
-    for target in s.trim().split(',') {
-        if !rgx.is_match(target) {
-            bail!("Invalid filebeat host: '{}'", s);
-        }
-        res.push(target.to_string());
-    }
-    Ok(res)
-}
 
 /// An immutable snapshot of the Internet Computer topology valid at a
 /// particular registry version.
@@ -1154,13 +1134,6 @@ impl<T: HasTestEnv> HasIcDependencies for T {
         let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
         Ok(initial_replica_version.version)
     }
-}
-
-pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
-    let dep_rel_path = "elasticsearch_hosts";
-    let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
-    parse_elasticsearch_hosts(Some(hosts))
 }
 
 pub fn get_current_branch_version() -> Result<String> {

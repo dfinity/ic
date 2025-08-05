@@ -70,10 +70,6 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
 
     # monitoring
-    Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
-    Label("monitoring/filebeat/generate-filebeat-config.sh"): "/opt/ic/bin/generate-filebeat-config.sh",
-    Label("monitoring/filebeat/filebeat.yml.template"): "/etc/filebeat/filebeat.yml.template",
-    Label("monitoring/filebeat/filebeat.service"): "/etc/systemd/system/filebeat.service",
     Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
     Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.service"): "/etc/systemd/system/ipv4-connectivity-check.service",
     Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.timer"): "/etc/systemd/system/ipv4-connectivity-check.timer",
@@ -118,9 +114,6 @@ component_files = {
     Label("selinux/dante/dante.fc"): "/prep/dante/dante.fc",
     Label("selinux/dante/dante.if"): "/prep/dante/dante.if",
     Label("selinux/dante/dante.te"): "/prep/dante/dante.te",
-    Label("selinux/filebeat/filebeat.fc"): "/prep/filebeat/filebeat.fc",
-    Label("selinux/filebeat/filebeat.if"): "/prep/filebeat/filebeat.if",
-    Label("selinux/filebeat/filebeat.te"): "/prep/filebeat/filebeat.te",
     Label("selinux/manageboot/manageboot.fc"): "/prep/manageboot/manageboot.fc",
     Label("selinux/manageboot/manageboot.if"): "/prep/manageboot/manageboot.if",
     Label("selinux/manageboot/manageboot.te"): "/prep/manageboot/manageboot.te",

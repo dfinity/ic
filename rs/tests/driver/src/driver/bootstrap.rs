@@ -14,7 +14,7 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
+            get_dependency_path_from_env, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -375,8 +375,6 @@ fn create_config_disk_image(
         node_reward_type: None,
         mgmt_mac: None,
         deployment_environment: Some(DeploymentEnvironment::Testnet),
-        elasticsearch_hosts: None,
-        elasticsearch_tags: Some(format!("system_test {}", group_name)),
         use_nns_public_key: Some(true),
         nns_urls: None,
         enable_trusted_execution_environment: None,
@@ -470,15 +468,6 @@ fn create_config_disk_image(
             "Node with id={} has domain_name {}", node.node_id, domain_name,
         );
         config.domain_name = Some(domain_name.to_string());
-    }
-
-    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
-    info!(
-        test_env.logger(),
-        "ElasticSearch hosts are {:?}", elasticsearch_hosts
-    );
-    if !elasticsearch_hosts.is_empty() {
-        config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
     }
 
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
@@ -674,14 +663,6 @@ fn create_setupos_config_image(
         .arg("type3.1")
         .arg("--admin-keys")
         .arg(ssh_authorized_pub_keys_dir.join("admin"))
-        .arg("--elasticsearch-tags")
-        .arg(format!("system_test {}", group_name));
-
-    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
-    if !elasticsearch_hosts.is_empty() {
-        cmd.arg("--elasticsearch-hosts")
-            .arg(elasticsearch_hosts.join(" "));
-    }
 
     if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
         if !node_key.trim().is_empty() {
