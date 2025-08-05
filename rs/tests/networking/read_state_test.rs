@@ -60,7 +60,7 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use slog::info;
 
 /// Encodes an unsigned integer into its binary representation using `leb128`.
@@ -189,6 +189,23 @@ fn read_state_with_identity_and_canister_id(
             let agent = build_agent_with_identity(env, identity).await;
             agent
                 .read_state_raw(paths, effective_canister_id.into())
+                .await
+        })
+}
+
+/// Call "read_state" with the given paths, identity and canister ID
+fn read_subnet_state_with_identity_and_subnet_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    identity: impl Identity + 'static,
+    subnet_id: SubnetId,
+) -> Result<Certificate, AgentError> {
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(async move {
+            let agent = build_agent_with_identity(env, identity).await;
+            agent
+                .read_subnet_state_raw(paths, subnet_id.get().into())
                 .await
         })
 }
@@ -601,6 +618,44 @@ fn test_request_path_access(env: TestEnv) {
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
+fn test_canister_canister_ranges_paths(env: TestEnv) {
+    let node = get_first_app_node(&env);
+    let effective_canister_id = node.effective_canister_id();
+
+    let path: Vec<Label<Vec<u8>>> = vec![
+        "canister_ranges".into(),
+        node.subnet_id().unwrap().get_ref().as_slice().into(),
+    ];
+
+    let cert = read_state_with_identity_and_canister_id(
+        &env,
+        vec![path.clone()],
+        get_identity(),
+        effective_canister_id,
+    )
+    .expect("Failed to read state");
+    lookup_value(&cert, path).expect("State tree does not contain canister ranges");
+}
+
+fn test_subnet_canister_ranges_paths(env: TestEnv) {
+    let node = get_first_app_node(&env);
+    let effective_canister_id = node.effective_canister_id();
+
+    let path: Vec<Label<Vec<u8>>> = vec![
+        "canister_ranges".into(),
+        node.subnet_id().unwrap().get_ref().as_slice().into(),
+    ];
+
+    let cert = read_subnet_state_with_identity_and_subnet_id(
+        &env,
+        vec![path.clone()],
+        get_identity(),
+        node.subnet_id().unwrap(),
+    )
+    .expect("Failed to read state");
+    lookup_value(&cert, path).expect("State tree does not contain canister ranges");
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -614,6 +669,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test_canister_path))
         .add_test(systest!(test_request_path))
         .add_test(systest!(test_request_path_access))
+        .add_test(systest!(test_canister_canister_ranges_paths))
+        .add_test(systest!(test_subnet_canister_ranges_paths))
         .execute_from_args()?;
     Ok(())
 }
