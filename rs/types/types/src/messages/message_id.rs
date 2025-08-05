@@ -158,12 +158,14 @@ fn hash_val(val: &RawHttpRequestVal) -> Vec<u8> {
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
         RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
-        RawHttpRequestVal::Map(map) => hash_of_map(map, hash_key_val).to_vec(),
+        RawHttpRequestVal::Map(map) => {
+            hash_of_map(map, |key, value| hash_key_val(key.as_str(), value)).to_vec()
+        }
     }
 }
 
-pub(crate) fn hash_key_val(key: &String, val: &RawHttpRequestVal) -> Vec<u8> {
-    let mut key_hash = hash_string(key.as_str());
+pub(crate) fn hash_key_val(key: &str, val: &RawHttpRequestVal) -> Vec<u8> {
+    let mut key_hash = hash_string(key);
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
     key_hash
@@ -265,7 +267,7 @@ mod tests {
     fn message_id_icf_key_val_reference_1() {
         assert_eq!(
             hash_key_val(
-                &"request_type".to_string(),
+                "request_type",
                 &RawHttpRequestVal::String("call".to_string())
             ),
             hex!(
