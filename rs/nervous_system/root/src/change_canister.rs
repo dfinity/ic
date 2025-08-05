@@ -224,7 +224,7 @@ pub struct StopOrStartCanisterRequest {
 // Key: CanisterId, Value: ChangeCanisterRequest (for debugging/logging)
 thread_local! {
     static CANISTER_CHANGE_LOCKS: RefCell<BTreeMap<CanisterId, ChangeCanisterRequest>> =
-        RefCell::new(BTreeMap::new());
+        const {RefCell::new(BTreeMap::new()) };
 }
 
 pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
