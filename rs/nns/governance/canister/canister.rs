@@ -17,7 +17,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    canister_state::{governance, governance_mut, set_governance, CanisterEnv},
+    canister_state::{governance, governance_mut, governance_ref, set_governance, CanisterEnv},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -44,7 +44,8 @@ use ic_nns_governance_api::{
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
     NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+    SettleNeuronsFundParticipationResponse, StakeNeuronRequest, StakeNeuronResult,
+    UpdateNodeProvider, Vote,
 };
 use std::sync::Arc;
 use std::{boxed::Box, time::Duration};
@@ -299,6 +300,12 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
     governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
+}
+
+#[update]
+async fn stake_neuron(request: StakeNeuronRequest) -> Result<StakeNeuronResult, GovernanceError> {
+    debug_log("stake_neuron");
+    Governance::stake_neuron(governance_ref(), caller(), request).await
 }
 
 #[query]

@@ -136,6 +136,7 @@ pub mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
+pub mod stake_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;

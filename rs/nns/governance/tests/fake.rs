@@ -29,7 +29,10 @@ use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse}
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
@@ -355,6 +358,17 @@ impl IcpLedger for FakeDriver {
         );
 
         Ok(0)
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {

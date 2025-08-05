@@ -9,7 +9,10 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use std::sync::{atomic, atomic::Ordering as AOrdering, Arc};
 
 pub mod test_data;
@@ -74,6 +77,17 @@ impl IcpLedger for InterleavingTestLedger {
         self.underlying
             .transfer_funds(amount_e8s, fee_e8s, from_subaccount, to, memo)
             .await
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {

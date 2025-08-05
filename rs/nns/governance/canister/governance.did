@@ -1321,6 +1321,23 @@ type MaturityDisbursement = record {
   account_identifier_to_disburse_to : opt AccountIdentifier;
 };
 
+type StakeNeuronRequest = record {
+  amount_e8s : opt nat64;
+  source_subaccount: opt blob;
+  controller : opt principal;
+  followees : opt SetFollowing;
+  dissolve_delay_seconds : opt nat64;
+};
+
+type StakeNeuronResult = record {
+  neuron_id : opt NeuronId;
+};
+
+type StakeNeuronResponse = variant {
+  Ok : StakeNeuronResult;
+  Err : GovernanceError;
+};
+
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -1358,6 +1375,7 @@ service : (Governance) -> {
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
+  stake_neuron : (StakeNeuronRequest) -> (StakeNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );

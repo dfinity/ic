@@ -8,9 +8,14 @@ use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
     TransferArgs, TransferError,
 };
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::Memo as Icrc1Memo,
+};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use mockall::automock;
+use rust_decimal::prelude::ToPrimitive;
 use std::marker::PhantomData;
 
 pub struct IcpLedgerCanister<Rt: Runtime> {
@@ -117,6 +122,44 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
                     NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
                 })
             })
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        from: Account,
+        to: Account,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        let result: Result<(Result<Nat, TransferFromError>,), (i32, String)> =
+            Rt::call_with_cleanup(
+                self.canister_id,
+                "icrc2_transfer_from",
+                (TransferFromArgs {
+                    spender_subaccount: None,
+                    from,
+                    to,
+                    amount: Nat::from(amount_e8s),
+                    fee: Some(Nat::from(fee_e8s)),
+                    memo: Some(Icrc1Memo::from(memo)),
+                    created_at_time: None,
+                },),
+            )
+            .await;
+
+        result.map_err(|(code, msg)| {
+            NervousSystemError::new_with_message(format!(
+                "Error calling method 'icrc2_transfer_from' of the ledger canister. Code: {:?}. Message: {}",
+                code, msg
+            ))
+        })
+        .and_then(|(inner_result,)| {
+            inner_result.map_err(|e: TransferFromError| {
+                NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
+            })
+        })
+        .and_then(|block_index| block_index.0.to_u64().ok_or(NervousSystemError::new_with_message("Block index is too large")))
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
@@ -228,6 +271,16 @@ pub trait IcpLedger: Send + Sync {
         fee_e8s: u64,
         from_subaccount: Option<IcpSubaccount>,
         to: AccountIdentifier,
+        memo: u64,
+    ) -> Result<u64, NervousSystemError>;
+
+    /// Transfers funds from one account to another.
+    async fn icrc2_transfer_from(
+        &self,
+        from: Account,
+        to: Account,
+        amount_e8s: u64,
+        fee_e8s: u64,
         memo: u64,
     ) -> Result<u64, NervousSystemError>;
 

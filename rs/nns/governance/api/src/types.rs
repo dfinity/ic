@@ -4447,3 +4447,18 @@ pub struct MaturityDisbursement {
     /// The account identifier to disburse the maturity to.
     pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct StakeNeuronRequest {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub source_subaccount: Option<Vec<u8>>,
+    pub amount_e8s: Option<u64>,
+    pub controller: Option<PrincipalId>,
+    pub followees: Option<manage_neuron::SetFollowing>,
+    pub dissolve_delay_seconds: Option<u64>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct StakeNeuronResult {
+    pub neuron_id: Option<NeuronId>,
+}

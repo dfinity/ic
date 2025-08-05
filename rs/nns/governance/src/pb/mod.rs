@@ -3,14 +3,17 @@ use crate::{
     neuron::Neuron,
     pb::v1::{
         manage_neuron::{set_following::FolloweesForTopic, SetFollowing},
-        ArchivedMonthlyNodeProviderRewards, Topic,
+        ArchivedMonthlyNodeProviderRewards, Followees, Topic,
     },
 };
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{governance_error::ErrorType, GovernanceError};
 use ic_stable_structures::{storable::Bound, Storable};
 use prost::Message;
-use std::{borrow::Cow, collections::HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 #[allow(clippy::all)]
 #[path = "../gen/ic_nns_governance.pb.v1.rs"]
@@ -61,6 +64,15 @@ impl SetFollowing {
         self.validate_authorized(caller, neuron)?;
 
         Ok(())
+    }
+
+    pub fn into_followees(self) -> HashMap<i32, Followees> {
+        self.topic_following
+            .into_iter()
+            .map(|FolloweesForTopic { topic, followees }| {
+                (topic.unwrap_or_default(), Followees { followees })
+            })
+            .collect()
     }
 
     /// Does the same thing as validate, except no authorization check.

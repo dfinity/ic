@@ -315,6 +315,17 @@ impl IcpLedger for SpyLedger {
         }
     }
 
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }

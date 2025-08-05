@@ -26,6 +26,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 #[cfg(any(test, feature = "test"))]
 use std::sync::RwLock;
+use std::thread::LocalKey;
 
 thread_local! {
     pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
@@ -99,6 +100,10 @@ pub fn with_governance<R>(f: impl FnOnce(&Governance) -> R) -> R {
 
 pub fn with_governance_mut<R>(f: impl FnOnce(&mut Governance) -> R) -> R {
     GOVERNANCE.with(|g| f(&mut g.borrow_mut()))
+}
+
+pub fn governance_ref() -> &'static LocalKey<RefCell<Governance>> {
+    &GOVERNANCE
 }
 
 // Sets governance global state to the given object.
