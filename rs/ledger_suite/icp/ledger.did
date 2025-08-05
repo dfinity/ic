@@ -441,9 +441,26 @@ type icrc21_consent_message_request = record {
     user_preferences: icrc21_consent_message_spec;
 };
 
+type Icrc21Value = variant {
+    TokenAmount: record {
+        decimals: nat8;
+        amount: nat64;
+        symbol: text;
+    };
+    TimestampSeconds: record {
+        amount: nat64;
+    };
+    DurationSeconds: record {
+        amount: nat64;
+    };
+    Text: record {
+        content: text;
+    };
+};
+
 type FieldsDisplay = record {
         intent: text;
-        fields: vec record { text; text };
+        fields: vec record { text; Icrc21Value };
 };
 
 type icrc21_consent_message = variant {
