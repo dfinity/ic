@@ -8,7 +8,7 @@ use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_management_canister_types_private::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
 };
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};

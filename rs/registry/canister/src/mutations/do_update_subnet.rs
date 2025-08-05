@@ -2,7 +2,7 @@ use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Reg
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
@@ -499,7 +499,7 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types_private::{
+    use ic_management_canister_types::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};

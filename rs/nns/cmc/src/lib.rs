@@ -3,7 +3,7 @@ use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_management_canister_types_private::{
+use ic_management_canister_types::{
     // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
     BoundedControllers,
     CanisterSettingsArgs as Ic00CanisterSettingsArgs,

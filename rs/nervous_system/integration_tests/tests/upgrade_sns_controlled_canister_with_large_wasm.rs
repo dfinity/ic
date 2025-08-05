@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_agent::management_canister::canister_status;
 use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError::PocketIc};

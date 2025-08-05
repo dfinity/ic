@@ -56,7 +56,7 @@ ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+
 ic-nervous-system-common-test-keys = { path = "../common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nervous-system-root = { path = "../root" }

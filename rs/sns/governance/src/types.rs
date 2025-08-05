@@ -47,7 +47,7 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types_private::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
 };
 use ic_nervous_system_common::{

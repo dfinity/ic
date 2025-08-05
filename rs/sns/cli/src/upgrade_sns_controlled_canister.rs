@@ -9,7 +9,7 @@ use clap::Parser;
 use core::convert::From;
 use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types_private::{BoundedVec, CanisterInstallMode};
+use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
     management_canister::{self, delete_canister, stop_canister},
     nns,

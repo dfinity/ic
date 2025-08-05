@@ -8,7 +8,7 @@ use crate::pb::v1::{
 use candid::Nat;
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types_private::ChunkHash;
+use ic_management_canister_types::ChunkHash;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_sns_governance_api::pb::v1::topics::Topic;
