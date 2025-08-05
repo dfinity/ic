@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:maplit",
     "@crate_index//:rust_decimal",
+    "@crate_index//:serde",
 ]
 
 DEV_DEPENDENCIES = [
