@@ -166,6 +166,7 @@ upload_artifacts(
             "//ic-os/guestos/envs/prod:bundle-update",
             "//ic-os/hostos/envs/prod:bundle-update",
             "//ic-os/setupos/envs/prod:bundle",
+            "//ic-os/setupos/envs/dev:bundle",  # used by {guest,host}os_upgrade_from_latest_release_to_current nested tests
         ],
     }),
     visibility = ["//visibility:public"],
