@@ -8,8 +8,6 @@ use ic_system_test_driver::driver::{
 };
 use slog::info;
 
-use crate::ssh_access::execute_bash_command;
-
 const UNIVERSAL_VM_NAME: &str = "upstream";
 
 const UPSTREAMS: [&str; 2] = ["download.dfinity.systems", "download.dfinity.network"];
@@ -121,7 +119,6 @@ pub fn spoof_node_dns(env: &TestEnv, node: &IcNodeSnapshot, server_ipv6: &Ipv6Ad
         "Spoofing node DNS to point the upstreams to the UVM at {}", server_ipv6,
     );
 
-    let ssh_session = node.block_on_ssh_session().unwrap();
     // File-system is read-only, so we modify /etc/hosts in a temporary file and replace the
     // original with a bind mount.
     let mut command = String::from(
@@ -147,7 +144,7 @@ pub fn spoof_node_dns(env: &TestEnv, node: &IcNodeSnapshot, server_ipv6: &Ipv6Ad
         "#,
     );
 
-    execute_bash_command(&ssh_session, command)
+    node.block_on_bash_script(&command)
         .map_err(|e| anyhow!("Failed to spoof DNS for node {}: {}", node.node_id, e))
         .unwrap();
 }
