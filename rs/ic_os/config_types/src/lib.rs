@@ -111,6 +111,7 @@ pub struct ICOSSettings {
     pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
+    pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
@@ -249,6 +250,10 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
+// Leftover from push-based logging. It has to stay here for backward compatibility.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct Logging {}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
@@ -330,6 +335,7 @@ mod tests {
             "icos_settings": {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
+                "logging": {},
                 "use_nns_public_key": false,
                 "nns_urls": [],
                 "use_node_operator_private_key": false,
@@ -367,6 +373,7 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
+                logging: Logging::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,

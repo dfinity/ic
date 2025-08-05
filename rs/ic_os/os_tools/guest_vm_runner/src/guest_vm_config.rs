@@ -150,7 +150,7 @@ mod tests {
     use super::*;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
-        Ipv4Config, Ipv6Config, NetworkSettings,
+        Ipv4Config, Ipv6Config, Logging, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -177,6 +177,7 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
+                logging: Logging {},
                 use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,

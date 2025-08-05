@@ -189,6 +189,7 @@ pub fn main() -> Result<()> {
                 node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.deployment_environment,
+                logging: Logging {},
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")

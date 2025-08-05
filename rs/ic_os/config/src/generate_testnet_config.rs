@@ -186,6 +186,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         node_reward_type,
         mgmt_mac,
         deployment_environment,
+        logging: Logging {},
         use_nns_public_key,
         nns_urls,
         use_node_operator_private_key,
