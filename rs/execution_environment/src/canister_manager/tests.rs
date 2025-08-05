@@ -1319,7 +1319,7 @@ fn get_canister_status_of_stopped_canister() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        let status = canister_manager
+        let status_res = canister_manager
             .get_canister_status(
                 sender,
                 canister,
@@ -1327,9 +1327,9 @@ fn get_canister_status_of_stopped_canister() {
                 CanisterCyclesCostSchedule::Normal,
                 false,
             )
-            .unwrap()
-            .status();
-        assert_eq!(status, CanisterStatusType::Stopped);
+            .unwrap();
+        assert_eq!(status_res.status(), CanisterStatusType::Stopped);
+        assert_eq!(status_res.ready_for_migration(), false);
     });
 }
 
