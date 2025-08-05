@@ -652,7 +652,6 @@ fn test_canister_canister_ranges_paths(env: TestEnv) {
 // and compares the result with the canister ranges obtained from the registry.
 fn test_subnet_canister_ranges_paths(env: TestEnv) {
     let subnet = get_first_app_subnet(&env);
-    let node = subnet.nodes().next().unwrap();
 
     let path: Vec<Label<Vec<u8>>> = vec![
         "canister_ranges".into(),
@@ -685,7 +684,7 @@ fn validate_canister_ranges(
             panic!("State tree doesn't contain the requested path: {path:?}");
         };
         let ranges: Vec<(PrincipalId, PrincipalId)> =
-            serde_cbor::from_slice(&value).expect("Failed to deserialize a canister ranges leaf");
+            serde_cbor::from_slice(value).expect("Failed to deserialize a canister ranges leaf");
 
         canister_ranges_from_state_tree.extend(ranges.into_iter().map(|(start, end)| {
             CanisterIdRange {
