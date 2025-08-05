@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "//rs/utils/heap_bytes",
     "//rs/utils/lru_cache",
     "//rs/utils/thread",
     "@crate_index//:candid",
@@ -60,7 +61,10 @@ DEPENDENCIES = [
     "@crate_index//:wasmparser",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/utils/heap_bytes_derive",
+]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
