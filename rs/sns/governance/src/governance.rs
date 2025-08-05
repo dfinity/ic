@@ -2366,6 +2366,14 @@ impl Governance {
         &mut self,
         register_extension: RegisterExtension,
     ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
         // Step 0. Validate the RegisterExtension proposal.
         let ValidatedRegisterExtension { wasm, init, spec } =
             register_extension.try_into().map_err(|err| {
@@ -2611,6 +2619,14 @@ impl Governance {
         &self,
         execute_extension_operation: ExecuteExtensionOperation,
     ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
         let ValidatedExecuteExtensionOperation {
             extension_canister_id,
             operation_name,
