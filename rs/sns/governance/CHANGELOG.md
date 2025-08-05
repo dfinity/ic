@@ -11,6 +11,35 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-01: Proposal 137687
+
+http://dashboard.internetcomputer.org/proposal/137687
+
+## Fixed
+
+Fixed multiple issues in `disburse_neuron` functionality:
+
+- Fixed a bug that could allow an SNS Neuron to burn fees that would have been refunded after proposal acceptance.
+- Fees are now only recorded as burned when they exceed the transaction fee threshold and are actually burned.
+- Added comprehensive tests to ensure the correct behavior in the future.
+
+
+# 2025-07-25: Proposal 137584
+
+http://dashboard.internetcomputer.org/proposal/137584
+
+## Added
+
+RegisterExtension proposals can now be used in the test version of SNS Governance; submitting
+these proposals on mainnet is still disabled until further notice.
+
+
+## Fixed
+
+Fixed a bug due to which governance cached metrics could be recomputed once every 10 seconds
+rather than with the intended rate of once per hour.
+
+
 # 2025-07-08: Proposal 137282
 
 http://dashboard.internetcomputer.org/proposal/137282

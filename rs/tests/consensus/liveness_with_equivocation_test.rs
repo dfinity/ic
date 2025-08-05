@@ -4,18 +4,18 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 
 use anyhow::Result;
 
 fn setup(env: TestEnv) {
-    let malicious_behaviour =
-        MaliciousBehaviour::new(true).set_maliciously_propose_equivocating_blocks();
+    let malicious_behavior =
+        MaliciousBehavior::new(true).set_maliciously_propose_equivocating_blocks();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .add_nodes(3)
-                .add_malicious_nodes(1, malicious_behaviour),
+                .add_malicious_nodes(1, malicious_behavior),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");

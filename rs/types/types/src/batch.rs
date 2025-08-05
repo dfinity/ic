@@ -23,10 +23,10 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::idkg::{common::PreSignature, PreSigId},
+    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
     crypto::{
         canister_threshold_sig::{idkg::IDkgTranscript, MasterPublicKey},
-        threshold_sig::ni_dkg::NiDkgId,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
     },
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
@@ -110,8 +110,7 @@ pub struct AvailablePreSignatures {
     /// The key transcript corresponding to these pre-signatures
     pub key_transcript: IDkgTranscript,
     /// Newly available pre-signatures to be delivered to execution
-    /// TODO(CON-1545): Remove `Option` once pre-signatures are resolved during batch delivery
-    pub pre_signatures: BTreeMap<PreSigId, Option<PreSignature>>,
+    pub pre_signatures: BTreeMap<PreSigId, PreSignature>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
@@ -119,9 +118,9 @@ pub struct ChainKeyData {
     /// The Master public keys of the subnet.
     pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// The pre-signatures available to be matched with signature requests.
-    pub idkg_pre_signatures: BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
+    pub idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
-    pub nidkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
+    pub nidkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
 }
 
 /// The payload of a batch.
