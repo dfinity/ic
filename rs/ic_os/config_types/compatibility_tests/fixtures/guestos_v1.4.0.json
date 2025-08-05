@@ -18,6 +18,10 @@
     "node_reward_type": "type3.1",
     "mgmt_mac": "00:00:00:00:00:01",
     "deployment_environment": "mainnet",
+    "logging": {
+      "elasticsearch_hosts": null,
+      "elasticsearch_tags": null
+    },
     "use_nns_public_key": false,
     "nns_urls": [
       "https://icp-api.io,https//icp0.io,https://ic0.app"
