@@ -24,7 +24,6 @@ launch_bare_metal(
 )
 
 # Export checksums & build artifacts
-# (image is used for {guest,host}os_upgrade_from_latest_release_to_current nested tests)
 artifact_bundle(
     name = "bundle",
     testonly = True,
