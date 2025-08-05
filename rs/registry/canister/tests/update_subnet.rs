@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };

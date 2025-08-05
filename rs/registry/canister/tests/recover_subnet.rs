@@ -4,7 +4,7 @@ use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };

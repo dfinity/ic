@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
@@ -323,7 +323,7 @@ impl ProposalPayload<do_create_subnet::CreateSubnetPayload> for ProposeToCreateS
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_types::PrincipalId;
