@@ -524,7 +524,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
             );
         }
 
-        hash_of_map(&map, |key, value| hash_key_val(&key.to_string(), value)).to_vec()
+        hash_of_map(&map, |key, value| hash_key_val(key, value)).to_vec()
     }
 }
 
