@@ -6,10 +6,13 @@ use super::{
     },
 };
 use crate::{
-    canister_snapshots::{CanisterSnapshot, CanisterSnapshots}, canister_state::{
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
+    canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
-    }, metadata_state::subnet_call_context_manager::PreSignatureStash, CanisterQueues, DroppedMessageMetrics
+    },
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
+    CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -23,7 +26,12 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats}, consensus::idkg::IDkgMasterPublicKeyId, ingress::IngressStatus, messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response}, time::CoarseTime, AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time
+    batch::{ConsensusResponse, RawQueryStats},
+    consensus::idkg::IDkgMasterPublicKeyId,
+    ingress::IngressStatus,
+    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    time::CoarseTime,
+    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
