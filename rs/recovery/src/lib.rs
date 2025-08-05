@@ -917,7 +917,7 @@ impl Recovery {
             echo "    - https://download.dfinity.systems/ic/$artifacts_hash/recovery.tar.zst"
             echo "    - https://download.dfinity.network/ic/$artifacts_hash/recovery.tar.zst"
             echo "  - Run the following command and commit + push to a branch of dfinity/ic:"
-            echo "    sed -i "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"$artifacts_hash\"/" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"
+            echo "    sed -i \"s/readonly EXPECTED_RECOVERY_HASH=\\\"\\\"/readonly EXPECTED_RECOVERY_HASH=\\\"$artifacts_hash\\\"/\" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"
             echo "  - Build a recovery image from that branch."
             echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
         "#,
