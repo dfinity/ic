@@ -293,8 +293,8 @@ fn uses_chunk_size(manifest: &Manifest, max_chunk_size: u32) -> bool {
     })
 }
 
-// Computes file_table and chunk_table of a manifest using a parallel algorithm.
-// All the parallel work is spawned in the specified thread pool.
+/// Computes file_table and chunk_table of a manifest using a parallel algorithm.
+/// All the parallel work is spawned in the specified thread pool.
 fn build_chunk_table_parallel(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,

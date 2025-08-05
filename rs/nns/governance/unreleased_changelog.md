@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Minor improvements on voting power spike detection mechanism.
-
 ## Changed
 
 ## Deprecated

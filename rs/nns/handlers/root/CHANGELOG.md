@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-01: Proposal 137685
+
+http://dashboard.internetcomputer.org/proposal/137685
+
+## Added
+
+NNS Root now returns the field `memory_metrics` from the `canister_status` API.
+
+
 # 2025-07-06: Proposal 137253
 
 http://dashboard.internetcomputer.org/proposal/137253

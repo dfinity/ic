@@ -383,6 +383,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # Required because chrono uses canisters incompatible features
+            "chrono_canisters": crate.spec(
+                git = "https://github.com/chronotope/chrono.git",
+                package = "chrono",
+                tag = "v0.4.41",
+                default_features = False,
+                features = [
+                    "alloc",
+                ],
+            ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
             ),
@@ -455,12 +465,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "derivative": crate.spec(
+                version = "^2.2",
+            ),
             "der": crate.spec(
                 version = "0.7",
                 default_features = False,
             ),
             "derive-new": crate.spec(
                 version = "^0.7.0",
+            ),
+            "devicemapper": crate.spec(
+                version = "0.34",
             ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
@@ -822,6 +838,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
             ),
+            "loopdev-3": crate.spec(
+                version = "0.5",
+            ),
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,
@@ -1141,6 +1160,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
             ),
+            "rust-ini": crate.spec(
+                version = "^0.21.2",
+            ),
             "rustls": crate.spec(
                 version = "^0.23.18",
                 default_features = False,
@@ -1326,6 +1348,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "sys-mount": crate.spec(
                 version = "3.0",
+            ),
+            "tabled": crate.spec(
+                version = "^0.20.0",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",

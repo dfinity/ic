@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -55,8 +55,9 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -74,8 +75,9 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -92,8 +94,9 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -111,8 +114,9 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -130,9 +134,10 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -150,9 +155,10 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -170,8 +176,9 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -189,8 +196,9 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -207,9 +215,10 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -227,9 +236,10 @@ system_test_nns(
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -248,9 +258,9 @@ system_test_nns(
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     test_timeout = "eternal",
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
@@ -268,8 +278,9 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/recovery",
@@ -292,8 +303,8 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
+    test_timeout = "eternal",
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
