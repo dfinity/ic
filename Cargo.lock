@@ -5348,7 +5348,6 @@ dependencies = [
  "ic-metrics-tool",
  "ic_device",
  "ic_sev",
- "loopdev-3",
  "macaddr",
  "nix 0.24.3",
  "regex",

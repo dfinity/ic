@@ -35,6 +35,7 @@ impl RegistryQuerier {
         RegistryQuerier { registry_client }
     }
 
+    ///  Returns the latest registry version corresponding to the given timestamp.
     pub fn version_for_timestamp(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
         self.registry_client
             .timestamp_to_versions_map()
