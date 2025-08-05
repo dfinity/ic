@@ -55,6 +55,9 @@ struct Argv {
 
     #[arg(long, default_value = "https://ic0.app")]
     network_url: String,
+
+    #[arg(long, default_value = "false")]
+    verbose: bool,
 }
 
 /// See the Identity struct. This is relative to the home directory of the user
@@ -68,9 +71,10 @@ async fn main() {
         network_url,
         neuron_id,
         proposal_file,
+        verbose,
     } = Argv::parse();
 
-    let request = load_proposal(&proposal_file, neuron_id);
+    let request = load_proposal(&proposal_file, neuron_id, verbose);
 
     let governance_canister_id = Principal::from(GOVERNANCE_CANISTER_ID);
     let response = new_ic_agent(&network_url)
@@ -128,7 +132,7 @@ fn handle_response(response: CallResponse<(Vec<u8>, Certificate)>) {
 /// Reads the file, which is formatted according to the --proposal-file file,
 /// parses it, and constructs a proposal creation request that can be sent to
 /// the NNS Governance canister via the manage_neuron canister method.
-fn load_proposal(proposal_file_path: &str, neuron_id: u64) -> ManageNeuron {
+fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> ManageNeuron {
     let proposal_file_content = std::fs::read_to_string(proposal_file_path).unwrap();
 
     let divider = "-".repeat(80) + "\n";
@@ -144,7 +148,13 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64) -> ManageNeuron {
     }
 
     let Header { title, url } = serde_yaml::from_str::<Header>(&header).unwrap();
-    println!("Submitting {:?}...", title);
+    println!("Title: {}", title);
+    if verbose {
+        println!("URL: {}", url);
+        println!("Summary:");
+        println!("{}", summary);
+    }
+    println!("Submitting... ⏳");
 
     // Robotic mechanical conversions that are nevertheless necessary.
     let title = Some(title);
