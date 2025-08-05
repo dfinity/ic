@@ -1000,6 +1000,7 @@ fn test_hash_plan() {
         max_chunk_size,
         0,
         1,
+        &mut thread_pool,
     );
 
     assert_eq!(
@@ -1026,6 +1027,7 @@ fn test_hash_plan() {
         max_chunk_size,
         0,
         u64::MAX,
+        &mut thread_pool,
     );
 
     assert_eq!(
@@ -1057,6 +1059,7 @@ fn test_hash_plan() {
             max_chunk_size,
             seed,
             2,
+            &mut thread_pool,
         );
 
         // It's random, so there could be two possible hash plans
