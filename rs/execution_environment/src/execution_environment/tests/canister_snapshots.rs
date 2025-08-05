@@ -2972,6 +2972,24 @@ fn canister_snapshot_roundtrip_succeeds() {
     );
     let snapshot_stable_memory_2 = read_canister_snapshot_data(&mut test, &args_stable);
     assert_eq!(snapshot_stable_memory, snapshot_stable_memory_2);
+
+    // Make sure canister history contains the `MetadataUpload` variant:
+    let canister_history = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .clone();
+    let history_after = canister_history
+        .get_changes(canister_history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    let last_canister_change: &CanisterChange = history_after.last().unwrap();
+    let CanisterChangeDetails::CanisterLoadSnapshot(rec) = last_canister_change.details() else {
+        panic!("Expected load snapshot")
+    };
+    assert_eq!(rec.source(), SnapshotSource::MetadataUpload);
 }
 
 #[test]
