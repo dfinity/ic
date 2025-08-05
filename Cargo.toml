@@ -452,7 +452,7 @@ members = [
     "rs/validator/ingress_message/test_canister",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
-    "rs/xnet/uri",
+    "rs/xnet/uri", "rs/http_endpoints/nns_delegation_manager",
 ]
 
 resolver = "2"

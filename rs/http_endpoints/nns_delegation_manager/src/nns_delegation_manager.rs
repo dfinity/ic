@@ -18,12 +18,13 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
         HttpReadStateResponse, HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
-    NodeId, SubnetId,
+    NodeId, RegistryVersion, SubnetId,
 };
 use rand::Rng;
 use tokio::{
@@ -36,10 +37,9 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::{
-    common::{get_root_threshold_public_key, CONTENT_TYPE_CBOR},
-    metrics::DelegationManagerMetrics,
-};
+use crate::metrics::DelegationManagerMetrics;
+
+const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
 // In order to properly test the time outs we set much lower values for them when we are
 // in the test mode.
@@ -56,7 +56,7 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(not(test))]
-const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = crate::common::MAX_REQUEST_RECEIVE_TIMEOUT;
+const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
 #[cfg(test)]
 const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -400,8 +400,9 @@ async fn try_fetch_delegation_from_nns(
     }?;
 
     let root_threshold_public_key =
-        get_root_threshold_public_key(log, registry_client, registry_version, &nns_subnet_id)
-            .ok_or("could not retrieve threshold root public key from registry")?;
+        get_root_threshold_public_key(registry_client, registry_version, &nns_subnet_id).map_err(
+            |err| format!("could not retrieve threshold root public key from registry: {err}"),
+        )?;
 
     validate_subnet_delegation_certificate(
         &response.certificate,
@@ -515,6 +516,18 @@ fn get_random_node_from_nns_subnet(
             "failed to get node record for nns node {}. Err: {}",
             nns_node, err
         )),
+    }
+}
+
+fn get_root_threshold_public_key(
+    registry_client: &dyn RegistryClient,
+    version: RegistryVersion,
+    nns_subnet_id: &SubnetId,
+) -> Result<ThresholdSigPublicKey, String> {
+    match registry_client.get_threshold_signing_public_key_for_subnet(*nns_subnet_id, version) {
+        Ok(Some(key)) => Ok(key),
+        Err(err) => Err(format!("Failed to get key for subnet {err}")),
+        Ok(None) => Err(format!("Received no public key for subnet {nns_subnet_id}")),
     }
 }
 

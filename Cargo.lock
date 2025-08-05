@@ -11311,6 +11311,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nns-delegation-manager"
+version = "0.9.0"
+dependencies = [
+ "axum 0.8.4",
+ "futures",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
+ "ic-certification 0.9.0",
+ "ic-config",
+ "ic-crypto-tls-interfaces",
+ "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-metrics",
+ "ic-registry-client-helpers",
+ "ic-types",
+ "prometheus 0.13.4",
+ "rand 0.8.5",
+ "serde_cbor",
+ "slog",
+ "tokio",
+ "tokio-rustls 0.26.1",
+ "tokio-util",
+ "tower 0.5.2",
+]
+
+[[package]]
 name = "ic-nns-governance"
 version = "0.9.0"
 dependencies = [
