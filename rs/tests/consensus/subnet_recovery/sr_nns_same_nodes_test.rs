@@ -19,31 +19,40 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_consensus_system_test_utils::{
+    impersonate_upstreams::{setup_upstreams_uvm, uvm_serve_recovery_artifacts},
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
     },
     set_sandbox_env_vars,
+    ssh_access::{
+        get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted, AuthMean,
+    },
+    upgrade::get_assigned_replica_version,
 };
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{get_node_metrics, util::DataLocation, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::{
+    constants::SSH_USERNAME, driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
-use std::cmp;
-use std::convert::TryFrom;
+use std::{cmp, convert::TryFrom};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 
 pub fn setup(env: TestEnv) {
+    setup_upstreams_uvm(&env);
+
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -59,19 +68,6 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
-
-    let ic_version = get_guestos_img_version().unwrap();
-    let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
-    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
-
-    // identifies the version of the replica after the recovery
-    let working_version =
-        ReplicaVersion::try_from(get_guestos_update_img_version().unwrap()).unwrap();
-    let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
-    info!(
-        logger,
-        "ssh_authorized_priv_keys_dir: {:?}", ssh_authorized_priv_keys_dir
-    );
 
     // choose a node from the nns subnet
     let mut nns_nodes = topo_snapshot.root_subnet().nodes();
@@ -93,6 +89,33 @@ pub fn test(env: TestEnv) {
         download_node.get_ip_addr()
     );
 
+    // add SSH key as backup key to the registry
+    info!(logger, "Update the registry with the backup key");
+    let ssh_priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let ssh_priv_key =
+        std::fs::read_to_string(&ssh_priv_key_path).expect("Failed to read SSH private key");
+    let ssh_pub_key_path = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME);
+    let ssh_pub_key =
+        std::fs::read_to_string(&ssh_pub_key_path).expect("Failed to read SSH public key");
+    let payload = get_updatesubnetpayload_with_keys(
+        topo_snapshot.root_subnet_id(),
+        None,
+        Some(vec![ssh_pub_key]),
+    );
+    block_on(update_subnet_record(upload_node.get_public_url(), payload));
+    let backup_mean = AuthMean::PrivateKey(ssh_priv_key);
+    wait_until_authentication_is_granted(&upload_node.get_ip_addr(), "backup", &backup_mean);
+
+    let ic_version =
+        get_assigned_replica_version(&upload_node).expect("Failed to get assigned replica version");
+    let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
+    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
+
+    // identifies the version of the replica after the recovery
+    let working_version =
+        ReplicaVersion::try_from(get_guestos_update_img_version().unwrap()).unwrap();
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
@@ -109,13 +132,14 @@ pub fn test(env: TestEnv) {
     ));
 
     let recovery_dir = get_dependency_path("rs/tests");
+    let output_dir = recovery_dir.join("output");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: upload_node.get_public_url(),
         replica_version: Some(ic_version),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
+        key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -131,6 +155,8 @@ pub fn test(env: TestEnv) {
         upgrade_image_hash: get_guestos_update_img_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
+        backup_key_file: Some(ssh_priv_key_path),
+        output_dir: Some(output_dir.clone()),
         next_step: None,
     };
 
@@ -213,6 +239,20 @@ pub fn test(env: TestEnv) {
 
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
+
+    uvm_serve_recovery_artifacts(
+        &env,
+        std::fs::read(output_dir.join("recovery.tar.zst")).unwrap(),
+        std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256")).unwrap(),
+    )
+    .expect("Failed to serve recovery artifacts from UVM");
+
+    // TODO: Host recovery GuestOS image on UVM (this involves some additional dependencies in Bazel)
+    // TODO: Spoof the node HostOS DNS (with spoof_node_dns) to point the upstreams to the UVM
+    // TODO: Make every replica reboot into GuestOS-recovery-upgrader specifying the version of that
+    // image
+    // TODO: Once GuestOS is launched, spoof the node GuestOS DNS (with spoof_node_dns) to point the
+    // upstreams to the UVM
 
     info!(logger, "Wait for state sync to complete");
     cert_state_makes_progress_with_retries(
