@@ -319,6 +319,7 @@ impl Recovery {
         &self,
         subnet_id: SubnetId,
         ssh_user: SshUser,
+        alt_key_file: Option<PathBuf>,
         auto_retry: bool,
     ) -> impl Step {
         DownloadCertificationsStep {
@@ -327,7 +328,7 @@ impl Recovery {
             registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: alt_key_file.or(self.key_file.clone()),
             auto_retry,
             ssh_user,
         }

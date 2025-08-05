@@ -340,6 +340,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     Ok(Box::new(self.recovery.get_download_certs_step(
                         self.params.subnet_id,
                         SshUser::Readonly,
+                        /*alt_key_file=*/ None,
                         !self.interactive(),
                     )))
                 } else {

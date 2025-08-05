@@ -73,6 +73,10 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long, value_parser=crate::util::data_location_from_str)]
     pub upload_method: Option<DataLocation>,
 
+    /// The path to a file containing the private key that has backup access to all nodes in the subnet.
+    #[clap(long)]
+    pub backup_key_file: Option<PathBuf>,
+
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
@@ -188,6 +192,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 Ok(Box::new(self.recovery.get_download_certs_step(
                     self.params.subnet_id,
                     SshUser::Backup,
+                    self.params.backup_key_file.clone(),
                     !self.interactive(),
                 )))
             }
