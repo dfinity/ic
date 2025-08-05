@@ -193,7 +193,7 @@ fn read_state_with_identity_and_canister_id(
         })
 }
 
-/// Call "read_state" with the given paths, identity and canister ID
+/// Call the `api/v2/subnet/{}/read_state` endpoint with the given paths, identity and subnet ID
 fn read_subnet_state_with_identity_and_subnet_id(
     env: &TestEnv,
     paths: Vec<Vec<Label<Vec<u8>>>>,
