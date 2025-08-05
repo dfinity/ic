@@ -989,11 +989,17 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
 pub(crate) trait IDkgTranscriptBuilder {
     /// Returns the specified transcript if it can be successfully
     /// built from the current entries in the IDKG pool
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
+    fn get_completed_transcript(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript>;
 
     /// Returns the validated dealings for the given transcript Id from
     /// the IDKG pool
-    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing>;
+    fn get_validated_dealings(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Vec<SignedIDkgDealing>;
 }
 
 pub(crate) struct IDkgTranscriptBuilderImpl<'a> {
@@ -1022,32 +1028,24 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
     }
 
     /// Build the specified transcript from the pool.
-    fn build_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+    fn build_transcript(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
         // Look up the transcript params
-        let transcript_params = match self
-            .block_reader
-            .requested_transcripts()
-            .find(|transcript_params| transcript_params.transcript_id == transcript_id)
-        {
-            Some(params_ref) => match params_ref.translate(self.block_reader) {
-                Ok(transcript_params) => transcript_params,
-                Err(error) => {
-                    warn!(
-                        self.log,
-                        "build_transcript(): failed to translate transcript ref: \
+        let transcript_params = match transcript_params_ref.translate(self.block_reader) {
+            Ok(transcript_params) => transcript_params,
+            Err(error) => {
+                warn!(
+                    self.log,
+                    "build_transcript(): failed to translate transcript ref: \
                                 transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
-                        params_ref,
-                        self.block_reader.tip_height(),
-                        error
-                    );
-                    self.metrics
-                        .transcript_builder_errors_inc("resolve_transcript_refs");
-                    return None;
-                }
-            },
-            None => {
+                    transcript_params_ref,
+                    self.block_reader.tip_height(),
+                    error
+                );
                 self.metrics
-                    .transcript_builder_errors_inc("missing_transcript_params");
+                    .transcript_builder_errors_inc("resolve_transcript_refs");
                 return None;
             }
         };
@@ -1062,7 +1060,7 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
                 for (id, signed_dealing) in self
                     .idkg_pool
                     .validated()
-                    .signed_dealings_by_transcript_id(&transcript_id)
+                    .signed_dealings_by_transcript_id(&transcript_params_ref.transcript_id)
                 {
                     if let Some(dealing_hash) = id.dealing_hash() {
                         transcript_state.init_dealing_state(dealing_hash, signed_dealing);
@@ -1080,13 +1078,13 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
                 for (_, support) in self
                     .idkg_pool
                     .validated()
-                    .dealing_support_by_transcript_id(&transcript_id)
+                    .dealing_support_by_transcript_id(&transcript_params_ref.transcript_id)
                 {
                     if let Err(err) = transcript_state.add_dealing_support(support) {
                         warn!(
                             self.log,
                             "Failed to add support: transcript_id = {:?}, error = {:?}",
-                            transcript_id,
+                            transcript_params_ref.transcript_id,
                             err
                         );
                         self.metrics
@@ -1212,11 +1210,14 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
     }
 
     /// Helper to get the validated dealings.
-    fn validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+    fn validated_dealings(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Vec<SignedIDkgDealing> {
         let mut ret = Vec::new();
         for (_, signed_dealing) in self.idkg_pool.validated().signed_dealings() {
             let dealing = signed_dealing.idkg_dealing();
-            if dealing.transcript_id == transcript_id {
+            if dealing.transcript_id == transcript_params_ref.transcript_id {
                 ret.push(signed_dealing.clone());
             }
         }
@@ -1225,18 +1226,24 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
 }
 
 impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+    fn get_completed_transcript(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
         timed_call(
             "get_completed_transcript",
-            || self.build_transcript(transcript_id),
+            || self.build_transcript(transcript_params_ref),
             &self.metrics.transcript_builder_duration,
         )
     }
 
-    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+    fn get_validated_dealings(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Vec<SignedIDkgDealing> {
         timed_call(
             "get_validated_dealings",
-            || self.validated_dealings(transcript_id),
+            || self.validated_dealings(transcript_params_ref),
             &self.metrics.transcript_builder_duration,
         )
     }
@@ -2772,6 +2779,10 @@ mod tests {
         let (dealings, supports) = get_dealings_and_support(&env, &params);
         let block_reader =
             TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
+        let params_ref = block_reader
+            .requested_transcripts()
+            .find(|params_ref| params_ref.transcript_id == tid)
+            .unwrap();
         let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
         let crypto = first_crypto(&env);
 
@@ -2791,7 +2802,7 @@ mod tests {
 
                     // tid is requested, but there are no dealings for it, the transcript cannot
                     // be completed
-                    let result = b.get_completed_transcript(tid);
+                    let result = b.get_completed_transcript(params_ref);
                     assert_matches!(result, None);
                 }
 
@@ -2816,7 +2827,7 @@ mod tests {
                     assert_matches!(result, None);
 
                     // there are no support shares, no transcript should be completed
-                    let result = b.get_completed_transcript(tid);
+                    let result = b.get_completed_transcript(params_ref);
                     assert_matches!(result, None);
                 }
 
@@ -2837,13 +2848,13 @@ mod tests {
                     logger.clone(),
                 );
                 // the transcript should be completed now
-                let result = b.get_completed_transcript(tid);
+                let result = b.get_completed_transcript(params_ref);
                 assert_matches!(result, Some(t) if t.transcript_id == tid);
 
                 // returned dealings should be equal to the ones we inserted
                 let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
                 let dealings2 = b
-                    .get_validated_dealings(tid)
+                    .get_validated_dealings(params_ref)
                     .into_iter()
                     .collect::<HashSet<_>>();
                 assert_eq!(dealings1, dealings2);
@@ -2851,16 +2862,11 @@ mod tests {
                 {
                     let block_reader =
                         TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
-                    let b = IDkgTranscriptBuilderImpl::new(
-                        &block_reader,
-                        crypto.deref(),
-                        &idkg_pool,
-                        &metrics,
-                        logger.clone(),
-                    );
-                    // the transcript is no longer requested, it should not be returned
-                    let result = b.get_completed_transcript(tid);
-                    assert_matches!(result, None);
+                    let params_ref = block_reader
+                        .requested_transcripts()
+                        .find(|params_ref| params_ref.transcript_id == tid);
+                    // the transcript is no longer requested
+                    assert_matches!(params_ref, None);
                 }
 
                 let crypto = crypto_without_keys();
@@ -2872,7 +2878,7 @@ mod tests {
                     logger,
                 );
                 // transcript completion should fail on crypto failures
-                let result = b.get_completed_transcript(tid);
+                let result = b.get_completed_transcript(params_ref);
                 assert_matches!(result, None);
             })
         });

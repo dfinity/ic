@@ -401,19 +401,25 @@ impl TestIDkgTranscriptBuilder {
 }
 
 impl IDkgTranscriptBuilder for TestIDkgTranscriptBuilder {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+    fn get_completed_transcript(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
         self.transcripts
             .lock()
             .unwrap()
-            .get(&transcript_id)
+            .get(&transcript_params_ref.transcript_id)
             .cloned()
     }
 
-    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+    fn get_validated_dealings(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+    ) -> Vec<SignedIDkgDealing> {
         self.dealings
             .lock()
             .unwrap()
-            .get(&transcript_id)
+            .get(&transcript_params_ref.transcript_id)
             .cloned()
             .unwrap_or_default()
     }
