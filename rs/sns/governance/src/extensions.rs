@@ -1,15 +1,3 @@
-use candid::{Decode, Encode, Nat};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
-use icrc_ledger_types::icrc1::account::Account;
-use lazy_static::lazy_static;
-use maplit::btreemap;
-use sns_treasury_manager::{
-    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
-};
-use std::{collections::BTreeMap, fmt::Display};
-
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
     pb::{
@@ -22,6 +10,18 @@ use crate::{
     },
     types::{Environment, Wasm},
 };
+use candid::{Decode, Encode, Nat};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
+use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
+use icrc_ledger_types::icrc1::account::Account;
+use lazy_static::lazy_static;
+use maplit::btreemap;
+use sns_treasury_manager::{
+    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
+};
+use std::fmt::Formatter;
+use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
     static ref ALLOWED_EXTENSIONS: BTreeMap<[u8; 32], ExtensionSpec> = btreemap! {};
@@ -530,10 +530,13 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    if name != "deposit" {
+    if !extension_operations.contains_key(name) {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            "Only TreasuryManager.deposit extension operations are currently supported.",
+            format!(
+                "Extension canister {} does not have an operation named {}.  Available operations: {:?}",
+                extension_canister_id, name, extension_operations.keys().collect::<Vec<_>>()
+            ),
         ));
     }
 
