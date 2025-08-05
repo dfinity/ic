@@ -35,7 +35,6 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Instant;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -814,7 +813,6 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
-    let start = Instant::now();
     let mut files = {
         let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
