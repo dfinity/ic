@@ -783,15 +783,15 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         let metrics = self.metrics.clone();
 
         let mut changes =
-            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
-                .then(|| {
-                    timed_call(
-                        "purge_artifacts",
-                        || self.purge_artifacts(idkg_pool, &block_reader),
-                        &metrics.on_state_change_duration,
-                    )
-                })
-                .unwrap_or_default();
+            if update_purge_height(&self.prev_finalized_height, block_reader.tip_height()) {
+                timed_call(
+                    "purge_artifacts",
+                    || self.purge_artifacts(idkg_pool, &block_reader),
+                    &metrics.on_state_change_duration,
+                )
+            } else {
+                IDkgChangeSet::default()
+            };
 
         let validate_complaints = || {
             timed_call(

@@ -457,8 +457,8 @@ fn add_subnet_local_registry_records(
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
             key_configs: chain_keys_enabled_status
-                .iter()
-                .map(|(key_id, _)| KeyConfig {
+                .keys()
+                .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
                         1

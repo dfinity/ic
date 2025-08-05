@@ -394,6 +394,7 @@ impl WasmtimeEmbedder {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     pub fn new_instance(
         &self,
         canister_id: CanisterId,
