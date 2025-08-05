@@ -27,7 +27,8 @@ use ic_management_canister_types::{
     CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
     InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
     ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags, UploadChunkArgs, UploadChunkResult,
+    WasmMemoryPersistence,
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
@@ -1175,10 +1176,8 @@ impl PocketIc {
         sender: Option<Principal>,
     ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
-            CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
-                wasm_memory_persistence: Some(
-                    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner::Keep,
-                ),
+            CanisterInstallMode::Upgrade(Some(UpgradeFlags {
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
                 skip_pre_upgrade: None,
             })),
             canister_id,
