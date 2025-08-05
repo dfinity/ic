@@ -9,6 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//rs/monitoring/logger",
         "@crate_index//:anyhow",
         "@crate_index//:async-stream",
         "@crate_index//:byte-unit",

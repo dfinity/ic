@@ -88,10 +88,10 @@ pub async fn install_canisters(
                         .clone()
                         .install_(&endpoints_runtime[subnet_idx], vec![])
                         .await
-                        .unwrap_or_else(|_| {
+                        .unwrap_or_else(|e| {
                             panic!(
-                                "Installation of the canister_idx={} on subnet_idx={} failed.",
-                                canister_idx, subnet_idx
+                                "Installation of the canister_idx={} on subnet_idx={} failed with error: {}",
+                                canister_idx, subnet_idx, e
                             )
                         });
                     info!(

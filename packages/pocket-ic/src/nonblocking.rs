@@ -11,8 +11,8 @@ use crate::common::rest::{
 use crate::wsl_path;
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse, Time,
+    copy_dir, start_server, IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse,
+    StartServerParams, Time,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -27,9 +27,8 @@ use ic_management_canister_types::{
     CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
     InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
     ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags as CanisterInstallModeUpgradeInner,
-    UploadChunkArgs, UploadChunkResult,
-    WasmMemoryPersistence as CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags, UploadChunkArgs, UploadChunkResult,
+    WasmMemoryPersistence,
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
@@ -144,7 +143,12 @@ impl PocketIc {
         let server_url = if let Some(server_url) = server_url {
             server_url
         } else {
-            start_or_reuse_server(server_binary).await
+            let (_, server_url) = start_server(StartServerParams {
+                server_binary,
+                reuse: true,
+            })
+            .await;
+            server_url
         };
 
         let subnet_config_set = subnet_config_set
@@ -200,6 +204,7 @@ impl PocketIc {
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
+            allow_incomplete_state: Some(false),
         };
 
         let test_driver_pid = std::process::id();
@@ -314,7 +319,12 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = start_or_reuse_server(None).await.join("instances").unwrap();
+        let (_, server_url) = start_server(StartServerParams {
+            reuse: true,
+            ..Default::default()
+        })
+        .await;
+        let url = server_url.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()
@@ -1147,11 +1157,28 @@ impl PocketIc {
         sender: Option<Principal>,
     ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
-            CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
-                wasm_memory_persistence: Some(
-                    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner::Replace,
-                ),
-                skip_pre_upgrade: Some(false),
+            CanisterInstallMode::Upgrade(None),
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
+        )
+        .await
+    }
+
+    /// Upgrade a Motoko EOP canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn upgrade_eop_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), RejectResponse> {
+        self.install_canister_helper(
+            CanisterInstallMode::Upgrade(Some(UpgradeFlags {
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                skip_pre_upgrade: None,
             })),
             canister_id,
             wasm_module,

@@ -25,6 +25,7 @@ mod list_proposals;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
+mod update_node_provider;
 
 #[test]
 fn test_time_warp() {
@@ -1637,7 +1638,7 @@ fn test_compute_ballots_for_new_proposal() {
         neuron_id_or_subaccount: None,
         command: None,
     }));
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
 
@@ -1657,7 +1658,7 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     // Similar to previous; this time though, Action::ManageNeuron, the weird
@@ -1688,7 +1689,7 @@ fn test_compute_ballots_for_new_proposal() {
     // Not affected by refresh.
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
@@ -1704,5 +1705,132 @@ fn test_compute_ballots_for_new_proposal() {
             200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
             3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
         }
+    );
+}
+
+#[test]
+fn test_validate_add_or_remove_node_provider() {
+    let node_provider_id = PrincipalId::new_user_test_id(1);
+    let existing_node_provider = api::NodeProvider {
+        id: Some(node_provider_id),
+        reward_account: None,
+    };
+
+    let governance = Governance::new(
+        api::Governance {
+            node_providers: vec![existing_node_provider.clone()],
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    let existing_node_provider = NodeProvider::from(existing_node_provider);
+
+    // Test case 1: No change field
+    let add_or_remove_no_change = AddOrRemoveNodeProvider { change: None };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_change);
+    assert!(result.is_err());
+
+    // Test case 2: ToAdd with new node provider (should succeed)
+    let new_node_provider_id = PrincipalId::new_user_test_id(2);
+    let valid_account = AccountIdentifier::new(new_node_provider_id, None);
+
+    let new_node_provider = NodeProvider {
+        id: Some(new_node_provider_id),
+        reward_account: Some(valid_account.into_proto_with_checksum()),
+    };
+    let add_or_remove_add_new = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(new_node_provider)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_new);
+    assert!(
+        result.is_ok(),
+        "Expected to succeed, but got error: {:?}",
+        result
+    );
+
+    // Test case 3: ToAdd with existing node provider (should fail)
+    let add_or_remove_add_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(existing_node_provider.clone())),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_existing);
+    assert!(result.is_err());
+
+    // Test case 4: ToAdd with invalid account identifier (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1, 2, 3], // Invalid length
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 5: ToAdd with 28-byte length (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1; 28], // 32-byte required, but only 28 bytes provided
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 6: ToRemove with existing node provider (should succeed)
+    let add_or_remove_remove_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(existing_node_provider)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_remove_existing);
+    assert!(result.is_ok());
+
+    // Test case 7: ToRemove with non-existing node provider (should fail)
+    let non_existing_node_provider = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(999)),
+        reward_account: None,
+    };
+    let add_or_remove_remove_non_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(non_existing_node_provider)),
+    };
+    let result =
+        governance.validate_add_or_remove_node_provider(&add_or_remove_remove_non_existing);
+    assert!(result.is_err());
+
+    // Test Case 8: ToAdd with no NodeProvider ID (should fail)
+    let node_provider_without_id = NodeProvider {
+        id: None,
+        reward_account: Some(valid_account.into_proto_with_checksum()),
+    };
+    let add_or_remove_no_id = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_without_id)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
+    assert!(
+        result.is_err(),
+        "Expected to fail, but got success: {:?}",
+        result
+    );
+
+    // Test Case 9: ToRemove with no NodeProvider ID (should fail)
+    let node_provider_without_id = NodeProvider {
+        id: None,
+        reward_account: None,
+    };
+    let add_or_remove_no_id = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(node_provider_without_id)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
+    assert!(
+        result.is_err(),
+        "Expected to fail, but got success: {:?}",
+        result
     );
 }

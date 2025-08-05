@@ -47,7 +47,7 @@ use crate::{
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
-    CanisterId, CountBytes, RegistryVersion, Time,
+    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
 };
 use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -60,8 +60,10 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
 };
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeSet,
     convert::{TryFrom, TryInto},
     mem::size_of,
     time::Duration,
@@ -310,11 +312,29 @@ pub fn validate_http_headers_and_body(
     Ok(())
 }
 
-impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestContext {
-    type Error = CanisterHttpRequestContextError;
+impl CanisterHttpRequestContext {
+    /// Calculate the size of all unbounded struct elements.
+    pub fn variable_parts_size(&self) -> NumBytes {
+        let request_size = self.url.len()
+            + self
+                .headers
+                .iter()
+                .map(|header| header.name.len() + header.value.len())
+                .sum::<usize>()
+            + self.body.as_ref().map_or(0, |body| body.len())
+            + self.transform.as_ref().map_or(0, |transform| {
+                transform.method_name.len() + transform.context.len()
+            });
+        NumBytes::from(request_size as u64)
+    }
 
-    fn try_from(input: (Time, &Request, CanisterHttpRequestArgs)) -> Result<Self, Self::Error> {
-        let (time, request, args) = input;
+    pub fn generate_from_args(
+        time: Time,
+        request: &Request,
+        args: CanisterHttpRequestArgs,
+        node_ids: &BTreeSet<NodeId>,
+        rng: &mut dyn RngCore,
+    ) -> Result<Self, CanisterHttpRequestContextError> {
         if let Some(transform_principal_id) = args.transform_principal() {
             if request.sender.get() != transform_principal_id {
                 return Err(CanisterHttpRequestContextError::TransformPrincipalId(
@@ -325,10 +345,6 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
                 ));
             }
         };
-
-        if let Some(false) = args.is_replicated {
-            return Err(CanisterHttpRequestContextError::NonReplicatedNotSupported);
-        }
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
@@ -358,6 +374,24 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             request_body.as_ref().unwrap_or(&vec![]),
         )?;
 
+        let replication = match args.is_replicated {
+            Some(false) => {
+                if node_ids.is_empty() {
+                    return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
+                }
+
+                let random_index = rng.gen_range(0..node_ids.len());
+
+                let delegated_node_id = node_ids
+                    .iter()
+                    .nth(random_index)
+                    .ok_or(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)?; // never panic.
+
+                Replication::NonReplicated(*delegated_node_id)
+            }
+            _ => Replication::FullyReplicated,
+        };
+
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
@@ -380,25 +414,8 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             },
             transform: args.transform.map(From::from),
             time,
-            replication: Replication::FullyReplicated,
+            replication,
         })
-    }
-}
-
-impl CanisterHttpRequestContext {
-    /// Calculate the size of all unbounded struct elements.
-    pub fn variable_parts_size(&self) -> NumBytes {
-        let request_size = self.url.len()
-            + self
-                .headers
-                .iter()
-                .map(|header| header.name.len() + header.value.len())
-                .sum::<usize>()
-            + self.body.as_ref().map_or(0, |body| body.len())
-            + self.transform.as_ref().map_or(0, |transform| {
-                transform.method_name.len() + transform.context.len()
-            });
-        NumBytes::from(request_size as u64)
     }
 }
 
@@ -432,6 +449,7 @@ pub enum CanisterHttpRequestContextError {
     TooLargeHeaders(usize),
     TooLargeRequest(usize),
     NonReplicatedNotSupported,
+    NoNodesAvailableForDelegation,
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -494,6 +512,12 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Canister HTTP requests with is_replicated=false are not supported".to_string(),
+                )
+            }
+            CanisterHttpRequestContextError::NoNodesAvailableForDelegation => {
+                UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "No nodes available for delegation for non-replicated canister HTTP request.".to_string(),
                 )
             }
         }
@@ -679,6 +703,7 @@ pub struct CanisterHttpResponseMetadata {
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub registry_version: RegistryVersion,
+    pub replica_version: ReplicaVersion,
 }
 
 impl CountBytes for CanisterHttpResponseMetadata {

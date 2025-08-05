@@ -39,6 +39,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::types::*;
 use ic_system_test_driver::util::*;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
@@ -225,7 +226,11 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                 balance_after < balance_before
                     && balance_before - balance_after
                         > cycles_account_manager
-                            .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
+                            .ingress_induction_cost_from_bytes(
+                                NumBytes::new(bytes.len() as u64),
+                                1,
+                                CanisterCyclesCostSchedule::Normal
+                            )
                             .get()
             );
         }

@@ -14,10 +14,9 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-            get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
-            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
-            read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
+            get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
+            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+            get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
         test_setup::InfraProvider,
@@ -28,7 +27,7 @@ use anyhow::{bail, Context, Result};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::guestos_bootstrap_image::BootstrapOptions;
+use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -39,7 +38,7 @@ use ic_prep_lib::{
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
@@ -96,12 +95,7 @@ pub fn init_ic(
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
-    let replica_version = if ic.with_mainnet_config {
-        get_mainnet_nns_revision()
-    } else {
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
-    };
-
+    let replica_version = get_guestos_img_version()?;
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
     let initial_replica_version = InitialReplicaVersion {
         version: replica_version.clone(),
@@ -187,25 +181,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = {
-        if ic.has_malicious_behaviours() {
-            warn!(
-                logger,
-                "Using malicious guestos update image for IC config."
-            );
-            (
-                get_malicious_ic_os_update_img_sha256()?,
-                get_malicious_ic_os_update_img_url()?,
-            )
-        } else if ic.with_mainnet_config {
-            (
-                test_env.get_mainnet_ic_os_update_img_sha256()?,
-                get_mainnet_ic_os_update_img_url()?,
-            )
-        } else {
-            (get_ic_os_update_img_sha256()?, get_ic_os_update_img_url()?)
-        }
-    };
+    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+        get_guestos_initial_update_img_sha256()?,
+        get_guestos_initial_update_img_url()?,
+    );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
@@ -265,11 +244,11 @@ pub fn setup_and_start_vms(
         let t_farm = farm.clone();
         let t_env = env.clone();
         let ic_name = ic.name();
-        let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let malicious_behavior = ic.get_malicious_behavior_of_node(node.node_id);
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
-        nodes_info.insert(node.node_id, malicious_behaviour.clone());
+        nodes_info.insert(node.node_id, malicious_behavior.clone());
         let tnet_node = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => tnet
                 .nodes
@@ -283,7 +262,7 @@ pub fn setup_and_start_vms(
             create_config_disk_image(
                 &ic_name,
                 &node,
-                malicious_behaviour,
+                malicious_behavior,
                 query_stats_epoch_length,
                 ipv4_config,
                 domain,
@@ -374,7 +353,7 @@ pub fn upload_config_disk_image(
 fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
-    malicious_behavior: Option<MaliciousBehaviour>,
+    malicious_behavior: Option<MaliciousBehavior>,
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
@@ -584,8 +563,8 @@ pub fn setup_nested_vms(
         for node in nodes {
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
-                let url = Url::parse(&std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?)?;
-                let hash = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?;
+                let url = get_setupos_img_url()?;
+                let hash = get_setupos_img_sha256()?;
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =
@@ -687,7 +666,7 @@ fn create_setupos_config_image(
         .arg(cpu)
         .arg("--nr-of-vcpus")
         .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-url")
+        .arg("--nns-urls")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)

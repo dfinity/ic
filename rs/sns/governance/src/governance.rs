@@ -1,5 +1,13 @@
+use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::Metrics;
+use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
+use crate::pb::v1::governance::GovernanceCachedMetrics;
+use crate::pb::v1::{
+    valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
+    VotingPowerMetrics,
+};
+use crate::proposal::TreasuryAccount;
+use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -22,8 +30,8 @@ use crate::{
     pb::{
         sns_root_types::{
             ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-            RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-            SetDappControllersResponse,
+            RegisterDappCanistersRequest, RegisterDappCanistersResponse, RegisterExtensionRequest,
+            RegisterExtensionResponse, SetDappControllersRequest, SetDappControllersResponse,
         },
         v1::{
             claim_swap_neurons_response::SwapNeuron,
@@ -55,18 +63,17 @@ use crate::{
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
             FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMetricsRequest, GetMode, GetModeResponse, GetNeuron,
-            GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -101,7 +108,7 @@ use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, ONE_DAY_SECONDS,
+    NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -117,6 +124,7 @@ use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
@@ -135,6 +143,7 @@ use std::{
     thread::LocalKey,
 };
 use strum::IntoEnumIterator;
+use swap_types::{GetDerivedStateRequest, GetDerivedStateResponse};
 
 lazy_static! {
     pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction =
@@ -614,10 +623,10 @@ pub struct Governance {
     pub env: Box<dyn Environment>,
 
     /// Implementation of the interface with the SNS ledger canister.
-    ledger: Box<dyn ICRC1Ledger>,
+    pub(crate) ledger: Box<dyn ICRC1Ledger>,
 
     // Implementation of the interface pointing to the NNS's ICP ledger canister
-    nns_ledger: Box<dyn ICRC1Ledger>,
+    pub(crate) nns_ledger: Box<dyn ICRC1Ledger>,
 
     /// Implementation of the interface with the CMC canister.
     cmc: Box<dyn CMC>,
@@ -1126,11 +1135,11 @@ impl Governance {
         caller: &PrincipalId,
         disburse: &manage_neuron::Disburse,
     ) -> Result<u64, GovernanceError> {
-        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
+        // First check authorized
         let neuron = self.get_neuron_result(id)?;
-
         neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
 
+        // Check that the neuron is dissolved.
         let state = neuron.state(self.env.now());
         if state != NeuronState::Dissolved {
             return Err(GovernanceError::new_with_message(
@@ -1138,6 +1147,8 @@ impl Governance {
                 format!("Neuron {} is NOT dissolved. It is in state {:?}", id, state),
             ));
         }
+
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
 
         let from_subaccount = neuron.subaccount()?;
 
@@ -1155,17 +1166,17 @@ impl Governance {
             })?,
         };
 
-        let fees_amount_e8s = neuron.neuron_fees_e8s;
+        let max_burnable_fee = self.maximum_burnable_fees_for_neuron(neuron)?;
+
         // Calculate the amount to transfer and make sure no matter what the user
         // disburses we still take the neuron management fees into account.
-        //
-        // Note that the implementation of stake_e8s() is effectively:
-        //   neuron.cached_neuron_stake_e8s.saturating_sub(neuron.neuron_fees_e8s)
-        // So there is symmetry here in that we are subtracting
-        // fees_amount_e8s from both sides of this `map_or`.
-        let mut disburse_amount_e8s = disburse.amount.as_ref().map_or(neuron.stake_e8s(), |a| {
-            a.e8s.saturating_sub(fees_amount_e8s)
-        });
+        let mut disburse_amount_e8s = disburse
+            .amount
+            .as_ref()
+            .map_or(neuron.stake_e8s(), |a| a.e8s);
+
+        // You cannot disburse more than the neuron's stake, which includes fees.
+        disburse_amount_e8s = disburse_amount_e8s.min(neuron.stake_e8s());
 
         // Subtract the transaction fee from the amount to disburse since it will
         // be deducted from the source (the neuron's) account.
@@ -1180,34 +1191,35 @@ impl Governance {
         // Transfer 1 - burn the neuron management fees, but only if the value
         // exceeds the cost of a transaction fee, as the ledger doesn't support
         // burn transfers for an amount less than the transaction fee.
-        if fees_amount_e8s > transaction_fee_e8s {
+        if max_burnable_fee > transaction_fee_e8s {
             let _result = self
                 .ledger
                 .transfer_funds(
-                    fees_amount_e8s,
+                    max_burnable_fee,
                     0, // Burning transfers don't pay a fee.
                     Some(from_subaccount),
                     self.governance_minting_account(),
                     self.env.now(),
                 )
                 .await?;
-        }
 
-        let nid = id.to_string();
-        let neuron = self
-            .proto
-            .neurons
-            .get_mut(&nid)
-            .expect("Expected the parent neuron to exist");
+            // We only update the cached_neuron_stake_e8s and neuron_fees_e8s if we actually
+            // burn fees, otherwise this leads to ledger and governance getting out of sync.
+            let nid = id.to_string();
+            let neuron = self
+                .proto
+                .neurons
+                .get_mut(&nid)
+                .expect("Expected the parent neuron to exist");
 
-        // Update the neuron's stake and management fees to reflect the burning
-        // above.
-        if neuron.cached_neuron_stake_e8s > fees_amount_e8s {
-            neuron.cached_neuron_stake_e8s -= fees_amount_e8s;
-        } else {
-            neuron.cached_neuron_stake_e8s = 0;
+            // Update the neuron's stake and management fees to reflect the burning
+            // above.
+            neuron.cached_neuron_stake_e8s = neuron
+                .cached_neuron_stake_e8s
+                .saturating_sub(max_burnable_fee);
+
+            neuron.neuron_fees_e8s = neuron.neuron_fees_e8s.saturating_sub(max_burnable_fee);
         }
-        neuron.neuron_fees_e8s = 0;
 
         // Transfer 2 - Disburse to the chosen account. This may fail if the
         // user told us to disburse more than they had in their account (but
@@ -1223,11 +1235,49 @@ impl Governance {
             )
             .await?;
 
+        let nid = id.to_string();
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&nid)
+            .expect("Expected the parent neuron to exist");
+
         let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
         neuron.cached_neuron_stake_e8s = neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
 
         Ok(block_height)
+    }
+
+    /// Returns the maximum amount of fees that can be burned for a given neuron.
+    /// This takes into account the open proposals that this neuron has submitted,
+    /// ensuring we don't burn fees that could potentially be refunded if those
+    /// proposals are accepted.
+    fn maximum_burnable_fees_for_neuron(&self, neuron: &Neuron) -> Result<u64, GovernanceError> {
+        let neuron_id = neuron.id.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(ErrorType::NotFound, "Neuron does not have an ID")
+        })?;
+
+        // Calculate the total reject costs from all open proposals submitted by this neuron
+        let total_open_proposal_reject_costs = self
+            .proto
+            .proposals
+            .values()
+            .filter(|proposal_data| {
+                // Only consider open proposals where this neuron is the proposer
+                proposal_data.proposer.as_ref() == Some(neuron_id)
+                    && proposal_data.status() == ProposalDecisionStatus::Open
+            })
+            .map(|proposal_data| proposal_data.reject_cost_e8s)
+            .sum::<u64>();
+
+        // The maximum burnable amount is the total fees minus any fees that are
+        // tied up in open proposals (which could potentially be refunded)
+        let max_burnable = neuron
+            .neuron_fees_e8s
+            .saturating_sub(total_open_proposal_reject_costs);
+
+        Ok(max_burnable)
     }
 
     /// Splits a (parent) neuron into two neurons (the parent and child neuron).
@@ -2011,11 +2061,12 @@ impl Governance {
             .unwrap_or(u64::MAX);
     }
 
-    pub async fn get_metrics(
-        &self,
-        request: GetMetricsRequest,
-    ) -> Result<Metrics, GovernanceError> {
-        let num_recently_submitted_proposals = self.recent_proposals(request.time_window_seconds);
+    pub async fn get_metrics(&self, time_window_seconds: u64) -> Result<Metrics, GovernanceError> {
+        let num_recently_submitted_proposals =
+            self.recently_submitted_proposals(time_window_seconds);
+
+        let num_recently_executed_proposals = self.recently_executed_proposals(time_window_seconds);
+
         let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
 
         let last_ledger_block_timestamp = icrc_ledger_helper
@@ -2025,13 +2076,33 @@ impl Governance {
                 GovernanceError::new_with_message(ErrorType::External, error_mesage)
             })?;
 
+        let treasury_metrics = self
+            .proto
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.treasury_metrics.clone())
+            .unwrap_or_default();
+
+        let voting_power_metrics = self
+            .proto
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.voting_power_metrics)
+            .unwrap_or_default();
+
+        let genesis_timestamp_seconds = self.proto.genesis_timestamp_seconds;
+
         Ok(Metrics {
             num_recently_submitted_proposals,
+            num_recently_executed_proposals,
             last_ledger_block_timestamp,
+            treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
         })
     }
 
-    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
+    fn recently_submitted_proposals(&self, time_window_seconds: u64) -> u64 {
         self.proto
             .proposals
             .values()
@@ -2040,6 +2111,19 @@ impl Governance {
                 self.env
                     .now()
                     .saturating_sub(proposal.proposal_creation_timestamp_seconds)
+                    <= time_window_seconds
+            })
+            .count() as u64
+    }
+
+    fn recently_executed_proposals(&self, time_window_seconds: u64) -> u64 {
+        self.proto
+            .proposals
+            .values()
+            .filter(|proposal| {
+                self.env
+                    .now()
+                    .saturating_sub(proposal.executed_timestamp_seconds)
                     <= time_window_seconds
             })
             .count() as u64
@@ -2107,6 +2191,10 @@ impl Governance {
                 self.perform_execute_generic_nervous_system_function(call)
                     .await
             }
+            Action::ExecuteExtensionOperation(execute_extension_operation) => {
+                self.perform_execute_extension_operation(execute_extension_operation)
+                    .await
+            }
             Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 self.perform_add_generic_nervous_system_function(nervous_system_function)
             }
@@ -2117,10 +2205,9 @@ impl Governance {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
-            Action::RegisterExtension(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension proposals are not supported yet.",
-            )),
+            Action::RegisterExtension(register_extension) => {
+                self.perform_register_extension(register_extension).await
+            }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2245,6 +2332,133 @@ impl Governance {
                 Ok(())
             },
         }
+    }
+
+    async fn register_extension_with_root(
+        &self,
+        extension_canister_id: CanisterId,
+    ) -> Result<(), GovernanceError> {
+        let payload = candid::Encode!(&RegisterExtensionRequest {
+            canister_id: Some(extension_canister_id.get()),
+        })
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidPrincipal,
+                format!("Could not encode RegisterExtensionRequest: {err:?}"),
+            )
+        })?;
+
+        let reply = self
+            .env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "register_extension",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })?;
+
+        let RegisterExtensionResponse { result } =
+            candid::Decode!(&reply, RegisterExtensionResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Could not decode RegisterExtensionResponse: {err:?}"),
+                )
+            })?;
+
+        if let Some(register_extension_response::Result::Err(CanisterCallError {
+            code,
+            description,
+        })) = result
+        {
+            let code = if let Some(code) = code {
+                code.to_string()
+            } else {
+                "<no code>".to_string()
+            };
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Root.register_extension failed with code {}: {}",
+                    code, description
+                ),
+            ));
+        }
+
+        log!(
+            INFO,
+            "Root.register_extension succeeded for canister {}",
+            extension_canister_id.get()
+        );
+
+        Ok(())
+    }
+
+    async fn perform_register_extension(
+        &mut self,
+        register_extension: RegisterExtension,
+    ) -> Result<(), GovernanceError> {
+        // Step 0. Validate the RegisterExtension proposal.
+        let ValidatedRegisterExtension { wasm, init, spec } =
+            register_extension.try_into().map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid RegisterExtension: {err:?}"),
+                )
+            })?;
+
+        let Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = wasm
+        else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "RegisterExtension proposal must contain a chunked wasm module.",
+            ));
+        };
+
+        // Use the store canister to install the extension itself.
+        let extension_canister_id = store_canister_id;
+
+        // Step 1. Register the extension with Root.
+        self.register_extension_with_root(extension_canister_id)
+            .await?;
+
+        // Step 2. Validate the init arguments.
+        if spec.kind != ExtensionKind::TreasuryManager {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Only TreasuryManager extensions are currently supported.",
+            ));
+        }
+
+        let treasury_manager_canister_id = extension_canister_id;
+
+        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init(init)?;
+
+        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
+            .await?;
+
+        self.upgrade_non_root_canister(
+            treasury_manager_canister_id,
+            Wasm::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            },
+            arg,
+            CanisterInstallMode::Install,
+        )
+        .await?;
+
+        Ok(())
     }
 
     /// Registers a list of Dapp canister ids in the root canister.
@@ -2429,6 +2643,16 @@ impl Governance {
         }
     }
 
+    async fn perform_execute_extension_operation(
+        &self,
+        _execute_extension_operation: ExecuteExtensionOperation,
+    ) -> Result<(), GovernanceError> {
+        Err(GovernanceError::new_with_message(
+            ErrorType::InvalidCommand,
+            "ExecuteExtensionOperation is not supported yet.",
+        ))
+    }
+
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
     /// NervousSystemParameters
     fn perform_manage_nervous_system_parameters(
@@ -2549,7 +2773,7 @@ impl Governance {
 
     async fn upgrade_non_root_canister(
         &mut self,
-        target_canister_id: CanisterId,
+        canister_id: CanisterId,
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
@@ -2565,7 +2789,7 @@ impl Governance {
             let stop_before_installing = true;
 
             let mut change_canister_arg =
-                ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
+                ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
                     .with_arg(arg)
                     .with_mode(mode);
 
@@ -2819,6 +3043,19 @@ impl Governance {
         Ok(())
     }
 
+    fn sns_treasury_icp_subaccount(&self) -> Option<Subaccount> {
+        None
+    }
+
+    fn sns_treasury_sns_token_subaccount(&self) -> Option<Subaccount> {
+        // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
+        let treasury_subaccount = compute_distribution_subaccount_bytes(
+            self.env.canister_id().get(),
+            TREASURY_SUBACCOUNT_NONCE,
+        );
+        Some(treasury_subaccount)
+    }
+
     async fn perform_transfer_sns_treasury_funds(
         &mut self,
         proposal_id: u64, // This is just to control concurrency.
@@ -2863,7 +3100,7 @@ impl Governance {
                 .transfer_funds(
                     transfer.amount_e8s,
                     NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
-                    None,
+                    self.sns_treasury_icp_subaccount(),
                     to,
                     transfer.memo.unwrap_or(0),
                 )
@@ -2877,16 +3114,12 @@ impl Governance {
                 }),
             TransferFrom::SnsTokenTreasury => {
                 let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-                // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-                let treasury_subaccount = compute_distribution_subaccount_bytes(
-                    self.env.canister_id().get(),
-                    TREASURY_SUBACCOUNT_NONCE,
-                );
+
                 self.ledger
                     .transfer_funds(
                         transfer.amount_e8s,
                         transaction_fee_e8s,
-                        Some(treasury_subaccount),
+                        self.sns_treasury_sns_token_subaccount(),
                         to,
                         transfer.memo.unwrap_or(0),
                     )
@@ -3227,7 +3460,7 @@ impl Governance {
     }
 
     /// Returns the ledger's transaction fee as stored in the service nervous parameters.
-    fn transaction_fee_e8s_or_panic(&self) -> u64 {
+    pub(crate) fn transaction_fee_e8s_or_panic(&self) -> u64 {
         self.nervous_system_parameters_or_panic()
             .transaction_fee_e8s
             .expect("NervousSystemParameters must have transaction_fee_e8s")
@@ -3324,7 +3557,10 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
+        // TODO: return the optional extension spec
         let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
+
+        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
 
         // This should not panic, because the proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
@@ -3344,8 +3580,7 @@ impl Governance {
             &self.proto.id_to_nervous_system_functions,
         )?;
 
-        let reject_cost_e8s = self
-            .nervous_system_parameters_or_panic()
+        let reject_cost_e8s = nervous_system_parameters
             .reject_cost_e8s
             .expect("NervousSystemParameters must have reject_cost_e8s");
 
@@ -3361,8 +3596,7 @@ impl Governance {
         // Check that the caller is authorized to make a proposal
         proposer.check_authorized(caller, NeuronPermissionType::SubmitProposal)?;
 
-        let min_dissolve_delay_for_vote = self
-            .nervous_system_parameters_or_panic()
+        let min_dissolve_delay_for_vote = nervous_system_parameters
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .expect("NervousSystemParameters must have min_dissolve_delay_for_vote");
 
@@ -3415,24 +3649,9 @@ impl Governance {
         // proposal creation (i.e., now).
         //
         // The electoral roll to put into the proposal.
-        let mut electoral_roll = BTreeMap::<String, Ballot>::new();
-        let mut total_power: u128 = 0;
-
-        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
-
-        // Voting power bonus parameters.
-        let max_dissolve_delay = nervous_system_parameters
-            .max_dissolve_delay_seconds
-            .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
-        let max_age_bonus = nervous_system_parameters
-            .max_neuron_age_for_age_bonus
-            .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
-        let max_dissolve_delay_bonus_percentage = nervous_system_parameters
-            .max_dissolve_delay_bonus_percentage
-            .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
-        let max_age_bonus_percentage = nervous_system_parameters
-            .max_age_bonus_percentage
-            .expect("NervousSystemParameters must have max_age_bonus_percentage");
+        let (_, electoral_roll) = self
+            .compute_ballots_for_new_proposal()
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::PreconditionFailed, err))?;
 
         // Define topic-based criticality based on the current mapping from proposals to topics.
         let (proposal_topic, proposal_criticality) = self
@@ -3474,47 +3693,6 @@ impl Governance {
             )
         };
 
-        for (k, v) in self.proto.neurons.iter() {
-            // If this neuron is eligible to vote, record its
-            // voting power at the time of proposal creation (now).
-            if v.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_for_vote {
-                // Not eligible due to dissolve delay.
-                continue;
-            }
-            let power = v.voting_power(
-                now_seconds,
-                max_dissolve_delay,
-                max_age_bonus,
-                max_dissolve_delay_bonus_percentage,
-                max_age_bonus_percentage,
-            );
-            total_power += power as u128;
-            electoral_roll.insert(
-                k.clone(),
-                Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power: power,
-                    cast_timestamp_seconds: 0,
-                },
-            );
-        }
-        if total_power >= (u64::MAX as u128) {
-            // The way the neurons are configured, the total voting
-            // power on this proposal would overflow a u64!
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Voting power overflow.",
-            ));
-        }
-        if electoral_roll.is_empty() {
-            // Cannot make a proposal with no eligible voters.  This
-            // is a precaution that shouldn't happen as we check that
-            // the voter is allowed to vote.
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "No eligible voters.",
-            ));
-        }
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
@@ -5002,6 +5180,315 @@ impl Governance {
         }
     }
 
+    async fn treasury_valuation_amount_e8s(&self, treasury: i32) -> Result<u64, String> {
+        let token = interpret_token_code(treasury).map_err(|err| {
+            format!(
+                "Failed to interpret treasury token code {}: {}",
+                treasury, err
+            )
+        })?;
+
+        let treasury_valuation_result = assess_treasury_balance(
+            token,
+            self.env.canister_id(),
+            self.ledger.canister_id(),
+            self.proto.swap_canister_id_or_panic(),
+        )
+        .await;
+
+        let treasury_valuation = treasury_valuation_result
+            .map_err(|err| format!("Failed to assess treasury balance for {:?}: {}", token, err))?;
+
+        let amount_e8s =
+            tokens_to_e8s(treasury_valuation.valuation_factors.tokens).map_err(|err| {
+                format!(
+                    "Failed to convert treasury balance to e8s for {:?}: {}",
+                    token, err
+                )
+            })?;
+
+        Ok(amount_e8s)
+    }
+
+    fn treasury_account(&self, treasury: i32) -> Result<Account, String> {
+        let token = interpret_token_code(treasury).map_err(|err| {
+            format!(
+                "Failed to interpret treasury token code {}: {}",
+                treasury, err
+            )
+        })?;
+
+        let treasury_account = token
+            .treasury_account(self.env.canister_id())
+            .map_err(|err| {
+                format!(
+                    "Failed to get treasury account for token {:?}: {}",
+                    token, err
+                )
+            })?;
+
+        Ok(treasury_account)
+    }
+
+    async fn original_treasury_icp_amount_e8s(&self) -> Result<u64, String> {
+        let request = Encode!(&GetDerivedStateRequest {})
+            .map_err(|err| format!("Failed to encode Swap.get_derived_state request: {:?}", err))?;
+
+        let derived_state_result = self
+            .env
+            .call_canister(
+                self.proto.swap_canister_id_or_panic(),
+                "get_derived_state",
+                request,
+            )
+            .await
+            .map_err(|err| format!("Calling Swap.get_derived_state failed: {:?}", err))
+            .and_then(|response| {
+                Decode!(&response, GetDerivedStateResponse).map_err(|err| {
+                    format!(
+                        "Failed to decode Swap.get_derived_state response: {:?}",
+                        err
+                    )
+                })
+            })?;
+
+        Ok(derived_state_result.buyer_total_icp_e8s.unwrap_or_default())
+    }
+
+    /// Some metrics are not supposed to be ever updated, just computed once and stored next
+    /// to dynamically updated metrics (e.g., the starting amount of ICP collected via the swap).
+    ///
+    /// This function takes care of initializing those metrics. It assumes that
+    /// `compute_cached_metrics` will be called after to (re-)compute the dynamic metrics.
+    pub(crate) async fn init_cached_metrics(&mut self) {
+        let now_seconds = self.env.now();
+
+        let mut treasury_metrics = vec![];
+
+        let original_icp_amount_e8s = match self.original_treasury_icp_amount_e8s().await {
+            Ok(amount) => amount,
+            Err(err) => {
+                log!(ERROR, "Failed to init_cached_metrics: {}", err);
+                0 // Default to 0 if we cannot get the valuation.
+            }
+        };
+
+        // TODO: This value could be fetched using `SnsIndex.get_account_transactions` to
+        // TODO: get the initial amount of SNS tokens in the treasury.
+        let original_sns_token_amount_e8s = 0;
+
+        for (treasury, ledger_canister_id, original_amount_e8s) in [
+            (
+                valuation::Token::Icp,
+                NNS_LEDGER_CANISTER_ID,
+                original_icp_amount_e8s,
+            ),
+            (
+                valuation::Token::SnsToken,
+                self.ledger.canister_id(),
+                original_sns_token_amount_e8s,
+            ),
+        ] {
+            let ledger_canister_id = Some(ledger_canister_id.get());
+            let name = Some(treasury.as_str_name().to_string());
+            let treasury = i32::from(treasury);
+            let account = match self.treasury_account(treasury) {
+                Ok(account) => Some(account.into()),
+                Err(err) => {
+                    log!(ERROR, "Failed to init_cached_metrics: {}", err);
+                    None
+                }
+            };
+
+            treasury_metrics.push(TreasuryMetrics {
+                // These fields remain unchanged, but now is the time to compute them.
+                name,
+                treasury,
+                ledger_canister_id,
+                account,
+                original_amount_e8s,
+
+                // These fields can change over time; they will be computed later.
+                amount_e8s: 0,
+                timestamp_seconds: 0,
+            });
+        }
+
+        let metrics = GovernanceCachedMetrics {
+            treasury_metrics,
+            timestamp_seconds: now_seconds,
+            ..Default::default()
+        };
+
+        self.proto.metrics.replace(metrics);
+    }
+
+    /// Computes the total potential voting power of the governance canister and ballots.
+    fn compute_ballots_for_new_proposal(&self) -> Result<(u64, BTreeMap<String, Ballot>), String> {
+        let now_seconds = self.env.now();
+
+        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
+
+        // Voting power bonus parameters.
+        let max_dissolve_delay = nervous_system_parameters
+            .max_dissolve_delay_seconds
+            .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
+
+        let max_age_bonus = nervous_system_parameters
+            .max_neuron_age_for_age_bonus
+            .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
+
+        let max_dissolve_delay_bonus_percentage = nervous_system_parameters
+            .max_dissolve_delay_bonus_percentage
+            .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
+
+        let max_age_bonus_percentage = nervous_system_parameters
+            .max_age_bonus_percentage
+            .expect("NervousSystemParameters must have max_age_bonus_percentage");
+
+        let min_dissolve_delay_for_vote = nervous_system_parameters
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .expect("NervousSystemParameters must have min_dissolve_delay_for_vote");
+
+        let mut electoral_roll = BTreeMap::<String, Ballot>::new();
+        let mut total_power: u128 = 0;
+
+        for (k, v) in self.proto.neurons.iter() {
+            // If this neuron is eligible to vote, record its
+            // voting power at the time of proposal creation (now).
+            if v.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_for_vote {
+                // Not eligible due to dissolve delay.
+                continue;
+            }
+
+            let voting_power = v.voting_power(
+                now_seconds,
+                max_dissolve_delay,
+                max_age_bonus,
+                max_dissolve_delay_bonus_percentage,
+                max_age_bonus_percentage,
+            );
+
+            total_power += voting_power as u128;
+            electoral_roll.insert(
+                k.clone(),
+                Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds: 0,
+                },
+            );
+        }
+
+        if total_power >= (u64::MAX as u128) {
+            // The way the neurons are configured, the total voting
+            // power on this proposal would overflow a u64!
+            return Err("Voting power overflow.".to_string());
+        }
+        if electoral_roll.is_empty() {
+            // Cannot make a proposal with no eligible voters.  This
+            // is a precaution that shouldn't happen as we check that
+            // the voter is allowed to vote.
+            return Err("No eligible voters.".to_string());
+        }
+
+        Ok((total_power as u64, electoral_roll))
+    }
+
+    pub(crate) async fn compute_cached_metrics(&mut self) {
+        let now_seconds = self.env.now();
+
+        if let Some(GovernanceCachedMetrics {
+            timestamp_seconds, ..
+        }) = self.proto.metrics
+        {
+            if now_seconds.saturating_sub(timestamp_seconds) < ONE_HOUR_SECONDS {
+                return;
+            }
+        }
+
+        let num_treasury_metrics = self
+            .proto
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.treasury_metrics.len())
+            .unwrap_or_default();
+
+        if num_treasury_metrics < 2 {
+            // If we don't have too few treasury metrics, initialize them.
+            log!(
+                INFO,
+                "Initializing cached metrics at {} ...",
+                format_timestamp_for_humans(now_seconds),
+            );
+            self.init_cached_metrics().await;
+        } else {
+            log!(
+                INFO,
+                "Refreshing cached metrics at {} ...",
+                format_timestamp_for_humans(now_seconds),
+            );
+        }
+
+        let mut metrics = self.proto.metrics.clone().unwrap_or_default();
+
+        metrics.timestamp_seconds = now_seconds;
+
+        let mut treasury_metrics = vec![];
+
+        for TreasuryMetrics {
+            // These fields remain unchanged.
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            original_amount_e8s,
+
+            // These fields can change over time.
+            amount_e8s: _,
+            timestamp_seconds: _,
+        } in metrics.treasury_metrics
+        {
+            let amount_e8s = match self.treasury_valuation_amount_e8s(treasury).await {
+                Ok(amount) => amount,
+                Err(err) => {
+                    log!(ERROR, "Failed to compute_cached_metrics: {}", err);
+                    continue;
+                }
+            };
+
+            treasury_metrics.push(TreasuryMetrics {
+                treasury,
+                name,
+                ledger_canister_id,
+                account,
+                amount_e8s,
+                original_amount_e8s,
+                timestamp_seconds: now_seconds,
+            });
+        }
+
+        metrics.treasury_metrics = treasury_metrics;
+
+        match self.compute_ballots_for_new_proposal() {
+            Ok((governance_total_potential_voting_power, _)) => {
+                metrics.voting_power_metrics = Some(VotingPowerMetrics {
+                    governance_total_potential_voting_power,
+                    timestamp_seconds: now_seconds,
+                });
+            }
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Failed to compute total potential voting power: {}",
+                    err
+                );
+            }
+        };
+
+        self.proto.metrics.replace(metrics);
+    }
+
     /// Garbage collect obsolete data from the governance canister.
     ///
     /// Current implementation only garbage collects proposals - not neurons.
@@ -5142,6 +5629,8 @@ impl Governance {
         self.maybe_finalize_disburse_maturity().await;
 
         self.maybe_move_staked_maturity();
+
+        self.compute_cached_metrics().await;
 
         self.maybe_gc();
     }
@@ -6233,11 +6722,16 @@ fn get_neuron_id_from_memo_and_controller(
     ))
 }
 
+mod swap_types;
+
 #[cfg(test)]
 mod assorted_governance_tests;
 
 #[cfg(test)]
 mod cast_vote_and_cascade_follow_tests;
+
+#[cfg(test)]
+mod disburse_neuron_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;

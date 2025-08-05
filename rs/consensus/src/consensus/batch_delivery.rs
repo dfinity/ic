@@ -8,8 +8,8 @@ use crate::consensus::{
 };
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_idkg::utils::{
-    generate_responses_to_signature_request_contexts, get_idkg_subnet_public_keys,
-    get_pre_signature_ids_to_deliver,
+    generate_responses_to_signature_request_contexts,
+    get_idkg_subnet_public_keys_and_pre_signatures,
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
@@ -29,7 +29,9 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
+    batch::{
+        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
+    },
     consensus::{
         idkg::{self},
         Block, HasVersion,
@@ -154,13 +156,13 @@ pub fn deliver_batches(
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
-        let mut idkg_subnet_public_keys =
-            get_idkg_subnet_public_keys(&block, &summary_block, pool, log);
+        let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
+            get_idkg_subnet_public_keys_and_pre_signatures(&block, &summary_block, pool, log);
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
 
         // Add vetKD keys to this map as well
-        let (mut ni_dkg_subnet_public_keys, ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
-        chain_key_subnet_public_keys.append(&mut ni_dkg_subnet_public_keys);
+        let (mut nidkg_subnet_public_keys, nidkg_ids) = get_vetkey_public_keys(dkg_summary, log);
+        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
 
         // If the subnet contains chain keys, log them on every summary block
         if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
@@ -236,9 +238,11 @@ pub fn deliver_batches(
             requires_full_state_hash,
             messages: batch_messages,
             randomness,
-            chain_key_subnet_public_keys,
-            idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
-            ni_dkg_ids,
+            chain_key_data: ChainKeyData {
+                master_public_keys: chain_key_subnet_public_keys,
+                idkg_pre_signatures,
+                nidkg_ids,
+            },
             registry_version: block.context.registry_version,
             time: block.context.time,
             consensus_responses,
@@ -489,7 +493,7 @@ fn generate_dkg_response_payload(
     }
 }
 
-/// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
+/// Creates responses to `ReshareChainKeyArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
     idkg_payload: &idkg::IDkgPayload,

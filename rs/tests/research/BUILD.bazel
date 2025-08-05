@@ -1,5 +1,5 @@
 load("//bazel:defs.bzl", "symlink_dirs")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -14,8 +14,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
             "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         },
         tags = ["experimental_system_test_colocation"],
-        target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-        runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
+        runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
             "//hs/spec_compliance:ic-ref-test",
             "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
@@ -43,7 +42,6 @@ symlink_dirs(
     target_compatible_with = ["@platforms//os:linux"],
     targets = {
         "//rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz": "test-data",
-        "//rs/tests:wabt-tests": "test-data",
     },
     visibility = [
         "//rs:system-tests-pkg",

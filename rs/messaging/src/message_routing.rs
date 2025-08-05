@@ -16,6 +16,7 @@ use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
@@ -33,7 +34,7 @@ use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary};
+use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
 use ic_types::crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
@@ -855,7 +856,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .into_iter()
             .collect::<BTreeSet<_>>();
 
-        let node_public_keys = self.try_to_populate_node_public_keys(nodes, registry_version)?;
+        let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
@@ -901,6 +902,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
+        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
+            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
+                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
+        );
 
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
@@ -944,6 +949,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 provisional_whitelist,
                 chain_key_settings,
                 subnet_size,
+                node_ids: nodes,
+                registry_version,
+                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1041,7 +1049,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 })
                 .transpose()?
                 .unwrap_or_default();
-
+            let cost_schedule = CanisterCyclesCostSchedule::from(
+                CanisterCyclesCostScheduleProto::try_from(
+                    subnet_record.canister_cycles_cost_schedule,
+                )
+                .map_err(|err| {
+                    Persistent(format!(
+                        "'CanisterCyclesCostSchedule type from subnet record for subnet {}', err: {}",
+                        *subnet_id, err
+                    ))
+                })?,
+            );
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1050,6 +1068,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_type,
                     subnet_features,
                     chain_keys_held,
+                    cost_schedule,
                 },
             );
         }
@@ -1093,14 +1112,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     /// This method skips missing or invalid node keys so that the `read_registry` method does not stall the subnet.
     fn try_to_populate_node_public_keys(
         &self,
-        nodes: BTreeSet<NodeId>,
+        nodes: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> Result<NodePublicKeys, ReadRegistryError> {
         let mut node_public_keys: NodePublicKeys = BTreeMap::new();
         for node_id in nodes {
             let optional_public_key_proto = self
                 .registry
-                .get_crypto_key_for_node(node_id, KeyPurpose::NodeSigning, registry_version)
+                .get_crypto_key_for_node(*node_id, KeyPurpose::NodeSigning, registry_version)
                 .map_err(|err| {
                     registry_error(&format!("public key of node {}", node_id), None, err)
                 })?;
@@ -1111,7 +1130,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
                     match ic_ed25519::PublicKey::convert_raw_to_der(&public_key_proto.key_value) {
                         Ok(pk_der) => {
-                            node_public_keys.insert(node_id, pk_der);
+                            node_public_keys.insert(*node_id, pk_der);
                         }
                         Err(err) => {
                             self.metrics

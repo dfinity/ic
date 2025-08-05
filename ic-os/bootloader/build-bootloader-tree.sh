@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This builds the filesystem tree for the /boot hierarchy containing
-# the /grub and /boot/efi portions. From this, the grub and
+# the /boot/grub and /boot/efi portions. From this, the grub and
 # efi partitions of the disk image can be built.
 
 set -exo pipefail
@@ -31,14 +31,14 @@ sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
 
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
+BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
 sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
-    RUN mkdir -p /build/grub
-    RUN cp -r /usr/lib/grub/x86_64-efi /build/grub
+    RUN mkdir -p /build/boot/grub
+    RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
     RUN grub-mkimage --version
     RUN apt list --installed | grep grub
@@ -55,4 +55,4 @@ IMAGE_ID=$(cut -d':' -f2 <"${TMPDIR}/iidfile")
 CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "${IMAGE_ID}")
 
 sudo podman --root "${TMPFS}" export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
-tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot grub
+tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
