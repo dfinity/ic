@@ -158,14 +158,12 @@ fn hash_val(val: &RawHttpRequestVal) -> Vec<u8> {
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
         RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
-        RawHttpRequestVal::Map(map) => {
-            hash_of_map(map, |key, value| hash_key_val(key, value)).to_vec()
-        }
+        RawHttpRequestVal::Map(map) => hash_of_map(map, hash_key_val).to_vec(),
     }
 }
 
 pub(crate) fn hash_key_val(key: &String, val: &RawHttpRequestVal) -> Vec<u8> {
-    let mut key_hash = hash_string(key);
+    let mut key_hash = hash_string(key.as_str());
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
     key_hash
