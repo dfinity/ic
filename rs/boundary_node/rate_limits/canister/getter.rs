@@ -516,8 +516,8 @@ mod tests {
             removed_in_version: Some(5),
         };
         // rules are not ordered in the response, so just search
-        assert!(response.iter().any(|e| *e == rule_1));
-        assert!(response.iter().any(|e| *e == rule_2));
+        assert!(response.contains(&rule_1));
+        assert!(response.contains(&rule_2));
     }
 
     #[test]

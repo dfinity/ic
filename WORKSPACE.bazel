@@ -153,7 +153,7 @@ rust_register_toolchains(
         "fastbuild": "none",
         "opt": "none",
     }},
-    versions = ["1.86.0"],
+    versions = ["1.88.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
