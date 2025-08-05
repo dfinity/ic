@@ -27,8 +27,7 @@ bazel build \
 
 print_separator
 
-for FILE in "${DIRECTORY}"/*
-do
+for FILE in "${DIRECTORY}"/*; do
     echo "File: ${FILE}"
 
     ./bazel-bin/rs/nervous_system/tools/submit-motion-proposal/submit-motion-proposal \
