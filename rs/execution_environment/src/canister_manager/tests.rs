@@ -1308,6 +1308,7 @@ fn get_canister_status_of_self() {
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
+    assert_eq!(status.ready_for_migration(), false);
 }
 
 #[test]
@@ -1330,6 +1331,18 @@ fn get_canister_status_of_stopped_canister() {
             .unwrap();
         assert_eq!(status_res.status(), CanisterStatusType::Stopped);
         assert_eq!(status_res.ready_for_migration(), false);
+
+        // pretend it's ready for migration:
+        let status_res = canister_manager
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                true,
+            )
+            .unwrap();
+        assert_eq!(status_res.ready_for_migration(), true);
     });
 }
 
