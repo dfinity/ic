@@ -401,7 +401,7 @@ fn get_active_transcripts(
 
     if let Some(snapshot) = state_reader.get_certified_state_snapshot() {
         let state = snapshot.get_state();
-        
+
         // Retain all stashed key transcripts
         for stash in state.pre_signature_stashes().values() {
             active_transcripts.insert((*stash.key_transcript).clone());
