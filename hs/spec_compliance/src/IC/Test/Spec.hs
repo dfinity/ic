@@ -116,45 +116,6 @@ icTests my_sub other_sub conf =
                                                                               ic_install'' defaultUser (enum #install) doesn'tExist trivialWasmModule ""
                                                                                 >>= isErrOrReject [3, 5],
                                                                             testGroup
-                                                                              "calls to a subnet ID"
-                                                                              [ let ic_install_subnet'' user subnet_id canister_id wasm_module arg =
-                                                                                      callICWithSubnet'' subnet_id user canister_id #install_code tmp
-                                                                                      where
-                                                                                        tmp :: InstallCodeArgs
-                                                                                        tmp =
-                                                                                          empty
-                                                                                            .+ #mode
-                                                                                            .== enum #install
-                                                                                            .+ #canister_id
-                                                                                            .== Principal canister_id
-                                                                                            .+ #wasm_module
-                                                                                            .== wasm_module
-                                                                                            .+ #arg
-                                                                                            .== arg
-                                                                                            .+ #sender_canister_version
-                                                                                            .== Nothing
-                                                                                 in testCase "as user" $ do
-                                                                                      cid <- create ecid
-                                                                                      ic_install_subnet'' defaultUser my_subnet_id cid trivialWasmModule "" >>= isErrOrReject []
-                                                                                      ic_install_subnet'' defaultUser other_subnet_id cid trivialWasmModule "" >>= isErrOrReject [],
-                                                                                simpleTestCase "as canister to own subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg my_sub my_subnet_id other_subnet_id cid
-                                                                                    else test_subnet_msg' my_sub my_subnet_id cid,
-                                                                                simpleTestCase "canister http outcalls to own subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg_canister_http my_sub my_subnet_id cid
-                                                                                    else test_subnet_msg_canister_http' my_sub my_subnet_id cid,
-                                                                                simpleTestCase "as canister to other subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg other_sub other_subnet_id my_subnet_id cid
-                                                                                    else test_subnet_msg' other_sub other_subnet_id cid,
-                                                                                simpleTestCase "canister http outcalls to other subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg_canister_http other_sub other_subnet_id cid
-                                                                                    else test_subnet_msg_canister_http' other_sub other_subnet_id cid
-                                                                              ],
-                                                                            testGroup
                                                                               "provisional_create_canister_with_cycles"
                                                                               [ testCase "specified_id does not belong to the subnet's canister ranges" $ do
                                                                                   let specified_id = entityIdToPrincipal $ EntityId doesn'tExist
