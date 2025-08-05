@@ -4,7 +4,7 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
     SchnorrKeyId, SchnorrPublicKeyArgs, VetKdKeyId, VetKdPublicKeyArgs,
 };

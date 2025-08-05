@@ -26,7 +26,7 @@ ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-http-utils = { path = "../../http_utils" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-management-canister-types = { workspace = true }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

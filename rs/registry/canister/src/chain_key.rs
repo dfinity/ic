@@ -1,6 +1,6 @@
 use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
     ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
 };

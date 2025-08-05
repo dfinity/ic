@@ -10,7 +10,7 @@ use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_cdk::println;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     MasterPublicKeyId, ReshareChainKeyArgs, ReshareChainKeyResponse,
 };
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;

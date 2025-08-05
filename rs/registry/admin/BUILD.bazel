@@ -43,8 +43,7 @@ DEPENDENCIES = [
     "//rs/sns/init",
     "//rs/sns/swap",
     "//rs/types/base_types",
-    
-    "@crate_index//:ic-management-canister-types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
