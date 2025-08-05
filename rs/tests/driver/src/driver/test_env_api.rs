@@ -190,7 +190,6 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{debug, info, warn, Logger};
 use ssh2::Session;
@@ -230,7 +229,6 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     }
     Ok(())
 }
-
 
 /// An immutable snapshot of the Internet Computer topology valid at a
 /// particular registry version.
