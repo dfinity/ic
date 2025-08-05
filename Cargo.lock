@@ -13160,6 +13160,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-temporary",
  "ic-nervous-system-timestamp",
  "ic-nns-constants",
  "ic-protobuf",
