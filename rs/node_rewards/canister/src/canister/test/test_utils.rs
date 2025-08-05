@@ -33,7 +33,8 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(TestState, STATE_TEST);
 
-pub(crate) fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
+pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Rc<MetricsManager<VM>>)
+{
     let fake_registry = Arc::new(FakeRegistry::new());
     let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
@@ -41,16 +42,17 @@ pub(crate) fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
             timestamp_nanos: 0,
             node_metrics: vec![],
         }]));
+    let metrics_manager = Rc::new(MetricsManager::new(mock));
     let canister = NodeRewardsCanister::new(
         Arc::new(StableCanisterRegistryClient::<TestState>::new(
             fake_registry.clone(),
         ))
         .clone(),
-        Rc::new(MetricsManager::new(mock)),
+        metrics_manager.clone(),
     );
     CANISTER_TEST.with_borrow_mut(|c| *c = canister);
     // To do thorough tests, this is all we currently need to mock, as everything else
     // interacts through the RegistryClient at present.  Outside of Registry, everything else
     // is internal state.
-    fake_registry
+    (fake_registry, metrics_manager)
 }

@@ -12,8 +12,28 @@ type NodeProvidersMonthlyXdrRewards = record {
     registry_version: opt nat64;
 };
 
+type UnixTsNanos = nat64;
+
+type GetNodeProvidersRewardsRequest = record {
+  from: UnixTsNanos;
+  to: UnixTsNanos;
+};
+
+type NodeProvidersRewards = record {
+  rewards_xdr_permyriad: vec record {
+    principal;
+    nat64;
+  };
+};
+
+type GetNodeProvidersRewardsResponse = record {
+  rewards: opt NodeProvidersRewards;
+  error: opt text;
+};
+
 service : () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
         GetNodeProvidersMonthlyXdrRewardsResponse
     );
+    get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
 }

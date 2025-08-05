@@ -7,7 +7,13 @@ pub struct GetNodeProvidersRewardsRequest {
     pub to: u64,
 }
 
-#[derive(CandidType, Clone, Deserialize)]
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct GetNodeProvidersRewardsResponse {
-    pub rewards: BTreeMap<Principal, u64>,
+    pub rewards: Option<NodeProvidersRewards>,
+    pub error: Option<String>,
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub struct NodeProvidersRewards {
+    pub rewards_xdr_permyriad: BTreeMap<Principal, u64>,
 }

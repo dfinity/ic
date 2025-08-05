@@ -14,7 +14,9 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap, HashSet};
+pub mod test_utils;
 
+#[derive(Debug)]
 pub struct RewardsCalculatorInput {
     pub reward_period: RewardPeriod,
     pub rewards_table: NodeRewardsTable,
@@ -613,4 +615,4 @@ fn avg(values: &[Decimal]) -> Option<Decimal> {
 }
 
 #[cfg(test)]
-mod tests;
+pub mod tests;

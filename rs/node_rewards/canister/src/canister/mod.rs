@@ -8,7 +8,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
-    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
+    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -186,59 +186,83 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_node_providers_rewards<S: RegistryDataStableMemory>(
+    pub async fn get_node_providers_rewards<S: RegistryDataStableMemory>(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        let (registry_client, metrics_manager) = canister.with(|canister| {
-            (
-                canister.borrow().get_registry_client(),
-                canister.borrow().get_metrics_manager(),
-            )
-        });
-        let reward_period = RewardPeriod::new(request.from, request.to).unwrap();
-        let registry_querier = RegistryQuerier::new(registry_client.clone());
-        let version = registry_client
-            .timestamp_to_versions_map()
-            .range(..=reward_period.to.unix_ts_at_day_end())
-            .next_back()
-            .unwrap()
-            .1
-            .into_iter()
-            .max()
-            .cloned()
-            .unwrap();
-        let rewards_table = registry_querier.get_rewards_table(version);
-        let daily_metrics_by_subnet =
-            metrics_manager.daily_metrics_by_subnet(reward_period.from, reward_period.to);
-        let provider_rewardable_nodes = RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
-            &*registry_client,
-            reward_period.from,
-            reward_period.to,
-        )
-        .unwrap();
-
-        let input = RewardsCalculatorInput {
-            reward_period: RewardPeriod::new(0, 0).unwrap(),
-            rewards_table,
-            daily_metrics_by_subnet,
-            provider_rewardable_nodes,
+        return match inner_get_node_providers_rewards::<S>(canister, request).await {
+            Ok(rewards) => GetNodeProvidersRewardsResponse {
+                rewards: Some(rewards),
+                error: None,
+            },
+            Err(e) => GetNodeProvidersRewardsResponse {
+                rewards: None,
+                error: Some(e),
+            },
         };
 
-        let RewardsCalculatorResults {
-            provider_results, ..
-        } = rewards_calculation::rewards_calculator::calculate_rewards(input).unwrap();
-        let rewards = provider_results
-            .iter()
-            .map(|(provider_id, provider_rewards)| {
+        async fn inner_get_node_providers_rewards<S: RegistryDataStableMemory>(
+            canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+            request: GetNodeProvidersRewardsRequest,
+        ) -> Result<NodeProvidersRewards, String> {
+            NodeRewardsCanister::schedule_registry_sync(canister)
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Could not sync registry store to latest version, \
+                    please try again later: {:?}",
+                        e
+                    )
+                })?;
+            NodeRewardsCanister::schedule_metrics_sync(canister).await;
+            let (registry_client, metrics_manager) = canister.with(|canister| {
                 (
-                    provider_id.0.clone(),
-                    provider_rewards.rewards_total_xdr_permyriad,
+                    canister.borrow().get_registry_client(),
+                    canister.borrow().get_metrics_manager(),
                 )
-            })
-            .collect();
+            });
 
-        GetNodeProvidersRewardsResponse { rewards }
+            let reward_period =
+                RewardPeriod::new(request.from, request.to).map_err(|e| e.to_string())?;
+            let registry_querier = RegistryQuerier::new(registry_client.clone());
+
+            let version = registry_querier
+                .version_for_timestamp(reward_period.to.unix_ts_at_day_end())
+                .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
+            let rewards_table = registry_querier.get_rewards_table(version);
+            let daily_metrics_by_subnet =
+                metrics_manager.daily_metrics_by_subnet(reward_period.from, reward_period.to);
+            let provider_rewardable_nodes =
+                RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
+                    &*registry_client,
+                    reward_period.from,
+                    reward_period.to,
+                )
+                .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
+
+            let input = RewardsCalculatorInput {
+                reward_period,
+                rewards_table,
+                daily_metrics_by_subnet,
+                provider_rewardable_nodes,
+            };
+            let RewardsCalculatorResults {
+                provider_results, ..
+            } = rewards_calculation::rewards_calculator::calculate_rewards(input).unwrap();
+            let rewards_xdr_permyriad = provider_results
+                .iter()
+                .map(|(provider_id, provider_rewards)| {
+                    (
+                        provider_id.0.clone(),
+                        provider_rewards.rewards_total_xdr_permyriad,
+                    )
+                })
+                .collect();
+
+            Ok(NodeProvidersRewards {
+                rewards_xdr_permyriad,
+            })
+        }
     }
 }
 

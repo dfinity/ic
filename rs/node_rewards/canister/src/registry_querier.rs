@@ -35,6 +35,15 @@ impl RegistryQuerier {
         RegistryQuerier { registry_client }
     }
 
+    pub fn version_for_timestamp(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
+        self.registry_client
+            .timestamp_to_versions_map()
+            .range(..=ts)
+            .next_back()
+            .and_then(|(_, versions)| versions.iter().max())
+            .cloned()
+    }
+
     ///  Returns a list of all subnets present in the registry at the specified version.
     pub fn subnets_list(&self, version: RegistryVersion) -> Vec<SubnetId> {
         let key = make_subnet_list_record_key();
