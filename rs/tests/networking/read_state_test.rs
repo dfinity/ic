@@ -639,7 +639,6 @@ fn test_canister_canister_ranges_paths(env: TestEnv) {
 
 fn test_subnet_canister_ranges_paths(env: TestEnv) {
     let node = get_first_app_node(&env);
-    let effective_canister_id = node.effective_canister_id();
 
     let path: Vec<Label<Vec<u8>>> = vec![
         "canister_ranges".into(),
