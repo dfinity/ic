@@ -320,7 +320,7 @@ async fn vetkd_derive_key(
 #[update]
 async fn canister_http(http_server_addr: String) -> Result<HttpResponse, (RejectionCode, String)> {
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
-        url: format!("http://{}", http_server_addr),
+        url: http_server_addr,
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],
@@ -343,7 +343,7 @@ async fn transform(transform_args: TransformArgs) -> HttpResponse {
 async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse {
     let context = b"this is my transform context".to_vec();
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
-        url: format!("http://{}", http_server_addr),
+        url: http_server_addr,
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],

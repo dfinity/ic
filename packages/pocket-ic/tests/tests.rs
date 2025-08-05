@@ -1436,8 +1436,8 @@ impl HttpServer {
         }
     }
 
-    fn addr(&self) -> SocketAddr {
-        self.addr
+    fn addr(&self) -> String {
+        format!("http://{}", self.addr)
     }
 }
 
@@ -1536,7 +1536,7 @@ fn test_canister_http_in_live_mode() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(http_server.addr().to_string()).unwrap(),
+            encode_one(http_server.addr()).unwrap(),
         )
         .unwrap();
 
