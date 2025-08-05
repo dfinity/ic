@@ -295,11 +295,7 @@ mod test {
         .is_err());
 
         assert!(verify_paths(
-            &[
-                Path::new(vec![
-                    Label::from("canister_ranges"),
-                ]),
-            ],
+            &[Path::new(vec![Label::from("canister_ranges"),]),],
             subnet_test_id(1).get(),
         )
         .is_err());
