@@ -22,11 +22,15 @@ print_separator() {
     echo --------------------------------------------------------------------------------
 }
 
+echo "Please, enter your HSM PIN."
+echo "(It will not appear as you type it; neverthless, press enter when done.)"
+read -s DFX_HSM_PIN
+export DFX_HSM_PIN
+
 bazel build \
     //rs/nervous_system/tools/submit-motion-proposal
 
 print_separator
-
 for FILE in "${DIRECTORY}"/*; do
     echo "File: ${FILE}"
 
