@@ -7742,7 +7742,6 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-test-utilities",
- "ic-test-utilities-consensus",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
