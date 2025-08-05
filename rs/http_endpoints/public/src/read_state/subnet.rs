@@ -193,6 +193,7 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
             | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
+            [b"canister_ranges", _subnet_id] => {}
             [b"subnet", subnet_id, b"metrics"] => {
                 let principal_id = parse_principal_id(subnet_id)?;
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
@@ -249,6 +250,10 @@ mod test {
                         ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
                         Label::from("metrics")
                     ]),
+                    Path::new(vec![
+                        Label::from("canister_ranges"),
+                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                    ]),
                 ],
                 subnet_test_id(1).get(),
             ),
@@ -284,6 +289,16 @@ mod test {
                     ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
                     Label::from("module_hash")
                 ])
+            ],
+            subnet_test_id(1).get(),
+        )
+        .is_err());
+
+        assert!(verify_paths(
+            &[
+                Path::new(vec![
+                    Label::from("canister_ranges"),
+                ]),
             ],
             subnet_test_id(1).get(),
         )
