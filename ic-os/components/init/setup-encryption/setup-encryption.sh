@@ -8,7 +8,7 @@ fi
 
 echo "- - L" | sfdisk --force --no-reread -a /dev/vda
 
-# Generate a key and initialize encrypted store with it.
+# Initialize encrypted store.
 partprobe /dev/vda
 # Set minimal iteration count -- we already use a random key with
 # maximal entropy, pbkdf doesn't gain anything (besides slowing

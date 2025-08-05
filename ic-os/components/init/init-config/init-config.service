@@ -2,7 +2,7 @@
 Description=Initialize IC node configuration
 DefaultDependencies=no
 After=mount-config.service
-Requires=mount-config.service
+Wants=mount-config.service
 RequiresMountsFor=/mnt/config
 
 [Service]
