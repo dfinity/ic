@@ -2220,6 +2220,7 @@ impl CanisterManager {
                 snapshot.canister_version(),
                 snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                snapshot.source(),
             ),
         );
         state

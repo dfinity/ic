@@ -1671,7 +1671,8 @@ fn load_canister_snapshot_succeeds() {
         CanisterChangeDetails::load_snapshot(
             canister_version_before,
             snapshot_id,
-            snapshot_taken_at_timestamp
+            snapshot_taken_at_timestamp,
+            SnapshotSource::TakenFromCanister,
         )
     );
     let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();

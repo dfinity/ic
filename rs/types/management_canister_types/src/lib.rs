@@ -22,7 +22,6 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
@@ -324,6 +323,10 @@ impl CanisterControllersChangeRecord {
 ///    canister_version : nat64;
 ///    snapshot_id : blob;
 ///    taken_at_timestamp : nat64;
+///    source: variant {
+///         taken_from_canister;
+///         uploaded_manually;
+///    };
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -331,14 +334,21 @@ pub struct CanisterLoadSnapshotRecord {
     canister_version: u64,
     snapshot_id: SnapshotId,
     taken_at_timestamp: u64,
+    source: SnapshotSource,
 }
 
 impl CanisterLoadSnapshotRecord {
-    pub fn new(canister_version: u64, snapshot_id: SnapshotId, taken_at_timestamp: u64) -> Self {
+    pub fn new(
+        canister_version: u64,
+        snapshot_id: SnapshotId,
+        taken_at_timestamp: u64,
+        source: SnapshotSource,
+    ) -> Self {
         Self {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
+            source,
         }
     }
 
@@ -352,6 +362,10 @@ impl CanisterLoadSnapshotRecord {
 
     pub fn snapshot_id(&self) -> SnapshotId {
         self.snapshot_id
+    }
+
+    pub fn source(&self) -> SnapshotSource {
+        self.source
     }
 }
 
@@ -479,11 +493,13 @@ impl CanisterChangeDetails {
         canister_version: u64,
         snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
+        source: SnapshotSource,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
+            source,
         })
     }
 
@@ -779,6 +795,10 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                         canister_version: canister_load_snapshot.canister_version,
                         snapshot_id: canister_load_snapshot.snapshot_id.to_vec(),
                         taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
+                        source: pb_canister_state_bits::SnapshotSource::from(
+                            canister_load_snapshot.source,
+                        )
+                        .into(),
                     },
                 )
             }
@@ -884,10 +904,21 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                     .map_err(|e| {
                         ProxyDecodeError::Other(format!("Failed to decode snapshot_id: {:?}", e))
                     })?;
+
+                let source = SnapshotSource::try_from(
+                    pb_canister_state_bits::SnapshotSource::try_from(canister_load_snapshot.source)
+                        .map_err(|e| {
+                            ProxyDecodeError::Other(format!(
+                                "Failed to decode snapshot source: {:?}",
+                                e
+                            ))
+                        })?,
+                )?;
                 Ok(CanisterChangeDetails::load_snapshot(
                     canister_load_snapshot.canister_version,
                     snapshot_id,
                     canister_load_snapshot.taken_at_timestamp,
+                    source,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
@@ -3865,34 +3896,34 @@ pub enum SnapshotSource {
     MetadataUpload,
 }
 
-impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
+impl From<SnapshotSource> for pb_canister_state_bits::SnapshotSource {
     fn from(value: SnapshotSource) -> Self {
         match value {
             SnapshotSource::TakenFromCanister => {
-                pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
+                pb_canister_state_bits::SnapshotSource::TakenFromCanister
             }
             SnapshotSource::MetadataUpload => {
-                pb_canister_snapshot_bits::SnapshotSource::UploadedManually
+                pb_canister_state_bits::SnapshotSource::UploadedManually
             }
         }
     }
 }
 
-impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
+impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_snapshot_bits::SnapshotSource) -> Result<Self, Self::Error> {
+    fn try_from(value: pb_canister_state_bits::SnapshotSource) -> Result<Self, Self::Error> {
         match value {
-            pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
+            pb_canister_state_bits::SnapshotSource::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "SnapshotSource",
                     err: format!("Unexpected value of SnapshotSource: {:?}", value),
                 })
             }
-            pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
+            pb_canister_state_bits::SnapshotSource::TakenFromCanister => {
                 Ok(SnapshotSource::TakenFromCanister)
             }
-            pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
+            pb_canister_state_bits::SnapshotSource::UploadedManually => {
                 Ok(SnapshotSource::MetadataUpload)
             }
         }
@@ -4349,13 +4380,12 @@ mod tests {
     use super::*;
     use strum::IntoEnumIterator;
 
-    use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
     use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 
     #[test]
     fn snapshot_source_exhaustive() {
         for initial in SnapshotSource::iter() {
-            let encoded = pb_canister_snapshot_bits::SnapshotSource::from(initial);
+            let encoded = pb_canister_state_bits::SnapshotSource::from(initial);
             let round_trip = SnapshotSource::try_from(encoded).unwrap();
             assert_eq!(initial, round_trip);
         }
