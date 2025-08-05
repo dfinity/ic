@@ -196,3 +196,28 @@ system_test_nns(
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
+
+rust_binary(
+    name = "nns_recovery_test_bin",
+    testonly = True,
+    srcs = ["nns_recovery_test.rs"],
+    deps = DEPENDENCIES + [":nested"],
+)
+
+# Tests the manual NNS recovery process:
+# - NNS subnet is broken
+# - guestos-recovery-upgrader is used to upgrade the GuestOS to the recovery image
+# - guestos-recovery-engine is used to recover the NNS subnet
+system_test_nns(
+    name = "nns_recovery_test",
+    env = MAINNET_ENV,
+    extra_head_nns_tags = [],
+    flaky = True,
+    tags = ["long_test"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":nns_recovery_test_bin",
+    test_timeout = "eternal",
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
