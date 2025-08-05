@@ -1,0 +1,14 @@
+[Unit]
+Description=Mount CONFIG device at /mnt/config
+DefaultDependencies=no
+After=systemd-udev-settle.service
+Before=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/mount-config.sh
+TimeoutSec=60
+
+[Install]
+WantedBy=local-fs.target
