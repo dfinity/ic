@@ -36,12 +36,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::{
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
-    ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
-    MAX_WASM_MEMORY_IN_BYTES,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData}, consensus::idkg::IDkgMasterPublicKeyId, ingress::{IngressState, IngressStatus}, messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE}, CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time, MAX_WASM_MEMORY_IN_BYTES
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use more_asserts::{debug_assert_ge, debug_assert_le};
@@ -2111,6 +2106,13 @@ fn observe_replicated_state_metrics(
             .in_flight_signature_request_contexts
             .with_label_values(&[&key_id.to_string()])
             .observe(count as f64);
+    }
+
+    for (key_id, stash) in state.pre_signature_stashes() {
+        metrics
+            .pre_signature_stash_size
+            .with_label_values(&[&key_id.to_string()])
+            .set(stash.pre_signatures.len());
     }
 
     let observe_reading = |status: CanisterStatusType, num: i64| {

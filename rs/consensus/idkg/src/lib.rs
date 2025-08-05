@@ -401,13 +401,9 @@ fn get_active_transcripts(
 
     if let Some(snapshot) = state_reader.get_certified_state_snapshot() {
         let state = snapshot.get_state();
-        let pre_signature_stashes = &state
-            .metadata
-            .subnet_call_context_manager
-            .pre_signature_stashes;
-
+        
         // Retain all stashed key transcripts
-        for stash in pre_signature_stashes.values() {
+        for stash in state.pre_signature_stashes().values() {
             active_transcripts.insert((*stash.key_transcript).clone());
         }
 
