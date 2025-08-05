@@ -37,7 +37,6 @@ use ic_replicated_state::{
 };
 use ic_types::{
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
-    consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
@@ -2118,7 +2117,7 @@ fn observe_replicated_state_metrics(
         metrics
             .pre_signature_stash_size
             .with_label_values(&[&key_id.to_string()])
-            .set(stash.pre_signatures.len());
+            .set(stash.pre_signatures.len() as i64);
     }
 
     let observe_reading = |status: CanisterStatusType, num: i64| {
