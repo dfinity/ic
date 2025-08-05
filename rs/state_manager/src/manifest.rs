@@ -22,11 +22,12 @@ use crate::{
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{error, fatal, info, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
+use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -34,6 +35,7 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
+use std::time::Instant;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -542,13 +544,15 @@ fn build_chunk_table_sequential(
     (file_table, chunk_table)
 }
 
-/// Traverses root recursively and populates the `files` vector with entries of
-/// the form `(relative_file_name, file_len)`.
-fn files_with_sizes(
+enum FileWithSizeOrDir {
+    File(FileWithSize),
+    Dir(Vec<PathBuf>),
+}
+
+fn file_with_size_or_dir(
     root: &Path,
     relative_path: PathBuf,
-    files: &mut Vec<FileWithSize>,
-) -> Result<(), CheckpointError> {
+) -> Result<FileWithSizeOrDir, CheckpointError> {
     let absolute_path = root.join(&relative_path);
     let metadata = absolute_path
         .metadata()
@@ -559,30 +563,59 @@ fn files_with_sizes(
         })?;
 
     if metadata.is_file() {
-        files.push(FileWithSize(relative_path, metadata.len()))
+        Ok(FileWithSizeOrDir::File(FileWithSize(
+            relative_path,
+            metadata.len(),
+        )))
     } else {
         assert!(
             metadata.is_dir(),
             "Checkpoints must not contain special files, found one at {}",
             absolute_path.display()
         );
-        for entry_result in absolute_path
-            .read_dir()
-            .map_err(|io_err| CheckpointError::IoError {
-                path: absolute_path.clone(),
-                message: "failed to read dir".to_string(),
-                io_err: io_err.to_string(),
-            })?
-        {
-            let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
-                path: absolute_path.clone(),
-                message: "failed to read dir entry".to_string(),
-                io_err: io_err.to_string(),
-            })?;
-            files_with_sizes(root, relative_path.join(entry.file_name()), files)?;
-        }
+        Ok(FileWithSizeOrDir::Dir(
+            absolute_path
+                .read_dir()
+                .map_err(|io_err| CheckpointError::IoError {
+                    path: absolute_path.clone(),
+                    message: "failed to read dir".to_string(),
+                    io_err: io_err.to_string(),
+                })?
+                .map(|entry_result| {
+                    let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
+                        path: absolute_path.clone(),
+                        message: "failed to read dir entry".to_string(),
+                        io_err: io_err.to_string(),
+                    })?;
+                    Ok(relative_path.join(entry.file_name()))
+                })
+                .collect::<Result<Vec<_>, CheckpointError>>()?,
+        ))
     }
-    Ok(())
+}
+
+/// Traverses root recursively and populates the `files` vector with entries of
+/// the form `(relative_file_name, file_len)`.
+fn files_with_sizes(
+    root: &Path,
+    relative_path: PathBuf,
+    thread_pool: &mut scoped_threadpool::Pool,
+) -> Result<Vec<FileWithSize>, CheckpointError> {
+    let mut files = Vec::new();
+    let mut paths_to_process = vec![relative_path];
+    while !paths_to_process.is_empty() {
+        let mut next_paths = Vec::new();
+        for entry in parallel_map(thread_pool, paths_to_process.into_iter(), |relative_path| {
+            file_with_size_or_dir(root, relative_path.to_path_buf())
+        }) {
+            match entry? {
+                FileWithSizeOrDir::File(file) => files.push(file),
+                FileWithSizeOrDir::Dir(mut paths) => next_paths.append(&mut paths),
+            }
+        }
+        paths_to_process = next_paths;
+    }
+    Ok(files)
 }
 
 /// Returns the range of chunks belonging to the file with the specified index.
@@ -781,13 +814,14 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
+    let start = Instant::now();
     let mut files = {
-        let mut files = Vec::new();
-        files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
+        let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
     };
+    info!(log, "Got files: {:#?}", start.elapsed());
 
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
@@ -836,6 +870,7 @@ pub fn compute_manifest(
         }
         None => default_hash_plan(&files, max_chunk_size),
     };
+    info!(log, "Got chunk actions: {:#?}", start.elapsed());
 
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
@@ -862,7 +897,7 @@ pub fn compute_manifest(
         chunk_actions,
         version,
     );
-
+    info!(log, "Got chunk table: {:#?}", start.elapsed());
     #[cfg(debug_assertions)]
     {
         assert_eq!(file_table, seq_file_table);
@@ -870,6 +905,7 @@ pub fn compute_manifest(
     }
 
     let manifest = Manifest::new(version, file_table, chunk_table);
+    info!(log, "Got manifest: {:#?}", start.elapsed());
     metrics
         .manifest_size
         .set(encode_manifest(&manifest).len() as i64);
@@ -896,7 +932,7 @@ pub fn compute_manifest(
 
     // Sanity check: ensure that we have produced a valid manifest.
     debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
-
+    info!(log, "Got all: {:#?}", start.elapsed());
     Ok(manifest)
 }
 
