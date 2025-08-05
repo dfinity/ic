@@ -1,7 +1,7 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::protocol::Response;
 use rusb::{Context, Device, UsbContext};
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, Write};
 use tempfile::NamedTempFile;
 
 // nitrokey:
@@ -60,11 +60,9 @@ fn create_hsm_xml_file() -> Result<NamedTempFile, String> {
 }
 
 fn get_hsm_info() -> Result<HSMInfo, Error> {
-    let context = Context::new().map_err(|e| Error::new(ErrorKind::Other, e))?;
+    let context = Context::new().map_err(Error::other)?;
 
-    let usb_devices = context
-        .devices()
-        .map_err(|e| Error::new(ErrorKind::Other, e))?;
+    let usb_devices = context.devices().map_err(Error::other)?;
 
     fn is_hsm_device(device: &Device<Context>) -> bool {
         match device.device_descriptor() {
@@ -95,7 +93,7 @@ fn get_hsm_info() -> Result<HSMInfo, Error> {
             hsm_bus_num: hsm_device.bus_number(),
             hsm_address: hsm_device.address(),
         })
-        .ok_or_else(|| Error::new(ErrorKind::Other, "No HSM device found"))
+        .ok_or_else(|| Error::other("No HSM device found"))
 }
 
 // HSM_VENDOR and HSM_PRODUCT must be converted to hexadecimal for the attach/detach hsm virsh commands
