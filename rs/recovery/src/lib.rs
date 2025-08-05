@@ -883,19 +883,31 @@ impl Recovery {
     }
 
     /// Return a [CreateFullTarStep] a tar file that contains a tar of the current registry local store and a recovery CUP
-    pub fn get_create_nns_recovery_tar_step(&self) -> impl Step {
-        let commands_create = format!(
+    pub fn get_create_nns_recovery_tar_step(&self, output_dir: Option<PathBuf>) -> impl Step {
+        let mut commands_create = format!(
             r#"
             tar --zstd -cvf {work_dir}/recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst
 
             artifacts_hash=$(sha256sum {work_dir}/recovery.tar.zst | cut -d ' ' -f1)
+            echo $artifacts_hash > {work_dir}/recovery.tar.zst.sha256
 
-            # Move the recovery artifacts to a temporary directory that will not be deleted by the cleanup step
-            dest_dir=$(mktemp -d)
-            mv {work_dir}/recovery.tar.zst $dest_dir
-        "#,
+            "#,
             work_dir = self.work_dir.display(),
         );
+        match output_dir {
+            Some(dir) => {
+                commands_create.push_str(&format!("$output_dir={dir}\n", dir = dir.display()));
+            }
+            None => {
+                // If no output directory is not specified, save the files in a directory that will
+                // not be deleted by the cleanup step (i.e., not `self.work_dir`).
+                commands_create.push_str("$output_dir=$(mktemp -d)\n");
+            }
+        }
+        commands_create.push_str(&format!(
+            "mv {work_dir}/recovery.tar.zst {work_dir}/recovery.tar.zst.sha256 $output_dir\n",
+            work_dir = self.work_dir.display(),
+        ));
 
         let commands_next_steps = format!(
             r#"

@@ -77,6 +77,10 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub backup_key_file: Option<PathBuf>,
 
+    /// The output directory where the recovery artifacts (and its hash) will be stored.
+    #[clap(long)]
+    pub output_dir: Option<PathBuf>,
+
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
@@ -308,9 +312,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::CreateArtifacts => {
-                Ok(Box::new(self.recovery.get_create_nns_recovery_tar_step()))
-            }
+            StepType::CreateArtifacts => Ok(Box::new(
+                self.recovery
+                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
+            )),
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }
