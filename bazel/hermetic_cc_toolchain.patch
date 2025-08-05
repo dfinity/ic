@@ -4,7 +4,10 @@
 # restrict which targets pick up the toolchains
 # (https://github.com/uber/hermetic_cc_toolchain/pull/213).
 # Strip debug_info off every target for determinism
-# (https://github.com/ziglang/zig/issues/23821, https://github.com/ziglang/zig/issues/23823).
+# (https://github.com/ziglang/zig/issues/23821,
+# https://github.com/ziglang/zig/issues/23823).
+# And update zig to 0.14.1 to fix libunwind
+# (https://github.com/llvm/llvm-project/pull/92291).
 diff --git a/MODULE.bazel b/MODULE.bazel
 index 409d626..15b70b3 100644
 --- a/MODULE.bazel
@@ -36,9 +39,40 @@ index 409d626..15b70b3 100644
 +    path = "/usr/bin",
 +)
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index f6f613e..4b36565 100644
+index f6f613e..62007fd 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
+@@ -19,20 +19,20 @@ _DEFAULT_INCLUDE_DIRECTORIES = [
+ ]
+ 
+ _HOST_PLATFORM_EXT = {
+-    "linux-aarch64": "tar.xz",
+-    "linux-x86_64": "tar.xz",
+-    "macos-aarch64": "tar.xz",
+-    "macos-x86_64": "tar.xz",
+-    "windows-x86_64": "zip",
++    "aarch64-linux": "tar.xz",
++    "x86_64-linux": "tar.xz",
++    "aarch64-macos": "tar.xz",
++    "x86_64-macos": "tar.xz",
++    "x86_64-windows": "zip",
+ }
+ 
+ # map bazel's host_platform to zig's -target= and -mcpu=
+ _TARGET_MCPU = {
+-    "linux-aarch64": ("aarch64-linux-musl", "baseline"),
+-    "linux-x86_64": ("x86_64-linux-musl", "baseline"),
+-    "macos-aarch64": ("aarch64-macos-none", "apple_a14"),
+-    "macos-x86_64": ("x86_64-macos-none", "baseline"),
+-    "windows-x86_64": ("x86_64-windows-gnu", "baseline"),
++    "aarch64-linux": ("aarch64-linux-musl", "baseline"),
++    "x86_64-linux": ("x86_64-linux-musl", "baseline"),
++    "aarch64-macos": ("aarch64-macos-none", "apple_a14"),
++    "x86_64-macos": ("x86_64-macos-none", "baseline"),
++    "x86_64-windows": ("x86_64-windows-gnu", "baseline"),
+ }
+ 
+ _compile_failed = """
 @@ -60,7 +60,8 @@ def toolchains(
          version = VERSION,
          url_formats = [],
@@ -57,6 +91,15 @@ index f6f613e..4b36565 100644
      )
  
  def _quote(s):
+@@ -100,7 +102,7 @@ def _zig_repository_impl(repository_ctx):
+     if os.startswith("windows"):
+         os = "windows"
+ 
+-    host_platform = "{}-{}".format(os, arch)
++    host_platform = "{}-{}".format(arch, os)
+ 
+     zig_sha256 = repository_ctx.attr.host_platform_sha256[host_platform]
+     zig_ext = repository_ctx.attr.host_platform_ext[host_platform]
 @@ -110,6 +112,8 @@ def _zig_repository_impl(repository_ctx):
          "host_platform": host_platform,
      }
@@ -165,7 +208,7 @@ index d4a8344..faafc5b 100644
  def declare_libc_aware_platforms():
      # create @zig_sdk//{os}_{arch}_platform entries with zig and go conventions
 diff --git a/toolchain/private/defs.bzl b/toolchain/private/defs.bzl
-index 716a3a3..b88d082 100644
+index 716a3a3..6d0e2bc 100644
 --- a/toolchain/private/defs.bzl
 +++ b/toolchain/private/defs.bzl
 @@ -49,6 +49,7 @@ def target_structs():
@@ -176,6 +219,15 @@ index 716a3a3..b88d082 100644
      return ret
  
  def _target_macos(gocpu, zigcpu):
+@@ -161,7 +162,7 @@ def _target_linux_gnu(gocpu, zigcpu, glibc_version):
+         linkopts = [],
+         dynamic_library_linkopts = [],
+         supports_dynamic_linker = True,
+-        copts = [],
++        copts = ["-D_GNU_SOURCE"],
+         libc = "glibc",
+         bazel_target_cpu = "k8",
+         constraint_values = [
 @@ -222,3 +223,22 @@ def _target_wasm():
          ld_zig_subcmd = "wasm-ld",
          artifact_name_patterns = [],
@@ -199,6 +251,30 @@ index 716a3a3..b88d082 100644
 +        ld_zig_subcmd = "wasm-ld",
 +        artifact_name_patterns = [],
 +    )
+diff --git a/toolchain/private/zig_sdk.bzl b/toolchain/private/zig_sdk.bzl
+index a328df5..0f60aaf 100644
+--- a/toolchain/private/zig_sdk.bzl
++++ b/toolchain/private/zig_sdk.bzl
+@@ -1,12 +1,12 @@
+-VERSION = "0.12.0"
++VERSION = "0.14.1"
+ 
+ HOST_PLATFORM_SHA256 = {
+-    "linux-aarch64": "754f1029484079b7e0ca3b913a0a2f2a6afd5a28990cb224fe8845e72f09de63",
+-    "linux-x86_64": "c7ae866b8a76a568e2d5cfd31fe89cdb629bdd161fdd5018b29a4a0a17045cad",
+-    "macos-aarch64": "294e224c14fd0822cfb15a35cf39aa14bd9967867999bf8bdfe3db7ddec2a27f",
+-    "macos-x86_64": "4d411bf413e7667821324da248e8589278180dbc197f4f282b7dbb599a689311",
+-    "windows-aarch64": "04c6b92689241ca7a8a59b5f12d2ca2820c09d5043c3c4808b7e93e41c7bf97b",
+-    "windows-x86_64": "2199eb4c2000ddb1fba85ba78f1fcf9c1fb8b3e57658f6a627a8e513131893f5",
++    "aarch64-linux": "f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b",
++    "x86_64-linux": "24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c",
++    "aarch64-macos": "39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa",
++    "x86_64-macos": "b0f8bdfb9035783db58dd6c19d7dea89892acc3814421853e5752fe4573e5f43",
++    "aarch64-windows": "b5aac0ccc40dd91e8311b1f257717d8e3903b5fefb8f659de6d65a840ad1d0e7",
++    "x86_64-windows": "554f5378228923ffd558eac35e21af020c73789d87afeabf4bfd16f2e6feed2c",
+ }
+ 
+ # Official recommended version. Should use this when we have a usable release.
 diff --git a/toolchain/toolchain/BUILD b/toolchain/toolchain/BUILD
 index 552fcaa..8f7dba5 100644
 --- a/toolchain/toolchain/BUILD
@@ -255,9 +331,27 @@ index 50cc881..0549c26 100644
          toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
      )
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index d1d59f9..4f471ee 100644
+index d1d59f9..94bdd4b 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
+@@ -55,7 +55,7 @@ const std = @import("std");
+ const fs = std.fs;
+ const mem = std.mem;
+ const process = std.process;
+-const ChildProcess = std.ChildProcess;
++const ChildProcess = std.process.Child;
+ const ArrayListUnmanaged = std.ArrayListUnmanaged;
+ const sep = fs.path.sep_str;
+ 
+@@ -93,7 +93,7 @@ const ParseResults = union(Action) {
+ };
+ 
+ // sub-commands in the same folder as `zig-wrapper`
+-const sub_commands_target = std.ComptimeStringMap(void, .{
++const sub_commands_target = std.StaticStringMap(void).initComptime(.{
+     .{"ar"},
+     .{"ld.lld"},
+     .{"lld-link"},
 @@ -132,7 +132,7 @@ pub fn main() u8 {
              if (builtin.os.tag == .windows)
                  return spawnWindows(arena, params)
@@ -272,7 +366,7 @@ index d1d59f9..4f471ee 100644
  }
  
 +fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
-+    var it = std.mem.tokenize(u8, pwd, "/");
++    var it = std.mem.tokenizeScalar(u8, pwd, '/');
 +
 +    while (it.next()) |segment| {
 +        if (std.mem.startsWith(u8, segment, "k8-opt-")) {
@@ -361,7 +455,15 @@ index d1d59f9..4f471ee 100644
  
      // args is the path to the zig binary and args to it.
      var args = ArrayListUnmanaged([]const u8){};
-@@ -283,7 +358,7 @@ fn getRunMode(self_exe: []const u8, self_base_noexe: []const u8) error{BadParent
+@@ -276,14 +351,14 @@ fn getRunMode(self_exe: []const u8, self_base_noexe: []const u8) error{BadParent
+     // strings `is.it.x86_64?-stallinux,macos-`; we are trying to aid users
+     // that run things from the wrong directory, not trying to punish the ones
+     // having fun.
+-    var it = mem.split(u8, triple, "-");
++    var it = mem.splitScalar(u8, triple, '-');
+ 
+     const arch = it.next() orelse return error.BadParent;
+     if (mem.indexOf(u8, "aarch64,x86_64,wasm32", arch) == null)
          return error.BadParent;
  
      const got_os = it.next() orelse return error.BadParent;
