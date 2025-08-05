@@ -292,6 +292,7 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     add_test = True,
+    opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.
