@@ -618,6 +618,7 @@ fn test_request_path_access(env: TestEnv) {
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
+// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges.
 fn test_canister_canister_ranges_paths(env: TestEnv) {
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
@@ -637,6 +638,7 @@ fn test_canister_canister_ranges_paths(env: TestEnv) {
     lookup_value(&cert, path).expect("State tree does not contain canister ranges");
 }
 
+// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
 fn test_subnet_canister_ranges_paths(env: TestEnv) {
     let node = get_first_app_node(&env);
 
