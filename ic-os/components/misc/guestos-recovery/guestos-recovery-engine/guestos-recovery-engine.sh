@@ -82,7 +82,7 @@ perform_recovery() {
 
     echo "Preparing recovery artifacts..."
     REGISTRY_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/ic_registry_local_store)
-    CUP_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/cups)
+    CUP_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb)
 
     mkdir ic_registry_local_store
     tar -xf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
