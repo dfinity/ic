@@ -68,7 +68,7 @@ enum FileOperation {
 // Example of how to use acquire_for with named locks for file operations.
 async fn try_file_operation(file_path: String, operation: FileOperation) -> bool {
     thread_local! {
-        static FILE_LOCKS: RefCell<BTreeMap<String, FileOperation>> = RefCell::new(BTreeMap::new());
+        static FILE_LOCKS: RefCell<BTreeMap<String, FileOperation>> = const { RefCell::new(BTreeMap::new()) };
     }
     let release_on_drop = acquire_for(&FILE_LOCKS, file_path.clone(), operation);
     if let Err(existing_operation) = release_on_drop {
