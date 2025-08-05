@@ -1329,7 +1329,7 @@ async fn test_network_status_single_genesis_transaction() {
 #[test]
 fn test_mainnet_and_env_flag_set_returns_error() {
     let output = Command::new(get_rosetta_path())
-        .args(&["--environment", "test", "--mainnet"])
+        .args(["--environment", "test", "--mainnet"])
         .output()
         .expect("Failed to execute binary");
 
