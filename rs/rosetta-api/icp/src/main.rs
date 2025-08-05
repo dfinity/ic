@@ -292,7 +292,7 @@ async fn main() -> std::io::Result<()> {
 
     // Check for conflicting flags
     if opt.mainnet && opt.environment != Environment::DeprecatedTestnet {
-        error!("Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet.");
+        eprintln!("Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet.");
         std::process::exit(1);
     }
 
