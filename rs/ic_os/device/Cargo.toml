@@ -6,7 +6,9 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+devicemapper = { workspace = true }
 gpt = { workspace = true }
+loopdev-3 = { workspace = true }
 nix = { workspace = true }
 partition_tools = { path = "../build_tools/partition_tools" }
 tempfile = { workspace = true }
@@ -14,6 +16,4 @@ tokio = { workspace = true }
 uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-loopdev-3 = { workspace = true }
-devicemapper = { workspace = true }
 sys-mount = { workspace = true }
