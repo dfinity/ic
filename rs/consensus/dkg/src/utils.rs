@@ -29,7 +29,7 @@ pub fn get_vetkey_public_keys(
     logger: &ReplicaLogger,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    BTreeMap<MasterPublicKeyId, NiDkgId>,
+    BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
 ) {
     // Get all next transcripts
     // If there is a current transcript, but no next transcript, use that one instead.
@@ -74,7 +74,7 @@ pub fn get_vetkey_public_keys(
                         public_key: pubkey.into_bytes().to_vec(),
                     },
                 ),
-                (key_id.clone().into(), ni_dkg_id),
+                (key_id.clone(), ni_dkg_id),
             )
         })
         .unzip();

@@ -1049,7 +1049,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 })
                 .transpose()?
                 .unwrap_or_default();
-
+            let cost_schedule = CanisterCyclesCostSchedule::from(
+                CanisterCyclesCostScheduleProto::try_from(
+                    subnet_record.canister_cycles_cost_schedule,
+                )
+                .map_err(|err| {
+                    Persistent(format!(
+                        "'CanisterCyclesCostSchedule type from subnet record for subnet {}', err: {}",
+                        *subnet_id, err
+                    ))
+                })?,
+            );
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1058,6 +1068,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_type,
                     subnet_features,
                     chain_keys_held,
+                    cost_schedule,
                 },
             );
         }
