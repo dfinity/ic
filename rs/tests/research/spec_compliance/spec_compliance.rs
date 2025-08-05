@@ -31,15 +31,7 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /Call from query method traps (in query call)/",
 ];
 
-pub fn group_all() -> Vec<&'static str> {
-    [group_01(), group_02()].concat()
-}
-
 pub fn group_01() -> Vec<&'static str> {
-    vec!["($0 ~ /canister global timer/)", "($0 ~ /canister http/)"]
-}
-
-pub fn group_02() -> Vec<&'static str> {
     vec![
         "($0 ~ /stable memory/)",
         "($0 ~ /inter-canister calls/)",

@@ -27,11 +27,3 @@ path = "spec_compliance_group_01_application_subnet_test.rs"
 [[bin]]
 name = "spec_compliance_group_01_system_subnet_test"
 path = "spec_compliance_group_01_system_subnet_test.rs"
-
-[[bin]]
-name = "spec_compliance_group_02_application_subnet_testt"
-path = "spec_compliance_group_02_application_subnet_test.rs"
-
-[[bin]]
-name = "spec_compliance_group_02_system_subnet_test"
-path = "spec_compliance_group_02_system_subnet_test.rs"
