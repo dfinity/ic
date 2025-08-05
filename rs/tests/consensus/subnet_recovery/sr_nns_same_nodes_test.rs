@@ -19,7 +19,9 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_consensus_system_test_utils::{
-    impersonate_upstreams::{setup_upstreams_uvm, uvm_serve_recovery_artifacts},
+    impersonate_upstreams::{
+        get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
+    },
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
@@ -251,8 +253,15 @@ pub fn test(env: TestEnv) {
     // TODO: Spoof every node's HostOS DNS (with spoof_node_dns) to point the upstreams to the UVM
     // TODO: Make every node reboot into GuestOS-recovery-upgrader specifying the version of that
     // image
-    // TODO: Once GuestOS is launched, spoof the node GuestOS DNS (with spoof_node_dns) to point the
-    // upstreams to the UVM
+
+    let server_ipv6 = get_upstreams_uvm_ipv6(&env);
+    for node in topo_snapshot.root_subnet().nodes() {
+        info!(
+            logger,
+            "Spoofing node {} DNS to point to the UVM at {}", node.node_id, server_ipv6
+        );
+        spoof_node_dns(&env, &node, &server_ipv6);
+    }
 
     info!(logger, "Wait for state sync to complete");
     cert_state_makes_progress_with_retries(
