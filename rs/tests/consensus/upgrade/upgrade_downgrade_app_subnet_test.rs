@@ -32,6 +32,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, get_app_subnet_and_node, MessageCanister};
 use ic_types::Height;
+use slog::info;
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 9;
@@ -111,6 +112,8 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
 
     rt.spawn(start_workload(app_subnet, requests, logger));
 
+    let logger = env.logger();
+    info!(logger, "Upgrading to target version: {}", target_version);
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
@@ -119,6 +122,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         None,
     );
     let initial_version = get_guestos_img_version().expect("target IC version");
+    info!(logger, "Upgrading to initial version: {}", initial_version);
     upgrade(
         &env,
         &nns_node,

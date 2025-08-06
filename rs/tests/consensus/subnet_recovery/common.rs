@@ -86,7 +86,7 @@ const APP_NODES_LARGE: usize = 37;
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
 
-pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -455,7 +455,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
         upgrade_image_url: get_guestos_update_img_url().ok(),
-        upgrade_image_hash: get_guestos_update_img_sha256(&env).ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access

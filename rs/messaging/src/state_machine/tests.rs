@@ -4,7 +4,7 @@ use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
     state_machine::StateMachineImpl,
 };
-use ic_interfaces::execution_environment::{ChainKeyData, Scheduler};
+use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -17,7 +17,7 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::{
     batch::BatchBuilder, ids::subnet_test_id, messages::SignedIngressBuilder,
 };
-use ic_types::batch::BatchMessages;
+use ic_types::batch::{BatchMessages, CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::messages::SignedIngress;
 use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
 use maplit::btreemap;
@@ -88,11 +88,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(ChainKeyData {
-                master_public_keys: provided_batch.chain_key_subnet_public_keys.clone(),
-                idkg_pre_signature_ids: provided_batch.idkg_pre_signature_ids.clone(),
-                nidkg_ids: provided_batch.ni_dkg_ids.clone(),
-            }),
+            eq(provided_batch.chain_key_data.clone()),
             eq(provided_batch.replica_version.clone()),
             eq(round),
             eq(None),
@@ -118,6 +114,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             subnet_type: SubnetType::Application,
             subnet_features: SubnetFeatures::default(),
             chain_keys_held: BTreeSet::new(),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         },
     );
 

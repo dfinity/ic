@@ -389,7 +389,7 @@ message CanisterStateBits {
   reserved 1;
   reserved "controller";
   uint64 last_full_execution_round = 2;
-  CallContextManager call_context_manager = 3;
+  reserved 3;
   uint64 compute_allocation = 4;
   int64 accumulated_priority = 5;
   reserved 6;

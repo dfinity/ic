@@ -437,14 +437,50 @@ mod sanity_check {
 
     impl MetricsBeforeAndAfter {
         /// Checks a list of metrics:
+        /// - The stable/wasm memory size should not double or halve.
+        /// - The number of proposals should not decrease by more than 50%.
+        /// - The number of neurons should be within 5% of the before value.
         /// - The latest reward event timestamp should have increased.
         /// - The total minted node provider rewards should be +-20% of the before value.
         /// - The node provider rewards timestamp should have increased.
         fn check_all(&self) {
             self.check_metric(
-                |metrics| governance_gauge_value(metrics, "governance_latest_reward_event_timestamp_seconds"),
+                |metrics| governance_gauge_value(metrics, "governance_stable_memory_size_bytes"),
                 |before, after| {
-                    assert!(after > before, "After advancing some time after upgrade, latest reward event timestamp did not increase, which means the reward event did not happen as expected.");
+                    assert_not_increased_too_much(before, after, "stable memory size", 0.1);
+                },
+            );
+
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_total_memory_size_bytes"),
+                |before, after| {
+                    assert_not_increased_too_much(before, after, "wasm memory size", 0.5);
+                    assert_not_decreased_too_much(before, after, "wasm memory size", 0.5);
+                },
+            );
+
+            self.check_metric(
+                |metrics| {
+                    governance_gauge_value(
+                        metrics,
+                        "governance_latest_reward_event_timestamp_seconds",
+                    )
+                },
+                |before, after| {
+                    assert_increased(before, after, "latest reward event timestamp");
+                },
+            );
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_proposals_total"),
+                |before, after| {
+                    assert_not_decreased_too_much(before, after, "number of proposals", 0.5);
+                },
+            );
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_neurons_total"),
+                |before, after| {
+                    assert_not_decreased_too_much(before, after, "number of neurons", 0.05);
+                    assert_not_increased_too_much(before, after, "number of neurons", 0.05);
                 },
             );
             self.check_metric(
@@ -454,19 +490,17 @@ mod sanity_check {
                     )
                 },
                 |before, after| {
-                    assert!(
-                        after < before * 1.2,
-                        "After upgrading and advancing time, total minted node provider rewards \
-                        increased too much. Before: {}, After: {}",
+                    assert_not_increased_too_much(
                         before,
-                        after
+                        after,
+                        "total minted node provider rewards",
+                        0.2,
                     );
-                    assert!(
-                        after > before * 0.8,
-                        "After upgrading and advancing time, total minted node provider rewards \
-                        decreased too much. Before: {}, After: {}",
+                    assert_not_decreased_too_much(
                         before,
-                        after
+                        after,
+                        "total minted node provider rewards",
+                        0.2,
                     );
                 },
             );
@@ -478,11 +512,7 @@ mod sanity_check {
                         .timestamp
                 },
                 |before, after| {
-                    assert!(
-                        after > before,
-                        "After upgrading and advancing time, the node provider rewards timestamp \
-                        did not increase, which means the reward event did not happen as expected."
-                    );
+                    assert_increased(before, after, "node provider rewards timestamp");
                 },
             );
         }
@@ -524,5 +554,38 @@ mod sanity_check {
             .as_ref()
             .unwrap();
         total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
+    }
+
+    fn assert_not_increased_too_much(before: f64, after: f64, name: &str, diff: f64) {
+        assert!(
+            after < before * (1.0 + diff),
+            "After upgrading and advancing time, {} increased too much. Before: {}, After: {}",
+            name,
+            before,
+            after
+        );
+    }
+
+    fn assert_not_decreased_too_much(before: f64, after: f64, name: &str, diff: f64) {
+        assert!(
+            after > before * (1.0 - diff),
+            "After upgrading and advancing time, {} decreased too much. Before: {}, After: {}",
+            name,
+            before,
+            after
+        );
+    }
+
+    fn assert_increased<T>(before: T, after: T, name: &str)
+    where
+        T: PartialOrd + std::fmt::Display,
+    {
+        assert!(
+            after > before,
+            "After upgrading and advancing time, {} did not increase. Before: {}, After: {}",
+            name,
+            before,
+            after
+        );
     }
 }

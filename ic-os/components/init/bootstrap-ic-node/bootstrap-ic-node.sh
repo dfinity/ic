@@ -3,11 +3,8 @@
 # Provision a node based on an injected "ic-bootstrap.tar" file. This script
 # is meant to be run as a prerequisite before launching orchestrator/replica.
 #
-# The tar file can be supplied using one of two methods:
-# - as "ic-bootstrap.tar" stored on a (virtual) removable media attached
-#   on first boot
-# - it can be directly "pushed" into the filesystem as /mnt/ic-bootstrap.tar
-#   (e.g. bind mount when running the entire stack as docker container)
+# The tar file can be supplied as "ic-bootstrap.tar" stored on a (virtual) removable
+# media (mounted at /mnt/config by mount-config.sh)
 
 set -eo pipefail
 
@@ -33,43 +30,7 @@ function get_guestos_version() {
         "gauge"
 }
 
-# List all block devices that could potentially contain the ic-bootstrap.tar configuration,
-# i.e. "removable" devices, devices with the serial "config"
-# or devices containing a filesystem with the label "CONFIG".
-function find_config_devices() {
-    for DEV in $(ls -C /sys/class/block); do
-        echo "Consider device $DEV" >&2
-        if [ -e /sys/class/block/"${DEV}"/removable ]; then
-            # In production, a removable device is used to pass configuration
-            # into the VM.
-            # In some test environments where this is not available, the
-            # configuration device is identified by the serial "config".
-            local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
-            local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config")
-            local FS_LABEL=$(lsblk --fs --noheadings --output LABEL /dev/"${DEV}")
-            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ] || [ "${FS_LABEL}" == "CONFIG" ]; then
-                # If this is a partitioned device (and it usually is), then
-                # the first partition is of relevance.
-                # return first partition for use instead.
-                if [ -e /sys/class/block/"${DEV}1" ]; then
-                    local TGT="/dev/${DEV}1"
-                elif [ -e /sys/class/block/"${DEV}p1" ]; then
-                    local TGT="/dev/${DEV}p1"
-                else
-                    local TGT="/dev/${DEV}"
-                fi
-                # Sanity check whether device is usable (it could be a
-                # CD drive with no medium in)
-                if blockdev "${TGT}"; then
-                    echo "$TGT"
-                fi
-            fi
-        fi
-    done
-}
-
-# Process the bootstrap package given as first argument to populate
-# both config space and parts of /var/lib/ic/data and /var/lib/ic/crypto
+# Process the bootstrap package to populate SSH keys, /var/lib/ic/data and /var/lib/ic/crypto
 # note: keep this list in sync with configurations supported in `config::guestos_bootstrap_image`.
 #
 # Arguments:
@@ -93,12 +54,22 @@ function process_bootstrap() {
         echo "Installing initial state"
         cp -rL -T "${TMPDIR}/ic_state" "${STATE_ROOT}/data/ic_state"
     fi
-    for ITEM in ic_registry_local_store nns_public_key.pem node_operator_private_key.pem; do
-        if [ -e "${TMPDIR}/${ITEM}" ]; then
-            echo "Setting up initial ${ITEM}"
-            cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
-        fi
-    done
+    if [ -e "${TMPDIR}/ic_registry_local_store" ]; then
+        echo "Setting up initial ic_registry_local_store"
+        cp -rL -T "${TMPDIR}/ic_registry_local_store" "${STATE_ROOT}/data/ic_registry_local_store"
+    fi
+
+    if [ -e "${TMPDIR}/nns_public_key.pem" ]; then
+        echo "Setting up initial nns_public_key.pem"
+        cp -rL -T "${TMPDIR}/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
+        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
+    fi
+
+    if [ -e "${TMPDIR}/node_operator_private_key.pem" ]; then
+        echo "Setting up initial node_operator_private_key.pem"
+        cp -rL -T "${TMPDIR}/node_operator_private_key.pem" "${STATE_ROOT}/data/node_operator_private_key.pem"
+        chmod 400 "${STATE_ROOT}/data/node_operator_private_key.pem"
+    fi
 
     for DIR in accounts_ssh_authorized_keys; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
@@ -109,31 +80,15 @@ function process_bootstrap() {
 
     rm -rf "${TMPDIR}"
 
+    # Fix up permissions. Ideally this is specific to only what is copied. If
+    # we do make this change, we need to make sure `data` itself has the
+    # correct permissions.
+    chown ic-replica:nogroup -R "${STATE_ROOT}/data"
+
     # Synchronize the above cached writes to persistent storage
     # to make sure the system can boot successfully after a hard shutdown.
     sync
 }
-
-# Process config.json from bootstrap package
-# Arguments:
-# - $1: path to the bootstrap package (typically /mnt/ic-bootstrap.tar)
-# - $2: path to config space (typically /boot/config)
-function process_config_json() {
-    local BOOTSTRAP_TAR="$1"
-    local CONFIG_ROOT="$2"
-
-    local TMPDIR=$(mktemp -d)
-    tar xf "${BOOTSTRAP_TAR}" -C "${TMPDIR}"
-
-    if [ -e "${TMPDIR}/config.json" ]; then
-        echo "Setting up config.json"
-        cp "${TMPDIR}/config.json" "${CONFIG_ROOT}/config.json"
-    fi
-
-    rm -rf "${TMPDIR}"
-}
-
-MAX_TRIES=10
 
 get_guestos_version
 
@@ -151,58 +106,21 @@ if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
 fi
 
-while [ ! -f /boot/config/CONFIGURED ]; do
-    echo "Locating CONFIG device"
-    DEV="$(find_config_devices)"
+if [ ! -f /boot/config/CONFIGURED ]; then
+    echo "Checking for bootstrap configuration"
 
-    # Check whether we were provided with a CONFIG device -- on "real"
-    # VM deployments this will be the method used to inject bootstrap information
-    # into the system.
-    # But even if nothing can be mounted, just try and see if something usable
-    # is there already -- this might be useful when operating this thing as a
-    # docker container instead of full-blown VM.
-    if [ "${DEV}" != "" ]; then
-        echo "Found CONFIG device at ${DEV}"
-        mount -t vfat -o ro "${DEV}" /mnt
-    fi
-
-    if [ -e /mnt/ic-bootstrap.tar ]; then
-        echo "Processing bootstrap config"
-        process_bootstrap /mnt/ic-bootstrap.tar /boot/config /var/lib/ic
-        echo "Successfully processed bootstrap config"
+    if [ -e /mnt/config/ic-bootstrap.tar ]; then
+        echo "Processing bootstrap data from /mnt/config"
+        process_bootstrap /mnt/config/ic-bootstrap.tar /boot/config /var/lib/ic
+        echo "Successfully processed bootstrap data"
         touch /boot/config/CONFIGURED
     else
-        MAX_TRIES=$(("${MAX_TRIES}" - 1))
-        if [ "${MAX_TRIES}" == 0 ]; then
-            echo "No registration configuration provided to bootstrap IC node -- continuing without"
-            exit 1
-        else
-            echo "Retrying to find bootstrap config"
-            sleep 1
-        fi
+        echo "No registration configuration provided to bootstrap IC node"
+        exit 1
     fi
-
-    # Fix up permissions. This is actually the wrong place.
-    chown ic-replica:nogroup -R /var/lib/ic/data
-
-    if [ "${DEV}" != "" ]; then
-        umount /mnt
-    fi
-done
-
-# Process config.json every boot (not just on first bootstrap)
-echo "Checking for config.json updates"
-DEV="$(find_config_devices)"
-if [ "${DEV}" != "" ]; then
-    echo "Found CONFIG device at ${DEV}"
-    mount -t vfat -o ro "${DEV}" /mnt
-    process_config_json /mnt/ic-bootstrap.tar /boot/config
-    umount /mnt
-elif [ -e /mnt/ic-bootstrap.tar ]; then
-    echo "Processing config.json from pre-mounted bootstrap"
-    process_config_json /mnt/ic-bootstrap.tar /boot/config
 fi
 
+# Write metric on use of node_operator_private_key
 node_operator_private_key_exists=0
 if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
     node_operator_private_key_exists=1

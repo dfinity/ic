@@ -15,6 +15,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_wit
 use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::propose_and_wait;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
@@ -22,7 +23,11 @@ use ic_sns_cli::register_extension;
 use ic_sns_cli::register_extension::RegisterExtensionArgs;
 use ic_sns_cli::register_extension::RegisterExtensionInfo;
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
+use ic_sns_governance_api::pb::v1::proposal::Action;
+use ic_sns_governance_api::pb::v1::ExecuteExtensionOperation;
+use ic_sns_governance_api::pb::v1::ExtensionOperationArg;
 use ic_sns_governance_api::pb::v1::PreciseValue;
+use ic_sns_governance_api::pb::v1::Proposal;
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc::generic_value::Value;
@@ -154,22 +159,30 @@ async fn test_treasury_manager() {
     .await
     .unwrap();
 
-    let treasury_allocation_icp_e8s = 150 * E8;
-    let treasury_allocation_sns_e8s = 350 * E8;
+    let initial_treasury_allocation_icp_e8s = 100 * E8;
+    let initial_treasury_allocation_sns_e8s = 300 * E8;
 
-    let extension_init = Some(PreciseValue::Map(btreemap! {
-        "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
-        "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
-    }));
+    let topup_treasury_allocation_icp_e8s = 50 * E8;
+    let topup_treasury_allocation_sns_e8s = 50 * E8;
 
-    let adaptor_canister_id = {
-        let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
-            &pocket_ic,
-            sns.governance.canister_id,
-        )
-        .await
-        .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+    fn make_deposit_allowances(
+        treasury_allocation_icp_e8s: u64,
+        treasury_allocation_sns_e8s: u64,
+    ) -> Option<PreciseValue> {
+        Some(PreciseValue::Map(btreemap! {
+            "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
+            "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
+        }))
+    }
 
+    let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
+        &pocket_ic,
+        sns.governance.canister_id,
+    )
+    .await
+    .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+    let extension_canister_id = {
         let agent = PocketIcAgent::new(&pocket_ic, sender);
 
         let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
@@ -186,13 +199,16 @@ async fn test_treasury_manager() {
             wasm_module_hash: _,
         } = register_extension::exec(
             RegisterExtensionArgs {
-                sns_neuron_id: Some(ParsedSnsNeuron(neuron_id)),
+                sns_neuron_id: Some(ParsedSnsNeuron(neuron_id.clone())),
                 sns_root_canister_id,
                 subnet_id: Some(PrincipalId(fiduciary_subnet_id)),
                 wasm_path,
                 proposal_url: Url::try_from("https://example.com").unwrap(),
                 summary: "Register KongSwap Adaptor".to_string(),
-                extension_init,
+                extension_init: make_deposit_allowances(
+                    initial_treasury_allocation_icp_e8s,
+                    initial_treasury_allocation_sns_e8s,
+                ),
             },
             &agent,
         )
@@ -229,10 +245,10 @@ async fn test_treasury_manager() {
         .with_treasury_owner(treasury_sns_account, "DAO Treasury".to_string())
         .with_treasury_manager(
             sns_treasury_manager::Account {
-                owner: adaptor_canister_id.0,
+                owner: extension_canister_id.0,
                 subaccount: None,
             },
-            format!("KongSwapAdaptor({})", adaptor_canister_id),
+            format!("KongSwapAdaptor({})", extension_canister_id),
         )
         .with_external_custodian(None, None)
         .with_fee_collector(None, None)
@@ -244,10 +260,10 @@ async fn test_treasury_manager() {
         .with_treasury_owner(treasury_icp_account, "DAO Treasury".to_string())
         .with_treasury_manager(
             sns_treasury_manager::Account {
-                owner: adaptor_canister_id.0,
+                owner: extension_canister_id.0,
                 subaccount: None,
             },
-            format!("KongSwapAdaptor({})", adaptor_canister_id),
+            format!("KongSwapAdaptor({})", extension_canister_id),
         )
         .with_external_custodian(None, None)
         .with_fee_collector(None, None)
@@ -264,22 +280,16 @@ async fn test_treasury_manager() {
         "After registering KongSwapAdaptor",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - treasury_allocation_icp_e8s - ICP_FEE,
-        initial_sns_balance_e8s - treasury_allocation_sns_e8s - SNS_FEE,
+        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s - ICP_FEE,
+        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s - SNS_FEE,
     )
     .await
     .unwrap();
 
-    // 1. created the manager canister
-    // 2. installed the code -- sync init; async init is scheduled
-    // 3. await 100 blocks / seconds (should be enough for the async init to complete)
-    // 4. async init fully completed  ==>  init deposit took place
-    // 5. KongSwap Adaptor is ready to use.
-
     {
         let request = BalancesRequest {};
         let response = pocket_ic
-            .call(adaptor_canister_id, request)
+            .call(extension_canister_id, request)
             .await
             .unwrap()
             .unwrap();
@@ -288,10 +298,10 @@ async fn test_treasury_manager() {
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token.clone() => empty_sns_balance_book.clone()
-                    .external_custodian(treasury_allocation_sns_e8s - 2 * SNS_FEE)
+                    .external_custodian(initial_treasury_allocation_sns_e8s - 2 * SNS_FEE)
                     .fee_collector(2 * SNS_FEE),
                 icp_token.clone() => empty_icp_balance_book.clone()
-                    .external_custodian(treasury_allocation_icp_e8s - 2 * ICP_FEE)
+                    .external_custodian(initial_treasury_allocation_icp_e8s - 2 * ICP_FEE)
                     .fee_collector(2 * ICP_FEE),
             }),
         );
@@ -299,12 +309,54 @@ async fn test_treasury_manager() {
 
     // Wait for the KongSwap Adaptor to be ready for the next operation.
     //
-    // This shoudl be less than 1 hour to avoid hitting the next periodic task.
+    // This should be less than 1 hour to avoid hitting the next periodic task.
     for _ in 0..100 {
         pocket_ic.tick().await;
         pocket_ic.advance_time(Duration::from_secs(35)).await;
     }
 
+    // Testing the top-up deposit operation.
+    {
+        let proposal = Proposal {
+            title: "Test top-up deposit".to_string(),
+            summary: "test".to_string(),
+            url: "https://example.com".to_string(),
+            action: Some(Action::ExecuteExtensionOperation(
+                ExecuteExtensionOperation {
+                    extension_canister_id: Some(extension_canister_id),
+                    operation_name: Some("deposit".to_string()),
+                    operation_arg: Some(ExtensionOperationArg {
+                        value: make_deposit_allowances(
+                            topup_treasury_allocation_icp_e8s,
+                            topup_treasury_allocation_sns_e8s,
+                        ),
+                    }),
+                },
+            )),
+        };
+        let proposal_data = propose_and_wait(
+            &pocket_ic,
+            sns.governance.canister_id,
+            sender,
+            neuron_id,
+            proposal,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(proposal_data.failure_reason, None);
+        assert!(proposal_data.executed_timestamp_seconds > 0);
+    }
+
+    // Wait for the KongSwap Adaptor to be ready for the next operation.
+    //
+    // This should be less than 1 hour to avoid hitting the next periodic task.
+    for _ in 0..100 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(35)).await;
+    }
+
+    // Testing the withdraw operation.
     {
         let ledger_id_to_account = btreemap! {
             sns.ledger.canister_id.0 => treasury_sns_account,
@@ -315,41 +367,53 @@ async fn test_treasury_manager() {
             withdraw_accounts: Some(ledger_id_to_account),
         };
 
-        let _response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
-            .call(adaptor_canister_id, request)
+        let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
+            .call(extension_canister_id, request)
             .await
             .unwrap()
             .unwrap();
 
         {
             let request = AuditTrailRequest {};
-            let response = pocket_ic.call(adaptor_canister_id, request).await.unwrap();
+            let response = pocket_ic
+                .call(extension_canister_id, request)
+                .await
+                .unwrap();
 
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        // TODO: Reenable this assertion.
-        // assert_eq!(
-        //     response.asset_to_balances,
-        //     Some(btreemap! {
-        //         sns_token => empty_sns_balance_book
-        //             .clone()
-        //             .treasury_owner(treasury_allocation_sns_e8s - 4 * SNS_FEE)
-        //             .fee_collector(4 * SNS_FEE),
-        //         icp_token => empty_icp_balance_book
-        //             .clone()
-        //             .treasury_owner(treasury_allocation_icp_e8s - 4 * ICP_FEE)
-        //             .fee_collector(4 * ICP_FEE),
-        //     }),
-        // );
+        let expected_fees_sns_e8s = 6 * SNS_FEE;
+        let expected_fees_icp_e8s = 7 * ICP_FEE;
+
+        let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
+            + topup_treasury_allocation_sns_e8s
+            - expected_fees_sns_e8s;
+        let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s
+            + topup_treasury_allocation_icp_e8s
+            - expected_fees_icp_e8s;
+
+        assert_eq!(
+            response.asset_to_balances,
+            Some(btreemap! {
+                sns_token => empty_sns_balance_book
+                    .clone()
+                    .treasury_owner(treasury_allocation_sns_e8s)
+                    .fee_collector(expected_fees_sns_e8s),
+                icp_token => empty_icp_balance_book
+                    .clone()
+                    .treasury_owner(treasury_allocation_icp_e8s)
+                    .fee_collector(expected_fees_icp_e8s),
+            }),
+        );
     };
 
     validate_treasury_balances(
         "After withdrawing.",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - 5 * ICP_FEE,
-        initial_sns_balance_e8s - 5 * SNS_FEE,
+        initial_icp_balance_e8s - 9 * ICP_FEE,
+        initial_sns_balance_e8s - 8 * SNS_FEE,
     )
     .await
     .unwrap();

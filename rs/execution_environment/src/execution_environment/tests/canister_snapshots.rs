@@ -31,6 +31,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
@@ -534,6 +535,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
                 NumBytes::from(subnet_memory_usage_after - subnet_memory_usage_before),
                 &ResourceSaturation::new(subnet_memory_usage_before, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
     });
@@ -932,6 +934,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
     test.canister_state_mut(canister_id)
@@ -1908,6 +1911,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -1969,6 +1973,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
