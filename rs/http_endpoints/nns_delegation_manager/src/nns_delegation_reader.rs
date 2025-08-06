@@ -3,6 +3,7 @@ use tokio::sync::watch;
 
 #[derive(Copy, Clone)]
 /// Enum representing the format of canister ranges in the delegation.
+// TODO(CON-1487): Add support for the new canister ranges format.
 pub enum CanisterRangesFormat {
     /// Canister ranges are represented as a flat list of canister ranges.
     /// Corresponds to the /subnet/{subnet_id}/canister_ranges path in the state tree.
@@ -13,6 +14,7 @@ pub enum CanisterRangesFormat {
 }
 
 #[derive(Clone)]
+// TODO(CON-1487): Consider caching the delegations.
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<CertificateDelegation>>,
     is_nns: bool,
