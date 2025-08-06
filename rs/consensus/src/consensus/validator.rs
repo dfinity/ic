@@ -1,6 +1,6 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
-
+#![allow(clippy::result_large_err)]
 use crate::consensus::{
     check_protocol_version,
     metrics::ValidatorMetrics,
