@@ -7189,7 +7189,7 @@ fn test_environment_variables() {
     let new_env_vars =
         check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
     assert_eq!(new_env_vars.len(), env_vars.len());
-    assert!(new_env_vars.contains_key("KEY4"));
+    assert_eq!(new_env_vars["KEY4"], "VALUE4");
 
     // Update a variable value.
     env_vars[0].value = "VALUE2_UPDATED".to_string();
