@@ -26,8 +26,8 @@ mod util;
 use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
-    simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
-    wait_for_expected_guest_version, wait_for_guest_version,
+    simple_setup_nested_vm, start_nested_vm_group, update_nodes_hostos_version,
+    update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
 };
 
 use anyhow::bail;
@@ -128,7 +128,7 @@ pub fn registration(env: TestEnv) {
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
 
     // Assert that the GuestOS was started with direct kernel boot.
     let guest_kernel_cmdline = env
@@ -173,7 +173,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
 
     info!(logger, "Waiting for all four nodes to join ...");
 
@@ -224,7 +224,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     let update_image_sha256 = get_hostos_update_img_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     let new_topology = block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
@@ -330,7 +330,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
 
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -449,7 +449,7 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     // start the nested VM and wait for it to join the network
     let initial_topology = env.topology_snapshot();
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     block_on(
         initial_topology.block_for_newer_registry_version_within_duration(

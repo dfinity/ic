@@ -300,7 +300,7 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, names: &[&str]) {
     info!(logger, "Minimal nested VM(s) setup complete!");
 }
 
-pub(crate) fn start_nested_vm(env: TestEnv) {
+pub(crate) fn start_nested_vm_group(env: TestEnv) {
     let logger = env.logger();
     info!(logger, "Setup nested VMs ...");
 
