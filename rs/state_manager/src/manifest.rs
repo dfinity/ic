@@ -32,6 +32,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
@@ -684,6 +685,12 @@ fn hash_plan(
                 Some((dirty_chunk_bitmap, base_index))
             };
 
+            let path_hash = {
+                let mut hasher = DefaultHasher::new();
+                relative_path.hash(&mut hasher);
+                hasher.finish()
+            };
+
             if let Some((dirty_chunk_bitmap, base_index)) = compute_dirty_chunk_bitmap() {
                 debug_assert_eq!(num_chunks, dirty_chunk_bitmap.len());
 
@@ -703,10 +710,7 @@ fn hash_plan(
                             (size_bytes - chunk.offset).min(max_chunk_size as u64)
                         );
 
-                        // We are using chunk_actions.len() as shorthand for the chunk_index.
-                        let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
-
-                        if (offset_index % rehash_every_nth) == 0 {
+                        if ((offset + path_hash + i as u64) % rehash_every_nth) == 0 {
                             ChunkAction::RecomputeAndCompare(chunk.hash)
                         } else {
                             ChunkAction::UseHash(chunk.hash)
