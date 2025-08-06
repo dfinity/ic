@@ -5,10 +5,13 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-dummy-getrandom-for-wasm",
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
 ]
 

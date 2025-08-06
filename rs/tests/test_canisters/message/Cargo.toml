@@ -12,3 +12,6 @@ ic-cdk = { workspace = true }
 serde = { workspace = true }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 futures = { workspace = true }
+rand = { workspace = true }
+ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
+rand_chacha = { workspace = true }

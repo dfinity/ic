@@ -1,5 +1,7 @@
+use futures::{stream::FuturesUnordered, StreamExt};
 use ic_cdk::api::call::ManualReply;
 use ic_message::ForwardParams;
+use rand::{seq::IteratorRandom, SeedableRng};
 use std::cell::RefCell;
 
 thread_local! {
@@ -65,8 +67,79 @@ fn subnet_node_ids() -> Vec<candid::Principal> {
     (0..subnet_num_nodes()).map(get_node_id).collect()
 }
 
+thread_local! {
+    static PRNG: RefCell<rand_chacha::ChaCha8Rng> = RefCell::new(rand_chacha::ChaCha8Rng::seed_from_u64(ic_cdk::api::time() as u64));
+}
+
+type ResponseTypePlaceholder = String;
+type CallErrorTypePlaceholder = String;
+type ParametersError = String;
+
 #[ic_cdk::update]
-pub async fn multi_http_request(url: String) -> Vec<Result<String, String>> {
+pub async fn k_of_n_http_requests(
+    url: String,
+    k: usize,
+    n: usize,
+) -> Result<Vec<Result<ResponseTypePlaceholder, CallErrorTypePlaceholder>>, ParametersError> {
+    if k > n {
+        return Err("k must be less than or equal to n".to_string());
+    }
+    let node_ids = subnet_node_ids();
+    if n > node_ids.len() {
+        return Err(
+            "n must be less than or equal to the number of nodes in the subnet".to_string(),
+        );
+    }
+    let chosen = PRNG.with_borrow_mut(|prng| node_ids.into_iter().choose_multiple(prng, n));
+    let mut futures = chosen
+        .into_iter()
+        .map(|node_id| {
+            ic_cdk::api::call::call_with_payment::<
+                _,
+                (ic_management_canister_types_private::CanisterHttpResponsePayload,),
+            >(
+                candid::Principal::management_canister(),
+                "http_request",
+                (
+                    ic_management_canister_types_private::CanisterHttpRequestArgs {
+                        url: url.clone(),
+                        method: ic_management_canister_types_private::HttpMethod::GET,
+                        body: None,
+                        headers: ic_management_canister_types_private::BoundedVec::new(vec![]),
+                        is_replicated: Some(node_id.into()),
+                        max_response_bytes: Some(1000),
+                        transform: None,
+                    },
+                ),
+                50_000_000,
+            )
+        })
+        .collect::<FuturesUnordered<_>>();
+
+    let mut res = vec![];
+    while (res.len() < k) {
+        match futures.next().await {
+            Some(Ok((response,))) => {
+                res.push(Ok(String::from_utf8(response.body)
+                    .map_err(|e| format!("Invalid UTF-8: {:?}", e))?));
+            }
+            Some(Err(e)) => {
+                res.push(Err(format!("{:?}", e)));
+            }
+            None => break,
+        }
+    }
+
+    Ok(res)
+}
+
+#[ic_cdk::update]
+pub async fn nonreplicated_http_request() -> Vec<Result<ResponseTypePlaceholder, CallErrorTypePlaceholder>> {}
+
+#[ic_cdk::update]
+pub async fn multi_http_request(
+    url: String,
+) -> Vec<Result<ResponseTypePlaceholder, CallErrorTypePlaceholder>> {
     let node_ids = subnet_node_ids();
     let futures = node_ids.into_iter().map(|node_id| {
         ic_cdk::api::call::call_with_payment::<

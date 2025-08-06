@@ -50,8 +50,12 @@ fn test(env: TestEnv) {
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         let response = msg_can
             .agent()
-            .update(&msg_can.canister_id(), "multi_http_request")
-            .with_arg(Encode!(&url).expect("Failed to encode URL argument"))
+            // .update(&msg_can.canister_id(), "multi_http_request")
+            // .with_arg(Encode!(&url).expect("Failed to encode URL argument"))
+            .update(&msg_can.canister_id(), "k_of_n_http_requests")
+            .with_arg(
+                Encode!(&url, &(2 as usize), &(4 as usize)).expect("Failed to encode URL argument"),
+            )
             .call_and_wait()
             .await
             .expect("Failed to make the update HTTP request");
