@@ -2445,7 +2445,7 @@ impl Governance {
             .await?;
 
         // Step 2. Validate the init arguments.
-        if spec.kind != ExtensionKind::TreasuryManager {
+        if spec.extension_types != vec![ExtensionKind::TreasuryManager] {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Only TreasuryManager extensions are currently supported.",

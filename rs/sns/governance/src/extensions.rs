@@ -22,7 +22,6 @@ use sns_treasury_manager::{
 };
 use std::str::FromStr;
 
-use std::marker::PhantomData;
 use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
@@ -673,7 +672,7 @@ pub(crate) async fn validate_execute_extension_operation(
     };
 
     // Currently only support extensions that implement TreasuryManager
-    if !extension_spec.extension_types != vec![ExtensionKind::TreasuryManager] {
+    if extension_spec.extension_types != vec![ExtensionKind::TreasuryManager] {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             "Only extensions implementing TreasuryManager are currently supported.",
@@ -722,16 +721,28 @@ pub(crate) async fn validate_execute_extension_operation(
                     // withdraw_args is ValidatedWithdrawOperationArg with typed fields
                     // e.g., withdraw_args.recipient_principal, withdraw_args.withdrawal_amount_sns_e8s
                 }
+                ValidatedOperationArg::Unprocessed(_) => {
+                    // This case shouldn't happen for governance-supported operations
+                    unreachable!(
+                        "Governance-supported operations should return specific validated types"
+                    )
+                }
             }
+
+            Ok(validated_args)
         }
         OperationSpec::GovernancePassthrough { .. } => {
             // For passthrough operations, we don't do any special validation
             // The operation arguments will be passed directly to the extension
-            // Could add basic schema validation here in the future
+            // Return the unprocessed arguments
+            Ok(ValidatedOperationArg::Unprocessed(
+                operation_arg
+                    .value
+                    .clone()
+                    .unwrap_or(Precise { value: None }),
+            ))
         }
     }
-
-    Ok(())
 }
 
 /// Validated deposit operation arguments
