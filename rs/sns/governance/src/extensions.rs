@@ -46,8 +46,8 @@ impl Display for ExtensionKind {
 #[derive(Clone, Debug)]
 pub enum ValidatedOperationArg {
     // Treasury Manager operations
-    TreasuryDeposit(ValidatedDepositOperationArg),
-    TreasuryWithdraw(ValidatedWithdrawOperationArg),
+    TreasuryManagerDeposit(ValidatedDepositOperationArg),
+    TreasuryManagerWithdraw(ValidatedWithdrawOperationArg),
     // Future: other extension type operations would go here
     // VotingCreatePoll(ValidatedCreatePollArg),
     // etc.
@@ -57,8 +57,8 @@ impl ValidatedOperationArg {
     /// Returns the original Precise value that was validated
     pub fn get_original_value(&self) -> &Precise {
         match self {
-            Self::TreasuryDeposit(arg) => &arg.original,
-            Self::TreasuryWithdraw(arg) => &arg.original,
+            Self::TreasuryManagerDeposit(arg) => &arg.original,
+            Self::TreasuryManagerWithdraw(arg) => &arg.original,
         }
     }
 }
@@ -99,12 +99,12 @@ impl OperationSpec {
 
 /// Validates deposit operation arguments
 fn validate_deposit_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
-    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryDeposit)
+    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
 }
 
 /// Validates withdraw operation arguments  
 fn validate_withdraw_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
-    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryWithdraw)
+    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
 }
 
 impl ExtensionKind {
@@ -710,11 +710,11 @@ pub(crate) async fn validate_execute_extension_operation(
             // For example, check treasury limits based on the validated amounts
             // You can now pattern match on validated_args to get the specific type:
             match &validated_args {
-                ValidatedOperationArg::TreasuryDeposit(deposit_args) => {
+                ValidatedOperationArg::TreasuryManagerDeposit(deposit_args) => {
                     // deposit_args is ValidatedDepositOperationArg with typed fields
                     // e.g., deposit_args.treasury_allocation_sns_e8s
                 }
-                ValidatedOperationArg::TreasuryWithdraw(withdraw_args) => {
+                ValidatedOperationArg::TreasuryManagerWithdraw(withdraw_args) => {
                     // withdraw_args is ValidatedWithdrawOperationArg with typed fields
                     // e.g., withdraw_args.recipient_principal, withdraw_args.withdrawal_amount_sns_e8s
                 }
