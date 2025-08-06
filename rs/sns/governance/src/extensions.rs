@@ -20,7 +20,7 @@ use maplit::btreemap;
 use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
 };
-use std::fmt::Formatter;
+
 use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
@@ -79,6 +79,7 @@ pub struct ValidatedRegisterExtension {
     pub init: ExtensionInit,
 }
 
+#[derive(Debug)]
 pub struct ValidatedExecuteExtensionOperation {
     pub extension_canister_id: CanisterId,
     pub operation_name: String,
@@ -530,15 +531,7 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    if !extension_operations.contains_key(name) {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "Extension canister {} does not have an operation named {}.  Available operations: {:?}",
-                extension_canister_id, name, extension_operations.keys().collect::<Vec<_>>()
-            ),
-        ));
-    }
+    // Now we need a generic way to validate particular extension operations.
 
     Ok(())
 }
@@ -573,4 +566,274 @@ pub(crate) async fn get_sns_token_symbol(
         })??;
 
     Ok(symbol)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse};
+    use crate::types::test_helpers::NativeEnvironment;
+    use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
+
+    #[test]
+    fn test_try_from_execute_extension_operation_success() {
+        let operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(CanisterId::from_u64(123).get()),
+            operation_name: Some("deposit".to_string()),
+            operation_arg: Some(ExtensionOperationArg { value: None }),
+        };
+
+        let result = ValidatedExecuteExtensionOperation::try_from(operation);
+        assert!(result.is_ok());
+
+        let validated = result.unwrap();
+        assert_eq!(validated.extension_canister_id, CanisterId::from_u64(123));
+        assert_eq!(validated.operation_name, "deposit");
+    }
+
+    #[test]
+    fn test_try_from_execute_extension_operation_missing_canister_id() {
+        let operation = ExecuteExtensionOperation {
+            extension_canister_id: None, // Missing
+            operation_name: Some("deposit".to_string()),
+            operation_arg: Some(ExtensionOperationArg { value: None }),
+        };
+
+        let result = ValidatedExecuteExtensionOperation::try_from(operation);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("extension_canister_id is required"));
+    }
+
+    #[test]
+    fn test_try_from_execute_extension_operation_missing_operation_name() {
+        let operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(CanisterId::from_u64(123).get()),
+            operation_name: None, // Missing
+            operation_arg: Some(ExtensionOperationArg { value: None }),
+        };
+
+        let result = ValidatedExecuteExtensionOperation::try_from(operation);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("operation_name is required"));
+    }
+
+    // Tests for validate_execute_extension_operation with proper environment mocking
+
+    #[tokio::test]
+    async fn test_validate_execute_extension_operation_success() {
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
+        let root_canister_id = CanisterId::from_u64(1000);
+        let extension_canister_id = CanisterId::from_u64(2000);
+
+        // Mock list_sns_canisters call
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(CanisterId::from_u64(3000).get()),
+                ledger: Some(CanisterId::from_u64(4000).get()),
+                swap: Some(CanisterId::from_u64(5000).get()),
+                index: Some(CanisterId::from_u64(6000).get()),
+                archives: vec![],
+                dapps: vec![],
+                extensions: Some(crate::pb::sns_root_types::Extensions {
+                    extension_canister_ids: vec![extension_canister_id.get()],
+                }),
+            })
+            .unwrap()),
+        );
+
+        // Mock canister_info call for extension canister
+        env.set_call_canister_response(
+            CanisterId::ic_00(),
+            "canister_info",
+            Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
+            Ok(Encode!(&CanisterInfoResponse::new(
+                0,                      // total_num_changes
+                vec![],                 // recent_changes
+                Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
+                vec![],                 // controllers
+            ))
+            .unwrap()),
+        );
+
+        let operation_arg = ExtensionOperationArg { value: None };
+
+        // Test with valid operation name - should succeed
+        let result = validate_execute_extension_operation(
+            &env,
+            root_canister_id,
+            extension_canister_id,
+            "deposit".to_string(),
+            &operation_arg,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_execute_extension_operation_withdraw_success() {
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
+        let root_canister_id = CanisterId::from_u64(1000);
+        let extension_canister_id = CanisterId::from_u64(2000);
+
+        // Mock list_sns_canisters call
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(CanisterId::from_u64(3000).get()),
+                ledger: Some(CanisterId::from_u64(4000).get()),
+                swap: Some(CanisterId::from_u64(5000).get()),
+                index: Some(CanisterId::from_u64(6000).get()),
+                archives: vec![],
+                dapps: vec![],
+                extensions: Some(crate::pb::sns_root_types::Extensions {
+                    extension_canister_ids: vec![extension_canister_id.get()],
+                }),
+            })
+            .unwrap()),
+        );
+
+        // Mock canister_info call for extension canister
+        env.set_call_canister_response(
+            CanisterId::ic_00(),
+            "canister_info",
+            Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
+            Ok(Encode!(&CanisterInfoResponse::new(
+                0,                      // total_num_changes
+                vec![],                 // recent_changes
+                Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
+                vec![],                 // controllers
+            ))
+            .unwrap()),
+        );
+
+        let operation_arg = ExtensionOperationArg { value: None };
+
+        // Test with withdraw operation - should succeed (since test mode supports withdraw)
+        let result = validate_execute_extension_operation(
+            &env,
+            root_canister_id,
+            extension_canister_id,
+            "withdraw".to_string(),
+            &operation_arg,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_execute_extension_operation_unregistered_extension() {
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
+        let root_canister_id = CanisterId::from_u64(1000);
+        let extension_canister_id = CanisterId::from_u64(2000);
+
+        // Mock list_sns_canisters call - return empty extensions list
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(CanisterId::from_u64(3000).get()),
+                ledger: Some(CanisterId::from_u64(4000).get()),
+                swap: Some(CanisterId::from_u64(5000).get()),
+                index: Some(CanisterId::from_u64(6000).get()),
+                archives: vec![],
+                dapps: vec![],
+                extensions: Some(crate::pb::sns_root_types::Extensions {
+                    extension_canister_ids: vec![], // Empty - extension not registered
+                }),
+            })
+            .unwrap()),
+        );
+
+        let operation_arg = ExtensionOperationArg { value: None };
+
+        let result = validate_execute_extension_operation(
+            &env,
+            root_canister_id,
+            extension_canister_id,
+            "deposit".to_string(),
+            &operation_arg,
+        )
+        .await;
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.error_type, ErrorType::NotFound as i32);
+        assert!(error.error_message.contains("Extension canister"));
+        assert!(error
+            .error_message
+            .contains("is not registered with the SNS"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_execute_extension_operation_invalid_operation_name() {
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
+        let root_canister_id = CanisterId::from_u64(1000);
+        let extension_canister_id = CanisterId::from_u64(2000);
+
+        // Mock list_sns_canisters call
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(CanisterId::from_u64(3000).get()),
+                ledger: Some(CanisterId::from_u64(4000).get()),
+                swap: Some(CanisterId::from_u64(5000).get()),
+                index: Some(CanisterId::from_u64(6000).get()),
+                archives: vec![],
+                dapps: vec![],
+                extensions: Some(crate::pb::sns_root_types::Extensions {
+                    extension_canister_ids: vec![extension_canister_id.get()],
+                }),
+            })
+            .unwrap()),
+        );
+
+        // Mock canister_info call for extension canister
+        env.set_call_canister_response(
+            CanisterId::ic_00(),
+            "canister_info",
+            Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
+            Ok(Encode!(&CanisterInfoResponse::new(
+                0,                      // total_num_changes
+                vec![],                 // recent_changes
+                Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
+                vec![],                 // controllers
+            ))
+            .unwrap()),
+        );
+
+        let operation_arg = ExtensionOperationArg { value: None };
+
+        // Test with invalid operation name - should fail
+        let result = validate_execute_extension_operation(
+            &env,
+            root_canister_id,
+            extension_canister_id,
+            "invalid_operation".to_string(),
+            &operation_arg,
+        )
+        .await;
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
+        assert!(error
+            .error_message
+            .contains("does not have an operation named invalid_operation"));
+    }
 }
