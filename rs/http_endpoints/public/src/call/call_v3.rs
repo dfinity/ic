@@ -58,7 +58,7 @@ pub(crate) enum CallV3Response {
 #[derive(Clone)]
 struct SynchronousCallHandlerState {
     ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
@@ -129,11 +129,11 @@ pub(crate) fn new_router(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
-        delegation_from_nns,
+        nns_delegation_reader,
         ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
@@ -154,7 +154,7 @@ pub fn new_service(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
@@ -162,7 +162,7 @@ pub fn new_service(
         ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
     );
     BoxCloneService::new(router.into_service())
@@ -177,7 +177,7 @@ async fn call_sync_v3(
         metrics,
         ingress_message_certificate_timeout_seconds,
         state_reader,
-        delegation_from_nns,
+        nns_delegation_reader,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
@@ -202,7 +202,7 @@ async fn call_sync_v3(
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
             let delegation_from_nns =
-                delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
+                nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -308,7 +308,7 @@ async fn call_sync_v3(
         .inc();
 
     let delegation_from_nns =
-        delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
+        nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

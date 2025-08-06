@@ -41,7 +41,7 @@ use tower::{util::BoxCloneService, ServiceBuilder};
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
@@ -52,7 +52,7 @@ pub struct CanisterReadStateServiceBuilder {
     log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
@@ -71,13 +71,13 @@ impl CanisterReadStateServiceBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: NNSDelegationReader,
+        nns_delegation_reader: NNSDelegationReader,
     ) -> Self {
         Self {
             log,
             health_status: None,
             malicious_flags: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             state_reader,
             time_source: None,
             ingress_verifier,
@@ -109,7 +109,7 @@ impl CanisterReadStateServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
@@ -134,7 +134,7 @@ pub(crate) async fn canister_read_state(
     State(CanisterReadStateService {
         log,
         health_status,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
         time_source,
         validator,
@@ -223,7 +223,7 @@ pub(crate) async fn canister_read_state(
         };
 
         let signature = certification.signed.signature.signature.get().0;
-        let delegation_from_nns = delegation_from_nns
+        let delegation_from_nns = nns_delegation_reader
             .get_delegation(CanisterRangesFormat::Flat, Some(effective_canister_id));
         let res = HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {

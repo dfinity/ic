@@ -52,13 +52,4 @@ impl NNSDelegationReader {
             self.receiver.changed().await
         }
     }
-
-    // DO NOT USE IN PRODUCTION CODE
-    pub fn new_for_test_only(delegation: Option<CertificateDelegation>) -> Self {
-        let (_sender, receiver) = watch::channel(delegation);
-        Self {
-            receiver,
-            is_nns: false,
-        }
-    }
 }

@@ -33,13 +33,13 @@ use tower::util::BoxCloneService;
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
@@ -51,12 +51,12 @@ impl SubnetReadStateService {
 
 impl SubnetReadStateServiceBuilder {
     pub fn builder(
-        delegation_from_nns: NNSDelegationReader,
+        nns_delegation_reader: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
             health_status: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             state_reader,
         }
     }
@@ -74,7 +74,7 @@ impl SubnetReadStateServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
         };
         Router::new().route_service(
@@ -93,7 +93,7 @@ pub(crate) async fn read_state_subnet(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SubnetReadStateService {
         health_status,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
     }): State<SubnetReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
@@ -158,7 +158,7 @@ pub(crate) async fn read_state_subnet(
         };
 
         let signature = certification.signed.signature.signature.get().0;
-        let delegation_from_nns = delegation_from_nns
+        let delegation_from_nns = nns_delegation_reader
             .get_delegation(CanisterRangesFormat::Flat, /*canister_id=*/ None);
         Cbor(HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {

@@ -49,7 +49,7 @@ pub struct QueryService {
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
@@ -62,7 +62,7 @@ pub struct QueryServiceBuilder {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -82,7 +82,7 @@ impl QueryServiceBuilder {
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: NNSDelegationReader,
+        nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
     ) -> Self {
         Self {
@@ -91,7 +91,7 @@ impl QueryServiceBuilder {
             signer,
             health_status: None,
             malicious_flags: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             time_source: None,
             ingress_verifier,
             registry_client,
@@ -126,7 +126,7 @@ impl QueryServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
@@ -156,7 +156,7 @@ pub(crate) async fn query(
         validator,
         health_status,
         signer,
-        delegation_from_nns,
+        nns_delegation_reader,
         query_execution_service,
     }): State<QueryService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
@@ -218,8 +218,8 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
-    let delegation_from_nns =
-        delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, Some(effective_canister_id));
+    let delegation_from_nns = nns_delegation_reader
+        .get_delegation(CanisterRangesFormat::Flat, Some(effective_canister_id));
     let query_execution_response = query_execution_service
         .oneshot((user_query.clone(), delegation_from_nns))
         .await
