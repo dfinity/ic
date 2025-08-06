@@ -10,7 +10,7 @@ build:lint --config=clippy
 # rust-clippy
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:clippy --output_groups=+clippy_checks
-build --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-D,clippy::mem_forget,-C,debug-assertions=off
+build --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-D,clippy::mem_forget,-C,debug-assertions=off,-A,clippy::uninlined_format_args
 # rustfmt
 build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
@@ -91,8 +91,8 @@ build:dev --compilation_mode=fastbuild
 
 # Fuzzing configuration
 build:fuzzing --action_env="SANITIZERS_ENABLED=1"
-# sanitizers are only supported in nightly
-build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
+# fuzzers use nightly features so we tell rustc to allow nightly features
+build:fuzzing --@rules_rust//rust/settings:extra_rustc_env=RUSTC_BOOTSTRAP=1 --@rules_rust//rust/settings:extra_exec_rustc_env=RUSTC_BOOTSTRAP=1
 build:fuzzing --build_tag_filters=fuzz_test
 # Ignoring transitions for now since it doesn't add any additional improvement to current setup
 build:fuzzing --//bazel:enable_fuzzing_code=True

@@ -1153,6 +1153,7 @@ pub fn create_available_pre_signature(
     )
 }
 
+// TODO(CON-1550): Parameterize by height that should be referenced by transcript refs
 pub fn create_available_pre_signature_with_key_transcript(
     idkg_payload: &mut IDkgPayload,
     caller: u8,

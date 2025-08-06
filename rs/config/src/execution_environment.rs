@@ -12,7 +12,7 @@ const TIB: u64 = GIB * 1024;
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
 /// capacity, then the subnet is never considered to have high usage.
-const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
+const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
@@ -20,7 +20,7 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(TIB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * TIB);
 
 /// This is the upper limit on how much memory can be used by all guaranteed
 /// response canister messages on a given subnet.
@@ -159,6 +159,16 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
+
+/// The maximum number of environment variables allowed per canister.
+pub const MAX_ENVIRONMENT_VARIABLES: usize = 20;
+
+/// The maximum length of an environment variable name.
+pub const MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;
+
+/// The maximum length of an environment variable value.
+/// Environment variables are sized to comfortably accommodate the root key.
+pub const MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -320,6 +330,15 @@ pub struct Config {
 
     /// Whether environment variables are supported.
     pub environment_variables: FlagStatus,
+
+    /// The maximum number of environment variables allowed per canister.
+    pub max_environment_variables: usize,
+
+    /// The maximum length of an environment variable name.
+    pub max_environment_variable_name_length: usize,
+
+    /// The maximum length of an environment variable value.
+    pub max_environment_variable_value_length: usize,
 }
 
 impl Default for Config {
@@ -396,6 +415,9 @@ impl Default for Config {
             canister_snapshot_download: FlagStatus::Disabled,
             canister_snapshot_upload: FlagStatus::Disabled,
             environment_variables: FlagStatus::Disabled,
+            max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
+            max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+            max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
         }
     }
 }

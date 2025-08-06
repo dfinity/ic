@@ -354,6 +354,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
+    let metrics_before = sanity_check::fetch_metrics(&state_machine);
+
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     // Modify all WASMs, but preserve their behavior.
@@ -363,98 +365,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
-    perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
+    sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
 
     check_canisters_are_all_protocol_canisters(&state_machine);
-}
-
-fn perform_sanity_check_after_upgrade(
-    state_machine: &StateMachine,
-    nns_canister_upgrade_sequence: &[NnsCanisterUpgrade],
-) {
-    for nns_canister_upgrade in nns_canister_upgrade_sequence {
-        println!(
-            "Performing sanity check after upgrade of {}",
-            nns_canister_upgrade.nns_canister_name
-        );
-        if nns_canister_upgrade.nns_canister_name.as_str() == "governance" {
-            perform_sanity_check_after_upgrade_governance(state_machine);
-        }
-    }
-}
-
-fn get_governance_latest_reward_event_timestamp_seconds(state_machine: &StateMachine) -> f64 {
-    let metrics = scrape_metrics(state_machine, GOVERNANCE_CANISTER_ID);
-    let metric = metrics
-        .samples
-        .iter()
-        .find(|sample| &sample.metric == "governance_latest_reward_event_timestamp_seconds")
-        .unwrap();
-    if let prometheus_parse::Value::Gauge(value) = &metric.value {
-        *value
-    } else {
-        panic!("governance_latest_reward_event_timestamp_seconds is not a gauge");
-    }
-}
-
-fn total_minted_node_rewards_value(
-    most_recent_monthly_node_provider_rewards: &MonthlyNodeProviderRewards,
-) -> f64 {
-    let total_rewards = most_recent_monthly_node_provider_rewards
-        .rewards
-        .iter()
-        .map(|reward| reward.amount_e8s as f64)
-        .sum::<f64>();
-    let xdr_permyriad_per_icp = *most_recent_monthly_node_provider_rewards
-        .xdr_conversion_rate
-        .as_ref()
-        .unwrap()
-        .xdr_permyriad_per_icp
-        .as_ref()
-        .unwrap();
-    total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
-}
-
-fn perform_sanity_check_after_upgrade_governance(state_machine: &StateMachine) {
-    let latest_reward_event_timestamp_seconds_before =
-        get_governance_latest_reward_event_timestamp_seconds(state_machine);
-    let node_provier_rewards_before =
-        nns_get_most_recent_monthly_node_provider_rewards(state_machine).unwrap();
-
-    state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
-    for _ in 0..100 {
-        state_machine.advance_time(std::time::Duration::from_secs(1));
-        state_machine.tick();
-    }
-    let latest_reward_event_timestamp_seconds_after =
-        get_governance_latest_reward_event_timestamp_seconds(state_machine);
-    let node_provier_rewards_after =
-        nns_get_most_recent_monthly_node_provider_rewards(state_machine).unwrap();
-
-    assert!(
-        latest_reward_event_timestamp_seconds_after > latest_reward_event_timestamp_seconds_before,
-        "After advancing some time after upgrade, latest reward event timestamp did not increase, which means \
-        the reward event did not happen as expected."
-    );
-    assert!(
-        node_provier_rewards_after.timestamp > node_provier_rewards_before.timestamp,
-        "After advancing some time after upgrade, the node provider rewards timestamp did not increase, which means \
-        the reward event did not happen as expected. Before: {:#?}, After: {:#?}",
-        node_provier_rewards_before, node_provier_rewards_after
-    );
-    let total_rewards_xdr_e8s_before =
-        total_minted_node_rewards_value(&node_provier_rewards_before);
-    let total_rewards_xdr_e8s_after = total_minted_node_rewards_value(&node_provier_rewards_after);
-    assert!(
-        total_rewards_xdr_e8s_after < total_rewards_xdr_e8s_before * 1.2,
-        "After advancing some time after upgrade, total minted node provider rewards increased too much. Before: {}, After: {}",
-        total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
-    );
-    assert!(
-        total_rewards_xdr_e8s_after > total_rewards_xdr_e8s_before * 0.8,
-        "After advancing some time after upgrade, total minted node provider rewards decreased too much. Before: {}, After: {}",
-        total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
-    );
 }
 
 // Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
@@ -472,6 +385,207 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
             PROTOCOL_CANISTER_IDS.contains(&&canister_id),
             "Canister {} is in the NNS subnet but not a protocol canister",
             canister_id,
+        );
+    }
+}
+
+mod sanity_check {
+    use super::*;
+
+    /// Metrics fetched from canisters either before or after testing.
+    pub struct Metrics {
+        governance_prometheus_metrics: prometheus_parse::Scrape,
+        governance_most_recent_monthly_node_provider_rewards: MonthlyNodeProviderRewards,
+    }
+
+    /// Fetches metrics from canisters.
+    pub fn fetch_metrics(state_machine: &StateMachine) -> Metrics {
+        let governance_prometheus_metrics = scrape_metrics(state_machine, GOVERNANCE_CANISTER_ID);
+        let governance_most_recent_monthly_node_provider_rewards =
+            nns_get_most_recent_monthly_node_provider_rewards(state_machine).unwrap();
+
+        Metrics {
+            governance_prometheus_metrics,
+            governance_most_recent_monthly_node_provider_rewards,
+        }
+    }
+
+    /// Fetches metrics from canisters after advancing time and checks that they are as expected,
+    /// comparing them to the metrics fetched before the upgrade.
+    pub fn fetch_and_check_metrics_after_advancing_time(
+        state_machine: &StateMachine,
+        before: Metrics,
+    ) {
+        advance_time(state_machine);
+        let after = fetch_metrics(state_machine);
+        MetricsBeforeAndAfter { before, after }.check_all();
+    }
+
+    fn advance_time(state_machine: &StateMachine) {
+        // This duration is picked so that node rewards will definitely be distributed.
+        state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
+        for _ in 0..100 {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
+            state_machine.tick();
+        }
+    }
+
+    struct MetricsBeforeAndAfter {
+        before: Metrics,
+        after: Metrics,
+    }
+
+    impl MetricsBeforeAndAfter {
+        /// Checks a list of metrics:
+        /// - The stable/wasm memory size should not double or halve.
+        /// - The number of proposals should not decrease by more than 50%.
+        /// - The number of neurons should be within 5% of the before value.
+        /// - The latest reward event timestamp should have increased.
+        /// - The total minted node provider rewards should be +-20% of the before value.
+        /// - The node provider rewards timestamp should have increased.
+        fn check_all(&self) {
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_stable_memory_size_bytes"),
+                |before, after| {
+                    assert_not_increased_too_much(before, after, "stable memory size", 0.1);
+                },
+            );
+
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_total_memory_size_bytes"),
+                |before, after| {
+                    assert_not_increased_too_much(before, after, "wasm memory size", 0.5);
+                    assert_not_decreased_too_much(before, after, "wasm memory size", 0.5);
+                },
+            );
+
+            self.check_metric(
+                |metrics| {
+                    governance_gauge_value(
+                        metrics,
+                        "governance_latest_reward_event_timestamp_seconds",
+                    )
+                },
+                |before, after| {
+                    assert_increased(before, after, "latest reward event timestamp");
+                },
+            );
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_proposals_total"),
+                |before, after| {
+                    assert_not_decreased_too_much(before, after, "number of proposals", 0.5);
+                },
+            );
+            self.check_metric(
+                |metrics| governance_gauge_value(metrics, "governance_neurons_total"),
+                |before, after| {
+                    assert_not_decreased_too_much(before, after, "number of neurons", 0.05);
+                    assert_not_increased_too_much(before, after, "number of neurons", 0.05);
+                },
+            );
+            self.check_metric(
+                |metrics| {
+                    total_minted_node_rewards_value(
+                        &metrics.governance_most_recent_monthly_node_provider_rewards,
+                    )
+                },
+                |before, after| {
+                    assert_not_increased_too_much(
+                        before,
+                        after,
+                        "total minted node provider rewards",
+                        0.2,
+                    );
+                    assert_not_decreased_too_much(
+                        before,
+                        after,
+                        "total minted node provider rewards",
+                        0.2,
+                    );
+                },
+            );
+
+            self.check_metric(
+                |metrics| {
+                    metrics
+                        .governance_most_recent_monthly_node_provider_rewards
+                        .timestamp
+                },
+                |before, after| {
+                    assert_increased(before, after, "node provider rewards timestamp");
+                },
+            );
+        }
+
+        fn check_metric<T>(&self, transform: impl Fn(&Metrics) -> T, assertion: impl Fn(T, T)) {
+            let before_value = transform(&self.before);
+            let after_value = transform(&self.after);
+            assertion(before_value, after_value);
+        }
+    }
+
+    fn governance_gauge_value(metrics: &Metrics, name: &str) -> f64 {
+        let metric = metrics
+            .governance_prometheus_metrics
+            .samples
+            .iter()
+            .find(|sample| sample.metric == name)
+            .unwrap();
+        if let prometheus_parse::Value::Gauge(value) = &metric.value {
+            *value
+        } else {
+            panic!("{} is not a gauge", name);
+        }
+    }
+
+    fn total_minted_node_rewards_value(
+        most_recent_monthly_node_provider_rewards: &MonthlyNodeProviderRewards,
+    ) -> f64 {
+        let total_rewards = most_recent_monthly_node_provider_rewards
+            .rewards
+            .iter()
+            .map(|reward| reward.amount_e8s as f64)
+            .sum::<f64>();
+        let xdr_permyriad_per_icp = *most_recent_monthly_node_provider_rewards
+            .xdr_conversion_rate
+            .as_ref()
+            .unwrap()
+            .xdr_permyriad_per_icp
+            .as_ref()
+            .unwrap();
+        total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
+    }
+
+    fn assert_not_increased_too_much(before: f64, after: f64, name: &str, diff: f64) {
+        assert!(
+            after < before * (1.0 + diff),
+            "After upgrading and advancing time, {} increased too much. Before: {}, After: {}",
+            name,
+            before,
+            after
+        );
+    }
+
+    fn assert_not_decreased_too_much(before: f64, after: f64, name: &str, diff: f64) {
+        assert!(
+            after > before * (1.0 - diff),
+            "After upgrading and advancing time, {} decreased too much. Before: {}, After: {}",
+            name,
+            before,
+            after
+        );
+    }
+
+    fn assert_increased<T>(before: T, after: T, name: &str)
+    where
+        T: PartialOrd + std::fmt::Display,
+    {
+        assert!(
+            after > before,
+            "After upgrading and advancing time, {} did not increase. Before: {}, After: {}",
+            name,
+            before,
+            after
         );
     }
 }

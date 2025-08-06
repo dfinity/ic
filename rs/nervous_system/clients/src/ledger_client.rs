@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use candid::{types::number::Nat, Principal};
-use dfn_candid::{ArgumentDecoder, ArgumentEncoder};
+use candid::types::number::Nat;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::{block::BlockIndex, Tokens};
 pub use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
 use icrc_ledger_client::{ICRC1Client, Runtime};
+use icrc_ledger_client_cdk::CdkRuntime;
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::{Memo, TransferArg},
@@ -14,37 +14,15 @@ use icrc_ledger_types::icrc1::{
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use num_traits::ToPrimitive;
 
-// A ICRC1 client runtime that uses dfn_* functionalities
-struct DfnRuntime {}
-
-#[async_trait]
-impl Runtime for DfnRuntime {
-    async fn call<In, Out>(
-        &self,
-        id: Principal,
-        method: &str,
-        args: In,
-    ) -> Result<Out, (i32, String)>
-    where
-        In: ArgumentEncoder + Send,
-        Out: for<'a> ArgumentDecoder<'a>,
-    {
-        let principal_id = CanisterId::unchecked_from_principal(PrincipalId::from(id));
-        dfn_core::api::call_with_cleanup(principal_id, method, dfn_candid::candid_multi_arity, args)
-            .await
-            .map_err(|(code, msg)| (code.unwrap_or_default(), msg))
-    }
-}
-
 pub struct LedgerCanister {
-    client: ICRC1Client<DfnRuntime>,
+    client: ICRC1Client<CdkRuntime>,
 }
 
 impl LedgerCanister {
     pub fn new(ledger_canister_id: CanisterId) -> Self {
         Self {
-            client: ICRC1Client::<DfnRuntime> {
-                runtime: DfnRuntime {},
+            client: ICRC1Client::<CdkRuntime> {
+                runtime: CdkRuntime {},
                 ledger_canister_id: ledger_canister_id.get().into(),
             },
         }

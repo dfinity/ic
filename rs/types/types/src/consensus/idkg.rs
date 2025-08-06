@@ -1904,15 +1904,6 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
     }
 }
 
-impl TryFrom<(&pb::IDkgPayload, Height)> for IDkgPayload {
-    type Error = ProxyDecodeError;
-    fn try_from((payload, height): (&pb::IDkgPayload, Height)) -> Result<Self, Self::Error> {
-        let mut ret = IDkgPayload::try_from(payload)?;
-        ret.update_refs(height);
-        Ok(ret)
-    }
-}
-
 impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
     fn try_from(payload: &pb::IDkgPayload) -> Result<Self, Self::Error> {

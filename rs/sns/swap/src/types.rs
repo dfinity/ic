@@ -20,7 +20,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_proto::pb::v1::Principals;
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -163,7 +163,7 @@ impl Init {
             let icp_ledger_canister_id = self
                 .icp_ledger()
                 .map_err(|s| format!("unable to get icp ledger canister id: {s}"))?;
-            IcpLedgerCanister::<DfnRuntime>::new(icp_ledger_canister_id)
+            IcpLedgerCanister::<CdkRuntime>::new(icp_ledger_canister_id)
         };
 
         let sns_ledger = {

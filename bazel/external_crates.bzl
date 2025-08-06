@@ -465,12 +465,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "derivative": crate.spec(
+                version = "^2.2",
+            ),
             "der": crate.spec(
                 version = "0.7",
                 default_features = False,
             ),
             "derive-new": crate.spec(
                 version = "^0.7.0",
+            ),
+            "devicemapper": crate.spec(
+                version = "0.34",
             ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
@@ -672,6 +678,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-http-gateway": crate.spec(
                 version = "0.3.0",
             ),
+            "ic-identity-hsm": crate.spec(
+                version = "^0.40.1",
+            ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
             ),
@@ -831,6 +840,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
+            ),
+            "loopdev-3": crate.spec(
+                version = "0.5",
             ),
             "lru": crate.spec(
                 version = "^0.7.8",
@@ -1339,6 +1351,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "sys-mount": crate.spec(
                 version = "3.0",
+            ),
+            "tabled": crate.spec(
+                version = "^0.20.0",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",
