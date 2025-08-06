@@ -5,7 +5,7 @@ use tokio::sync::watch;
 /// Enum representing the format of canister ranges in the delegation.
 pub enum CanisterRangesFormat {
     /// Canister ranges are represented as a flat list of canister ranges.
-    /// Corresponds to the /{subnet_id}/canister_ranges path in the state tree.
+    /// Corresponds to the /subnet/{subnet_id}/canister_ranges path in the state tree.
     Flat,
     //// Canister ranges are represented as a tree of canister ranges.
     //// Corresponds to the /canister_ranges/{subnet_id} path in the state tree.
@@ -19,42 +19,24 @@ pub struct NNSDelegationReader {
 }
 
 impl NNSDelegationReader {
-    pub(crate) fn new(
-        receiver: watch::Receiver<Option<CertificateDelegation>>,
-        is_nns: bool,
-    ) -> Self {
+    pub fn new(receiver: watch::Receiver<Option<CertificateDelegation>>, is_nns: bool) -> Self {
         Self { receiver, is_nns }
     }
 
+    /// Returns the most recent NNS delegation with the canister ranges in the specified format.
+    /// If canister_id is given, canister ranges subtrees are pruned in such a way that it's
+    /// still possible to prove that the specified canister id is assigned to the subnet.
+    /// Otherwise, the entire delegation is returned.
     pub fn get_delegation(
         &self,
         canister_ranges_format: CanisterRangesFormat,
-        _canister_id: CanisterId,
+        _canister_id: Option<CanisterId>,
     ) -> Option<CertificateDelegation> {
         if self.is_nns {
             return None;
         }
 
-        let Some(delegation) = self.receiver.borrow().clone() else {
-            return None;
-        };
-
-        match canister_ranges_format {
-            CanisterRangesFormat::Flat => Some(delegation),
-        }
-    }
-
-    pub fn get_full_delegation(
-        &self,
-        canister_ranges_format: CanisterRangesFormat,
-    ) -> Option<CertificateDelegation> {
-        if self.is_nns {
-            return None;
-        }
-
-        let Some(delegation) = self.receiver.borrow().clone() else {
-            return None;
-        };
+        let delegation = self.receiver.borrow().clone()?;
 
         match canister_ranges_format {
             CanisterRangesFormat::Flat => Some(delegation),

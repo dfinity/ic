@@ -126,7 +126,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let subnet_type = self.subnet_type;
         let delegation_from_nns = self.delegation_from_nns.get_delegation(
             CanisterRangesFormat::Flat,
-            canister_http_request.context.request.sender,
+            Some(canister_http_request.context.request.sender),
         );
         let log = self.log.clone();
 

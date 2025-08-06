@@ -839,7 +839,9 @@ mod tests {
 
         rx.receiver.changed().await.unwrap();
 
-        assert!(rx.get_full_delegation(CanisterRangesFormat::Flat).is_none());
+        assert!(rx
+            .get_delegation(CanisterRangesFormat::Flat, /*canister_id=*/ None)
+            .is_none());
     }
 
     #[tokio::test]
@@ -866,7 +868,7 @@ mod tests {
         rx.receiver.changed().await.unwrap();
 
         let delegation = rx
-            .get_full_delegation(CanisterRangesFormat::Flat)
+            .get_delegation(CanisterRangesFormat::Flat, /*canister_id=*/ None)
             .expect("Should return some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
             .expect("Should return a certificate which can be deserialized");

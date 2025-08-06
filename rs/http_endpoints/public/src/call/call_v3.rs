@@ -202,7 +202,7 @@ async fn call_sync_v3(
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
             let delegation_from_nns =
-                delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, canister_id);
+                delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -308,7 +308,7 @@ async fn call_sync_v3(
         .inc();
 
     let delegation_from_nns =
-        delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, canister_id);
+        delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

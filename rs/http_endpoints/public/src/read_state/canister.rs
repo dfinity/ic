@@ -223,8 +223,8 @@ pub(crate) async fn canister_read_state(
         };
 
         let signature = certification.signed.signature.signature.get().0;
-        let delegation_from_nns =
-            delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, effective_canister_id);
+        let delegation_from_nns = delegation_from_nns
+            .get_delegation(CanisterRangesFormat::Flat, Some(effective_canister_id));
         let res = HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,
