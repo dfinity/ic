@@ -635,7 +635,6 @@ fn hash_plan(
     max_chunk_size: u32,
     seed: u64,
     rehash_every_nth: u64,
-    thread_pool: &mut scoped_threadpool::Pool,
 ) -> Vec<ChunkAction> {
     // Even if we could reuse all chunks, we want to ensure that we sometimes still
     // recompute them anyway to not propagate errors indefinitely. We choose a
@@ -653,78 +652,72 @@ fn hash_plan(
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 
-    parallel_map(
-        thread_pool,
-        files.iter(),
-        |FileWithSize(relative_path, size_bytes)| {
-            let mut chunk_actions = Vec::new();
-            let num_chunks = count_chunks(*size_bytes, max_chunk_size);
+    let mut chunk_actions: Vec<ChunkAction> = Vec::new();
 
-            let compute_dirty_chunk_bitmap = || -> Option<(&BitVec, usize)> {
-                let dirty_chunk_bitmap = dirty_file_chunks.get(relative_path)?;
+    for FileWithSize(relative_path, size_bytes) in files.iter() {
+        let num_chunks = count_chunks(*size_bytes, max_chunk_size);
 
-                let base_file_index = base_manifest
-                    .file_table
-                    .binary_search_by_key(&relative_path, |file_info| &file_info.relative_path)
-                    .ok()?;
+        let compute_dirty_chunk_bitmap = || -> Option<(&BitVec, usize)> {
+            let dirty_chunk_bitmap = dirty_file_chunks.get(relative_path)?;
 
-                // The chunk table contains chunks from all files and hence `base_index` is
-                // needed to know the absolute index. The chunk table is sorted by
-                // `file_index` and then `offset`. Therefore binary search can be used to find
-                // the first chunk index of a file.
-                let base_index = base_manifest
-                    .chunk_table
-                    .binary_search_by(|chunk_info| {
-                        chunk_info
-                            .file_index
-                            .cmp(&(base_file_index as u32))
-                            .then_with(|| chunk_info.offset.cmp(&0u64))
-                    })
-                    .ok()?;
-                Some((dirty_chunk_bitmap, base_index))
-            };
+            let base_file_index = base_manifest
+                .file_table
+                .binary_search_by_key(&relative_path, |file_info| &file_info.relative_path)
+                .ok()?;
 
-            if let Some((dirty_chunk_bitmap, base_index)) = compute_dirty_chunk_bitmap() {
-                debug_assert_eq!(num_chunks, dirty_chunk_bitmap.len());
+            // The chunk table contains chunks from all files and hence `base_index` is
+            // needed to know the absolute index. The chunk table is sorted by
+            // `file_index` and then `offset`. Therefore binary search can be used to find
+            // the first chunk index of a file.
+            let base_index = base_manifest
+                .chunk_table
+                .binary_search_by(|chunk_info| {
+                    chunk_info
+                        .file_index
+                        .cmp(&(base_file_index as u32))
+                        .then_with(|| chunk_info.offset.cmp(&0u64))
+                })
+                .ok()?;
+            Some((dirty_chunk_bitmap, base_index))
+        };
 
-                for i in 0..num_chunks {
-                    let action = if dirty_chunk_bitmap[i] {
-                        ChunkAction::Recompute
+        if let Some((dirty_chunk_bitmap, base_index)) = compute_dirty_chunk_bitmap() {
+            debug_assert_eq!(num_chunks, dirty_chunk_bitmap.len());
+
+            for i in 0..num_chunks {
+                let action = if dirty_chunk_bitmap[i] {
+                    ChunkAction::Recompute
+                } else {
+                    let chunk = &base_manifest.chunk_table[base_index + i];
+
+                    debug_assert_eq!(
+                        &base_manifest.file_table[chunk.file_index as usize].relative_path,
+                        relative_path
+                    );
+                    debug_assert_eq!(chunk.offset, i as u64 * max_chunk_size as u64);
+                    debug_assert_eq!(
+                        chunk.size_bytes as u64,
+                        (size_bytes - chunk.offset).min(max_chunk_size as u64)
+                    );
+
+                    // We are using chunk_actions.len() as shorthand for the chunk_index.
+                    let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
+
+                    if (offset_index % rehash_every_nth) == 0 {
+                        ChunkAction::RecomputeAndCompare(chunk.hash)
                     } else {
-                        let chunk = &base_manifest.chunk_table[base_index + i];
-
-                        debug_assert_eq!(
-                            &base_manifest.file_table[chunk.file_index as usize].relative_path,
-                            relative_path
-                        );
-                        debug_assert_eq!(chunk.offset, i as u64 * max_chunk_size as u64);
-                        debug_assert_eq!(
-                            chunk.size_bytes as u64,
-                            (size_bytes - chunk.offset).min(max_chunk_size as u64)
-                        );
-
-                        // We are using chunk_actions.len() as shorthand for the chunk_index.
-                        let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
-
-                        if (offset_index % rehash_every_nth) == 0 {
-                            ChunkAction::RecomputeAndCompare(chunk.hash)
-                        } else {
-                            ChunkAction::UseHash(chunk.hash)
-                        }
-                    };
-                    chunk_actions.push(action);
-                }
-            } else {
-                for _ in 0..num_chunks {
-                    chunk_actions.push(ChunkAction::Recompute);
-                }
+                        ChunkAction::UseHash(chunk.hash)
+                    }
+                };
+                chunk_actions.push(action);
             }
-            chunk_actions
-        },
-    )
-    .into_iter()
-    .flatten()
-    .collect()
+        } else {
+            for _ in 0..num_chunks {
+                chunk_actions.push(ChunkAction::Recompute);
+            }
+        }
+    }
+    chunk_actions
 }
 
 /// Returns the trivial hash plan that instructs the caller to recompute hashes
@@ -879,7 +872,6 @@ pub fn compute_manifest(
                     } else {
                         u64::MAX
                     },
-                    thread_pool,
                 )
             } else {
                 default_hash_plan(&files, max_chunk_size)
