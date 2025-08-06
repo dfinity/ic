@@ -644,7 +644,7 @@ fn create_setupos_config_image(
 
     // Prep data dir
     let data_dir = tmp_dir.join("data");
-    std::fs::create_dir(&data_dir)?;
+    std::fs::create_dir_all(&data_dir)?;
 
     // Prep config contents
     let mut cmd = Command::new(create_setupos_config);
