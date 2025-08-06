@@ -70,14 +70,14 @@ impl ValidatedOperationArg {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OperationSpec {
     /// Operations that need special governance validation and support
-    Governed {
+    GovernanceSupported {
         name: String,
         description: String,
         extension_type: ExtensionKind,
         validate: fn(Precise) -> Result<ValidatedOperationArg, String>,
     },
     /// Operations that just pass through to the extension without special validation
-    Passthrough {
+    GovernancePassthrough {
         name: String,
         description: String,
         // Extensions can expose their own validation functions for these operations
@@ -87,15 +87,16 @@ pub enum OperationSpec {
 impl OperationSpec {
     pub fn name(&self) -> &str {
         match self {
-            Self::Governed { name, .. } | Self::Passthrough { name, .. } => name,
+            Self::GovernanceSupported { name, .. } | Self::GovernancePassthrough { name, .. } => {
+                name
+            }
         }
     }
 
     pub fn description(&self) -> &str {
         match self {
-            Self::Governed { description, .. } | Self::Passthrough { description, .. } => {
-                description
-            }
+            Self::GovernanceSupported { description, .. }
+            | Self::GovernancePassthrough { description, .. } => description,
         }
     }
 }
@@ -114,13 +115,13 @@ impl ExtensionKind {
     pub fn standard_operations(&self) -> Vec<OperationSpec> {
         match self {
             ExtensionKind::TreasuryManager => vec![
-                OperationSpec::Governed {
+                OperationSpec::GovernanceSupported {
                     name: "deposit".to_string(),
                     description: "Deposit funds into the treasury manager.".to_string(),
                     extension_type: ExtensionKind::TreasuryManager,
                     validate: validate_deposit_operation,
                 },
-                OperationSpec::Governed {
+                OperationSpec::GovernanceSupported {
                     name: "withdraw".to_string(),
                     description: "Withdraw funds from the treasury manager.".to_string(),
                     extension_type: ExtensionKind::TreasuryManager,
@@ -539,7 +540,7 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
             extension_types: vec![ExtensionKind::TreasuryManager],
             other_operations: btreemap! {
                 // Example of an additional operation beyond standard treasury operations
-                "delegate_treasury_authority".to_string() => OperationSpec::Passthrough {
+                "delegate_treasury_authority".to_string() => OperationSpec::GovernancePassthrough {
                     name: "delegate_treasury_authority".to_string(),
                     description: "Delegate treasury management authority to a set of principals.".to_string(),
                 },
@@ -691,7 +692,7 @@ pub(crate) async fn validate_execute_extension_operation(
 
     // Handle the operation based on its type
     match &operation_spec {
-        OperationSpec::Governed { validate, .. } => {
+        OperationSpec::GovernanceSupported { validate, .. } => {
             // Validate the operation arguments using the operation's validation function
             let validated_args = validate(
                 operation_arg
@@ -723,7 +724,7 @@ pub(crate) async fn validate_execute_extension_operation(
                 }
             }
         }
-        OperationSpec::Passthrough { .. } => {
+        OperationSpec::GovernancePassthrough { .. } => {
             // For passthrough operations, we don't do any special validation
             // The operation arguments will be passed directly to the extension
             // Could add basic schema validation here in the future
