@@ -9,8 +9,11 @@ use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use hex_literal::hex;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
+
+pub use candid::Principal as CanisterId;
 
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
@@ -480,6 +483,15 @@ impl Signature {
     }
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MasterPublicKeyId {
+    /// The production master key
+    Key1,
+    /// The test master key
+    TestKey1,
+}
+
 /// An Ed25519 public key
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -760,6 +772,35 @@ impl PublicKey {
         } else {
             Err(SignatureError::InvalidSignature)
         }
+    }
+
+    /// Return the public master keys used in the production mainnet
+    pub fn mainnet_key(key_id: MasterPublicKeyId) -> Self {
+        match key_id {
+            MasterPublicKeyId::Key1 => Self::deserialize_raw(&hex!(
+                "476374d9df3a8af28d3164dc2422cff894482eadd1295290b6d9ad92b2eeaa5c"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            MasterPublicKeyId::TestKey1 => Self::deserialize_raw(&hex!(
+                "6c0824beb37621bcca6eecc237ed1bc4e64c9c59dcb85344aa7f9cc8278ee31f"
+            ))
+            .expect("Hardcoded master key was rejected"),
+        }
+    }
+
+    /// Derive a public key from the mainnet parameters
+    ///
+    /// This is an offline equivalent to the `schnorr_public_key` management canister call
+    pub fn derive_mainnet_key(
+        key_id: MasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::mainnet_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
     }
 
     /// Derive a public key from this public key using a derivation path

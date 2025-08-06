@@ -13,11 +13,13 @@ documentation.workspace = true
 [dependencies]
 curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
+hex-literal = "0.4"
 hkdf = "0.12"
 pem = "1"
-rand = { workspace = true, optional = true, no-default-features = true }
+rand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
+candid = { workspace = true }
 
 [features]
 default = ["rand"]
@@ -25,7 +27,6 @@ rand = ["dep:rand"]
 
 [dev-dependencies]
 hex = { workspace = true }
-hex-literal = "0.4"
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }
