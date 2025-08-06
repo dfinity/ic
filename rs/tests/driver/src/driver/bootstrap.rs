@@ -40,7 +40,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::ReplicaVersion;
-use slog::{info, warn, Logger};
+use slog::{error, info, warn, Logger};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -558,6 +558,15 @@ pub fn setup_nested_vms(
 ) -> anyhow::Result<()> {
     let mut result = Ok(());
 
+    info!(
+        farm.logger,
+        "Starting setup_nested_vms for {} node(s)",
+        nodes.len()
+    );
+    for (i, node) in nodes.iter().enumerate() {
+        info!(farm.logger, "Node {}: {}", i, node.name);
+    }
+
     thread::scope(|s| {
         let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
         for node in nodes {
@@ -586,6 +595,11 @@ pub fn setup_nested_vms(
         }
 
         // Wait for all threads to finish and return an error if any of them fails.
+        info!(
+            farm.logger,
+            "Waiting for {} VM setup threads to complete",
+            join_handles.len()
+        );
         for jh in join_handles {
             if let Err(e) = jh.join().expect("Waiting for a thread failed") {
                 warn!(farm.logger, "Setting up VM failed with: {:?}", e);
@@ -612,6 +626,11 @@ fn create_setupos_config_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
+    info!(
+        env.logger(),
+        "[{}] Starting create_setupos_config_image", name
+    );
+
     let tmp_dir = env.get_path("setupos");
     fs::create_dir_all(&tmp_dir)?;
 
@@ -627,7 +646,19 @@ fn create_setupos_config_image(
 
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
-    let old_ip = nested_vm.get_vm()?.ipv6;
+    let old_ip = match nested_vm.get_vm() {
+        Ok(vm) => {
+            info!(env.logger(), "[{}] Got VM with IPv6: {}", name, vm.ipv6);
+            vm.ipv6
+        }
+        Err(e) => {
+            error!(
+                env.logger(),
+                "[{}] Failed to get VM for IPv6: {:?}", name, e
+            );
+            return Err(e);
+        }
+    };
     let segments = old_ip.segments();
     let prefix = format!(
         "{:04x}:{:04x}:{:04x}:{:04x}",
@@ -647,6 +678,7 @@ fn create_setupos_config_image(
     std::fs::create_dir_all(&data_dir)?;
 
     // Prep config contents
+    info!(env.logger(), "[{}] Building setupos config command", name);
     let mut cmd = Command::new(create_setupos_config);
     cmd.arg("--config-dir")
         .arg(&config_dir)
@@ -708,5 +740,9 @@ fn create_setupos_config_image(
         bail!("Could not inject configs into image");
     }
 
+    info!(
+        env.logger(),
+        "[{}] Successfully created config image at: {:?}", name, config_image
+    );
     Ok(config_image)
 }

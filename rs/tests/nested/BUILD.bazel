@@ -204,7 +204,7 @@ rust_binary(
     deps = DEPENDENCIES + [":nested"],
 )
 
-# Tests the manual NNS recovery process:
+# WORK IN PROGRESS: End-to-end test of the manual NNS recovery process:
 # - NNS subnet is broken
 # - guestos-recovery-upgrader is used to upgrade the GuestOS to the recovery image
 # - guestos-recovery-engine is used to recover the NNS subnet
