@@ -535,8 +535,6 @@ fn get_root_threshold_public_key(
 mod tests {
     use std::sync::RwLock;
 
-    use crate::common::Cbor;
-
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -750,7 +748,15 @@ mod tests {
                         Blob(create_certificate(*time))
                     };
 
-                Cbor(HttpReadStateResponse { certificate }).into_response()
+                let body = serde_cbor::ser::to_vec(&HttpReadStateResponse { certificate }).unwrap();
+                (
+                    [(
+                        hyper::header::CONTENT_TYPE,
+                        hyper::header::HeaderValue::from_static(CONTENT_TYPE_CBOR),
+                    )],
+                    body,
+                )
+                    .into_response()
             });
 
             axum_server::from_tcp_rustls(tcp_listener, generate_self_signed_cert().await)
