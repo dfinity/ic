@@ -15,11 +15,12 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_state_manager::StateReader;
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, ReadState,
+        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
+        HttpRequestEnvelope, ReadState, RoutingTableFormat,
     },
     CanisterId, PrincipalId,
 };
@@ -27,19 +28,18 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tokio::sync::watch;
 use tower::util::BoxCloneService;
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
@@ -51,7 +51,7 @@ impl SubnetReadStateService {
 
 impl SubnetReadStateServiceBuilder {
     pub fn builder(
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        delegation_from_nns: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
@@ -107,7 +107,6 @@ pub(crate) async fn read_state_subnet(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
     let make_service_unavailable_response = || {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = "Certified state is not available yet. Please try again...".to_string();
@@ -159,6 +158,7 @@ pub(crate) async fn read_state_subnet(
         };
 
         let signature = certification.signed.signature.signature.get().0;
+        let delegation_from_nns = delegation_from_nns.get_full_delegation(RoutingTableFormat::Flat);
         Cbor(HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,

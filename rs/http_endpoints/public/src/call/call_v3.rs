@@ -30,17 +30,17 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::certification::Certification,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
+        Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId, RoutingTableFormat,
     },
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
-use tokio::sync::watch;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
@@ -60,7 +60,7 @@ pub(crate) enum CallV3Response {
 #[derive(Clone)]
 struct SynchronousCallHandlerState {
     ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
@@ -131,7 +131,7 @@ pub(crate) fn new_router(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
@@ -156,7 +156,7 @@ pub fn new_service(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
@@ -194,6 +194,7 @@ async fn call_sync_v3(
     };
 
     let message_id = ingress_submitter.message_id();
+    let canister_id = ingress_submitter.canister_id();
 
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
@@ -202,7 +203,8 @@ async fn call_sync_v3(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = delegation_from_nns.borrow().clone();
+            let delegation_from_nns =
+                delegation_from_nns.get_delegation(RoutingTableFormat::Flat, canister_id);
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -307,7 +309,8 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
+    let delegation_from_nns =
+        delegation_from_nns.get_delegation(RoutingTableFormat::Flat, canister_id);
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

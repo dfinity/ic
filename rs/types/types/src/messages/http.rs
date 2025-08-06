@@ -717,6 +717,12 @@ pub struct CertificateDelegation {
     pub certificate: Blob,
 }
 
+#[derive(Copy, Clone)]
+pub enum RoutingTableFormat {
+    Flat,
+    // Tree,
+}
+
 /// Different stages required for the full initialization of the HTTPS endpoint.
 /// The fields are listed in order of execution/transition.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, AsRefStr, Deserialize, Serialize)]

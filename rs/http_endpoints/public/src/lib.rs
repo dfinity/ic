@@ -79,9 +79,7 @@ use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
-    messages::{
-        CertificateDelegation, MessageId, QueryResponseHash, ReplicaHealthStatus, SignedIngress,
-    },
+    messages::{MessageId, QueryResponseHash, ReplicaHealthStatus, SignedIngress},
     Height, NodeId, SubnetId,
 };
 use std::{
@@ -172,7 +170,7 @@ fn start_server_initialization(
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
         info!(log, "Waiting for the NNS certificate delegation...");
-        let _ = delegation_from_nns.wait_for_delegation().await;
+        let _ = delegation_from_nns.wait_until_initialized().await;
         info!(log, "NNS certificate delegation is now available.");
 
         metrics

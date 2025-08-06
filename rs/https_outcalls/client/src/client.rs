@@ -11,6 +11,7 @@ use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveErro
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
@@ -19,19 +20,16 @@ use ic_types::{
         CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, Query, QuerySource, Request},
+    messages::{CertificateDelegation, Query, QuerySource, Request, RoutingTableFormat},
     CanisterId, NumBytes,
 };
 use std::time::Instant;
 use tokio::{
     runtime::Handle,
-    sync::{
-        mpsc::{
-            channel,
-            error::{TryRecvError, TrySendError},
-            Receiver, Sender,
-        },
-        watch,
+    sync::mpsc::{
+        channel,
+        error::{TryRecvError, TrySendError},
+        Receiver, Sender,
     },
 };
 use tonic::{transport::Channel, Code};
@@ -64,7 +62,7 @@ pub struct CanisterHttpAdapterClientImpl {
     query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    delegation_from_nns: NNSDelegationReader,
     log: ReplicaLogger,
 }
 
@@ -76,7 +74,7 @@ impl CanisterHttpAdapterClientImpl {
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        delegation_from_nns: NNSDelegationReader,
         log: ReplicaLogger,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
@@ -126,7 +124,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
-        let delegation_from_nns = self.delegation_from_nns.borrow().clone();
+        let delegation_from_nns = self.delegation_from_nns.get_delegation(
+            RoutingTableFormat::Flat,
+            canister_http_request.context.request.sender,
+        );
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
