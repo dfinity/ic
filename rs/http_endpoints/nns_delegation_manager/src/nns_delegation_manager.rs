@@ -575,6 +575,8 @@ mod tests {
 
     use tokio::time::timeout;
 
+    use crate::CanisterRangesFormat;
+
     use super::*;
 
     const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
@@ -837,7 +839,7 @@ mod tests {
 
         rx.receiver.changed().await.unwrap();
 
-        assert!(rx.get_delegation().is_none());
+        assert!(rx.get_full_delegation(CanisterRangesFormat::Flat).is_none());
     }
 
     #[tokio::test]
@@ -864,7 +866,7 @@ mod tests {
         rx.receiver.changed().await.unwrap();
 
         let delegation = rx
-            .get_delegation()
+            .get_full_delegation(CanisterRangesFormat::Flat)
             .expect("Should return some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
             .expect("Should return a certificate which can be deserialized");
