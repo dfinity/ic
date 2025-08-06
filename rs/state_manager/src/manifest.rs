@@ -710,7 +710,10 @@ fn hash_plan(
                             (size_bytes - chunk.offset).min(max_chunk_size as u64)
                         );
 
-                        if ((offset + path_hash + i as u64) % rehash_every_nth) == 0 {
+                        if (offset.wrapping_add(path_hash).wrapping_add(i as u64)
+                            % rehash_every_nth)
+                            == 0
+                        {
                             ChunkAction::RecomputeAndCompare(chunk.hash)
                         } else {
                             ChunkAction::UseHash(chunk.hash)
