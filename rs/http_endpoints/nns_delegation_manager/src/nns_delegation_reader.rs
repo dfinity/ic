@@ -14,7 +14,7 @@ pub enum CanisterRangesFormat {
 }
 
 #[derive(Clone)]
-// TODO(CON-1487): Consider c
+// TODO(CON-1487): Consider caching the delegations.
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<CertificateDelegation>>,
 }
