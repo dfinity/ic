@@ -1,5 +1,5 @@
 {
-  "checksum": "3ca566bc256ae4071a748e6f20bc33acd658b895cca0dec380e54be42ed01f9c",
+  "checksum": "5578eb85a5a456aec76965a14038f0c934b47aceb58de82e8e7efe4594204a0e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21307,6 +21307,10 @@
             {
               "id": "ic-http-gateway 0.3.0",
               "target": "ic_http_gateway"
+            },
+            {
+              "id": "ic-identity-hsm 0.40.1",
+              "target": "ic_identity_hsm"
             },
             {
               "id": "ic-management-canister-types 0.3.1",
@@ -94935,6 +94939,7 @@
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
+    "ic-identity-hsm 0.40.1",
     "ic-management-canister-types 0.3.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
