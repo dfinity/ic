@@ -1,5 +1,5 @@
 {
-  "checksum": "a19ca90d52ade97882bb9f45ea6563e8ca3534b229ac3962d1dad2153ab00fc5",
+  "checksum": "5d43c326918cbf0c7b71346c2979f44f2084242a770acb9cb6cf1f545e9d7a00",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7329,6 +7329,146 @@
       ],
       "license_file": "LICENSE"
     },
+    "bindgen 0.71.1": {
+      "name": "bindgen",
+      "version": "0.71.1",
+      "package_url": "https://github.com/rust-lang/rust-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bindgen/0.71.1/download",
+          "sha256": "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bindgen",
+            "crate_root": "lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bindgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "logging",
+            "prettyplease",
+            "runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.71.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cexpr 0.6.0",
+              "target": "cexpr"
+            },
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "prettyplease 0.2.15",
+              "target": "prettyplease"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "rustc-hash 2.1.1",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.71.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "prettyplease 0.2.15",
+              "target": "prettyplease"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
     "binread 2.2.0": {
       "name": "binread",
       "version": "2.2.0",
@@ -13455,7 +13595,36 @@
             "libloading",
             "runtime"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "clang_10_0",
+              "clang_11_0",
+              "clang_7_0",
+              "clang_8_0",
+              "clang_9_0"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "clang_10_0",
+              "clang_11_0",
+              "clang_7_0",
+              "clang_8_0",
+              "clang_9_0"
+            ],
+            "x86_64-apple-darwin": [
+              "clang_10_0",
+              "clang_11_0",
+              "clang_7_0",
+              "clang_8_0",
+              "clang_9_0"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "clang_10_0",
+              "clang_11_0",
+              "clang_7_0",
+              "clang_8_0",
+              "clang_9_0"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -16030,7 +16199,7 @@
               "target": "regalloc2"
             },
             {
-              "id": "rustc-hash 2.0.0",
+              "id": "rustc-hash 2.1.1",
               "target": "rustc_hash"
             },
             {
@@ -21269,6 +21438,10 @@
             {
               "id": "libc 0.2.172",
               "target": "libc"
+            },
+            {
+              "id": "libcryptsetup-rs 0.13.2",
+              "target": "libcryptsetup_rs"
             },
             {
               "id": "libflate 2.1.0",
@@ -42648,6 +42821,222 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "libcryptsetup-rs 0.13.2": {
+      "name": "libcryptsetup-rs",
+      "version": "0.13.2",
+      "package_url": "https://github.com/stratis-storage/libcryptsetup-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/libcryptsetup-rs/0.13.2/download",
+          "sha256": "3ffd3642e85d0a4a7852c28545764754e8f7ca00c33ea5f2035f241a1da869ed"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "libcryptsetup_rs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "libcryptsetup_rs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "mutex"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "either 1.14.0",
+              "target": "either"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "libcryptsetup-rs 0.13.2",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libcryptsetup-rs-sys 0.6.0",
+              "target": "libcryptsetup_rs_sys"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "per-thread-mutex 0.1.4",
+              "target": "per_thread_mutex"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "uuid 1.12.1",
+              "target": "uuid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "pkg-config 0.3.32",
+              "target": "pkg_config"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "libcryptsetup-rs-sys 0.6.0": {
+      "name": "libcryptsetup-rs-sys",
+      "version": "0.6.0",
+      "package_url": "https://github.com/stratis-storage/libcryptsetup-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/libcryptsetup-rs-sys/0.6.0/download",
+          "sha256": "d70e7b16c75f442c560d3b9514c6343e8dde6426651745de12868e1500edbc0f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "libcryptsetup_rs_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "libcryptsetup_rs_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libcryptsetup-rs-sys 0.6.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.71.1",
+              "target": "bindgen"
+            },
+            {
+              "id": "cc 1.2.22",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.32",
+              "target": "pkg_config"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "libdbus-sys 0.2.5": {
       "name": "libdbus-sys",
       "version": "0.2.5",
@@ -54266,6 +54655,57 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "per-thread-mutex 0.1.4": {
+      "name": "per-thread-mutex",
+      "version": "0.1.4",
+      "package_url": "https://github.com/jbaublitz/per-thread-mutex",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/per-thread-mutex/0.1.4/download",
+          "sha256": "b20d1aaa7fcf3cd5a7b4506c38594d25e122ad45dec6da7f85bac52f3a3e562c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "per_thread_mutex",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "per_thread_mutex",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.4"
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "percent-encoding 2.3.1": {
       "name": "percent-encoding",
       "version": "2.3.1",
@@ -57219,6 +57659,23 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "verbatim"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "verbatim"
+            ],
+            "x86_64-apple-darwin": [
+              "verbatim"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "verbatim"
+            ]
+          }
+        },
         "deps": {
           "common": [
             {
@@ -60255,7 +60712,7 @@
               "alias": "udp"
             },
             {
-              "id": "rustc-hash 2.0.0",
+              "id": "rustc-hash 2.1.1",
               "target": "rustc_hash"
             },
             {
@@ -60343,7 +60800,7 @@
               "target": "ring"
             },
             {
-              "id": "rustc-hash 2.0.0",
+              "id": "rustc-hash 2.1.1",
               "target": "rustc_hash"
             },
             {
@@ -62826,7 +63283,7 @@
               "target": "log"
             },
             {
-              "id": "rustc-hash 2.0.0",
+              "id": "rustc-hash 2.1.1",
               "target": "rustc_hash"
             },
             {
@@ -65958,14 +66415,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustc-hash 2.0.0": {
+    "rustc-hash 2.1.1": {
       "name": "rustc-hash",
-      "version": "2.0.0",
+      "version": "2.1.1",
       "package_url": "https://github.com/rust-lang/rustc-hash",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustc-hash/2.0.0/download",
-          "sha256": "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
+          "url": "https://static.crates.io/crates/rustc-hash/2.1.1/download",
+          "sha256": "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
         }
       },
       "targets": [
@@ -65995,9 +66452,9 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.0"
+        "version": "2.1.1"
       },
-      "license": "Apache-2.0/MIT",
+      "license": "Apache-2.0 OR MIT",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -94941,6 +95398,7 @@
     "lazy_static 1.5.0",
     "leb128 0.2.5",
     "libc 0.2.172",
+    "libcryptsetup-rs 0.13.2",
     "libflate 2.1.0",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
