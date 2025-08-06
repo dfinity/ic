@@ -70,7 +70,7 @@ pub fn display(bytes: &[u8]) -> String {
     let mut buf = String::new();
     let mut prefix = "";
     let mut emit = |count, byte| {
-        fmt::write(&mut buf, format_args!("{prefix}{count}×{byte:02x}"))
+        fmt::write(&mut buf, format_args!("{}{}×{:02x}", prefix, count, byte))
             .expect("Failed to write to string");
         prefix = " ";
     };

@@ -347,7 +347,8 @@ impl UserError {
         );
         assert!(
             self.description.contains(description),
-            "Error matching description \"{}\" with \"{description}\"",
+            "Error matching description \"{}\" with \"{}\"",
+            description,
             self.description
         );
     }
