@@ -10,8 +10,9 @@ use ic_types::{
     batch::AvailablePreSignatures,
     consensus::idkg::{
         common::{PreSignature, STORE_PRE_SIGNATURES_IN_STATE},
-        IDkgMasterPublicKeyId,
+        IDkgMasterPublicKeyId, PreSigId,
     },
+    crypto::canister_threshold_sig::idkg::IDkgTranscript,
     ExecutionRound, Height,
 };
 use more_asserts::debug_unreachable;
@@ -22,7 +23,7 @@ use super::SchedulerMetrics;
 /// Update [`SignatureRequestContext`]s by assigning randomness and matching pre-signatures.
 pub(crate) fn update_signature_request_contexts(
     current_round: ExecutionRound,
-    mut delivered_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
+    delivered_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     mut contexts: Vec<&mut SignWithThresholdContext>,
     pre_signature_stashes: &mut BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
     csprng: &mut Csprng,
@@ -66,7 +67,7 @@ pub(crate) fn update_signature_request_contexts(
                 .with_label_values(&[&key_id.to_string()])
                 .observe(delivered.pre_signatures.len() as f64);
 
-            let stash = pre_signature_stashes
+            pre_signature_stashes
                 .entry(key_id)
                 .and_modify(|stash| stash.pre_signatures.append(&mut delivered.pre_signatures))
                 .or_insert_with(|| PreSignatureStash {
@@ -74,32 +75,41 @@ pub(crate) fn update_signature_request_contexts(
                     pre_signatures: delivered.pre_signatures,
                 });
         }
+
+        for (key_id, stash) in pre_signature_stashes {
+            match_stashed_pre_signatures_by_key_id(
+                key_id,
+                stash,
+                &mut contexts,
+                Height::from(current_round.get()),
+            );
+        }
     } else {
         // Clear the pre-signature stash in case of a downgrade.
         pre_signature_stashes.clear();
-    }
 
-    for (key_id, pre_sigs) in delivered_pre_signatures {
-        // Match up to the maximum number of contexts per key ID to delivered pre-signatures.
-        let max_ongoing_signatures = registry_settings
-            .chain_key_settings
-            .get(&key_id)
-            .map(|setting| setting.pre_signatures_to_create_in_advance)
-            .unwrap_or_default() as usize;
+        for (key_id, delivered) in delivered_pre_signatures {
+            // Match up to the maximum number of contexts per key ID to delivered pre-signatures.
+            let max_ongoing_signatures = registry_settings
+                .chain_key_settings
+                .get(&key_id)
+                .map(|setting| setting.pre_signatures_to_create_in_advance)
+                .unwrap_or_default() as usize;
 
-        match_pre_signatures_by_key_id(
-            key_id,
-            pre_sigs,
-            &mut contexts,
-            max_ongoing_signatures,
-            Height::from(current_round.get()),
-        );
+            match_delivered_pre_signatures_by_key_id(
+                key_id,
+                delivered,
+                &mut contexts,
+                max_ongoing_signatures,
+                Height::from(current_round.get()),
+            );
+        }
     }
 }
 
 /// Match up to `max_ongoing_signatures` pre-signatures to unmatched signature request contexts
 /// of the given `key_id`.
-fn match_pre_signatures_by_key_id(
+fn match_delivered_pre_signatures_by_key_id(
     key_id: IDkgMasterPublicKeyId,
     mut pre_sigs: AvailablePreSignatures,
     contexts: &mut [&mut SignWithThresholdContext],
@@ -128,31 +138,74 @@ fn match_pre_signatures_by_key_id(
         let Some((pre_sig_id, pre_signature)) = pre_sigs.pre_signatures.pop_first() else {
             break;
         };
-        match (&mut context.args, pre_signature) {
-            (ThresholdArguments::Ecdsa(args), PreSignature::Ecdsa(pre_signature)) => {
-                args.pre_signature = Some(EcdsaMatchedPreSignature {
-                    id: pre_sig_id,
-                    height,
-                    pre_signature,
-                    key_transcript: Arc::new(pre_sigs.key_transcript.clone()),
-                })
-            }
-            (ThresholdArguments::Schnorr(args), PreSignature::Schnorr(pre_signature)) => {
-                args.pre_signature = Some(SchnorrMatchedPreSignature {
-                    id: pre_sig_id,
-                    height,
-                    pre_signature,
-                    key_transcript: Arc::new(pre_sigs.key_transcript.clone()),
-                })
-            }
-            _ => {
-                debug_unreachable!("Attempted to pair signature request context with pre-signature of different scheme.");
-                continue;
-            }
+        if match_context_with_pre_signature(
+            context,
+            pre_sig_id,
+            pre_signature,
+            Arc::new(pre_sigs.key_transcript.clone()),
+            height,
+        ) {
+            matched += 1;
         }
-        let _ = context.matched_pre_signature.insert((pre_sig_id, height));
-        matched += 1;
     }
+}
+
+/// Match pre-signatures to unmatched signature request contexts of the given `key_id`.
+fn match_stashed_pre_signatures_by_key_id(
+    key_id: &IDkgMasterPublicKeyId,
+    stash: &mut PreSignatureStash,
+    contexts: &mut [&mut SignWithThresholdContext],
+    height: Height,
+) {
+    // Assign pre-signatures to unmatched contexts until `max_ongoing_signatures` is reached.
+    for context in contexts.iter_mut() {
+        if !(context.requires_pre_signature() && context.key_id() == *key_id.inner()) {
+            continue;
+        }
+        let Some((pre_sig_id, pre_signature)) = stash.pre_signatures.pop_first() else {
+            break;
+        };
+        match_context_with_pre_signature(
+            context,
+            pre_sig_id,
+            pre_signature,
+            Arc::clone(&stash.key_transcript),
+            height,
+        );
+    }
+}
+
+fn match_context_with_pre_signature(
+    context: &mut SignWithThresholdContext,
+    pre_sig_id: PreSigId,
+    pre_signature: PreSignature,
+    key_transcript: Arc<IDkgTranscript>,
+    height: Height,
+) -> bool {
+    match (&mut context.args, pre_signature) {
+        (ThresholdArguments::Ecdsa(args), PreSignature::Ecdsa(pre_signature)) => {
+            args.pre_signature = Some(EcdsaMatchedPreSignature {
+                id: pre_sig_id,
+                height,
+                pre_signature,
+                key_transcript,
+            })
+        }
+        (ThresholdArguments::Schnorr(args), PreSignature::Schnorr(pre_signature)) => {
+            args.pre_signature = Some(SchnorrMatchedPreSignature {
+                id: pre_sig_id,
+                height,
+                pre_signature,
+                key_transcript,
+            })
+        }
+        _ => {
+            debug_unreachable!("Attempted to pair signature request context with pre-signature of different scheme.");
+            return false;
+        }
+    }
+    let _ = context.matched_pre_signature.insert((pre_sig_id, height));
+    true
 }
 
 #[cfg(test)]
@@ -281,7 +334,7 @@ mod tests {
         cutoff: u64,
     ) {
         let mut context_vec: Vec<_> = contexts.values_mut().collect();
-        match_pre_signatures_by_key_id(
+        match_delivered_pre_signatures_by_key_id(
             key_id.clone(),
             pre_sigs,
             &mut context_vec,
@@ -461,7 +514,7 @@ mod tests {
         let mut context_vec: Vec<_> = contexts.values_mut().collect();
 
         // Match them at height 3
-        match_pre_signatures_by_key_id(
+        match_delivered_pre_signatures_by_key_id(
             key_id.clone(),
             pre_sigs,
             &mut context_vec,
