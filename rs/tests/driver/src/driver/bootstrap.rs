@@ -631,7 +631,8 @@ fn create_setupos_config_image(
         "[{}] Starting create_setupos_config_image", name
     );
 
-    let tmp_dir = env.get_path("setupos");
+    // Create a unique temporary directory for this thread to avoid conflicts
+    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
