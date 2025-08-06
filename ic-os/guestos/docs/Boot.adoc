@@ -13,8 +13,6 @@ After switch to the proper root filesystem, the following essential IC-specific 
 
 - Mount configuration media (+mount-config.service+)
 
-- Generate store encryption key (+generate-store-key.service+)
-
 - Save machine-id
 
 - Set up ssh host keys
@@ -90,13 +88,6 @@ Service: +mount-config.service+, script: +/opt/ic/bin/mount-config.sh+.
 
 This service locates and mounts the configuration device (removable media, device with serial "config", or filesystem labeled "CONFIG") to +/mnt/config+.
 The configuration device is used to supply bootstrap information and initial configuration files to the system.
-
-== Generate store encryption key
-
-Service: +generate-store-key.service+, script: +/opt/ic/bin/generate-store-key.sh+, depends on +/boot/config+ mount.
-
-This service generates a random 16-byte encryption key for the encrypted store if one doesn't already exist.
-The key is written to +/boot/config/store.keyfile+.
 
 == Save machine-id
 
