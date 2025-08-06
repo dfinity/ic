@@ -22,7 +22,7 @@ use crate::{
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, info, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -35,7 +35,6 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Instant;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -656,7 +655,7 @@ fn hash_plan(
 
     parallel_map(
         thread_pool,
-        files.into_iter(),
+        files.iter(),
         |FileWithSize(relative_path, size_bytes)| {
             let mut chunk_actions = Vec::new();
             let num_chunks = count_chunks(*size_bytes, max_chunk_size);
@@ -773,7 +772,7 @@ fn dirty_pages_to_dirty_chunks(
     }
     let path_to_num_chunks_for_same_files = parallel_map(
         thread_pool,
-        files.into_iter(),
+        files.iter(),
         |FileWithSize(path, size_bytes)| {
             use std::os::unix::fs::MetadataExt;
             let new_path = checkpoint.raw_path().join(path);
@@ -801,13 +800,10 @@ fn dirty_pages_to_dirty_chunks(
             {
                 return Some(FileWithSize(path.clone(), *size_bytes));
             }
-            return None;
+            None
         },
     );
-    for FileWithSize(path, size_bytes) in path_to_num_chunks_for_same_files
-        .into_iter()
-        .filter_map(std::convert::identity)
-    {
+    for FileWithSize(path, size_bytes) in path_to_num_chunks_for_same_files.into_iter().flatten() {
         let num_chunks = count_chunks(size_bytes, max_chunk_size);
         let chunks_bitmap = BitVec::from_elem(num_chunks, false);
         let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
@@ -835,14 +831,12 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
-    let start = Instant::now();
     let mut files = {
         let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
     };
-    info!(log, "Got files: {:#?}", start.elapsed());
 
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
@@ -874,7 +868,6 @@ pub fn compute_manifest(
                     max_chunk_size,
                     thread_pool,
                 )?;
-                info!(log, "Got dirty file chunks: {:#?}", start.elapsed());
                 hash_plan(
                     &manifest_delta.base_manifest,
                     &files,
@@ -894,7 +887,6 @@ pub fn compute_manifest(
         }
         None => default_hash_plan(&files, max_chunk_size),
     };
-    info!(log, "Got chunk actions: {:#?}", start.elapsed());
 
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
@@ -921,7 +913,6 @@ pub fn compute_manifest(
         chunk_actions,
         version,
     );
-    info!(log, "Got chunk table: {:#?}", start.elapsed());
     #[cfg(debug_assertions)]
     {
         assert_eq!(file_table, seq_file_table);
@@ -929,7 +920,6 @@ pub fn compute_manifest(
     }
 
     let manifest = Manifest::new(version, file_table, chunk_table);
-    info!(log, "Got manifest: {:#?}", start.elapsed());
     metrics
         .manifest_size
         .set(encode_manifest(&manifest).len() as i64);
@@ -956,7 +946,6 @@ pub fn compute_manifest(
 
     // Sanity check: ensure that we have produced a valid manifest.
     debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
-    info!(log, "Got all: {:#?}", start.elapsed());
     Ok(manifest)
 }
 
