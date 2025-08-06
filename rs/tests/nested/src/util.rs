@@ -209,16 +209,19 @@ pub(crate) async fn update_nodes_hostos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
+pub(crate) fn setup_nested_vm(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
-    info!(logger, "Setup nested VMs ...");
+    info!(logger, "Setting up nested VM(s) ...");
 
     let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
     let farm = Farm::new(farm_url, logger.clone());
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
-    let nodes = vec![NestedNode::new(name.to_owned())];
+    let nodes: Vec<NestedNode> = names
+        .iter()
+        .map(|name| NestedNode::new(name.to_string()))
+        .collect();
 
     let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
         .expect("Failed to build resource request for nested test.");
@@ -247,14 +250,16 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
         &nns_public_key,
     )
     .expect("Unable to setup nested VMs.");
+
+    info!(logger, "Nested VM(s) setup complete!");
 }
 
 /// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
-pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
+pub(crate) fn simple_setup_nested_vm(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
     info!(
         logger,
-        "Setup minimal nested VM without IC infrastructure..."
+        "Setting up minimal nested VM(s) without IC infrastructure..."
     );
 
     let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
@@ -262,7 +267,10 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
-    let nodes = vec![NestedNode::new(name.to_owned())];
+    let nodes: Vec<NestedNode> = names
+        .iter()
+        .map(|name| NestedNode::new(name.to_string()))
+        .collect();
 
     // Allocate VM resources
     let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
@@ -289,7 +297,7 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
     )
     .expect("Unable to setup nested VMs with minimal config.");
 
-    info!(logger, "Minimal nested VM setup complete!");
+    info!(logger, "Minimal nested VM(s) setup complete!");
 }
 
 pub(crate) fn start_nested_vm(env: TestEnv) {

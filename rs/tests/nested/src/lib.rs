@@ -59,7 +59,7 @@ pub fn config(env: TestEnv) {
         .start(&env)
         .expect("failed to setup ic-gateway");
 
-    setup_nested_vm(env.clone(), HOST_VM_NAME);
+    setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
 
     let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
         panic!(
@@ -90,7 +90,7 @@ pub fn config(env: TestEnv) {
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
 pub fn simple_config(env: TestEnv) {
-    simple_setup_nested_vm(env.clone(), HOST_VM_NAME);
+    simple_setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
