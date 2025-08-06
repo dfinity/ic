@@ -412,6 +412,20 @@ fn get_transcript_data_at_given_summary<T>(
     }
 }
 
+/// Check if the [`ReplicaVersion`] is the current version
+///
+/// # Arguments
+///
+/// - `version`: the [`ReplicaVersion`] to check against
+///
+/// # Returns
+///
+/// - `true` if `version` matches the current version
+/// - `false` otherwise
+pub fn is_current_protocol_version(version: &ReplicaVersion) -> bool {
+    version == &ReplicaVersion::default()
+}
+
 /// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,
@@ -652,12 +666,14 @@ mod tests {
                 MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
                     message_hash: [0; 32],
                     key_id: key_id.clone(),
+                    pre_signature: None,
                 }),
                 MasterPublicKeyId::Schnorr(key_id) => {
                     ThresholdArguments::Schnorr(SchnorrArguments {
                         message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
                         taproot_tree_root: None,
+                        pre_signature: None,
                     })
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),

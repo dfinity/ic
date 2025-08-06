@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
-- The function `PocketIc::start_or_reuse_server` to manually start or reuse a PocketIC server.
+- The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
 - The function `PocketIcBuilder::with_all_icp_features` to specify that all ICP features (supported by PocketIC) should be enabled.
+- The function `PocketIc::upgrade_eop_canister` to upgrade a Motoko EOP canister.
 
 
 

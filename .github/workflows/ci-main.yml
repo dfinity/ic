@@ -106,13 +106,13 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
+    runs-on:
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
-    runs-on:
-      labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
@@ -298,7 +298,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -342,7 +342,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -352,17 +352,19 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Libfuzzer targets
-        shell: bash
-        run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+        uses: ./.github/actions/bazel
+        with:
+          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
-        shell: bash
-        run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+        uses: ./.github/actions/bazel
+        with:
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
   python-ci-tests:
     name: Python CI Tests
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -394,7 +396,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -476,7 +478,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -495,7 +497,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -532,7 +534,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     timeout-minutes: 30

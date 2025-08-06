@@ -14,13 +14,31 @@ env:
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 jobs:
+  insta-tests:
+    name: Quick Feedback Tests
+    timeout-minutes: 30
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
+      options: >-
+        -e NODE_NAME
+    if: ${{ github.event_name != 'merge_group' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run insta-tests
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel test //:insta_tests
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     timeout-minutes: 90
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -50,7 +68,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -92,7 +110,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     timeout-minutes: 5
@@ -128,7 +146,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -189,7 +207,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+      image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')

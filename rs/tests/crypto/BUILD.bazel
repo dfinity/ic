@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -36,7 +36,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
@@ -46,16 +46,17 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "rpc_csp_vault_reconnection_test",
+    env = MESSAGE_CANISTER_ENV,
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
@@ -64,7 +65,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
@@ -73,7 +73,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
@@ -82,7 +81,6 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
@@ -91,6 +89,5 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )

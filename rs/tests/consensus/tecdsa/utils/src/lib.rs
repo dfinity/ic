@@ -824,7 +824,7 @@ pub async fn generate_dummy_ecdsa_signature_with_logger(
     key_id: &EcdsaKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithEcdsaResponse, String> {
+) -> Result<SignWithEcdsaResponse, AgentError> {
     let signature_request = GenEcdsaParams {
         derivation_path_length,
         derivation_path_element_size,
@@ -869,7 +869,7 @@ pub async fn generate_dummy_schnorr_signature_with_logger(
     key_id: &SchnorrKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithSchnorrResponse, String> {
+) -> Result<SignWithSchnorrResponse, AgentError> {
     let signature_request = GenSchnorrParams {
         message_size,
         derivation_path_length,
@@ -914,7 +914,7 @@ pub async fn generate_dummy_vetkd_key_with_logger(
     key_id: &VetKdKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<VetKDDeriveKeyResult, String> {
+) -> Result<VetKDDeriveKeyResult, AgentError> {
     let key_request = GenVetkdParams {
         context_size,
         input_size,
@@ -1004,6 +1004,7 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
                 .collect(),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
             idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }),
         ..empty_subnet_update()
     };
@@ -1072,6 +1073,7 @@ pub async fn create_new_subnet_with_keys(
             .collect(),
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
+        max_parallel_pre_signature_transcripts_in_creation: None,
     };
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(
         SubnetType::Application,

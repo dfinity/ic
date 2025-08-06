@@ -50,6 +50,7 @@ TEST_DEPENDENCIES = [
 rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["README.md"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "9.0.2",
     deps = DEPENDENCIES,
@@ -63,6 +64,7 @@ rust_doc_test(
 rust_test(
     name = "pocket-ic-test",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["README.md"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )
@@ -79,10 +81,35 @@ rust_test_suite(
         "@mozilla_root_ca_store//file",
     ],
     env = {
-        "RUST_TEST_THREADS": "2",
+        "RUST_TEST_THREADS": "4",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
+    },
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "cpu:16",
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_macos",
+    ],
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "icp_features",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
+    srcs = ["tests/icp_features.rs"],
+    data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "RUST_TEST_THREADS": "2",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

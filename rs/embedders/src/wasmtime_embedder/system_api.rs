@@ -21,6 +21,7 @@ use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
     NumWasmPages,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -181,7 +182,6 @@ impl InstructionLimits {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
-    pub canister_memory_limit: NumBytes,
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
@@ -837,9 +837,6 @@ pub enum CostReturnCode {
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
-    /// Upper limit on how much the memory the canister could use.
-    limit: NumBytes,
-
     /// The Wasm memory limit set by the developer in canister settings.
     wasm_memory_limit: Option<NumBytes>,
 
@@ -872,9 +869,6 @@ struct MemoryUsage {
 
 impl MemoryUsage {
     fn new(
-        log: ReplicaLogger,
-        canister_id: CanisterId,
-        limit: NumBytes,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
@@ -883,22 +877,7 @@ impl MemoryUsage {
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
-        // A canister's current usage should never exceed its limit. This is
-        // most probably a bug. Panicking here due to this inconsistency has the
-        // danger of putting the entire subnet in a crash loop. Log an error
-        // message to page the on-call team and try to stumble along.
-        if current_usage > limit {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: current_usage {} > limit {}",
-                canister_id,
-                current_usage,
-                limit
-            );
-        }
-
         Self {
-            limit,
             wasm_memory_limit,
             current_usage,
             stable_memory_usage,
@@ -983,7 +962,7 @@ impl MemoryUsage {
             .current_usage
             .get()
             .overflowing_add(execution_bytes.get());
-        if overflow || new_usage > self.limit.get() {
+        if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
 
@@ -1239,9 +1218,6 @@ impl SystemApiImpl {
             .expect("Wasm memory size is larger than maximal allowed.");
 
         let memory_usage = MemoryUsage::new(
-            log.clone(),
-            sandbox_safe_system_state.canister_id,
-            execution_parameters.canister_memory_limit,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,
@@ -1268,6 +1244,10 @@ impl SystemApiImpl {
             instructions_executed_before_current_slice: 0,
             call_counters: SystemApiCallCounters::default(),
         }
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.sandbox_safe_system_state.cost_schedule
     }
 
     /// Refunds any cycles used for an outgoing request that doesn't get sent
@@ -4204,6 +4184,7 @@ impl SystemApi for SystemApiImpl {
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
                 execution_mode,
+                self.get_cost_schedule(),
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
@@ -4215,7 +4196,7 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .canister_creation_fee(subnet_size);
+            .canister_creation_fee(subnet_size, self.get_cost_schedule());
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
@@ -4232,7 +4213,12 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+            .http_request_fee(
+                request_size.into(),
+                Some(max_res_bytes.into()),
+                subnet_size,
+                self.get_cost_schedule(),
+            );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())

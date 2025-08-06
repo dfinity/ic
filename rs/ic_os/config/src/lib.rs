@@ -18,7 +18,7 @@ pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini"
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config-guestos.json";
-pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
+pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/run/config/config.json";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
@@ -111,6 +111,7 @@ mod tests {
             upgrade_config: GuestOSUpgradeConfig {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
             },
+            trusted_execution_environment_config: None,
         };
 
         fn serialize_and_deserialize<T>(config: &T)

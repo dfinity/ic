@@ -90,7 +90,6 @@ impl Ic00MethodPermissions {
                 installs_code: true,
             },
             Ic00Method::SetupInitialDKG
-            | Ic00Method::ComputeInitialIDkgDealings
             | Ic00Method::ReshareChainKey
             | Ic00Method::RenameCanister => Self {
                 method,

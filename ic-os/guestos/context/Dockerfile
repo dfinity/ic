@@ -20,7 +20,7 @@ USER root:root
 
 RUN mkdir -p /boot/config \
              /boot/efi \
-             /grub
+             /boot/grub
 COPY etc /etc
 
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
@@ -236,6 +236,9 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
+
+# Prepare mount point for config device coming from the HostOS
+RUN mkdir /mnt/config
 
 # ------ DEV VARIANT ---------------------------------------------
 

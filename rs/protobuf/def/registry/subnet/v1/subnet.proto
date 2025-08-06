@@ -301,28 +301,11 @@ message SubnetFeatures {
   optional bool sev_enabled = 9;
 }
 
-// Per subnet ECDSA configuration
-//
-// Deprecated; please use ChainKeyConfig instead.
-message EcdsaConfig {
-  // Number of quadruples to create in advance.
-  uint32 quadruples_to_create_in_advance = 1;
-  reserved 2;
-  // Identifiers for threshold ECDSA keys held by the subnet.
-  repeated types.v1.EcdsaKeyId key_ids = 3;
-  // The maximum number of signature requests that can be enqueued at once.
-  uint32 max_queue_size = 4;
-  // Signature requests will timeout after the given number of nano seconds.
-  optional uint64 signature_request_timeout_ns = 5;
-  // Key rotation period of a single node in milliseconds.
-  // If none is specified key rotation is disabled.
-  optional uint64 idkg_key_rotation_period_ms = 6;
-}
-
 message KeyConfig {
   // The key's identifier.
   optional types.v1.MasterPublicKeyId key_id = 1;
-  // Number of pre-signatures to create in advance.
+  // The size of the pre-signature stash, i.e. the maximum number of
+  // pre-signatures that can be stored at once.
   optional uint32 pre_signatures_to_create_in_advance = 3;
   // The maximum number of signature requests that can be enqueued at once.
   optional uint32 max_queue_size = 4;
@@ -335,8 +318,11 @@ message ChainKeyConfig {
   // Signature requests will timeout after the given number of nano seconds.
   optional uint64 signature_request_timeout_ns = 2;
   // Key rotation period of a single node in milliseconds.
-  // If none is specified key rotation is disabled.
+  // If none is specified, key rotation is disabled.
   optional uint64 idkg_key_rotation_period_ms = 3;
+  // Maximum number of pre-signature transcripts that can be worked on in
+  // parallel to fill the pre-signature stash.
+  optional uint32 max_parallel_pre_signature_transcripts_in_creation = 4;
 }
 
 // How to charge canisters for their use of computational resources (such as

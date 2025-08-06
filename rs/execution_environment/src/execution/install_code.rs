@@ -226,6 +226,7 @@ impl InstallCodeHelper {
     /// Replays the previous `install_code` steps on the given clean canister.
     /// Returns an error if any step fails. Otherwise, it returns an instance of
     /// the helper that can be used to continue the `install_code` execution.
+    #[allow(clippy::result_large_err)]
     pub fn resume(
         clean_canister: &CanisterState,
         paused: PausedInstallCodeHelper,
@@ -278,6 +279,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            round.cost_schedule,
             original.wasm_execution_mode,
             round.log,
         );
@@ -323,6 +325,7 @@ impl InstallCodeHelper {
                 bytes,
                 &original.execution_parameters.subnet_memory_saturation,
                 original.subnet_size,
+                round.cost_schedule,
             );
 
             match self
@@ -367,6 +370,7 @@ impl InstallCodeHelper {
                 self.canister.message_memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
+                round.cost_schedule,
                 self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
@@ -544,16 +548,17 @@ impl InstallCodeHelper {
 
         self.canister.execution_state = Some(execution_state);
 
-        let best_effort_limit = self.execution_parameters.canister_memory_limit;
-        self.execution_parameters.canister_memory_limit =
-            self.canister.memory_limit(best_effort_limit);
-
         let new_memory_usage = self.canister.memory_usage();
-        if new_memory_usage > self.execution_parameters.canister_memory_limit {
-            return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                memory_allocation_given: memory_allocation,
-                memory_usage_needed: new_memory_usage,
-            });
+        match self.canister.memory_allocation() {
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                if new_memory_usage > reserved_bytes {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        memory_allocation_given: memory_allocation,
+                        memory_usage_needed: new_memory_usage,
+                    });
+                }
+            }
+            MemoryAllocation::BestEffort => (),
         }
         self.update_allocated_bytes(
             old_memory_usage,
@@ -873,6 +878,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        round.cost_schedule,
         original.wasm_execution_mode,
         round.log,
     );

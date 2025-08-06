@@ -177,7 +177,7 @@ mod idkg_gen_dealing_encryption_key_pair {
 
     #[test]
     fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails() {
-        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+        let io_error = std::io::Error::other("oh no!");
         let mut pks_returning_io_error = MockPublicKeyStore::new();
         pks_returning_io_error
             .expect_add_idkg_dealing_encryption_pubkey()
@@ -556,8 +556,7 @@ mod idkg_retain_active_keys {
         let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
         let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
             .expect("should convert to MEGaPublicKey");
-        let err =
-            PublicKeyRetainError::Io(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"));
+        let err = PublicKeyRetainError::Io(std::io::Error::other("oh no!"));
         pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
             .times(1)
             .in_sequence(&mut seq)

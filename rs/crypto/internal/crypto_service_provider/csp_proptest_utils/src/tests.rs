@@ -160,6 +160,7 @@ should_have_a_strategy_for_each_variant!(
         error: "dummy error to match upon".to_string(),
     },
     VersionNotAvailable { .. },
+    NoVersionsBefore { .. },
     DataProviderQueryFailed { .. },
     PollLockFailed { .. },
     PollingLatestVersionFailed { .. },

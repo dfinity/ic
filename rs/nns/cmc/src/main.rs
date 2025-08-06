@@ -22,7 +22,9 @@ use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
     IC_00,
 };
-use ic_nervous_system_common::{serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID};
+use ic_nervous_system_common::{
+    serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -42,6 +44,7 @@ use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 use std::{
     cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
@@ -79,6 +82,9 @@ const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 /// into this. At that time, prices had recently gone up, so we resolved to
 /// increase this by 3x.
 const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
+
+/// The limit for the number of cycles that can be minted by the Subnet Rental Canister in a month.
+const SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT: u128 = 500e15 as u128;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
@@ -188,10 +194,10 @@ struct StateVersion(u64);
 ///
 /// * Optionally remove older State types (StateVm where m < n)
 ///   because they are no longer needed.
-type State = StateV1;
+type State = StateV2;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct StateV1 {
+pub struct StateV2 {
     pub ledger_canister_id: CanisterId,
 
     pub governance_canister_id: CanisterId,
@@ -225,10 +231,17 @@ pub struct StateV1 {
     pub cycles_per_xdr: Cycles,
 
     /// How many cycles are allowed to be minted in an hour.
-    pub cycles_limit: Cycles,
+    pub base_cycles_limit: Cycles,
+
+    /// How many cycles are allowed to be minted by the Subnet Rental Canister in a month.
+    pub subnet_rental_cycles_limit: Cycles,
 
     /// Maintain a count of how many cycles have been minted in the last hour.
-    pub limiter: limiter::Limiter,
+    pub base_limiter: limiter::Limiter,
+
+    /// Maintain a count of how many cycles have been minted by the Subnet Rental Canister
+    /// in the last month.
+    pub subnet_rental_canister_limiter: limiter::Limiter,
 
     pub total_cycles_minted: Cycles,
 
@@ -274,9 +287,9 @@ pub struct StateV1 {
     pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
-impl StateV1 {
+impl StateV2 {
     fn state_version() -> StateVersion {
-        StateVersion(1)
+        StateVersion(2)
     }
 }
 
@@ -290,6 +303,7 @@ impl State {
         let stored_state_version: StateVersion =
             deserializer.get_value().expect("state version is missing");
         let current_state_version: StateVersion = Self::state_version();
+
         match stored_state_version.cmp(&current_state_version) {
             Ordering::Greater => {
                 return Err(format!(
@@ -300,9 +314,13 @@ impl State {
                 ))
             }
             Ordering::Less => {
-                // Since the version 1 is the latest version and also the first one encoded along
-                // with the state version, this should never happen. When we have a higher version
-                // than 1, we should add migration code here.
+                // This is where you would put a function to do the migration, which would look something like this:
+                // if stored_state_version == StateVersion(*last_state_version*) {
+                //   let state = deserializer.get_value::<StateVLast>().unwrap();
+                //   deserializer.done().unwrap();
+                //   return Ok(migrate_last_to_current(state));
+                // }
+                // Migrations should be deleted after execution to keep the codebase tidy.
                 return Err(format!(
                     "[cycles] ERROR: stored state version {:?} is lesser than the current state \
                      version {:?}! Did you forget to migrate the old to the current type?",
@@ -363,14 +381,44 @@ impl Default for State {
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
-            limiter: limiter::Limiter::new(resolution, max_age),
+            base_cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
+            subnet_rental_cycles_limit: Cycles::from(SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT),
+            base_limiter: limiter::Limiter::new(resolution, max_age),
+            subnet_rental_canister_limiter: limiter::Limiter::new(
+                Duration::from_secs(ONE_HOUR_SECONDS),
+                Duration::from_secs(ONE_MONTH_SECONDS),
+            ),
             total_cycles_minted: Cycles::zero(),
             blocks_notified: BTreeMap::new(),
             last_purged_notification: 0,
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
             update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
+        }
+    }
+}
+
+enum CyclesMintingLimiterSelector {
+    BaseLimit,
+    SubnetRentalLimit,
+}
+
+impl CyclesMintingLimiterSelector {
+    fn check_and_add_cycles(
+        &self,
+        state: &mut State,
+        now: SystemTime,
+        cycles_to_mint: Cycles,
+    ) -> Result<(), String> {
+        match self {
+            CyclesMintingLimiterSelector::BaseLimit => state.base_limiter.check_and_add_cycles(
+                now,
+                cycles_to_mint,
+                state.base_cycles_limit,
+            ),
+            CyclesMintingLimiterSelector::SubnetRentalLimit => state
+                .subnet_rental_canister_limiter
+                .check_and_add_cycles(now, cycles_to_mint, state.subnet_rental_cycles_limit),
         }
     }
 }
@@ -872,8 +920,7 @@ fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRat
     let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
 
     let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
-        IcpXdrConversionRate::default(
-        );
+        IcpXdrConversionRate::default();
         ICP_XDR_CONVERSION_RATE_CACHE_SIZE
     ]);
 
@@ -1125,6 +1172,17 @@ async fn notify_top_up(
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
+    let caller = caller();
+
+    let src_canister_principal = SUBNET_RENTAL_CANISTER_ID.get();
+    let limiter_to_use =
+        if caller == src_canister_principal && canister_id.get() == src_canister_principal {
+            // caller and destination needs to be src_canister_principal to get alternate limiter
+            CyclesMintingLimiterSelector::SubnetRentalLimit
+        } else {
+            CyclesMintingLimiterSelector::BaseLimit
+        };
+
     let (amount, from) = fetch_transaction(
         block_index,
         Subaccount::from(&canister_id),
@@ -1180,7 +1238,7 @@ async fn notify_top_up(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_top_up(canister_id, from, amount).await;
+            let result = process_top_up(canister_id, from, amount, limiter_to_use).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1950,7 +2008,18 @@ async fn do_transaction_notification(
             .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_top_up(canister_id, from, tn.amount).await {
+
+        // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
+        // doesn't call this endpoint.
+        let process_top_up_result = process_top_up(
+            canister_id,
+            from,
+            tn.amount,
+            CyclesMintingLimiterSelector::BaseLimit,
+        )
+        .await;
+
+        match process_top_up_result {
             Ok(cycles) => (
                 Ok(CyclesResponse::ToppedUp(())),
                 Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
@@ -2126,6 +2195,7 @@ async fn process_top_up(
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2136,7 +2206,7 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles, true).await {
+    match deposit_cycles(canister_id, cycles, true, limiter_to_use).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
@@ -2255,9 +2325,10 @@ async fn deposit_cycles(
     canister_id: CanisterId,
     cycles: Cycles,
     mint_cycles: bool,
+    limiter_to_use: CyclesMintingLimiterSelector,
 ) -> Result<(), String> {
     if mint_cycles {
-        ensure_balance(cycles)?;
+        ensure_balance(cycles, limiter_to_use)?;
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
@@ -2287,8 +2358,9 @@ async fn do_mint_cycles(
     else {
         return Err("No cycles ledger canister id configured.".to_string());
     };
-
-    ensure_balance(cycles)?;
+    // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
+    // doesn't call endpoints using this function.
+    ensure_balance(cycles, CyclesMintingLimiterSelector::BaseLimit)?;
 
     let arg = CyclesLedgerDepositArgs {
         to: account,
@@ -2384,7 +2456,10 @@ async fn do_create_canister(
     }
 
     // We have subnets available, so we can now mint the cycles and create the canister.
-    ensure_balance(cycles)?;
+
+    // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
+    // doesn't call endpoints using this function.
+    ensure_balance(cycles, CyclesMintingLimiterSelector::BaseLimit)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -2437,31 +2512,22 @@ async fn do_create_canister(
     Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
-fn ensure_balance(cycles: Cycles) -> Result<(), String> {
+/// Ensure the Cycles Minting canister has at least `cycles` balance of cycles, otherwise, mint more
+/// so that the balance of this canister is at least `cycles`.  If the `check_minting_limit` is true,
+/// the minting limit is checked and enforced before minting, otherwise, the minting limit is ignored.
+fn ensure_balance(
+    cycles: Cycles,
+    limiter_to_use: CyclesMintingLimiterSelector,
+) -> Result<(), String> {
     let now = now_system_time();
 
     let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
-        state.limiter.purge_old(now);
-        let count = state.limiter.get_count();
-
-        if count + cycles_to_mint > state.cycles_limit {
-            LIMITER_REJECT_COUNT.with(|count| {
-                count.set(count.get().saturating_add(1));
-            });
-
-            return Err(format!(
-                "More than {} cycles have been minted in the last {} seconds, please try again later.",
-                state.cycles_limit,
-                state.limiter.get_max_age().as_secs(),
-            ));
-        }
-
-        state.limiter.add(now, cycles_to_mint);
+        limiter_to_use.check_and_add_cycles(state, now, cycles_to_mint)?;
         state.total_cycles_minted += cycles_to_mint;
-        Ok(())
+        Ok::<_, String>(())
     })?;
 
     // unused because of check above
@@ -2534,9 +2600,6 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
-
-    // Delete after release.
-    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
@@ -2658,17 +2721,32 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         )?;
         w.encode_gauge(
             "cmc_limiter_cycles",
-            state.limiter.get_count().get() as f64,
+            state.base_limiter.get_count().get() as f64,
             "The amount of cycles minted in the recent past. If someone tries \
              to mint N cycles, but N + the value of this metric exceeds \
              cmc_cycles_limit, then the request will be rejected.",
         )?;
         w.encode_gauge(
             "cmc_cycles_limit",
-            state.cycles_limit.get() as f64,
+            state.base_cycles_limit.get() as f64,
             "The maximum amount of cycles that can be minted in the recent past. \
              More precisely, if someone tries to mint N cycles, and \
              N + cmc_limiter_cycles > cmc_cycles_limit, then the request will \
+             be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_subnet_rental_limiter_cycles",
+            state.subnet_rental_canister_limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past for the Subnet Rental Canister. \
+             If someone tries to mint N cycles, but N + the value of this metric exceeds \
+             cmc_subnet_rental_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_subnet_rental_cycles_limit",
+            state.subnet_rental_cycles_limit.get() as f64,
+            "The maximum amount of cycles that can be minted in the recent past for the Subnet \
+             Rental Canister. 1GMore precisely, if someone tries to mint N cycles, and \
+             N + cmc_limiter_cycles > cmc_subnet_rental_cycles_limit, then the request will \
              be rejected.",
         )?;
 
