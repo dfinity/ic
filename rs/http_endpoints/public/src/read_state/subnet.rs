@@ -15,12 +15,12 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_state_manager::StateReader;
-use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{
         Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, ReadState, RoutingTableFormat,
+        HttpRequestEnvelope, ReadState,
     },
     CanisterId, PrincipalId,
 };
@@ -158,7 +158,8 @@ pub(crate) async fn read_state_subnet(
         };
 
         let signature = certification.signed.signature.signature.get().0;
-        let delegation_from_nns = delegation_from_nns.get_full_delegation(RoutingTableFormat::Flat);
+        let delegation_from_nns =
+            delegation_from_nns.get_full_delegation(CanisterRangesFormat::Flat);
         Cbor(HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,

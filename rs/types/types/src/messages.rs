@@ -14,7 +14,7 @@ pub use self::http::{
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
     HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
-    RoutingTableFormat, SignedDelegation,
+    SignedDelegation,
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;

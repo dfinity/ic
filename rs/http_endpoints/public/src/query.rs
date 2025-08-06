@@ -23,7 +23,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
-use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
@@ -31,7 +31,7 @@ use ic_types::{
     messages::{
         Blob, HasCanisterId, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply,
         HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query,
-        QueryResponseHash, RoutingTableFormat,
+        QueryResponseHash,
     },
     CanisterId, NodeId,
 };
@@ -219,7 +219,7 @@ pub(crate) async fn query(
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
     let delegation_from_nns =
-        delegation_from_nns.get_delegation(RoutingTableFormat::Flat, effective_canister_id);
+        delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, effective_canister_id);
     let query_execution_response = query_execution_service
         .oneshot((user_query.clone(), delegation_from_nns))
         .await

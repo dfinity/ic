@@ -30,13 +30,11 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
-use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::certification::Certification,
-    messages::{
-        Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId, RoutingTableFormat,
-    },
+    messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
@@ -204,7 +202,7 @@ async fn call_sync_v3(
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
             let delegation_from_nns =
-                delegation_from_nns.get_delegation(RoutingTableFormat::Flat, canister_id);
+                delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, canister_id);
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -310,7 +308,7 @@ async fn call_sync_v3(
         .inc();
 
     let delegation_from_nns =
-        delegation_from_nns.get_delegation(RoutingTableFormat::Flat, canister_id);
+        delegation_from_nns.get_delegation(CanisterRangesFormat::Flat, canister_id);
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

@@ -1,10 +1,11 @@
-use ic_registry_client_helpers::routing_table;
-use ic_types::{
-    messages::{CertificateDelegation, RoutingTableFormat},
-    CanisterId,
-};
+use ic_types::{messages::CertificateDelegation, CanisterId};
 use tokio::sync::watch;
 
+#[derive(Copy, Clone)]
+pub enum CanisterRangesFormat {
+    Flat,
+    // Tree,
+}
 #[derive(Clone)]
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<CertificateDelegation>>,
@@ -21,7 +22,7 @@ impl NNSDelegationReader {
 
     pub fn get_delegation(
         &self,
-        routing_table_format: RoutingTableFormat,
+        canister_ranges_format: CanisterRangesFormat,
         _canister_id: CanisterId,
     ) -> Option<CertificateDelegation> {
         if self.is_nns {
@@ -32,14 +33,14 @@ impl NNSDelegationReader {
             return None;
         };
 
-        match routing_table_format {
-            RoutingTableFormat::Flat => Some(delegation),
+        match canister_ranges_format {
+            CanisterRangesFormat::Flat => Some(delegation),
         }
     }
 
     pub fn get_full_delegation(
         &self,
-        routing_table_format: RoutingTableFormat,
+        canister_ranges_format: CanisterRangesFormat,
     ) -> Option<CertificateDelegation> {
         if self.is_nns {
             return None;
@@ -49,8 +50,8 @@ impl NNSDelegationReader {
             return None;
         };
 
-        match routing_table_format {
-            RoutingTableFormat::Flat => Some(delegation),
+        match canister_ranges_format {
+            CanisterRangesFormat::Flat => Some(delegation),
         }
     }
 
