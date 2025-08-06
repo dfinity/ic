@@ -33,13 +33,13 @@ use util::{
 use anyhow::bail;
 
 const HOST_VM_NAME: &str = "host-1";
+const FOUR_VM_NAMES: [&str; 4] = ["host-1", "host-2", "host-3", "host-4"];
 
 const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
-/// Prepare the environment for nested tests.
-/// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv) {
+/// Setup the basic IC infrastructure (testnet, NNS, gateway)
+fn setup_ic_infrastructure(env: &TestEnv) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -50,20 +50,21 @@ pub fn config(env: TestEnv) {
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
-        .setup_and_start(&env)
+        .setup_and_start(env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-        .start(&env)
+        .start(env)
         .expect("failed to setup ic-gateway");
+}
 
-    setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
-
-    let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
+/// Setup vector targets for a single VM
+fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
+    let vm = env.get_nested_vm(vm_name).unwrap_or_else(|e| {
         panic!(
-            "Expected nested vm {HOST_VM_NAME} to exist, but got error: {:?}",
+            "Expected nested vm {vm_name} to exist, but got error: {:?}",
             e
         )
     });
@@ -75,7 +76,7 @@ pub fn config(env: TestEnv) {
         ("host_node_exporter", network.host_ip),
     ] {
         env.add_custom_vector_target(
-            format!("{HOST_VM_NAME}-{job}"),
+            format!("{vm_name}-{job}"),
             ip.into(),
             Some(
                 [("job", job)]
@@ -87,10 +88,29 @@ pub fn config(env: TestEnv) {
         .unwrap();
     }
 }
+
+/// Prepare the environment for nested tests.
+/// SetupOS -> HostOS -> GuestOS
+pub fn config(env: TestEnv) {
+    setup_ic_infrastructure(&env);
+    setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
+    setup_vector_targets_for_vm(&env, HOST_VM_NAME);
+}
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
 pub fn simple_config(env: TestEnv) {
     simple_setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
+}
+
+/// Prepare the environment for nested tests with four nested VMs.
+/// SetupOS -> HostOS -> GuestOS (x4)
+pub fn config_four_vms(env: TestEnv) {
+    setup_ic_infrastructure(&env);
+    setup_nested_vm(env.clone(), &FOUR_VM_NAMES);
+
+    for vm_name in FOUR_VM_NAMES {
+        setup_vector_targets_for_vm(&env, vm_name);
+    }
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
