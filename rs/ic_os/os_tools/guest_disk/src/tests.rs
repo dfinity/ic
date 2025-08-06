@@ -10,8 +10,9 @@ use ic_device::device_mapping::{Bytes, TempDevice};
 use ic_sev::guest::firmware::MockSevGuestFirmware;
 use ic_sev::guest::key_deriver::{Key, SevKeyDeriver};
 use std::fs;
-use std::fs::File;
+use std::fs::{File, Permissions};
 use std::io::Read;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tempfile::{tempdir, TempDir};
 
@@ -176,7 +177,27 @@ fn test_generated_key_init_and_reopen() {
             .expect("Failed to reopen partition with generated key");
 
         assert_device_has_content(device_path, b"test_data");
+        assert!(fixture.generated_key_path.exists());
+        assert_eq!(fs::read(&fixture.generated_key_path).unwrap().len(), 16);
+        assert_eq!(
+            fixture.generated_key_path.metadata().unwrap().permissions(),
+            // Type file, readable and writable by owner only
+            Permissions::from_mode(0o100600)
+        );
     }
+}
+
+#[test]
+fn test_does_not_change_existing_generated_key() {
+    let mut fixture = TestFixture::new(false);
+    fs::write(&fixture.generated_key_path, "existing_key")
+        .expect("Failed to write existing key for testing");
+    fixture.format(Partition::Var).unwrap();
+    fixture.open(Partition::Var).unwrap();
+    assert_eq!(
+        fs::read_to_string(&fixture.generated_key_path).unwrap(),
+        "existing_key"
+    );
 }
 
 #[test]

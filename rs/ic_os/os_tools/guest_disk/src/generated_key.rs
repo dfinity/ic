@@ -1,6 +1,7 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
 use crate::{DiskEncryption, Partition};
 use anyhow::{Context, Result};
+use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -37,13 +38,13 @@ impl GeneratedKeyDiskEncryption<'_> {
                 .key_path
                 .parent()
                 .context("Could not find parent directory for key file")?;
-            let mut temp = NamedTempFile::new_in(parent_dir)
+            let mut temp = tempfile::Builder::new()
+                .permissions(Permissions::from_mode(0o600))
+                .tempfile_in(parent_dir)
                 .context("Could not create temporary file for boot partition key")?;
             let rand_key = rand::random::<[u8; 16]>();
             temp.write_all(&rand_key)
                 .context("Could not write generated key")?;
-            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o600))
-                .context("Could not set permissions on key file")?;
 
             match temp
                 .persist_noclobber(self.key_path)

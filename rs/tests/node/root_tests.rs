@@ -5,7 +5,6 @@ use ic_system_test_driver::driver::test_env_api::{get_dependency_path, SshSessio
 use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::systest;
 use slog::info;
-use std::path::Path;
 
 const UNIVERSAL_VM_NAME: &str = "root_tests";
 
