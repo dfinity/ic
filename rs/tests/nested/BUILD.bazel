@@ -173,13 +173,6 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
-rust_binary(
-    name = "recovery_upgrader_test_bin",
-    testonly = True,
-    srcs = ["recovery_upgrader_test.rs"],
-    deps = DEPENDENCIES + [":nested"],
-)
-
 # Tests the recovery-upgrader component by upgrading the GuestOS to the mainnet update image
 # Uses the mainnet update image, as this image is hosted at https://download.dfinity.systems/
 system_test_nns(
@@ -188,20 +181,11 @@ system_test_nns(
     extra_head_nns_tags = [],
     flaky = True,
     tags = ["long_test"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_driver_target = ":recovery_upgrader_test_bin",
     test_timeout = "eternal",
     uses_guestos_mainnet_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
-)
-
-rust_binary(
-    name = "nns_recovery_test_bin",
-    testonly = True,
-    srcs = ["nns_recovery_test.rs"],
-    deps = DEPENDENCIES + [":nested"],
 )
 
 # WORK IN PROGRESS: End-to-end test of the manual NNS recovery process:
@@ -214,8 +198,6 @@ system_test_nns(
     extra_head_nns_tags = [],
     flaky = True,
     tags = ["long_test"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_driver_target = ":nns_recovery_test_bin",
     test_timeout = "eternal",
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
