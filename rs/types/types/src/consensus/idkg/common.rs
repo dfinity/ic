@@ -47,6 +47,8 @@ use super::{
     IDkgMasterPublicKeyId,
 };
 
+pub const STORE_PRE_SIGNATURES_IN_STATE: bool = false;
+
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
 pub type PseudoRandomId = [u8; 32];
 

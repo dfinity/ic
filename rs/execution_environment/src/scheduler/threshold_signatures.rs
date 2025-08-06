@@ -3,12 +3,15 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaMatchedPreSignature, SchnorrMatchedPreSignature, SignWithThresholdContext,
-    ThresholdArguments,
+    EcdsaMatchedPreSignature, PreSignatureStash, SchnorrMatchedPreSignature,
+    SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::{
     batch::AvailablePreSignatures,
-    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId},
+    consensus::idkg::{
+        common::{PreSignature, STORE_PRE_SIGNATURES_IN_STATE},
+        IDkgMasterPublicKeyId,
+    },
     ExecutionRound, Height,
 };
 use more_asserts::debug_unreachable;
@@ -19,8 +22,9 @@ use super::SchedulerMetrics;
 /// Update [`SignatureRequestContext`]s by assigning randomness and matching pre-signatures.
 pub(crate) fn update_signature_request_contexts(
     current_round: ExecutionRound,
-    idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
+    mut delivered_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     mut contexts: Vec<&mut SignWithThresholdContext>,
+    pre_signature_stashes: &mut BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
     csprng: &mut Csprng,
     registry_settings: &RegistryExecutionSettings,
     metrics: &SchedulerMetrics,
@@ -47,18 +51,41 @@ pub(crate) fn update_signature_request_contexts(
         }
     }
 
-    for (key_id, pre_sigs) in idkg_pre_signatures {
+    if STORE_PRE_SIGNATURES_IN_STATE {
+        // Purge all pre-signature stashes for which a different (or no) key transcript was delivered.
+        pre_signature_stashes.retain(|key_id, stash| {
+            delivered_pre_signatures.get(key_id).is_some_and(|data| {
+                data.key_transcript.transcript_id == stash.key_transcript.transcript_id
+            })
+        });
+
+        // Merge delivered pre-signatures into the pre-signature stash.
+        for (key_id, mut delivered) in delivered_pre_signatures {
+            metrics
+                .delivered_pre_signatures
+                .with_label_values(&[&key_id.to_string()])
+                .observe(delivered.pre_signatures.len() as f64);
+
+            let stash = pre_signature_stashes
+                .entry(key_id)
+                .and_modify(|stash| stash.pre_signatures.append(&mut delivered.pre_signatures))
+                .or_insert_with(|| PreSignatureStash {
+                    key_transcript: Arc::new(delivered.key_transcript),
+                    pre_signatures: delivered.pre_signatures,
+                });
+        }
+    } else {
+        // Clear the pre-signature stash in case of a downgrade.
+        pre_signature_stashes.clear();
+    }
+
+    for (key_id, pre_sigs) in delivered_pre_signatures {
         // Match up to the maximum number of contexts per key ID to delivered pre-signatures.
         let max_ongoing_signatures = registry_settings
             .chain_key_settings
             .get(&key_id)
             .map(|setting| setting.pre_signatures_to_create_in_advance)
             .unwrap_or_default() as usize;
-
-        metrics
-            .delivered_pre_signatures
-            .with_label_values(&[&key_id.to_string()])
-            .observe(pre_sigs.pre_signatures.len() as f64);
 
         match_pre_signatures_by_key_id(
             key_id,

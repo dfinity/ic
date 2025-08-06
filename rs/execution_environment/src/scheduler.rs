@@ -1521,17 +1521,20 @@ impl Scheduler for SchedulerImpl {
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
-            let contexts = state
-                .metadata
-                .subnet_call_context_manager
+            let subnet_call_context_manager = &mut state.metadata.subnet_call_context_manager;
+
+            let contexts = subnet_call_context_manager
                 .sign_with_threshold_contexts
                 .values_mut()
                 .collect();
+
+            let pre_signature_stashes = &mut subnet_call_context_manager.pre_signature_stashes;
 
             update_signature_request_contexts(
                 current_round,
                 chain_key_data.idkg_pre_signatures,
                 contexts,
+                pre_signature_stashes,
                 &mut csprng,
                 registry_settings,
                 self.metrics.as_ref(),
