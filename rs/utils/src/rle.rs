@@ -39,7 +39,7 @@ impl fmt::Debug for DebugBlob<'_> {
         }
         let rle = display(self.0);
         if rle.len() < (self.0.len() + 1) * 2 {
-            write!(f, "{rle}")
+            write!(f, "{}", rle)
         } else {
             write!(f, "0x{}", hex::encode(self.0))
         }

@@ -343,13 +343,14 @@ impl UserError {
     pub fn assert_contains(&self, code: ErrorCode, description: &str) {
         assert_eq!(
             self.code, code,
-            "Failed to match actual error \"{self:?}\" with expected \"{code}, {description}\"",
+            "Failed to match actual error \"{:?}\" with expected \"{}, {}\"",
+            self, code, description
         );
         assert!(
             self.description.contains(description),
             "Error matching description \"{}\" with \"{}\"",
-            description,
-            self.description
+            self.description,
+            description
         );
     }
 }
