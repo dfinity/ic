@@ -1111,6 +1111,23 @@ impl PocketIc {
         })
     }
 
+    /// Upgrade a Motoko EOP canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn upgrade_eop_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .upgrade_eop_canister(canister_id, wasm_module, arg, sender)
+                .await
+        })
+    }
+
     /// Reinstall a canister WASM module.
     #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn reinstall_canister(

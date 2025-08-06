@@ -3,6 +3,8 @@ Description=Set up encrypted storage on first boot
 DefaultDependencies=no
 RequiresMountsFor=/boot/config
 Before=cryptsetup-pre.target
+Requires=init-config.service generate-store-key.service
+After=init-config.service generate-store-key.service
 Wants=cryptsetup-pre.target
 
 [Install]
