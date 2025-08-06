@@ -45,51 +45,182 @@ impl Display for ExtensionKind {
 /// Enum that captures all possible validated operation arguments
 #[derive(Clone, Debug)]
 pub enum ValidatedOperationArg {
-    Deposit(ValidatedDepositOperationArg),
-    Withdraw(ValidatedWithdrawOperationArg),
+    // Treasury Manager operations
+    TreasuryDeposit(ValidatedDepositOperationArg),
+    TreasuryWithdraw(ValidatedWithdrawOperationArg),
+    // Future: other extension type operations would go here
+    // VotingCreatePoll(ValidatedCreatePollArg),
+    // etc.
 }
 
 impl ValidatedOperationArg {
     /// Returns the original Precise value that was validated
     pub fn get_original_value(&self) -> &Precise {
         match self {
-            Self::Deposit(arg) => &arg.original,
-            Self::Withdraw(arg) => &arg.original,
+            Self::TreasuryDeposit(arg) => &arg.original,
+            Self::TreasuryWithdraw(arg) => &arg.original,
         }
     }
 }
 
 /// Specification for an extension operation
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExtensionOperationSpec {
-    pub name: String,
-    pub description: String,
-    /// Function that validates the operation arguments
-    pub validate: fn(Precise) -> Result<ValidatedOperationArg, String>,
+pub enum OperationSpec {
+    /// Operations that need special governance validation and support
+    Governed {
+        name: String,
+        description: String,
+        extension_type: ExtensionKind,
+        validate: fn(Precise) -> Result<ValidatedOperationArg, String>,
+    },
+    /// Operations that just pass through to the extension without special validation
+    Passthrough {
+        name: String,
+        description: String,
+        // Extensions can expose their own validation functions for these operations
+    },
+}
+
+impl OperationSpec {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Governed { name, .. } | Self::Passthrough { name, .. } => name,
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        match self {
+            Self::Governed { description, .. } | Self::Passthrough { description, .. } => {
+                description
+            }
+        }
+    }
+}
+
+/// Validates deposit operation arguments
+fn validate_deposit_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
+    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryDeposit)
+}
+
+/// Validates withdraw operation arguments  
+fn validate_withdraw_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
+    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryWithdraw)
+}
+
+impl ExtensionKind {
+    pub fn standard_operations(&self) -> Vec<OperationSpec> {
+        match self {
+            ExtensionKind::TreasuryManager => vec![
+                OperationSpec::Governed {
+                    name: "deposit".to_string(),
+                    description: "Deposit funds into the treasury manager.".to_string(),
+                    extension_type: ExtensionKind::TreasuryManager,
+                    validate: validate_deposit_operation,
+                },
+                OperationSpec::Governed {
+                    name: "withdraw".to_string(),
+                    description: "Withdraw funds from the treasury manager.".to_string(),
+                    extension_type: ExtensionKind::TreasuryManager,
+                    validate: validate_withdraw_operation,
+                },
+            ],
+            // Future extension types would define their standard operations here
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionSpec {
     pub name: String,
     pub topic: Topic,
-    pub kind: ExtensionKind,
-    pub operations: BTreeMap<String, ExtensionOperationSpec>,
+    /// The extension types this extension implements (can be multiple)
+    pub extension_types: Vec<ExtensionKind>,
+    /// Additional operations beyond the standard ones from extension_types
+    pub other_operations: BTreeMap<String, OperationSpec>,
     // TODO: Add a way to specify initialization arguments schema for the extension.
+}
+
+impl ExtensionSpec {
+    /// Validates that there are no operation name conflicts
+    pub fn validate(&self) -> Result<(), String> {
+        let mut seen_operations = BTreeMap::new();
+
+        // First, collect all standard operations
+        for ext_type in &self.extension_types {
+            for op in ext_type.standard_operations() {
+                let name = op.name();
+                if let Some(existing_type) = seen_operations.insert(name.to_string(), ext_type) {
+                    return Err(format!(
+                        "Operation '{}' is defined by multiple extension types: {:?} and {:?}",
+                        name, existing_type, ext_type
+                    ));
+                }
+            }
+        }
+
+        // Check that other_operations don't conflict with standard operations
+        for (name, _) in &self.other_operations {
+            if seen_operations.contains_key(name) {
+                return Err(format!(
+                    "Custom operation '{}' conflicts with a standard operation from extension type {:?}",
+                    name, seen_operations.get(name).unwrap()
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get all operations (standard + other) for this extension
+    /// Returns error if there are conflicts
+    pub fn all_operations(&self) -> Result<BTreeMap<String, OperationSpec>, String> {
+        self.validate()?;
+
+        let mut operations = BTreeMap::new();
+
+        // Add standard operations from each extension type
+        for ext_type in &self.extension_types {
+            for op in ext_type.standard_operations() {
+                operations.insert(op.name().to_string(), op);
+            }
+        }
+
+        // Add other operations (already validated for no conflicts)
+        for (name, op) in &self.other_operations {
+            operations.insert(name.clone(), op.clone());
+        }
+
+        Ok(operations)
+    }
+
+    /// Get a specific operation by name
+    /// Standard operations take precedence to ensure deterministic behavior
+    pub fn get_operation(&self, name: &str) -> Option<OperationSpec> {
+        // validate() ensures no name conflicts, so we can safely look up operations this way
+        for ext_type in &self.extension_types {
+            for op in ext_type.standard_operations() {
+                if op.name() == name {
+                    return Some(op);
+                }
+            }
+        }
+
+        // Then check other operations
+        self.other_operations.get(name).cloned()
+    }
 }
 
 impl Display for ExtensionSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let operations_str = match self.all_operations() {
+            Ok(ops) => ops.keys().cloned().collect::<Vec<_>>().join(", "),
+            Err(e) => format!("<invalid: {}>", e),
+        };
+
         write!(
             f,
-            "SNS Extension {{ name: {}, topic: {}, kind: {}, operations: {} }}",
-            self.name,
-            self.topic,
-            self.kind,
-            self.operations
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
+            "SNS Extension {{ name: {}, topic: {}, types: {:?}, operations: {} }}",
+            self.name, self.topic, self.extension_types, operations_str
         )
     }
 }
@@ -396,41 +527,34 @@ impl TryFrom<RegisterExtension> for ValidatedRegisterExtension {
     }
 }
 
-/// Validates deposit operation arguments
-fn validate_deposit_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
-    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::Deposit)
-}
-
-/// Validates withdraw operation arguments  
-fn validate_withdraw_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
-    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::Withdraw)
-}
-
 pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
     // In testing, any wasm module hash is allowed.
     if cfg!(test) || cfg!(feature = "test") {
-        return Ok(ExtensionSpec {
+        let spec = ExtensionSpec {
             name: "My Test Extension".to_string(),
             topic: Topic::TreasuryAssetManagement,
-            kind: ExtensionKind::TreasuryManager,
-            operations: btreemap! {
-                "deposit".to_string() => ExtensionOperationSpec {
-                    name: "deposit".to_string(),
-                    description: "Deposit funds into the treasury manager.".to_string(),
-                    validate: validate_deposit_operation,
-                },
-                "withdraw".to_string() => ExtensionOperationSpec {
-                    name: "withdraw".to_string(),
-                    description: "Withdraw funds from the treasury manager.".to_string(),
-                    validate: validate_withdraw_operation,
+            extension_types: vec![ExtensionKind::TreasuryManager],
+            other_operations: btreemap! {
+                // Example of an additional operation beyond standard treasury operations
+                "delegate_treasury_authority".to_string() => OperationSpec::Passthrough {
+                    name: "delegate_treasury_authority".to_string(),
+                    description: "Delegate treasury management authority to a set of principals.".to_string(),
                 },
             },
-        });
+        };
+
+        // Validate the spec to ensure no conflicting method names.
+        spec.validate()?;
+
+        return Ok(spec);
     }
 
     // In production, check against the allowed extensions.
-    if let Some(extension) = ALLOWED_EXTENSIONS.get(wasm_module_hash) {
-        return Ok(extension.clone());
+    if let Some(spec) = ALLOWED_EXTENSIONS.get(wasm_module_hash) {
+        // Validate the spec to ensure no conflicting method names.
+        spec.validate()?;
+
+        return Ok(spec.clone());
     }
 
     Err(format!(
@@ -530,10 +654,8 @@ pub(crate) async fn validate_execute_extension_operation(
 
     let wasm_module_hash = canister_module_hash(env, extension_canister_id).await?;
 
-    let (extension_kind, extension_operations) = match validate_extension_wasm(&wasm_module_hash) {
-        Ok(ExtensionSpec {
-            kind, operations, ..
-        }) => (kind, operations),
+    let extension_spec = match validate_extension_wasm(&wasm_module_hash) {
+        Ok(spec) => spec,
         Err(err) => {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
@@ -546,14 +668,15 @@ pub(crate) async fn validate_execute_extension_operation(
         }
     };
 
-    if extension_kind != ExtensionKind::TreasuryManager {
+    // Currently only support extensions that implement TreasuryManager
+    if !extension_spec.extension_types != vec![ExtensionKind::TreasuryManager] {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            "Only TreasuryManager extensions are currently supported.",
+            "Only extensions implementing TreasuryManager are currently supported.",
         ));
     }
 
-    let Some(operation_spec) = extension_operations.get(&operation_name) else {
+    let Some(operation_spec) = extension_spec.get_operation(&operation_name) else {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!(
@@ -563,34 +686,44 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    // Validate the operation arguments using the spec's validation function
-    let validated_args = (operation_spec.validate)(
-        operation_arg
-            .value
-            .clone()
-            .unwrap_or(Precise { value: None }),
-    )
-    .map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "Invalid arguments for operation {}: {}",
-                operation_name, err
-            ),
-        )
-    })?;
+    // Handle the operation based on its type
+    match &operation_spec {
+        OperationSpec::Governed { validate, .. } => {
+            // Validate the operation arguments using the operation's validation function
+            let validated_args = validate(
+                operation_arg
+                    .value
+                    .clone()
+                    .unwrap_or(Precise { value: None }),
+            )
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "Invalid arguments for operation {}: {}",
+                        operation_name, err
+                    ),
+                )
+            })?;
 
-    // Could add additional governance-specific validation here
-    // For example, check treasury limits based on the validated amounts
-    // You can now pattern match on validated_args to get the specific type:
-    match &validated_args {
-        ValidatedOperationArg::Deposit(deposit_args) => {
-            // deposit_args is ValidatedDepositOperationArg with typed fields
-            // e.g., deposit_args.treasury_allocation_sns_e8s
+            // Could add additional governance-specific validation here
+            // For example, check treasury limits based on the validated amounts
+            // You can now pattern match on validated_args to get the specific type:
+            match &validated_args {
+                ValidatedOperationArg::TreasuryDeposit(deposit_args) => {
+                    // deposit_args is ValidatedDepositOperationArg with typed fields
+                    // e.g., deposit_args.treasury_allocation_sns_e8s
+                }
+                ValidatedOperationArg::TreasuryWithdraw(withdraw_args) => {
+                    // withdraw_args is ValidatedWithdrawOperationArg with typed fields
+                    // e.g., withdraw_args.recipient_principal, withdraw_args.withdrawal_amount_sns_e8s
+                }
+            }
         }
-        ValidatedOperationArg::Withdraw(withdraw_args) => {
-            // withdraw_args is ValidatedWithdrawOperationArg with typed fields
-            // e.g., withdraw_args.recipient_principal, withdraw_args.withdrawal_amount_sns_e8s
+        OperationSpec::Passthrough { .. } => {
+            // For passthrough operations, we don't do any special validation
+            // The operation arguments will be passed directly to the extension
+            // Could add basic schema validation here in the future
         }
     }
 
