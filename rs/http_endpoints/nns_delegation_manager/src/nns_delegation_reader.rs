@@ -2,10 +2,16 @@ use ic_types::{messages::CertificateDelegation, CanisterId};
 use tokio::sync::watch;
 
 #[derive(Copy, Clone)]
+/// Enum representing the format of canister ranges in the delegation.
 pub enum CanisterRangesFormat {
+    /// Canister ranges are represented as a flat list of canister ranges.
+    /// Corresponds to the /{subnet_id}/canister_ranges path in the state tree.
     Flat,
+    //// Canister ranges are represented as a tree of canister ranges.
+    //// Corresponds to the /canister_ranges/{subnet_id} path in the state tree.
     // Tree,
 }
+
 #[derive(Clone)]
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<CertificateDelegation>>,
