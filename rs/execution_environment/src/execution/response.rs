@@ -298,6 +298,7 @@ impl ResponseHelper {
     ///
     /// It returns an error if the cycles balance of the clean canister differs
     /// from the cycles balances at the start of the DTS execution.
+    #[allow(clippy::result_large_err)]
     fn resume(
         paused: PausedResponseHelper,
         clean_canister: &CanisterState,
@@ -352,6 +353,7 @@ impl ResponseHelper {
 
     /// Processes the output and the state changes of Wasm execution of the
     /// response callback.
+    #[allow(clippy::result_large_err)]
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
