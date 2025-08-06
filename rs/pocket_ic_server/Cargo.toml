@@ -54,6 +54,7 @@ ic-management-canister-types-private = { path = "../types/management_canister_ty
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
+ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }

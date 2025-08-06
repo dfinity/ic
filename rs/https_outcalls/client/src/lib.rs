@@ -27,7 +27,7 @@ pub fn setup_canister_http_client(
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
-    delegation_from_nns: NNSDelegationReader,
+    nns_delegation_reader: NNSDelegationReader,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -75,7 +75,7 @@ pub fn setup_canister_http_client(
                         max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
                         subnet_type,
-                        delegation_from_nns,
+                        nns_delegation_reader,
                         log,
                     ))
                 }

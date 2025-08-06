@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
     "//rs/https_outcalls:__subpackages__",
+    "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 

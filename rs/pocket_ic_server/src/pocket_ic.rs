@@ -57,6 +57,7 @@ use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
     LEDGER_INDEX_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
     are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
@@ -395,7 +396,7 @@ impl Subnet {
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
             state_machine.get_subnet_type(),
-            nns_delegation_rx,
+            NNSDelegationReader::new(nns_delegation_rx, false),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -2100,6 +2101,7 @@ fn process_mock_canister_https_response(
     let canister_id = context.request.sender;
     let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
     let (_, delegation_rx) = watch::channel(delegation);
+    let nns_delegation_reader = NNSDelegationReader::new(delegation_rx, false);
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
@@ -2124,7 +2126,7 @@ fn process_mock_canister_https_response(
                 1,
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
-                delegation_rx.clone(),
+                nns_delegation_reader.clone(),
                 subnet.replica_logger.clone(),
             );
             client
@@ -2703,7 +2705,7 @@ impl Operation for CallRequest {
                             metrics,
                             http_handler::Config::default()
                                 .ingress_message_certificate_timeout_seconds,
-                            delegation_rx,
+                            NNSDelegationReader::new(delegation_rx, false),
                             subnet.state_manager.clone(),
                         )
                     }
@@ -2797,7 +2799,7 @@ impl Operation for QueryRequest {
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    delegation_rx,
+                    NNSDelegationReader::new(delegation_rx, false),
                     query_handler,
                 )
                 .with_time_source(subnet.time_source.clone())
@@ -2855,7 +2857,7 @@ impl Operation for CanisterReadStateRequest {
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    delegation_rx,
+                    NNSDelegationReader::new(delegation_rx, false),
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
@@ -2907,7 +2909,7 @@ impl Operation for SubnetReadStateRequest {
                 let (_, delegation_rx) = watch::channel(delegation);
                 subnet.certify_latest_state();
                 let svc = SubnetReadStateServiceBuilder::builder(
-                    delegation_rx,
+                    NNSDelegationReader::new(delegation_rx, false),
                     subnet.state_manager.clone(),
                 )
                 .build_service();
