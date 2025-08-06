@@ -12,6 +12,7 @@ use clap::Parser;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
 use ic_sev::guest::key_deriver::SevKeyDeriver;
+use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::path::{Path, PathBuf};
@@ -59,7 +60,7 @@ fn main() -> Result<()> {
     let mut sev_key_deriver = guestos_config
         .icos_settings
         .enable_trusted_execution_environment
-        .then(|| SevKeyDeriver::new())
+        .then(SevKeyDeriver::new)
         .transpose()?;
 
     run(
@@ -120,6 +121,13 @@ fn crypt_name(partition: Partition) -> &'static str {
     match partition {
         Partition::Var => VAR_CRYPT_NAME,
         Partition::Store => STORE_CRYPT_NAME,
+    }
+}
+
+fn activate_flags(partition: Partition) -> CryptActivate {
+    match partition {
+        Partition::Var => CryptActivate::empty(),
+        Partition::Store => CryptActivate::ALLOW_DISCARDS,
     }
 }
 

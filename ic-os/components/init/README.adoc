@@ -19,8 +19,8 @@ sequence to set it up is in principle not complicated, but due to the
 event-driven nature of systemd must be scattered across multiple service
 units and scripts:
 
-* Creating partition and setting up LUKS inside it: This is done by
-  the service +setup-encryption+ (and corresponding shell script). It creates
+* Creating partition and setting up LUKS inside it: This is done by the service +setup-data-encryption+ (and corresponding shell script).
+It creates
   the partition number 10 (unless it exists already), and sets it LUKS
   using a newly-generated random key. The key is stored for re-use across
   reboots and upgrades.

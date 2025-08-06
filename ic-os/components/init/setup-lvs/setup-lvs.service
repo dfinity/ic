@@ -1,8 +1,8 @@
 [Unit]
 Description=Set up logical volumes on first boot
 DefaultDependencies=no
-Requires=setup-encryption.service
-After=setup-encryption.service
+Requires=setup-data-encryption.service
+After=setup-data-encryption.service
 
 [Install]
 WantedBy=local-fs.target

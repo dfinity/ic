@@ -1,11 +1,11 @@
 use crate::crypt::{activate_crypt_device, destroy_key_slots_except, format_crypt_device};
-use crate::{DiskEncryption, Partition};
+use crate::{activate_flags, DiskEncryption, Partition};
 use anyhow::{Context, Result};
 use config_types::GuestVMType;
 use ic_sev::guest::key_deriver::{Key, SevKeyDeriver};
 use std::path::Path;
 
-pub const PREVIOUS_KEY_PATH: &'static str = "/var/alternative_store.keyfile";
+pub const PREVIOUS_KEY_PATH: &str = "/var/alternative_store.keyfile";
 
 pub struct SevDiskEncryption<'a> {
     pub sev_key_deriver: &'a mut SevKeyDeriver,
@@ -20,14 +20,19 @@ impl SevDiskEncryption<'_> {
         crypt_name: &str,
         new_key: &[u8],
     ) -> Result<()> {
-        let previous_key = std::fs::read(&self.previous_key_path).with_context(|| {
+        let previous_key = std::fs::read(self.previous_key_path).with_context(|| {
             format!(
                 "Could not read previous key from {}",
                 self.previous_key_path.display()
             )
         })?;
-        let mut crypt_device = activate_crypt_device(&device_path, crypt_name, &previous_key)
-            .context("Failed to unlock store partition with previous key")?;
+        let mut crypt_device = activate_crypt_device(
+            device_path,
+            crypt_name,
+            &previous_key,
+            activate_flags(Partition::Store),
+        )
+        .context("Failed to unlock store partition with previous key")?;
 
         // Keep the key slot that was used to unlock the partition with the previous key.
         // Delete all other key slots and add the new key.
@@ -68,8 +73,13 @@ impl DiskEncryption for SevDiskEncryption<'_> {
 
         match partition {
             Partition::Var => {
-                activate_crypt_device(device_path, crypt_name, key.as_bytes())
-                    .context("Failed to open crypt device for var partition")?;
+                activate_crypt_device(
+                    device_path,
+                    crypt_name,
+                    key.as_bytes(),
+                    activate_flags(partition),
+                )
+                .context("Failed to open crypt device for var partition")?;
             }
 
             Partition::Store => {
@@ -97,8 +107,13 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     }
                 }
 
-                activate_crypt_device(device_path, crypt_name, key.as_bytes())
-                    .context("Failed to initialize crypt device for store partition")?;
+                activate_crypt_device(
+                    device_path,
+                    crypt_name,
+                    key.as_bytes(),
+                    activate_flags(partition),
+                )
+                .context("Failed to initialize crypt device for store partition")?;
             }
         }
 

@@ -99,7 +99,7 @@ and systemd has no other way of stashing it away otherwise.
 
 == Set up key for block device encryption
 
-Service: +setup-encryption.service+, script: +/opt/ic/bin/setup-encryption.sh+,
+Service: +setup-data-encryption.service+, script: +/opt/ic/bin/setup-encryption.sh+,
 depends on +/boot/config+ mount. cryptsetup for +/dev/vda10+ depends on this.
 
 The initially deployed image has only 9 partitions set up. The 10th partition

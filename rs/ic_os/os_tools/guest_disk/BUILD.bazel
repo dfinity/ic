@@ -23,13 +23,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:parking_lot",
 ]
 
-MACRO_DEPENDENCIES = []
-
 rust_binary(
     name = "guest_disk",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guest_disk",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],

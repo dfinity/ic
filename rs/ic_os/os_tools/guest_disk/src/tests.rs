@@ -9,6 +9,7 @@ use config_types::{
 use ic_device::device_mapping::{Bytes, TempDevice};
 use ic_sev::guest::firmware::MockSevGuestFirmware;
 use ic_sev::guest::key_deriver::{Key, SevKeyDeriver};
+use libcryptsetup_rs::consts::flags::CryptActivate;
 use std::fs;
 use std::fs::{File, Permissions};
 use std::io::Read;
@@ -48,16 +49,15 @@ impl<'a> TestFixture<'a> {
 
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
 
-        let fixture = Self {
-            _temp_dir: temp_dir,
+        Self {
             device,
             previous_key_path,
             generated_key_path,
             sev_key_deriver,
             guestos_config,
+            _temp_dir: temp_dir,
             _guard: guard,
-        };
-        fixture
+        }
     }
 
     fn create_guestos_config(enable_trusted_execution_environment: bool) -> GuestOSConfig {
@@ -116,7 +116,7 @@ fn assert_device_has_content(encrypted_device_path: &Path, expected_content: &[u
     assert!(encrypted_device_path.exists());
 
     let mut contents = vec![0; expected_content.len()];
-    File::open(&encrypted_device_path)
+    File::open(encrypted_device_path)
         .unwrap_or_else(|_| {
             panic!(
                 "Failed to open encrypted device: {}",
@@ -245,8 +245,8 @@ fn test_fail_to_open_if_device_is_not_formatted() {
 
 #[test]
 fn test_sev_unlock_store_partition_with_previous_key() {
-    const PREVIOUS_KEY: &'static [u8] = b"previous key";
-    const DEPRECATED_KEY: &'static [u8] = b"deprecated key";
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+    const DEPRECATED_KEY: &[u8] = b"deprecated key";
 
     let mut fixture = TestFixture::new(true);
 
@@ -263,8 +263,13 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         .expect("Failed to add deprecated key slot");
 
     // Write some data to the disk.
-    activate_crypt_device(&fixture.device.path().unwrap(), "vda10-crypt", PREVIOUS_KEY)
-        .expect("Failed to activate device");
+    activate_crypt_device(
+        &fixture.device.path().unwrap(),
+        "vda10-crypt",
+        PREVIOUS_KEY,
+        CryptActivate::empty(),
+    )
+    .expect("Failed to activate device");
     fs::write("/dev/mapper/vda10-crypt", "hello world").unwrap();
     deactive_crypt_device_with_check("vda10-crypt");
 

@@ -13,6 +13,7 @@ pub fn activate_crypt_device(
     device_path: &Path,
     name: &str,
     passphrase: &[u8],
+    flags: CryptActivate,
 ) -> Result<CryptDevice> {
     if !device_path.exists() {
         bail!("Device does not exist: {}", device_path.display());
@@ -28,12 +29,14 @@ pub fn activate_crypt_device(
 
     crypt_device
         .activate_handle()
-        .activate_by_passphrase(Some(name), None, passphrase, CryptActivate::empty())
+        .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
     Ok(crypt_device)
 }
 
+/// Deactivates the cryptographic device with the given name.
+#[cfg(test)] // Currently only used in tests
 pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
     CryptDevice::from_ptr(std::ptr::null_mut())
         .activate_handle()
@@ -95,6 +98,7 @@ fn open_luks2_device(device_path: &Path) -> Result<CryptDevice> {
 
 /// Checks if the provided passphrase can activate the cryptographic device at the given path.
 /// Does not activate the device.
+#[cfg(test)] // Currently only used in tests
 pub fn check_passphrase(device_path: &Path, passphrase: &[u8]) -> Result<()> {
     let mut crypt_device = open_luks2_device(device_path).context("Failed to open LUKS2 device")?;
 
@@ -114,23 +118,24 @@ pub fn destroy_key_slots_except(crypt_device: &mut CryptDevice, keep: &[u8]) -> 
 
     let key_slot_to_keep = crypt_device
         .activate_handle()
-        .activate_by_passphrase(None, None, &keep, CryptActivate::empty())
+        .activate_by_passphrase(None, None, keep, CryptActivate::empty())
         .context("Cannot activate device with passphrase that we should keep")?;
 
     for key_slot in 0..LUKS2_N_KEY_SLOTS {
-        if key_slot != key_slot_to_keep {
-            if matches!(
+        // If this key slot is active and not the one we want to keep, destroy it.
+        if key_slot != key_slot_to_keep
+            && matches!(
                 crypt_device.keyslot_handle().status(key_slot),
                 Ok(KeyslotInfo::Active)
-            ) {
-                let _ = crypt_device
-                    .keyslot_handle()
-                    .destroy(key_slot)
-                    .inspect_err(|err| {
-                        debug_assert!(false, "Failed to remove old keyslot {key_slot}: {err:?}",);
-                        eprintln!("Failed to remove old keyslot {key_slot}: {err:?}",)
-                    });
-            }
+            )
+        {
+            let _ = crypt_device
+                .keyslot_handle()
+                .destroy(key_slot)
+                .inspect_err(|err| {
+                    debug_assert!(false, "Failed to remove old keyslot {key_slot}: {err:?}",);
+                    eprintln!("Failed to remove old keyslot {key_slot}: {err:?}",)
+                });
         }
     }
     Ok(())
