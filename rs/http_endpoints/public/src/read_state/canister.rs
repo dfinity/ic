@@ -289,6 +289,7 @@ fn verify_paths(
             | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
+            [b"canister_ranges", _subnet_id] => {}
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
@@ -548,7 +549,8 @@ mod test {
                         Label::from("request_status"),
                         [0; 32].into(),
                         Label::from("reply")
-                    ])
+                    ]),
+                    Path::new(vec![Label::from("canister_ranges"), [0; 32].into(),])
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),

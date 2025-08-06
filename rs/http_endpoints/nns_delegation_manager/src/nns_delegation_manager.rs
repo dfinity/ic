@@ -400,7 +400,7 @@ async fn try_fetch_delegation_from_nns(
     }?;
 
     let root_threshold_public_key =
-        get_root_threshold_public_key(registry_client, registry_version, &nns_subnet_id).map_err(
+        get_root_threshold_public_key(registry_client, registry_version, nns_subnet_id).map_err(
             |err| format!("could not retrieve threshold root public key from registry: {err}"),
         )?;
 
@@ -522,11 +522,11 @@ fn get_random_node_from_nns_subnet(
 fn get_root_threshold_public_key(
     registry_client: &dyn RegistryClient,
     version: RegistryVersion,
-    nns_subnet_id: &SubnetId,
+    nns_subnet_id: SubnetId,
 ) -> Result<ThresholdSigPublicKey, String> {
-    match registry_client.get_threshold_signing_public_key_for_subnet(*nns_subnet_id, version) {
+    match registry_client.get_threshold_signing_public_key_for_subnet(nns_subnet_id, version) {
         Ok(Some(key)) => Ok(key),
-        Err(err) => Err(format!("Failed to get key for subnet {err}")),
+        Err(err) => Err(format!("Failed to get key for subnet: {err}")),
         Ok(None) => Err(format!("Received no public key for subnet {nns_subnet_id}")),
     }
 }
