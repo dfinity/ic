@@ -113,6 +113,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) delivered_pre_signatures: HistogramVec,
     pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
+    pub(super) pre_signature_stash_size: IntGaugeVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
     pub(super) canister_snapshots_memory_usage: IntGauge,
@@ -287,6 +288,11 @@ impl SchedulerMetrics {
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
                 "execution_completed_signature_request_contexts_total",
                 "Total number of completed signature request contexts by key ID",
+                &["key_id"],
+            ),
+            pre_signature_stash_size: metrics_registry.int_gauge_vec(
+                "execution_pre_signature_stash_size",
+                "Number of pre-signatures currently stored in the pre-signature stash, by key ID.",
                 &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(

@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Mount the configuration device at /mnt/config
-# This script handles the mounting part that was previously in init-config.sh
 
 set -eo pipefail
 
@@ -24,7 +23,7 @@ function find_config_devices() {
             local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
             local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config" || true)
             local FS_LABEL=$(lsblk --fs --noheadings --output LABEL /dev/"${DEV}" 2>/dev/null || true)
-            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ] || [ "${FS_LABEL}" == "CONFIG" ]; then
+            if [ "$IS_REMOVABLE" == 1 ] || [ "$CONFIG_SERIAL" != "" ] || [ "$FS_LABEL" == "CONFIG" ]; then
                 # If this is a partitioned device (and it usually is), then
                 # the first partition is of relevance.
                 # return first partition for use instead.
@@ -37,7 +36,7 @@ function find_config_devices() {
                 fi
                 # Sanity check whether device is usable (it could be a
                 # CD drive with no medium in)
-                if blockdev "${TGT}" 2>/dev/null; then
+                if blockdev "$TGT" 2>/dev/null; then
                     echo "$TGT"
                 fi
             fi
@@ -47,30 +46,23 @@ function find_config_devices() {
 
 MAX_TRIES=10
 
-while [ "${MAX_TRIES}" -gt 0 ]; do
+while [ $MAX_TRIES -gt 0 ]; do
     echo "Locating CONFIG device for mounting"
-    DEV="$(find_config_devices)"
+    config_device="$(find_config_devices)"
 
-    # Check whether we were provided with a CONFIG device -- on "real"
-    # VM deployments this will be the method used to inject bootstrap information
-    # into the system.
-    if [ "${DEV}" != "" ]; then
-        echo "Found CONFIG device at ${DEV}, creating mount at /mnt/config"
-        mkdir -p /mnt/config
+    if [ "$config_device" != "" ]; then
+        echo "Found CONFIG device at $config_device, creating mount at /mnt/config"
 
-        if mount -t vfat -o ro "${DEV}" /mnt/config; then
+        if mount -t vfat -o ro "$config_device" /mnt/config; then
             echo "Successfully mounted CONFIG device at /mnt/config"
             exit 0
         else
-            echo "Failed to mount CONFIG device at ${DEV}"
-            rmdir /mnt/config 2>/dev/null || true
+            echo "Failed to mount CONFIG device at $config_device"
         fi
-    else
-        echo "No CONFIG device found"
     fi
 
-    MAX_TRIES=$(("${MAX_TRIES}" - 1))
-    if [ "${MAX_TRIES}" == 0 ]; then
+    MAX_TRIES=$(($MAX_TRIES - 1))
+    if [ $MAX_TRIES == 0 ]; then
         echo "No CONFIG device found for mounting"
         exit 1
     else

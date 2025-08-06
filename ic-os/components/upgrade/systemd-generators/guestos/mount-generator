@@ -83,6 +83,8 @@ function make_var_cryptsetup() {
     echo "BindsTo=dev-${DEVICE}.device"
     echo "After=dev-${DEVICE}.device"
     echo "Before=umount.target"
+    echo "After=generate-store-key.service"
+    echo "Requires=generate-store-key.service"
     echo ""
     echo "[Service]"
     echo "Type=oneshot"

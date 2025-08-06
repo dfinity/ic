@@ -2,7 +2,7 @@
 Description=Initialize IC node configuration
 DefaultDependencies=no
 After=mount-config.service
-Requires=mount-config.service
+Wants=mount-config.service
 RequiresMountsFor=/mnt/config
 
 [Service]
@@ -16,3 +16,6 @@ RestartSec=10
 # console to be piped to the host terminal if the verbose flag is enabled.
 StandardOutput=journal+console
 StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

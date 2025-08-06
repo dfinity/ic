@@ -4,8 +4,8 @@ DefaultDependencies=no
 # When SEV is disabled, the key is read from /boot/config.
 # When SEV is enabled, the key is read from /var during the first boot after an upgrade.
 RequiresMountsFor=/boot/config /var
-Requires=init-config.service
-After=init-config.service
+Requires=init-config.service generate-store-key.service
+After=init-config.service generate-store-key.service
 Wants=cryptsetup-pre.target
 
 [Install]

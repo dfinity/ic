@@ -43,6 +43,8 @@ component_files = {
     Label("ic/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
 
     # init
+    Label("init/generate-store-key/generate-store-key.sh"): "/opt/ic/bin/generate-store-key.sh",
+    Label("init/generate-store-key/generate-store-key.service"): "/etc/systemd/system/generate-store-key.service",
     Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
     Label("init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
     Label("init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
