@@ -59,6 +59,7 @@ pub(super) enum QueryResponse {
 /// The result of execution of a query or a response callback.
 /// The execution either produces a response or returns a possibly empty set of
 /// outgoing calls with the new canister state and the call origin.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum ExecutionResult {
     Response(QueryResponse),
     Calls(CanisterState, CallOrigin, VecDeque<Arc<Request>>),

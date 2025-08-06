@@ -42,7 +42,6 @@ const MAX_TOKEN_CAPACITY = 1024 * 1024
 // These events are collected from test-driver logs during the testnet deployment.
 const INFRA_GROUP_NAME_CREATED_EVENT = "infra_group_name_created_event"
 const KIBANA_URL_CREATED_EVENT = "kibana_url_created_event"
-const KIBANA_URL_CREATED_NEW_EVENT = "kibana_url_created_new_event"
 const FARM_VM_CREATED_EVENT = "farm_vm_created_event"
 const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT = "ic_gateway_aaaa_records_created_event"
 const IC_GATEWAY_A_RECORDS_CREATED_EVENT = "ic_gateway_a_records_created_event"
@@ -122,10 +121,6 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 	} else if event.EventName == INFRA_GROUP_NAME_CREATED_EVENT {
 		summary.FarmGroup = event.Body
 	} else if event.EventName == KIBANA_URL_CREATED_EVENT {
-		if summary.KibanaUrl == nil {
-			summary.KibanaUrl = event.Body
-		}
-	} else if event.EventName == KIBANA_URL_CREATED_NEW_EVENT {
 		summary.KibanaUrl = event.Body
 	}
 }

@@ -48,5 +48,6 @@ write_grubenv() {
     # Truncate to arrive at precisely 1024 bytes
     truncate --size=1024 "${TMP_FILE}"
     cat "${TMP_FILE}" >"${GRUBENV_FILE}"
+    sync "${GRUBENV_FILE}"
     rm "${TMP_FILE}"
 }
