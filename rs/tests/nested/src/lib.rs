@@ -177,7 +177,7 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     info!(logger, "Waiting for all four nodes to join ...");
 
-    let final_topology = retry_with_msg!(
+    retry_with_msg!(
         "Waiting for all four nodes to register and appear as unassigned nodes",
         logger.clone(),
         NODE_REGISTRATION_TIMEOUT,
@@ -186,7 +186,8 @@ pub fn nns_recovery_test(env: TestEnv) {
             let topology = env.topology_snapshot();
             let num_unassigned_nodes = topology.unassigned_nodes().count();
             if num_unassigned_nodes == 4 {
-                Ok(topology)
+                info!(logger, "SUCCESS: All four nodes have registered");
+                Ok(())
             } else {
                 bail!(
                     "Expected 4 unassigned nodes, but found {}",
@@ -196,17 +197,6 @@ pub fn nns_recovery_test(env: TestEnv) {
         }
     )
     .unwrap();
-
-    let num_unassigned_nodes = final_topology.unassigned_nodes().count();
-    assert_eq!(
-        num_unassigned_nodes, 4,
-        "Expected 4 unassigned nodes, but found {}",
-        num_unassigned_nodes
-    );
-    info!(
-        logger,
-        "SUCCESS: All four nodes have registered and are unassigned as expected."
-    );
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
