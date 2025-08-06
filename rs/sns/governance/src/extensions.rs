@@ -51,6 +51,8 @@ pub enum ValidatedOperationArg {
     // Future: other extension type operations would go here
     // VotingCreatePoll(ValidatedCreatePollArg),
     // etc.
+    // This one is for generic operations that governance doesn't validate
+    Unprocessed(Precise),
 }
 
 impl ValidatedOperationArg {
@@ -59,6 +61,7 @@ impl ValidatedOperationArg {
         match self {
             Self::TreasuryManagerDeposit(arg) => &arg.original,
             Self::TreasuryManagerWithdraw(arg) => &arg.original,
+            Self::Unprocessed(arg) => &arg,
         }
     }
 }
@@ -639,7 +642,7 @@ pub(crate) async fn validate_execute_extension_operation(
     extension_canister_id: CanisterId,
     operation_name: String,
     operation_arg: &ExtensionOperationArg,
-) -> Result<(), GovernanceError> {
+) -> Result<ValidatedOperationArg, GovernanceError> {
     let registered_extensions = list_extensions(env, root_canister_id).await?;
 
     if !registered_extensions.contains(&extension_canister_id.get()) {
