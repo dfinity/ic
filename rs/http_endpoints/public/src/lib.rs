@@ -10,7 +10,6 @@ mod common;
 mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
-mod nns_delegation_manager;
 mod pprof;
 mod query;
 mod read_state;
@@ -29,7 +28,6 @@ pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, Ingres
 pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
 use ic_http_endpoints_async_utils::start_tcp_listener;
-pub use nns_delegation_manager::start_nns_delegation_manager;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
