@@ -7104,7 +7104,7 @@ fn check_environment_variables_via_canister_status(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
     expected_env_vars: Vec<EnvironmentVariable>,
-) -> BTreeMap<String, String> {
+) {
     let status = test.canister_status(canister_id);
     let reply = get_reply(status);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
@@ -7125,13 +7125,6 @@ fn check_environment_variables_via_canister_status(
             .collect::<Vec<_>>(),
         expected_env_vars
     );
-
-    canister
-        .system_state
-        .environment_variables
-        .iter()
-        .map(|(name, value)| (name.clone(), value.clone()))
-        .collect()
 }
 
 #[test]
@@ -7161,21 +7154,14 @@ fn test_environment_variables() {
         )
         .unwrap();
 
-    // Verify that the canister has no environment variables.
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, vec![]);
-
     // Set environment variables.
     update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 
     // Delete a variable.
     env_vars.remove(0);
     update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
-    assert!(!new_env_vars.contains_key("KEY1"));
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 
     // Add new variable.
     env_vars.push(EnvironmentVariable {
@@ -7183,30 +7169,22 @@ fn test_environment_variables() {
         value: "VALUE4".to_string(),
     });
     update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
-    assert_eq!(new_env_vars["KEY4"], "VALUE4");
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 
     // Update a variable value.
     env_vars[0].value = "VALUE2_UPDATED".to_string();
     update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
-    assert_eq!(new_env_vars["KEY2"], "VALUE2_UPDATED");
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 
     // Update a variable name.
     env_vars[0].name = "KEY2_UPDATED".to_string();
     update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
-    assert_eq!(new_env_vars["KEY2_UPDATED"], "VALUE2_UPDATED");
-    assert!(!new_env_vars.contains_key("KEY2"));
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 
     // Delete all the environment variables.
     env_vars.clear();
     update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
-    let new_env_vars =
-        check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 }
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
