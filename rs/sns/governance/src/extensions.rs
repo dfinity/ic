@@ -3,9 +3,9 @@ use crate::{
     pb::{
         sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
         v1::{
-            governance_error::ErrorType, ChunkedCanisterWasm, ExecuteExtensionOperation,
-            ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, RegisterExtension,
-            Topic,
+            governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
+            ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
+            RegisterExtension, Topic,
         },
     },
     types::{Environment, Wasm},
@@ -20,7 +20,9 @@ use maplit::btreemap;
 use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
 };
+use std::str::FromStr;
 
+use std::marker::PhantomData;
 use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
@@ -40,11 +42,30 @@ impl Display for ExtensionKind {
     }
 }
 
+/// Enum that captures all possible validated operation arguments
+#[derive(Clone, Debug)]
+pub enum ValidatedOperationArg {
+    Deposit(ValidatedDepositOperationArg),
+    Withdraw(ValidatedWithdrawOperationArg),
+}
+
+impl ValidatedOperationArg {
+    /// Returns the original Precise value that was validated
+    pub fn get_original_value(&self) -> &Precise {
+        match self {
+            Self::Deposit(arg) => &arg.original,
+            Self::Withdraw(arg) => &arg.original,
+        }
+    }
+}
+
+/// Specification for an extension operation
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
-    // TODO: Add a way to specify argument schema for the extension operation.
+    /// Function that validates the operation arguments
+    pub validate: fn(Precise) -> Result<ValidatedOperationArg, String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -375,6 +396,16 @@ impl TryFrom<RegisterExtension> for ValidatedRegisterExtension {
     }
 }
 
+/// Validates deposit operation arguments
+fn validate_deposit_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
+    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::Deposit)
+}
+
+/// Validates withdraw operation arguments  
+fn validate_withdraw_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
+    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::Withdraw)
+}
+
 pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
     // In testing, any wasm module hash is allowed.
     if cfg!(test) || cfg!(feature = "test") {
@@ -386,10 +417,12 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
                 "deposit".to_string() => ExtensionOperationSpec {
                     name: "deposit".to_string(),
                     description: "Deposit funds into the treasury manager.".to_string(),
+                    validate: validate_deposit_operation,
                 },
                 "withdraw".to_string() => ExtensionOperationSpec {
                     name: "withdraw".to_string(),
                     description: "Withdraw funds from the treasury manager.".to_string(),
+                    validate: validate_withdraw_operation,
                 },
             },
         });
@@ -481,7 +514,7 @@ pub(crate) async fn validate_execute_extension_operation(
     root_canister_id: CanisterId,
     extension_canister_id: CanisterId,
     operation_name: String,
-    _operation_arg: &ExtensionOperationArg,
+    operation_arg: &ExtensionOperationArg,
 ) -> Result<(), GovernanceError> {
     let registered_extensions = list_extensions(env, root_canister_id).await?;
 
@@ -520,8 +553,7 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     }
 
-    let Some(ExtensionOperationSpec { name, .. }) = extension_operations.get(&operation_name)
-    else {
+    let Some(operation_spec) = extension_operations.get(&operation_name) else {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!(
@@ -531,9 +563,148 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    // Now we need a generic way to validate particular extension operations.
+    // Validate the operation arguments using the spec's validation function
+    let validated_args = (operation_spec.validate)(
+        operation_arg
+            .value
+            .clone()
+            .unwrap_or(Precise { value: None }),
+    )
+    .map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Invalid arguments for operation {}: {}",
+                operation_name, err
+            ),
+        )
+    })?;
+
+    // Could add additional governance-specific validation here
+    // For example, check treasury limits based on the validated amounts
+    // You can now pattern match on validated_args to get the specific type:
+    match &validated_args {
+        ValidatedOperationArg::Deposit(deposit_args) => {
+            // deposit_args is ValidatedDepositOperationArg with typed fields
+            // e.g., deposit_args.treasury_allocation_sns_e8s
+        }
+        ValidatedOperationArg::Withdraw(withdraw_args) => {
+            // withdraw_args is ValidatedWithdrawOperationArg with typed fields
+            // e.g., withdraw_args.recipient_principal, withdraw_args.withdrawal_amount_sns_e8s
+        }
+    }
 
     Ok(())
+}
+
+/// Validated deposit operation arguments
+#[derive(Debug, Clone)]
+pub struct ValidatedDepositOperationArg {
+    /// Amount of SNS tokens to allocate from treasury
+    pub treasury_allocation_sns_e8s: u64,
+    /// Amount of ICP tokens to allocate from treasury
+    pub treasury_allocation_icp_e8s: u64,
+    /// Original Precise value with all fields
+    original: Precise,
+}
+
+impl TryFrom<Precise> for ValidatedDepositOperationArg {
+    type Error = String;
+
+    fn try_from(value: Precise) -> Result<Self, Self::Error> {
+        let map = match &value.value {
+            Some(precise::Value::Map(PreciseMap { map })) => map,
+            _ => return Err("Deposit operation arguments must be a PreciseMap".to_string()),
+        };
+
+        let treasury_allocation_sns_e8s = map
+            .get("treasury_allocation_sns_e8s")
+            .and_then(|p| match &p.value {
+                Some(precise::Value::Nat(n)) => Some(*n),
+                _ => None,
+            })
+            .ok_or_else(|| "treasury_allocation_sns_e8s must be a Nat value".to_string())?;
+
+        let treasury_allocation_icp_e8s = map
+            .get("treasury_allocation_icp_e8s")
+            .and_then(|p| match &p.value {
+                Some(precise::Value::Nat(n)) => Some(*n),
+                _ => None,
+            })
+            .ok_or_else(|| "treasury_allocation_icp_e8s must be a Nat value".to_string())?;
+
+        Ok(Self {
+            treasury_allocation_sns_e8s,
+            treasury_allocation_icp_e8s,
+            original: value,
+        })
+    }
+}
+
+/// Validated withdraw operation arguments
+#[derive(Debug, Clone)]
+pub struct ValidatedWithdrawOperationArg {
+    /// Recipient of the withdrawal
+    pub recipient_principal: PrincipalId,
+    /// Amount of SNS tokens to withdraw
+    pub withdrawal_amount_sns_e8s: u64,
+    /// Amount of ICP tokens to withdraw
+    pub withdrawal_amount_icp_e8s: u64,
+    /// Optional memo
+    pub memo: Option<String>,
+    /// Original Precise value with all fields
+    original: Precise,
+}
+
+impl TryFrom<Precise> for ValidatedWithdrawOperationArg {
+    type Error = String;
+
+    fn try_from(value: Precise) -> Result<Self, Self::Error> {
+        let map = match &value.value {
+            Some(precise::Value::Map(PreciseMap { map })) => map,
+            _ => return Err("Withdraw operation arguments must be a PreciseMap".to_string()),
+        };
+
+        let recipient_text = map
+            .get("recipient_principal")
+            .and_then(|p| match &p.value {
+                Some(precise::Value::Text(t)) => Some(t.as_str()),
+                _ => None,
+            })
+            .ok_or_else(|| "recipient_principal must be a Text value".to_string())?;
+
+        let recipient_principal = PrincipalId::from_str(recipient_text)
+            .map_err(|e| format!("Invalid recipient principal: {}", e))?;
+
+        let withdrawal_amount_sns_e8s = map
+            .get("withdrawal_amount_sns_e8s")
+            .and_then(|p| match &p.value {
+                Some(precise::Value::Nat(n)) => Some(*n),
+                _ => None,
+            })
+            .ok_or_else(|| "withdrawal_amount_sns_e8s must be a Nat value".to_string())?;
+
+        let withdrawal_amount_icp_e8s = map
+            .get("withdrawal_amount_icp_e8s")
+            .and_then(|p| match &p.value {
+                Some(precise::Value::Nat(n)) => Some(*n),
+                _ => None,
+            })
+            .ok_or_else(|| "withdrawal_amount_icp_e8s must be a Nat value".to_string())?;
+
+        let memo = map.get("memo").and_then(|p| match &p.value {
+            Some(precise::Value::Text(t)) => Some(t.clone()),
+            _ => None,
+        });
+
+        Ok(Self {
+            recipient_principal,
+            withdrawal_amount_sns_e8s,
+            withdrawal_amount_icp_e8s,
+            memo,
+            original: value,
+        })
+    }
 }
 
 pub(crate) async fn get_sns_token_symbol(
@@ -574,6 +745,7 @@ mod tests {
     use crate::pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse};
     use crate::types::test_helpers::NativeEnvironment;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
+    use maplit::btreemap;
 
     /// Helper function to set up common environment mocking for validate_execute_extension_operation tests
     fn setup_env_for_test(
@@ -630,7 +802,31 @@ mod tests {
             );
         }
 
-        let operation_arg = ExtensionOperationArg { value: None };
+        // Create a valid operation arg for deposit (works for both deposit and withdraw in tests)
+        let operation_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000))
+                        },
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000))
+                        },
+                        // For withdraw tests, these fields will be ignored by deposit validator
+                        "recipient_principal".to_string() => Precise {
+                            value: Some(precise::Value::Text("rdmx6-jaaaa-aaaaa-aaadq-cai".to_string()))
+                        },
+                        "withdrawal_amount_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000))
+                        },
+                        "withdrawal_amount_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000))
+                        },
+                    },
+                })),
+            }),
+        };
 
         (env, root_canister_id, extension_canister_id, operation_arg)
     }
