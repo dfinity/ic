@@ -22,7 +22,7 @@ use crate::{
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, info, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -32,11 +32,9 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Instant;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -637,7 +635,6 @@ fn hash_plan(
     max_chunk_size: u32,
     seed: u64,
     rehash_every_nth: u64,
-    thread_pool: &mut scoped_threadpool::Pool,
 ) -> Vec<ChunkAction> {
     // Even if we could reuse all chunks, we want to ensure that we sometimes still
     // recompute them anyway to not propagate errors indefinitely. We choose a
@@ -655,84 +652,72 @@ fn hash_plan(
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 
-    parallel_map(
-        thread_pool,
-        files.iter(),
-        |FileWithSize(relative_path, size_bytes)| {
-            let mut chunk_actions = Vec::new();
-            let num_chunks = count_chunks(*size_bytes, max_chunk_size);
+    let mut chunk_actions: Vec<ChunkAction> = Vec::new();
 
-            let compute_dirty_chunk_bitmap = || -> Option<(&BitVec, usize)> {
-                let dirty_chunk_bitmap = dirty_file_chunks.get(relative_path)?;
+    for FileWithSize(relative_path, size_bytes) in files.iter() {
+        let num_chunks = count_chunks(*size_bytes, max_chunk_size);
 
-                let base_file_index = base_manifest
-                    .file_table
-                    .binary_search_by_key(&relative_path, |file_info| &file_info.relative_path)
-                    .ok()?;
+        let compute_dirty_chunk_bitmap = || -> Option<(&BitVec, usize)> {
+            let dirty_chunk_bitmap = dirty_file_chunks.get(relative_path)?;
 
-                // The chunk table contains chunks from all files and hence `base_index` is
-                // needed to know the absolute index. The chunk table is sorted by
-                // `file_index` and then `offset`. Therefore binary search can be used to find
-                // the first chunk index of a file.
-                let base_index = base_manifest
-                    .chunk_table
-                    .binary_search_by(|chunk_info| {
-                        chunk_info
-                            .file_index
-                            .cmp(&(base_file_index as u32))
-                            .then_with(|| chunk_info.offset.cmp(&0u64))
-                    })
-                    .ok()?;
-                Some((dirty_chunk_bitmap, base_index))
-            };
+            let base_file_index = base_manifest
+                .file_table
+                .binary_search_by_key(&relative_path, |file_info| &file_info.relative_path)
+                .ok()?;
 
-            let path_hash = {
-                let mut hasher = DefaultHasher::new();
-                relative_path.hash(&mut hasher);
-                hasher.finish()
-            };
+            // The chunk table contains chunks from all files and hence `base_index` is
+            // needed to know the absolute index. The chunk table is sorted by
+            // `file_index` and then `offset`. Therefore binary search can be used to find
+            // the first chunk index of a file.
+            let base_index = base_manifest
+                .chunk_table
+                .binary_search_by(|chunk_info| {
+                    chunk_info
+                        .file_index
+                        .cmp(&(base_file_index as u32))
+                        .then_with(|| chunk_info.offset.cmp(&0u64))
+                })
+                .ok()?;
+            Some((dirty_chunk_bitmap, base_index))
+        };
 
-            if let Some((dirty_chunk_bitmap, base_index)) = compute_dirty_chunk_bitmap() {
-                debug_assert_eq!(num_chunks, dirty_chunk_bitmap.len());
+        if let Some((dirty_chunk_bitmap, base_index)) = compute_dirty_chunk_bitmap() {
+            debug_assert_eq!(num_chunks, dirty_chunk_bitmap.len());
 
-                for i in 0..num_chunks {
-                    let action = if dirty_chunk_bitmap[i] {
-                        ChunkAction::Recompute
+            for i in 0..num_chunks {
+                let action = if dirty_chunk_bitmap[i] {
+                    ChunkAction::Recompute
+                } else {
+                    let chunk = &base_manifest.chunk_table[base_index + i];
+
+                    debug_assert_eq!(
+                        &base_manifest.file_table[chunk.file_index as usize].relative_path,
+                        relative_path
+                    );
+                    debug_assert_eq!(chunk.offset, i as u64 * max_chunk_size as u64);
+                    debug_assert_eq!(
+                        chunk.size_bytes as u64,
+                        (size_bytes - chunk.offset).min(max_chunk_size as u64)
+                    );
+
+                    // We are using chunk_actions.len() as shorthand for the chunk_index.
+                    let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
+
+                    if (offset_index % rehash_every_nth) == 0 {
+                        ChunkAction::RecomputeAndCompare(chunk.hash)
                     } else {
-                        let chunk = &base_manifest.chunk_table[base_index + i];
-
-                        debug_assert_eq!(
-                            &base_manifest.file_table[chunk.file_index as usize].relative_path,
-                            relative_path
-                        );
-                        debug_assert_eq!(chunk.offset, i as u64 * max_chunk_size as u64);
-                        debug_assert_eq!(
-                            chunk.size_bytes as u64,
-                            (size_bytes - chunk.offset).min(max_chunk_size as u64)
-                        );
-
-                        if (offset.wrapping_add(path_hash).wrapping_add(i as u64)
-                            % rehash_every_nth)
-                            == 0
-                        {
-                            ChunkAction::RecomputeAndCompare(chunk.hash)
-                        } else {
-                            ChunkAction::UseHash(chunk.hash)
-                        }
-                    };
-                    chunk_actions.push(action);
-                }
-            } else {
-                for _ in 0..num_chunks {
-                    chunk_actions.push(ChunkAction::Recompute);
-                }
+                        ChunkAction::UseHash(chunk.hash)
+                    }
+                };
+                chunk_actions.push(action);
             }
-            chunk_actions
-        },
-    )
-    .into_iter()
-    .flatten()
-    .collect()
+        } else {
+            for _ in 0..num_chunks {
+                chunk_actions.push(ChunkAction::Recompute);
+            }
+        }
+    }
+    chunk_actions
 }
 
 /// Returns the trivial hash plan that instructs the caller to recompute hashes
@@ -839,14 +824,12 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
-    let start = Instant::now();
     let mut files = {
         let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
     };
-    info!(log, "Got files: {:#?}", start.elapsed());
 
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
@@ -889,7 +872,6 @@ pub fn compute_manifest(
                     } else {
                         u64::MAX
                     },
-                    thread_pool,
                 )
             } else {
                 default_hash_plan(&files, max_chunk_size)
@@ -897,7 +879,6 @@ pub fn compute_manifest(
         }
         None => default_hash_plan(&files, max_chunk_size),
     };
-    info!(log, "Got chunk actions: {:#?}", start.elapsed());
 
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
@@ -924,7 +905,6 @@ pub fn compute_manifest(
         chunk_actions,
         version,
     );
-    info!(log, "Got chunk table: {:#?}", start.elapsed());
     #[cfg(debug_assertions)]
     {
         assert_eq!(file_table, seq_file_table);
@@ -932,7 +912,6 @@ pub fn compute_manifest(
     }
 
     let manifest = Manifest::new(version, file_table, chunk_table);
-    info!(log, "Got manifest: {:#?}", start.elapsed());
     metrics
         .manifest_size
         .set(encode_manifest(&manifest).len() as i64);
@@ -959,7 +938,6 @@ pub fn compute_manifest(
 
     // Sanity check: ensure that we have produced a valid manifest.
     debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
-    info!(log, "Got all: {:#?}", start.elapsed());
     Ok(manifest)
 }
 
