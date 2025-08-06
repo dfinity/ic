@@ -575,6 +575,66 @@ mod tests {
     use crate::types::test_helpers::NativeEnvironment;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
 
+    /// Helper function to set up common environment mocking for validate_execute_extension_operation tests
+    fn setup_env_for_test(
+        extension_registered: bool,
+    ) -> (
+        NativeEnvironment,
+        CanisterId,
+        CanisterId,
+        ExtensionOperationArg,
+    ) {
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
+        let root_canister_id = CanisterId::from_u64(1000);
+        let extension_canister_id = CanisterId::from_u64(2000);
+
+        // Mock list_sns_canisters call
+        let extension_canister_ids = if extension_registered {
+            vec![extension_canister_id.get()]
+        } else {
+            vec![] // Empty for unregistered extension tests
+        };
+
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(CanisterId::from_u64(3000).get()),
+                ledger: Some(CanisterId::from_u64(4000).get()),
+                swap: Some(CanisterId::from_u64(5000).get()),
+                index: Some(CanisterId::from_u64(6000).get()),
+                archives: vec![],
+                dapps: vec![],
+                extensions: Some(crate::pb::sns_root_types::Extensions {
+                    extension_canister_ids,
+                }),
+            })
+            .unwrap()),
+        );
+
+        // Mock canister_info call for extension canister (only needed if extension is registered)
+        if extension_registered {
+            env.set_call_canister_response(
+                CanisterId::ic_00(),
+                "canister_info",
+                Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
+                Ok(Encode!(&CanisterInfoResponse::new(
+                    0,                      // total_num_changes
+                    vec![],                 // recent_changes
+                    Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
+                    vec![],                 // controllers
+                ))
+                .unwrap()),
+            );
+        }
+
+        let operation_arg = ExtensionOperationArg { value: None };
+
+        (env, root_canister_id, extension_canister_id, operation_arg)
+    }
+
     #[test]
     fn test_try_from_execute_extension_operation_success() {
         let operation = ExecuteExtensionOperation {
@@ -623,45 +683,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_success() {
-        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
-        let root_canister_id = CanisterId::from_u64(1000);
-        let extension_canister_id = CanisterId::from_u64(2000);
-
-        // Mock list_sns_canisters call
-        env.set_call_canister_response(
-            root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(CanisterId::from_u64(3000).get()),
-                ledger: Some(CanisterId::from_u64(4000).get()),
-                swap: Some(CanisterId::from_u64(5000).get()),
-                index: Some(CanisterId::from_u64(6000).get()),
-                archives: vec![],
-                dapps: vec![],
-                extensions: Some(crate::pb::sns_root_types::Extensions {
-                    extension_canister_ids: vec![extension_canister_id.get()],
-                }),
-            })
-            .unwrap()),
-        );
-
-        // Mock canister_info call for extension canister
-        env.set_call_canister_response(
-            CanisterId::ic_00(),
-            "canister_info",
-            Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
-            Ok(Encode!(&CanisterInfoResponse::new(
-                0,                      // total_num_changes
-                vec![],                 // recent_changes
-                Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
-                vec![],                 // controllers
-            ))
-            .unwrap()),
-        );
-
-        let operation_arg = ExtensionOperationArg { value: None };
+        let (env, root_canister_id, extension_canister_id, operation_arg) =
+            setup_env_for_test(true);
 
         // Test with valid operation name - should succeed
         let result = validate_execute_extension_operation(
@@ -678,45 +701,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_withdraw_success() {
-        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
-        let root_canister_id = CanisterId::from_u64(1000);
-        let extension_canister_id = CanisterId::from_u64(2000);
-
-        // Mock list_sns_canisters call
-        env.set_call_canister_response(
-            root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(CanisterId::from_u64(3000).get()),
-                ledger: Some(CanisterId::from_u64(4000).get()),
-                swap: Some(CanisterId::from_u64(5000).get()),
-                index: Some(CanisterId::from_u64(6000).get()),
-                archives: vec![],
-                dapps: vec![],
-                extensions: Some(crate::pb::sns_root_types::Extensions {
-                    extension_canister_ids: vec![extension_canister_id.get()],
-                }),
-            })
-            .unwrap()),
-        );
-
-        // Mock canister_info call for extension canister
-        env.set_call_canister_response(
-            CanisterId::ic_00(),
-            "canister_info",
-            Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
-            Ok(Encode!(&CanisterInfoResponse::new(
-                0,                      // total_num_changes
-                vec![],                 // recent_changes
-                Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
-                vec![],                 // controllers
-            ))
-            .unwrap()),
-        );
-
-        let operation_arg = ExtensionOperationArg { value: None };
+        let (env, root_canister_id, extension_canister_id, operation_arg) =
+            setup_env_for_test(true);
 
         // Test with withdraw operation - should succeed (since test mode supports withdraw)
         let result = validate_execute_extension_operation(
@@ -733,31 +719,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_unregistered_extension() {
-        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
-        let root_canister_id = CanisterId::from_u64(1000);
-        let extension_canister_id = CanisterId::from_u64(2000);
-
-        // Mock list_sns_canisters call - return empty extensions list
-        env.set_call_canister_response(
-            root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(CanisterId::from_u64(3000).get()),
-                ledger: Some(CanisterId::from_u64(4000).get()),
-                swap: Some(CanisterId::from_u64(5000).get()),
-                index: Some(CanisterId::from_u64(6000).get()),
-                archives: vec![],
-                dapps: vec![],
-                extensions: Some(crate::pb::sns_root_types::Extensions {
-                    extension_canister_ids: vec![], // Empty - extension not registered
-                }),
-            })
-            .unwrap()),
-        );
-
-        let operation_arg = ExtensionOperationArg { value: None };
+        let (env, root_canister_id, extension_canister_id, operation_arg) =
+            setup_env_for_test(false); // false = extension not registered
 
         let result = validate_execute_extension_operation(
             &env,
@@ -779,45 +742,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_invalid_operation_name() {
-        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
-        let root_canister_id = CanisterId::from_u64(1000);
-        let extension_canister_id = CanisterId::from_u64(2000);
-
-        // Mock list_sns_canisters call
-        env.set_call_canister_response(
-            root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(CanisterId::from_u64(3000).get()),
-                ledger: Some(CanisterId::from_u64(4000).get()),
-                swap: Some(CanisterId::from_u64(5000).get()),
-                index: Some(CanisterId::from_u64(6000).get()),
-                archives: vec![],
-                dapps: vec![],
-                extensions: Some(crate::pb::sns_root_types::Extensions {
-                    extension_canister_ids: vec![extension_canister_id.get()],
-                }),
-            })
-            .unwrap()),
-        );
-
-        // Mock canister_info call for extension canister
-        env.set_call_canister_response(
-            CanisterId::ic_00(),
-            "canister_info",
-            Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
-            Ok(Encode!(&CanisterInfoResponse::new(
-                0,                      // total_num_changes
-                vec![],                 // recent_changes
-                Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
-                vec![],                 // controllers
-            ))
-            .unwrap()),
-        );
-
-        let operation_arg = ExtensionOperationArg { value: None };
+        let (env, root_canister_id, extension_canister_id, operation_arg) =
+            setup_env_for_test(true);
 
         // Test with invalid operation name - should fail
         let result = validate_execute_extension_operation(
