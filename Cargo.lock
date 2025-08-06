@@ -17415,6 +17415,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-registry-keys",
+ "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
