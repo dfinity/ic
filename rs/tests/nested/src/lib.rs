@@ -159,6 +159,56 @@ pub fn registration(env: TestEnv) {
     assert_eq!(num_unassigned_nodes, 1);
 }
 
+/// Test that all four VMs can register with the network successfully.
+pub fn nns_recovery_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let initial_topology = block_on(
+        env.topology_snapshot()
+            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
+    )
+    .unwrap();
+
+    // Check that there are initially no unassigned nodes.
+    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
+    assert_eq!(num_unassigned_nodes, 0);
+
+    start_nested_vm(env.clone());
+
+    info!(logger, "Waiting for all four nodes to join ...");
+
+    let final_topology = retry_with_msg!(
+        "Waiting for all four nodes to register and appear as unassigned nodes",
+        logger.clone(),
+        NODE_REGISTRATION_TIMEOUT,
+        NODE_REGISTRATION_BACKOFF,
+        || {
+            let topology = env.topology_snapshot();
+            let num_unassigned_nodes = topology.unassigned_nodes().count();
+            if num_unassigned_nodes == 4 {
+                Ok(topology)
+            } else {
+                bail!(
+                    "Expected 4 unassigned nodes, but found {}",
+                    num_unassigned_nodes
+                )
+            }
+        }
+    )
+    .unwrap();
+
+    let num_unassigned_nodes = final_topology.unassigned_nodes().count();
+    assert_eq!(
+        num_unassigned_nodes, 4,
+        "Expected 4 unassigned nodes, but found {}",
+        num_unassigned_nodes
+    );
+    info!(
+        logger,
+        "SUCCESS: All four nodes have registered and are unassigned as expected."
+    );
+}
+
 /// Upgrade each HostOS VM to the target version, and verify that each is
 /// healthy before and after the upgrade.
 pub fn upgrade_hostos(env: TestEnv) {

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(nested::config)
+        .with_setup(nested::config_four_vms)
         .add_test(systest!(nested::nns_recovery_test))
         .with_timeout_per_test(Duration::from_secs(20 * 60))
         .with_overall_timeout(Duration::from_secs(25 * 60))
