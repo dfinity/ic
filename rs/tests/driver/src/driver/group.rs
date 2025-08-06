@@ -27,6 +27,7 @@ use crate::driver::{
 };
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
+use chrono::Utc;
 use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
@@ -545,6 +546,7 @@ impl SystemTestGroup {
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
+        let start_time = Utc::now();
 
         let mut compose_ctx = ComposeContext {
             rh,
@@ -689,7 +691,7 @@ impl SystemTestGroup {
                         std::thread::sleep(KEEPALIVE_INTERVAL);
                     }
 
-                    let mut vector_vm = VectorVm::new();
+                    let mut vector_vm = VectorVm::new().with_start_time(start_time);
                     vector_vm.start(&env).expect("Failed to start Vector VM");
 
                     loop {

@@ -12,7 +12,7 @@ use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
-use ic_sev::HostSevCertificateProvider;
+use ic_sev::host::HostSevCertificateProvider;
 use nix::unistd::getuid;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
@@ -92,10 +92,16 @@ pub async fn main() -> Result<()> {
             Ok(()) => return Ok(()),
             // If the VM started but stopped, we restart it. Note that we recreate the entire
             // service in order to start the VM with fresh config.
-            Err(GuestVmServiceError::VirtualMachineStopped) => {
-                println!("Guest VM stopped, restarting");
-                continue;
-            }
+            Err(GuestVmServiceError::VirtualMachineStopped) => match args.vm_type {
+                GuestVMType::Default => {
+                    println!("Guest VM stopped, restarting");
+                    continue;
+                }
+                GuestVMType::Upgrade => {
+                    println!("Upgrade VM stopped, exiting");
+                    break Ok(());
+                }
+            },
             // If we encounter an unexpected error, we exit with the error and let systemd restart
             // the service.
             Err(GuestVmServiceError::Other(err)) => return Err(err),
@@ -605,7 +611,7 @@ mod tests {
     };
     use ic_device::mount::testing::ExtractingFilesystemMounter;
     use ic_device::mount::GptPartitionProvider;
-    use ic_sev::testing::mock_host_sev_certificate_provider;
+    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use std::fs::File;

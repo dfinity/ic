@@ -14,7 +14,7 @@ use ic_registry_keys::{
 };
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
-use rewards_calculation::rewards_calculator_results::DayUTC;
+use rewards_calculation::rewards_calculator_results::DayUtc;
 use rewards_calculation::types::{Region, RewardPeriod, RewardableNode, UnixTsNanos};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
@@ -141,9 +141,9 @@ impl RegistryQuerier {
     /// - the corresponding `RegistryVersion`,
     /// - the sorted list of `DayUTC`s the node is in the registry.
     fn nodes_in_registry_between<S: RegistryDataStableMemory>(
-        day_start: DayUTC,
-        day_end: DayUTC,
-    ) -> BTreeMap<NodeId, (NodeRecord, RegistryVersion, Vec<DayUTC>)> {
+        day_start: DayUtc,
+        day_end: DayUtc,
+    ) -> BTreeMap<NodeId, (NodeRecord, RegistryVersion, Vec<DayUtc>)> {
         let start_ts = day_start.unix_ts_at_day_start();
         let end_ts = day_end.unix_ts_at_day_end();
         let prefix_length = NODE_RECORD_KEY_PREFIX.len();
@@ -185,7 +185,7 @@ impl RegistryQuerier {
                             if let Some(start_of_interval) = last_present_ts.take() {
                                 // The node was present and is now gone. Finalize the interval.
                                 let days_between =
-                                    DayUTC::from(start_of_interval).days_until(&DayUTC::from(ts));
+                                    DayUtc::from(start_of_interval).days_until(&DayUtc::from(ts));
                                 days.extend(days_between.unwrap_or_default());
                             }
                         }
@@ -194,7 +194,7 @@ impl RegistryQuerier {
                     // After all mutations, if the node is still present, finalize the last interval.
                     if let Some(start_of_interval) = last_present_ts {
                         let days_between =
-                            DayUTC::from(start_of_interval).days_until(&DayUTC::from(end_ts));
+                            DayUtc::from(start_of_interval).days_until(&DayUtc::from(end_ts));
                         days.extend(days_between.unwrap_or_default());
                     }
 

@@ -44,7 +44,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
-    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/config/hostos/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",

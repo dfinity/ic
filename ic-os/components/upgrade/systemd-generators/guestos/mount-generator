@@ -20,7 +20,14 @@
 
 UNIT_DIR="$1"
 
-source /opt/ic/bin/grub.sh
+function get_boot_arg_value() {
+    local ARGNAME="$1"
+    for ARG in $(cat /proc/cmdline); do
+        echo "$ARG" | while IFS='=' read KEY VALUE; do
+            if [ "$ARGNAME" == "$KEY" ]; then echo "$VALUE"; fi
+        done
+    done
+}
 
 function make_requires() {
     mkdir -p "${UNIT_DIR}"/$1.requires
@@ -73,6 +80,8 @@ function make_var_cryptsetup() {
     echo "BindsTo=dev-${DEVICE}.device"
     echo "After=dev-${DEVICE}.device"
     echo "Before=umount.target"
+    echo "After=generate-store-key.service"
+    echo "Requires=generate-store-key.service"
     echo ""
     echo "[Service]"
     echo "Type=oneshot"
@@ -84,15 +93,12 @@ function make_var_cryptsetup() {
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
 }
 
-# Read current state
-mount /grub
-read_grubenv "/grub/grubenv"
-umount /grub
-CURRENT_SYSTEM="${boot_alternative}"
+CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
+make_requires boot-grub.mount boot.mount
 
 make_var_cryptsetup "$CURRENT_SYSTEM" >"$UNIT_DIR"/systemd-cryptsetup@var_crypt.service
 make_requires dev-mapper-var_crypt.device systemd-cryptsetup@var_crypt.service

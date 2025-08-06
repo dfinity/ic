@@ -2049,10 +2049,7 @@ async fn setup_adapter_mock(
                 if let Some(client) = client {
                     Ok(hyper_util::rt::TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))

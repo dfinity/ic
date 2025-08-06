@@ -10815,6 +10815,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-utils 0.9.0",
  "icrc-ledger-client",
+ "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "num-traits",
  "rand 0.8.5",
@@ -11134,15 +11135,18 @@ dependencies = [
 name = "ic-nervous-system-root"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "dfn_core",
  "ic-cdk 0.17.2",
  "ic-crypto-sha2",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
+ "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
  "serde",
  "serde_bytes",
+ "tokio",
 ]
 
 [[package]]
@@ -13156,6 +13160,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-temporary",
  "ic-nervous-system-timestamp",
  "ic-nns-constants",
  "ic-protobuf",
@@ -15236,12 +15241,15 @@ name = "ic_sev"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.1",
  "der 0.7.9",
+ "hkdf",
  "mockall",
  "pem 1.1.1",
  "rcgen",
  "reqwest 0.12.15",
  "sev",
+ "sha2 0.10.9",
  "tempfile",
 ]
 
@@ -16671,6 +16679,9 @@ checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
 [[package]]
 name = "linux_kernel_command_line"
 version = "0.9.0"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "litemap"
@@ -17404,6 +17415,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-registry-keys",
+ "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -20525,6 +20537,7 @@ checksum = "a1e211f878258887b3e65dd3c8ff9f530fe109f441a117ee0cdc27f341355032"
 name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "chrono",
  "ic-base-types",
  "ic-cdk 0.17.2",
@@ -20534,6 +20547,7 @@ dependencies = [
  "maplit",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde",
  "tabled",
 ]
 
@@ -20878,9 +20892,9 @@ dependencies = [
 
 [[package]]
 name = "rust_decimal"
-version = "1.37.1"
+version = "1.37.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faa7de2ba56ac291bd90c6b9bece784a52ae1411f9506544b3eae36dd2356d50"
+checksum = "b203a6425500a03e0919c42d3c47caca51e79f1132046626d2c8871c5092035d"
 dependencies = [
  "arrayvec 0.7.6",
  "borsh",

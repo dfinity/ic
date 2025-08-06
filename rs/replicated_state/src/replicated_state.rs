@@ -11,6 +11,7 @@ use crate::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
     CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
@@ -26,6 +27,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     batch::{ConsensusResponse, RawQueryStats},
+    consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
@@ -708,6 +710,14 @@ impl ReplicatedState {
             .metadata
             .subnet_call_context_manager
             .sign_with_threshold_contexts
+    }
+
+    /// Returns all pre-signature stashes.
+    pub fn pre_signature_stashes(&self) -> &BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> {
+        &self
+            .metadata
+            .subnet_call_context_manager
+            .pre_signature_stashes
     }
 
     /// Returns all reshare chain key contexts.
