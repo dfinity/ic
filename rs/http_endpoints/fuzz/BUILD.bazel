@@ -9,6 +9,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/http_endpoints/public",
+    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/registry/mocks",

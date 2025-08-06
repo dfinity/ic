@@ -97,10 +97,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (
-        join_handle,
-        NNSDelegationReader::new(rx, subnet_id == nns_subnet_id),
-    )
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 struct DelegationManager {

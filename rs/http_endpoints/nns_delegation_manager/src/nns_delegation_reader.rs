@@ -14,15 +14,14 @@ pub enum CanisterRangesFormat {
 }
 
 #[derive(Clone)]
-// TODO(CON-1487): Consider caching the delegations.
+// TODO(CON-1487): Consider c
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<CertificateDelegation>>,
-    is_nns: bool,
 }
 
 impl NNSDelegationReader {
-    pub fn new(receiver: watch::Receiver<Option<CertificateDelegation>>, is_nns: bool) -> Self {
-        Self { receiver, is_nns }
+    pub fn new(receiver: watch::Receiver<Option<CertificateDelegation>>) -> Self {
+        Self { receiver }
     }
 
     /// Returns the most recent NNS delegation with the canister ranges in the specified format.
@@ -34,10 +33,6 @@ impl NNSDelegationReader {
         canister_ranges_format: CanisterRangesFormat,
         _canister_id: Option<CanisterId>,
     ) -> Option<CertificateDelegation> {
-        if self.is_nns {
-            return None;
-        }
-
         let delegation = self.receiver.borrow().clone()?;
 
         match canister_ranges_format {
@@ -46,10 +41,6 @@ impl NNSDelegationReader {
     }
 
     pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
-        if self.is_nns {
-            Ok(())
-        } else {
-            self.receiver.changed().await
-        }
+        self.receiver.changed().await
     }
 }

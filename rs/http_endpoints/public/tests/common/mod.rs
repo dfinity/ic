@@ -460,8 +460,7 @@ impl HttpEndpointBuilder {
             watch::channel(self.certified_height.unwrap_or_default());
         let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
             watch::channel(self.delegation_from_nns);
-        let nns_delegation_reader =
-            NNSDelegationReader::new(nns_delegation_watcher_rx, /*is_nns=*/ false);
+        let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
