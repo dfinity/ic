@@ -563,9 +563,6 @@ pub fn setup_nested_vms(
         "Starting setup_nested_vms for {} node(s)",
         nodes.len()
     );
-    for (i, node) in nodes.iter().enumerate() {
-        info!(farm.logger, "Node {}: {}", i, node.name);
-    }
 
     thread::scope(|s| {
         let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
