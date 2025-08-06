@@ -23,6 +23,7 @@ PACKAGES = [
     "@noble//bash/amd64",
     "@noble//ca-certificates/amd64",
     "@noble//coreutils/amd64",
+    "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
     "@noble//gawk/amd64",
     "@noble//gzip/amd64",
@@ -32,6 +33,7 @@ PACKAGES = [
     "@noble//openssh-client/amd64",
     "@noble//rsync/amd64",
     "@noble//tar/amd64",
+    "@noble//udev/amd64",
     "@noble//xz-utils/amd64",
     "@noble//zstd/amd64",
 ]
@@ -220,6 +222,22 @@ uvm_config_image(
     remap_paths = {
         "canister_http_test_ca.cert": "cert.pem",
         "canister_http_test_ca.key": "key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+uvm_config_image(
+    name = "guestos_recovery_engine_uvm_config_image",
+    srcs = [
+        ":minica.tar",
+        ":static-file-server.tar",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
+        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst",
+    ],
+    remap_paths = {
+        "canister_http_test_ca.cert": "minica.pem",
+        "canister_http_test_ca.key": "minica-key.pem",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

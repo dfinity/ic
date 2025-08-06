@@ -960,8 +960,8 @@ fn test_hash_plan() {
     .expect("failed to compute manifest");
 
     // Compute the manifest incrementally.
-    let mut files = Vec::new();
-    files_with_sizes(root, "".into(), &mut files).expect("failed to traverse the files");
+    let mut files =
+        files_with_sizes(root, "".into(), &mut thread_pool).expect("failed to traverse the files");
     // We sort the table to make sure that the table is the same on all replicas
     files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
 
@@ -1389,8 +1389,12 @@ fn all_same_inodes_are_detected() {
             .unwrap(),
     };
 
-    let mut files = Vec::new();
-    files_with_sizes(target.path(), "".into(), &mut files).unwrap();
+    let files = files_with_sizes(
+        target.path(),
+        "".into(),
+        &mut scoped_threadpool::Pool::new(NUM_THREADS),
+    )
+    .unwrap();
 
     let result = dirty_pages_to_dirty_chunks(
         &no_op_logger(),

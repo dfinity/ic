@@ -58,12 +58,14 @@ ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-nervous-system-timestamp = { path = "../../nervous_system/timestamp" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance-api = { path = "./api" }
 ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
 ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_total_limit" }
 ic-sns-governance-token-valuation = { path = "./token_valuation" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 lazy_static = { workspace = true }

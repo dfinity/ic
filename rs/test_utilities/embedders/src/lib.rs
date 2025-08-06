@@ -27,6 +27,7 @@ use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -124,6 +125,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
@@ -161,6 +163,7 @@ impl WasmtimeInstanceBuilder {
             Default::default(),
             self.api_type.caller(),
             self.api_type.call_context_id(),
+            CanisterCyclesCostSchedule::Normal,
         );
 
         let subnet_memory_capacity = i64::MAX / 2;

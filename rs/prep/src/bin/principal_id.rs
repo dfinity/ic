@@ -101,8 +101,7 @@ fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<
             match pod {
                 Some(tgt) => parser = tgt,
                 None => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(io::Error::other(
                         "Must specify '--type' option when reading from stdin",
                     ))
                 }

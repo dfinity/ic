@@ -25,8 +25,8 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError,
-    HypervisorResult, IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
+    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
+    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
     SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -52,7 +52,8 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    consensus::idkg::PreSigId,
+    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
+    consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -74,7 +75,6 @@ use super::{RoundSchedule, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
-use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
 /// fakes execution of Wasm code for performance, so it can process thousands
@@ -117,8 +117,8 @@ pub(crate) struct SchedulerTest {
     metrics_registry: MetricsRegistry,
     // Chain key subnet public keys.
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    // Pre-signature IDs.
-    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    // Available pre-signatures.
+    idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     // Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
 }
@@ -181,6 +181,11 @@ impl SchedulerTest {
         &self.registry_settings
     }
 
+    pub fn set_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        self.state.as_mut().unwrap().metadata.cost_schedule = cost_schedule;
+        self.registry_settings.canister_cycles_cost_schedule = cost_schedule;
+    }
+
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
@@ -205,6 +210,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
+            self.state.as_ref().unwrap().metadata.cost_schedule,
             WasmExecutionMode::Wasm32,
         )
     }
@@ -520,7 +526,7 @@ impl SchedulerTest {
             Randomness::from([0; 32]),
             ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),
-                idkg_pre_signature_ids: self.idkg_pre_signature_ids.clone(),
+                idkg_pre_signatures: self.idkg_pre_signatures.clone(),
                 nidkg_ids: BTreeMap::new(),
             },
             &self.replica_version,
@@ -639,20 +645,24 @@ impl SchedulerTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
+            self.state.as_ref().unwrap().metadata.cost_schedule,
         )
     }
 
     pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .memory_cost(bytes, duration, self.subnet_size())
+        self.scheduler.cycles_account_manager.memory_cost(
+            bytes,
+            duration,
+            self.subnet_size(),
+            self.state.as_ref().unwrap().metadata.cost_schedule,
+        )
     }
 
-    pub(crate) fn deliver_pre_signature_ids(
+    pub(crate) fn deliver_pre_signatures(
         &mut self,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     ) {
-        self.idkg_pre_signature_ids = idkg_pre_signature_ids;
+        self.idkg_pre_signatures = idkg_pre_signatures;
     }
 }
 
@@ -977,7 +987,7 @@ impl SchedulerTestBuilder {
             registry_settings,
             metrics_registry: self.metrics_registry,
             chain_key_subnet_public_keys,
-            idkg_pre_signature_ids: BTreeMap::new(),
+            idkg_pre_signatures: BTreeMap::new(),
             replica_version: self.replica_version,
         }
     }
@@ -1351,11 +1361,12 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
+                system_state.cost_schedule(),
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size);
+            .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule());
         let deadline = NO_DEADLINE;
         let callback = system_state
             .register_callback(Callback {

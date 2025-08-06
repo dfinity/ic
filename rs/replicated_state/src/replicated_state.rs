@@ -11,6 +11,7 @@ use crate::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
     CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
@@ -26,6 +27,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     batch::{ConsensusResponse, RawQueryStats},
+    consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
@@ -710,6 +712,14 @@ impl ReplicatedState {
             .sign_with_threshold_contexts
     }
 
+    /// Returns all pre-signature stashes.
+    pub fn pre_signature_stashes(&self) -> &BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> {
+        &self
+            .metadata
+            .subnet_call_context_manager
+            .pre_signature_stashes
+    }
+
     /// Returns all reshare chain key contexts.
     pub fn reshare_chain_key_contexts(&self) -> &BTreeMap<CallbackId, ReshareChainKeyContext> {
         &self
@@ -733,7 +743,7 @@ impl ReplicatedState {
     }
 
     /// Canister migrations require that a canister is stopped, has no guaranteed responses
-    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
+    /// in any outgoing stream, and nothing in the input or output queue (guaranteed or otherwise).
     pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
         let streams_flushed = || {
             self.metadata
@@ -749,7 +759,7 @@ impl ReplicatedState {
 
         let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
 
-        stopped && !canister_state.has_output() && streams_flushed()
+        stopped && !canister_state.has_input() && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.

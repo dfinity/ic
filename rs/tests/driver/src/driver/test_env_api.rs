@@ -139,7 +139,7 @@ use super::{
 };
 use crate::{
     driver::{
-        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
+        constants::{self, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -148,7 +148,7 @@ use crate::{
         tnet::TNet,
         virtualmachine::{destroy_vm, restart_vm, start_vm},
     },
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -182,7 +182,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    malicious_behaviour::MaliciousBehaviour,
+    malicious_behavior::MaliciousBehavior,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
     NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
@@ -192,7 +192,7 @@ use itertools::Itertools;
 use prost::Message;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{debug, error, info, warn, Logger};
+use slog::{debug, info, warn, Logger};
 use ssh2::Session;
 use std::{
     cmp::max,
@@ -221,8 +221,7 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
-const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
-pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
+pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -647,7 +646,7 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
-            latest_version = retry_with_msg_async!(
+            latest_version = retry_with_msg_async_quiet!(
                 format!(
                     "check if latest registry version >= {}",
                     min_version.to_string()
@@ -695,7 +694,7 @@ impl TopologySnapshot {
         let backoff = Duration::from_secs(2);
         let prev_version: Arc<TokioMutex<RegistryVersion>> =
             Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
-        let version = retry_with_msg_async!(
+        let version = retry_with_msg_async_quiet!(
             "block_for_newest_mainnet_registry_version",
             &self.env.logger(),
             duration,
@@ -786,7 +785,7 @@ impl IcNodeSnapshot {
         self.malicious_behavior().is_some()
     }
 
-    pub fn malicious_behavior(&self) -> Option<MaliciousBehaviour> {
+    pub fn malicious_behavior(&self) -> Option<MaliciousBehavior> {
         let nodes_info: NodesInfo = self
             .env
             .read_json_object(NODES_INFO)
@@ -1141,8 +1140,6 @@ impl HasRegistryLocalStore for TestEnv {
 pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
 }
 
 impl<T: HasTestEnv> HasIcDependencies for T {
@@ -1157,16 +1154,6 @@ impl<T: HasTestEnv> HasIcDependencies for T {
         let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
         Ok(initial_replica_version.version)
     }
-
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
-    }
-
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
-    }
 }
 
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
@@ -1176,60 +1163,8 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
-}
-
-pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
-}
-
-pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
-}
-
-pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
-}
-
-pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var(
-        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
-    )?)
-}
-
-pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_boundary_node_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+pub fn get_current_branch_version() -> Result<String> {
+    read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
 }
 
 pub fn get_mainnet_nns_revision() -> String {
@@ -1242,25 +1177,87 @@ pub fn get_mainnet_application_subnet_revision() -> String {
         .expect("could not read mainnet application subnet version from environment")
 }
 
-pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
+// The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
+
+/// Pull the version of the initial GuestOS image from the environment.
+pub fn get_guestos_img_version() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
+}
+
+/// Pull the URL of the initial GuestOS image from the environment.
+pub fn get_guestos_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
+/// Pull the hash of the initial GuestOS image from the environment.
+pub fn get_guestos_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
+}
+
+/// Pull the URL of the initial GuestOS update image from the environment.
+///
+/// With the initial image, there is also a corresponding initial update image.
+/// The version is shared, so only the URL and hash are provided.
+pub fn get_guestos_initial_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
+/// Pull the hash of the initial GuestOS update image from the environment.
+///
+/// With the initial image, there is also a corresponding initial update image.
+/// The version is shared, so only the URL and hash are provided.
+pub fn get_guestos_initial_update_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?)
+}
+
+/// Pull the version of the target GuestOS update image from the environment.
+pub fn get_guestos_update_img_version() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
+}
+
+/// Pull the URL of the target GuestOS update image from the environment.
+pub fn get_guestos_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+/// Pull the hash of the target GuestOS update image from the environment.
+pub fn get_guestos_update_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
+}
+
+/// Pull the version of the initial SetupOS image from the environment.
+pub fn get_setupos_img_version() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
+}
+
+/// Pull the URL of the initial SetupOS image from the environment.
+pub fn get_setupos_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+/// Pull the hash of the initial SetupOS image from the environment.
+pub fn get_setupos_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?)
+}
+
+/// Pull the version of the target HostOS update image from the environment.
+pub fn get_hostos_update_img_version() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
+}
+
+/// Pull the URL of the target HostOS update image from the environment.
+pub fn get_hostos_update_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+/// Pull the hash of the target HostOS update image from the environment.
+pub fn get_hostos_update_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_HASH")?)
 }
 
 pub fn get_empty_disk_img_url() -> Result<Url> {
@@ -1272,42 +1269,13 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
-pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
-pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+pub fn get_boundary_node_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
 
-fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let url = &format!("{base_url}/SHA256SUMS");
-    let response = retry_with_msg!(
-        format!("GET {url}"),
-        logger.clone(),
-        FETCH_SHA256SUMS_RETRY_TIMEOUT,
-        FETCH_SHA256SUMS_RETRY_BACKOFF,
-        || reqwest::blocking::get(url).map_err(|e| anyhow!("{:?}", e))
-    )?;
-
-    if !response.status().is_success() {
-        error!(
-            logger,
-            "Failed to fetch sha256. Remote address: {:?}, Headers: {:?}",
-            response.remote_addr(),
-            response.headers()
-        );
-        return Err(anyhow!("Failed to fetch sha256"));
-    }
-    let body = response.text()?;
-
-    // body should look like:
-    // 7348b0f4b0267da7424306efddd57e26dc5a858cd642d64afaeaa592c4974af8 *disk-img.tar.zst
-
-    let lines = body
-        .split('\n')
-        .filter(|line| line.ends_with(file))
-        .collect::<Vec<&str>>();
-    let line = lines.first().unwrap();
-    let parts = line.split(' ').collect::<Vec<&str>>();
-    let sha256 = parts.first().unwrap();
-    bail_if_sha256_invalid(sha256, &format!("{base_url}/{file}"))?;
-    Ok(sha256.to_string())
+pub fn get_boundary_node_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub trait HasGroupSetup {
@@ -1356,7 +1324,6 @@ impl HasGroupSetup for TestEnv {
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -1511,7 +1478,9 @@ pub trait SshSession: HasTestEnv {
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
         let mut channel = session.channel_session()?;
-        channel.exec("bash").unwrap();
+        channel.exec("bash").map_err(|e| {
+            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+        })?;
 
         channel.write_all(script.as_bytes())?;
         channel.flush()?;
@@ -2171,6 +2140,20 @@ macro_rules! retry_with_msg_async {
     };
 }
 
+/// This is a quieter version of retry_with_msg_async that only logs the initial attempt and final result, not every intermediate failure.
+#[macro_export]
+macro_rules! retry_with_msg_async_quiet {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::driver::test_env_api::retry_async_quiet(
+            format!("{} [{}:{}]", $msg, file!(), line!()),
+            $log,
+            $timeout,
+            $backoff,
+            $f,
+        )
+    };
+}
+
 pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
     msg: S,
     log: &slog::Logger,
@@ -2200,7 +2183,7 @@ where
                 break Ok(v);
             }
             Err(err) => {
-                let err_msg = err.to_string();
+                let err_msg = format!("{:?}", err);
                 if start.elapsed() > timeout {
                     break Err(err.context(format!(
                         "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}",
@@ -2212,6 +2195,52 @@ where
                     "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
                     trunc_error(err_msg)
                 );
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+/// A quieter version of `retry_async` that only logs the initial attempt and final result.
+/// This reduces log noise when there are many retry attempts.
+pub async fn retry_async_quiet<S: AsRef<str>, F, Fut, R>(
+    msg: S,
+    log: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    f: F,
+) -> Result<R>
+where
+    Fut: Future<Output = Result<R>>,
+    F: Fn() -> Fut,
+{
+    let msg = msg.as_ref();
+    let mut attempt = 1;
+    let start = Instant::now();
+    debug!(
+        log,
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
+    );
+    loop {
+        match f().await {
+            Ok(v) => {
+                debug!(
+                    log,
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = format!("{:?}", err);
+                if start.elapsed() > timeout {
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. \n Last error: {err_msg}",
+                        start.elapsed(),
+                    )));
+                }
+                debug!(log, "Func=\"{msg}\" failed on attempt {attempt}",);
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }
@@ -2462,22 +2491,6 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         GroupName {
             message: "Created new InfraProvider group".to_string(),
             group: group.to_string(),
-        },
-    );
-    event.emit_log(log);
-}
-
-pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Deserialize, Serialize)]
-    pub struct KibanaUrl {
-        message: String,
-        url: String,
-    }
-    let event = log_events::LogEvent::new(
-        KIBANA_URL_CREATED_EVENT_NAME.to_string(),
-        KibanaUrl {
-            message: "Replica logs will appear in Kibana".to_string(),
-            url: kibana_url.to_string(),
         },
     );
     event.emit_log(log);

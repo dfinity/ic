@@ -149,6 +149,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::pb::v1::AddOrRemoveNodeProvider;
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
@@ -4968,8 +4969,10 @@ impl Governance {
                 self.validate_manage_network_economics(network_economics)
             }
 
+            Action::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                self.validate_add_or_remove_node_provider(add_or_remove_node_provider)
+            }
             Action::ApproveGenesisKyc(_)
-            | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
@@ -5133,6 +5136,81 @@ impl Governance {
         }
 
         Ok(())
+    }
+
+    fn validate_add_or_remove_node_provider(
+        &self,
+        add_or_remove_node_provider: &AddOrRemoveNodeProvider,
+    ) -> Result<(), GovernanceError> {
+        match &add_or_remove_node_provider.change {
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "AddOrRemoveNodeProvider proposal must have a change field",
+            )),
+            Some(Change::ToAdd(node_provider)) => {
+                let Some(np_id) = node_provider.id else {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "AddOrRemoveNodeProvider proposal must have a node provider id",
+                    ));
+                };
+                // Validate that np does not exist
+                if self
+                    .heap_data
+                    .node_providers
+                    .iter()
+                    .any(|np| np.id.as_ref() == Some(&np_id))
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "AddOrRemoveNodeProvider cannot add already existing Node Provider: {}",
+                            np_id
+                        ),
+                    ));
+                }
+
+                if let Some(ref account_identifier) = node_provider.reward_account {
+                    validate_account_identifier(account_identifier).map_err(|e| {
+                        GovernanceError::new_with_message(
+                            ErrorType::InvalidProposal,
+                            format!("The account_identifier field is invalid: {}", e),
+                        )
+                    })?;
+                }
+
+                // Validate that np does not exist
+                // validate the account_identifier
+                Ok(())
+            }
+            Some(Change::ToRemove(node_provider)) => {
+                let Some(np_id) = node_provider.id else {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "AddOrRemoveNodeProvider proposal must have a node provider id",
+                    ));
+                };
+
+                // Validate that np exists
+                if !self
+                    .heap_data
+                    .node_providers
+                    .iter()
+                    .any(|np| np.id.as_ref() == Some(&np_id))
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider \
+                              but targeted {}",
+                            np_id
+                        ),
+                    ));
+                }
+
+                Ok(())
+            }
+        }
     }
 
     fn validate_add_or_remove_data_centers_payload(payload: &[u8]) -> Result<(), String> {
@@ -7030,6 +7108,15 @@ impl Governance {
             })?;
 
         if let Some(new_reward_account) = update.reward_account {
+            validate_account_identifier(&new_reward_account).map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Invalid reward_account for Node Provider {}: {}",
+                        node_provider_id, e
+                    ),
+                )
+            })?;
             node_provider.reward_account = Some(new_reward_account);
         } else {
             return Err(GovernanceError::new_with_message(
@@ -8113,6 +8200,24 @@ fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
             ),
         ));
     }
+
+    Ok(())
+}
+
+fn validate_account_identifier(
+    account_identifier: &icp_ledger::protobuf::AccountIdentifier,
+) -> Result<(), String> {
+    if account_identifier.hash.len() != 32 {
+        return Err(
+            format!(
+                "The account identifier must be 32 bytes long (so that it includes the checksum) but, this account identifier is: {} bytes",
+                account_identifier.hash.len()
+            ),
+        );
+    }
+
+    AccountIdentifier::try_from(account_identifier)
+        .map_err(|e| format!("The account identifier is not valid: {}", e))?;
 
     Ok(())
 }

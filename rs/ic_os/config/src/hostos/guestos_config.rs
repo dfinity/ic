@@ -5,7 +5,7 @@ use config_types::{
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
-use ic_sev::HostSevCertificateProvider;
+use ic_sev::host::HostSevCertificateProvider;
 use std::net::Ipv6Addr;
 use utils::to_cidr;
 
@@ -32,6 +32,9 @@ pub fn generate_guestos_config(
     let (node_type, upgrade_peer_node_type) = match guest_vm_type {
         GuestVMType::Default => (NodeType::GuestOS, NodeType::UpgradeGuestOS),
         GuestVMType::Upgrade => (NodeType::UpgradeGuestOS, NodeType::GuestOS),
+        GuestVMType::Unknown => {
+            anyhow::bail!("GuestVMType::Unknown is not a valid type for generating GuestOS config");
+        }
     };
 
     let guestos_ipv6_address =
@@ -97,7 +100,7 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, ICOSSettings, Ipv6Config,
         NetworkSettings,
     };
-    use ic_sev::testing::mock_host_sev_certificate_provider;
+    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use std::net::Ipv6Addr;
 
     fn hostos_config_for_test() -> HostOSConfig {

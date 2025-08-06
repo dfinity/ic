@@ -136,6 +136,7 @@ type InitialChainKeyConfig = record {
   key_configs : vec KeyConfigRequest;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type KeyConfigRequest = record {
@@ -161,20 +162,7 @@ type VetKdCurve = variant { bls12_381_g2 };
 
 type EcdsaCurve = variant { secp256k1 };
 
-type EcdsaInitialConfig = record {
-  quadruples_to_create_in_advance : nat32;
-  max_queue_size : opt nat32;
-  keys : vec EcdsaKeyRequest;
-  signature_request_timeout_ns : opt nat64;
-  idkg_key_rotation_period_ms : opt nat64;
-};
-
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
-
-type EcdsaKeyRequest = record {
-  key_id : EcdsaKeyId;
-  subnet_id : opt principal;
-};
 
 type FirewallRule = record {
   ipv4_prefixes : vec text;
@@ -463,6 +451,7 @@ type ChainKeyConfig = record {
   key_configs : vec KeyConfig;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type UpdateUnassignedNodesConfigPayload = record {
