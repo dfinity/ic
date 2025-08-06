@@ -679,7 +679,6 @@ fn create_setupos_config_image(
     std::fs::create_dir_all(&data_dir)?;
 
     // Prep config contents
-    info!(env.logger(), "[{}] Building setupos config command", name);
     let mut cmd = Command::new(create_setupos_config);
     cmd.arg("--config-dir")
         .arg(&config_dir)
