@@ -1,8 +1,8 @@
 use crate::io::retry_if_busy;
 use anyhow::{ensure, Context, Result};
 use devicemapper::{
-    devnode_to_devno, Bytes, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
-    LinearDevTargetTable, LinearTargetParams, Sectors, TargetLine, TargetTable, DM,
+    devnode_to_devno, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
+    LinearDevTargetTable, LinearTargetParams, TargetLine, TargetTable, DM,
 };
 use loopdev::LoopDevice;
 use nix::ioctl_read;
@@ -13,6 +13,9 @@ use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::{NamedTempFile, TempPath};
+
+// Republish these types so clients can pass them as parameters.
+pub use devicemapper::{Bytes, Sectors};
 
 #[allow(clippy::len_without_is_empty)]
 pub trait DeviceTrait: Send + Sync {
@@ -176,6 +179,10 @@ impl TempDevice {
             device: Device { major, minor },
             _temp_file: temp_path,
         })
+    }
+
+    pub fn path(&self) -> Option<PathBuf> {
+        self._loop_device.path()
     }
 }
 

@@ -49,10 +49,37 @@ EOF
         .expect("Failed to run upgrade_vm_device_test");
 }
 
+fn guest_disk_test(env: TestEnv) {
+    let deployed_universal_vm = env
+        .get_deployed_universal_vm(UNIVERSAL_VM_NAME)
+        .expect("unable to get deployed VM.");
+    deployed_universal_vm
+        .block_on_bash_script(
+            r#"
+        set -euo pipefail
+        docker load -i /config/ubuntu_test_runtime.tar
+
+        cp /config/guest_disk_test .
+        cat <<EOF > /tmp/Dockerfile
+            FROM ubuntu_test_runtime:image
+            COPY --chmod=755 guest_disk_test /guest_disk_test
+EOF
+
+        docker build --tag final -f /tmp/Dockerfile .
+        mkdir /tmp/out
+        docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
+            RUST_BACKTRACE=1 /guest_disk_test
+        "
+    "#,
+        )
+        .expect("Failed to run guest_disk_test");
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(upgrade_vm_device_test))
+        .add_test(systest!(guest_disk_test))
         .execute_from_args()?;
     Ok(())
 }

@@ -49,19 +49,17 @@ TYPE=$(blkid -o value --match-tag TYPE "${VAR_PARTITION}")
 # on having a clean slate here after first boot of an upgrade.
 if [ "${TYPE}" == "crypto_LUKS" ]; then
     echo "Found LUKS header in partition ${VAR_PARTITION} for /var."
-    cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
+    /opt/ic/bin/guest_disk crypt-open var "$VAR_PARTITION"
 else
     echo "No LUKS header found in partition ${VAR_PARTITION} for /var. Setting it up on first boot."
-    # Set minimal iteration count -- we already use a random key with
-    # maximal entropy, pbkdf doesn't gain anything (besides slowing
-    # down boot by a couple seconds which needlessly annoys for testing).
-    cryptsetup luksFormat --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "${VAR_PARTITION}" /boot/config/store.keyfile
-    cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
+    /opt/ic/bin/guest_disk crypt-format var "$VAR_PARTITION"
+    /opt/ic/bin/guest_disk crypt-open var "$VAR_PARTITION"
     echo "Populating /var filesystem in ${VAR_PARTITION} on first boot."
     mkfs.ext4 -F /dev/mapper/var_crypt -d /var
     # Fix root inode (mkfs fails to set correct security context).
     echo "ea_set / security.selinux system_u:object_r:var_t:s0\\000" | debugfs -w /dev/mapper/var_crypt
 
+    # TODO(NODE-1655): This won't work anymore if SEV is enabled on the node and should be removed.
     echo "Attempting to save logs from previous system instance at ${OLD_VAR_PARTITION}"
     # Try to open the old encrypted /var partition, but allow for failure.
     if cryptsetup luksOpen "${OLD_VAR_PARTITION}" old_var_crypt --key-file /boot/config/store.keyfile; then

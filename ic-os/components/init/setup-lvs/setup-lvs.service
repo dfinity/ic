@@ -1,8 +1,8 @@
 [Unit]
 Description=Set up logical volumes on first boot
 DefaultDependencies=no
-Requires=systemd-cryptsetup@vda10\x2dcrypt.service
-After=systemd-cryptsetup@vda10\x2dcrypt.service
+Requires=setup-encryption.service
+After=setup-encryption.service
 
 [Install]
 WantedBy=local-fs.target

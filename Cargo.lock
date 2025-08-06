@@ -5332,6 +5332,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "guest_disk"
+version = "0.0.0"
+dependencies = [
+    "anyhow",
+    "clap 4.5.27",
+    "config",
+    "config_types",
+    "grub",
+    "ic_device",
+    "ic_sev",
+    "itertools 0.12.1",
+    "libcryptsetup-rs",
+    "linux_kernel_command_line",
+    "nix 0.24.3",
+    "parking_lot",
+    "rand 0.8.5",
+    "tempfile",
+]
+
+[[package]]
 name = "guest_vm_runner"
 version = "0.0.0"
 dependencies = [
@@ -16477,6 +16497,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d750af042f7ef4f724306de029d18836c26c1765a54a6a3f094cbd23a7267ffa"
 
 [[package]]
+name = "libcryptsetup-rs"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ffd3642e85d0a4a7852c28545764754e8f7ca00c33ea5f2035f241a1da869ed"
+dependencies = [
+    "bitflags 2.9.0",
+    "either",
+    "libc",
+    "libcryptsetup-rs-sys",
+    "log",
+    "once_cell",
+    "per-thread-mutex",
+    "pkg-config",
+    "semver",
+    "serde_json",
+    "uuid",
+]
+
+[[package]]
+name = "libcryptsetup-rs-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d70e7b16c75f442c560d3b9514c6343e8dde6426651745de12868e1500edbc0f"
+dependencies = [
+    "bindgen 0.71.1",
+    "cc",
+    "pkg-config",
+    "semver",
+]
+
+[[package]]
 name = "libdbus-sys"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18505,6 +18556,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
 dependencies = [
  "base64ct",
+]
+
+[[package]]
+name = "per-thread-mutex"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b20d1aaa7fcf3cd5a7b4506c38594d25e122ad45dec6da7f85bac52f3a3e562c"
+dependencies = [
+    "libc",
+    "log",
 ]
 
 [[package]]
