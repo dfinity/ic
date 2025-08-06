@@ -2,18 +2,16 @@ load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:proc-macro2",
-    "@crate_index//:quote",
-    "@crate_index//:syn",
-]
-
 rust_proc_macro(
     name = "exhaustive_derive",
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_exhaustive_derive",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:proc-macro2",
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
 )

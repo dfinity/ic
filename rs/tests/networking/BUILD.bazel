@@ -211,6 +211,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/limits",
+        "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
