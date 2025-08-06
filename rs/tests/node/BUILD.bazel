@@ -1,5 +1,5 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -8,7 +8,6 @@ system_test_nns(
     proc_macro_deps = [
         "@crate_index//:indoc",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",
         "//rs/registry/canister",
@@ -25,13 +24,36 @@ system_test_nns(
     ],
 )
 
+# Unit tests that require root privileges to run.
+system_test(
+    name = "root_tests",
+    env = {
+        "NODE_ROOT_TESTS_UVM_CONFIG_PATH": "$(rootpath :root_tests_config_image)",
+    },
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":root_tests_config_image"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+uvm_config_image(
+    name = "root_tests_config_image",
+    testonly = True,
+    srcs = [
+        "//rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test",
+        "//rs/tests:ubuntu_test_runtime.tar",
+    ],
+    tags = ["manual"],
+)
+
 system_test(
     name = "reboot_toy",
     tags = [
         "k8s",
         "manual",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",

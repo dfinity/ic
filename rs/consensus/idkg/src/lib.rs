@@ -401,13 +401,9 @@ fn get_active_transcripts(
 
     if let Some(snapshot) = state_reader.get_certified_state_snapshot() {
         let state = snapshot.get_state();
-        let pre_signature_stashes = &state
-            .metadata
-            .subnet_call_context_manager
-            .pre_signature_stashes;
 
         // Retain all stashed key transcripts
-        for stash in pre_signature_stashes.values() {
+        for stash in state.pre_signature_stashes().values() {
             active_transcripts.insert((*stash.key_transcript).clone());
         }
 
@@ -685,7 +681,7 @@ mod tests {
         // Create some pre-signature stashes
         let mut stashes = BTreeMap::new();
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            stashes.insert(key_id.inner().clone(), fake_pre_signature_stash(&key_id, 5));
+            stashes.insert(key_id.clone(), fake_pre_signature_stash(&key_id, 5));
         }
         let stashed_transcripts = stashes.len() as u64;
         state

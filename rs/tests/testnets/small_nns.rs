@@ -45,7 +45,6 @@ use ic_system_test_driver::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
-    vector_vm::VectorVm,
 };
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
@@ -62,8 +61,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
 
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -83,9 +80,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     set_authorized_subnets(&env);

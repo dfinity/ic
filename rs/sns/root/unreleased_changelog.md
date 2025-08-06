@@ -9,17 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-SNS Root now has a function called `register_extension` that is similar to `register_dapp_canister`,
-but different in the following ways:
-
-* The controllers of an SNS extension are the Root and the Governance canisters of the SNS (as
-  opposed to just Root). This allows SNS Governance to call functions of the extension that can
-  be called only by an extension's controller.
-* Extensions are listed separately in the respone of `list_sns_canisters`.
-
-Similar to `register_dapp_canister` and `register_dapp_canisters`, `register_extension` can be
-called only by the SNS Governance.
-
 ## Changed
 
 ## Deprecated
@@ -27,5 +16,9 @@ called only by the SNS Governance.
 ## Removed
 
 ## Fixed
+
+- A lock was added to `change_canister` to prevent two simultaneous upgrade operations from being executed  
+  at the same time. The second upgrade will now fail immediately instead of attempting to run, which prevents
+  dangerous edge cases where the canister is restarted by one operation while being upgraded by another.
 
 ## Security

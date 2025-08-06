@@ -35,7 +35,7 @@ use ic_types::{
 };
 use std::{
     cell::RefCell,
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
     sync::Arc,
 };
@@ -935,15 +935,15 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
             .update_active_pre_signatures(&block_reader);
 
         let mut changes =
-            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
-                .then(|| {
-                    timed_call(
-                        "purge_artifacts",
-                        || self.purge_artifacts(idkg_pool, &block_reader),
-                        &metrics.on_state_change_duration,
-                    )
-                })
-                .unwrap_or_default();
+            if update_purge_height(&self.prev_finalized_height, block_reader.tip_height()) {
+                timed_call(
+                    "purge_artifacts",
+                    || self.purge_artifacts(idkg_pool, &block_reader),
+                    &metrics.on_state_change_duration,
+                )
+            } else {
+                IDkgChangeSet::default()
+            };
 
         let send_dealings = || {
             timed_call(
@@ -1001,7 +1001,6 @@ pub(crate) struct IDkgTranscriptBuilderImpl<'a> {
     crypto: &'a dyn ConsensusCrypto,
     metrics: &'a IDkgPayloadMetrics,
     idkg_pool: &'a dyn IDkgPool,
-    cache: RefCell<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     log: ReplicaLogger,
 }
 
@@ -1017,7 +1016,6 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
             block_reader,
             crypto,
             idkg_pool,
-            cache: RefCell::new(BTreeMap::new()),
             metrics,
             log,
         }
@@ -1230,12 +1228,7 @@ impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         timed_call(
             "get_completed_transcript",
-            || match self.cache.borrow_mut().entry(transcript_id) {
-                Entry::Vacant(e) => self
-                    .build_transcript(transcript_id)
-                    .map(|transcript| e.insert(transcript).clone()),
-                Entry::Occupied(e) => Some(e.get().clone()),
-            },
+            || self.build_transcript(transcript_id),
             &self.metrics.transcript_builder_duration,
         )
     }

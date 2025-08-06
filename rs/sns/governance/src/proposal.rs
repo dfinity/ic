@@ -1,5 +1,10 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
+use crate::extensions::validate_execute_extension_operation;
+use crate::extensions::{validate_extension_wasm, ValidatedExecuteExtensionOperation};
+use crate::pb::v1::{
+    AdvanceSnsTargetVersion, ExecuteExtensionOperation, RegisterExtension,
+    SetTopicsForCustomProposals, Topic,
+};
 use crate::treasury::assess_treasury_balance;
 use crate::types::Wasm;
 use crate::{
@@ -443,14 +448,17 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
         }
+        proposal::Action::ExecuteExtensionOperation(execute) => {
+            validate_and_render_execute_extension_operation(env, execute, root_canister_id).await
+        }
         proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
                 register_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::RegisterExtension(_) => {
-            Err("RegisterExtension proposals are not supported yet.".to_string())
+        proposal::Action::RegisterExtension(register_extension) => {
+            validate_and_render_register_extension(register_extension).await
         }
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
@@ -1496,6 +1504,125 @@ pub async fn validate_and_render_execute_nervous_system_function(
             }
         }
     }
+}
+
+async fn validate_and_render_execute_extension_operation(
+    env: &dyn Environment,
+    execute: &ExecuteExtensionOperation,
+    root_canister_id: CanisterId,
+) -> Result<String, String> {
+    let ValidatedExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        operation_arg,
+    } = execute.clone().try_into()?;
+
+    validate_execute_extension_operation(
+        env,
+        root_canister_id,
+        extension_canister_id,
+        operation_name.clone(),
+        &operation_arg,
+    )
+    .await
+    .map_err(|err| err.error_message)?;
+
+    let operation_arg = format!("{:#?}", operation_arg);
+
+    Ok(format!(
+        r"# Proposal to execute extension operation:
+
+* Extension canister ID: `{extension_canister_id}`
+* Operation name: `{operation_name}`
+* Operation argument: `{operation_arg}`
+#"
+    ))
+}
+
+async fn validate_and_render_register_extension(
+    register_extension: &RegisterExtension,
+) -> Result<String, String> {
+    let mut defects = vec![];
+
+    let RegisterExtension {
+        chunked_canister_wasm,
+        extension_init,
+    } = register_extension.clone();
+
+    // Validate the extension WASM
+    let wasm_and_canister_id = match chunked_canister_wasm {
+        None => {
+            defects.push("RegisterExtension must specify chunked_canister_wasm".to_string());
+            None
+        }
+        Some(chunked_wasm) => {
+            if let Some(canister_id) = chunked_wasm.store_canister_id {
+                match Wasm::try_from(chunked_wasm.clone()) {
+                    Ok(wasm) => Some((wasm, canister_id)),
+                    Err(err) => {
+                        defects.push(format!("Invalid chunked_canister_wasm: {}", err));
+                        None
+                    }
+                }
+            } else {
+                defects.push(
+                    "RegisterExtension must specify chunked_canister_wasm.store_canister_id"
+                        .to_string(),
+                );
+                None
+            }
+        }
+    };
+
+    // Validate the extension init parameters
+    if extension_init.is_none() {
+        defects.push("RegisterExtension must specify extension_init".to_string());
+    };
+
+    // Generate final report
+    if !defects.is_empty() {
+        return Err(format!(
+            "RegisterExtension proposal was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ));
+    }
+
+    // If this is reached, then defects is empty. In that case, it is safe to unwrap the values
+    // required for rendering the proposal.
+
+    let (wasm, canister_id) = wasm_and_canister_id.unwrap();
+
+    let extension_spec = match validate_extension_wasm(&wasm.sha256sum()) {
+        Err(err) => {
+            return Err(format!(
+                "RegisterExtension proposal was invalid because: {}",
+                err
+            ));
+        }
+        Ok(spec) => spec,
+    };
+
+    let wasm_info = wasm.description();
+
+    let extension_init = format!("{:#?}", extension_init.unwrap());
+
+    Ok(format!(
+        r"# Proposal to Register {extension_spec}
+
+## Extension canister: {canister_id}
+
+## Wasm Details
+
+{wasm_info}
+
+## Initialization
+
+{extension_init}
+
+## Extension Configuration
+
+The extension will be deployed and configured according to the provided parameters.",
+    ))
 }
 
 fn validate_and_render_register_dapp_canisters(
@@ -2724,7 +2851,9 @@ mod tests {
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
     use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
-    use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+    use ic_nervous_system_clients::canister_status::{
+        CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
+    };
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
@@ -3664,6 +3793,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             0,
             0,
             0,
+            MemoryMetricsFromManagementCanister::default(),
         )
     }
 
