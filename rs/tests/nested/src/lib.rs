@@ -177,14 +177,23 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     info!(logger, "Waiting for all four nodes to join ...");
 
+    // Wait for all four nodes to register by repeatedly waiting for registry updates
+    // and checking if we have 4 unassigned nodes
     retry_with_msg!(
         "Waiting for all four nodes to register and appear as unassigned nodes",
         logger.clone(),
         NODE_REGISTRATION_TIMEOUT,
         NODE_REGISTRATION_BACKOFF,
         || {
-            let topology = env.topology_snapshot();
-            let num_unassigned_nodes = topology.unassigned_nodes().count();
+            // Wait for a newer registry version to be available
+            let new_topology = block_on(
+                initial_topology.block_for_newer_registry_version_within_duration(
+                    Duration::from_secs(60), // Shorter timeout for each individual check
+                    Duration::from_secs(2),
+                ),
+            )?;
+
+            let num_unassigned_nodes = new_topology.unassigned_nodes().count();
             if num_unassigned_nodes == 4 {
                 info!(logger, "SUCCESS: All four nodes have registered");
                 Ok(())
