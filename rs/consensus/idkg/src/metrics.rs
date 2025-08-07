@@ -439,7 +439,7 @@ impl ThresholdSignatureMetrics {
     }
 }
 
-// IDkg payload stats
+/// IDkg payload stats
 #[derive(Default)]
 pub struct IDkgPayloadStats {
     pub signature_agreements: usize,

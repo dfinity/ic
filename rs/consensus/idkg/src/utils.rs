@@ -563,7 +563,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                         }
                         error!(
                             log,
-                            "{}: Failed to retrieve IDKg subnet master public key of key {}: {:?}",
+                            "{}: Failed to retrieve IDKg subnet master public key of key id {}: {:?}",
                             CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
                             key_id,
                             err
