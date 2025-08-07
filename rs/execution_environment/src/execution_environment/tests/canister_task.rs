@@ -7,6 +7,7 @@ use ic_management_canister_types_private::{
     OnLowWasmMemoryHookStatus, Payload, WasmMemoryPersistence, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;
@@ -21,6 +22,7 @@ use ic_types::{CanisterId, NumBytes};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
+use strum::IntoEnumIterator;
 
 #[test]
 fn heartbeat_is_executed() {
@@ -265,8 +267,8 @@ fn global_timer_can_be_cancelled() {
     // The timer should not be called even after bumping time by 1s = 1_000_000_000ns
     // to exceed the deadline.
     env.advance_time(Duration::from_secs(1));
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
@@ -300,8 +302,8 @@ fn global_timer_can_be_immediately_cancelled() {
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
     // The counter must be zero as the timer should have been immediately cancelled
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
@@ -347,8 +349,8 @@ fn global_timer_is_one_off() {
     assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
 
     // The timer should be called just once
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         env.advance_time(Duration::from_secs(1));
         env.tick();
         let result = env
@@ -382,8 +384,8 @@ fn global_timer_in_far_future_does_not_run() {
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         env.tick();
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
@@ -421,8 +423,8 @@ fn global_timer_can_be_reactivated() {
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
@@ -948,8 +950,8 @@ fn global_timer_runs_if_set_in_stopping_canister_post_upgrade() {
     assert_eq!(result, Ok(()));
 
     // The timer should not be triggered as the canister is stopping.
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         env.advance_time(Duration::from_secs(1));
         env.tick();
     }
@@ -996,8 +998,8 @@ fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
     assert_eq!(result, Ok(()));
 
     // The timer should not be triggered as the canister is stopped.
-    // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
-    for _ in 0..3 {
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
         env.advance_time(Duration::from_secs(1));
         env.tick();
     }
