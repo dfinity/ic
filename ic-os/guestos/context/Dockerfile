@@ -237,6 +237,9 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
 
+# Prepare mount point for config device coming from the HostOS
+RUN mkdir /mnt/config
+
 # ------ DEV VARIANT ---------------------------------------------
 
 # The following steps apply conditionally to the dev image ONLY
