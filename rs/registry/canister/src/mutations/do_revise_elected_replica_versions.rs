@@ -239,8 +239,10 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if let Some(measurements) = &self.guest_launch_measurements
-            && measurements.guest_launch_measurements.is_empty()
+        if self
+            .guest_launch_measurements
+            .as_ref()
+            .is_some_and(|measurements| measurements.guest_launch_measurements.is_empty())
         {
             return Err("guest_launch_measurements must not be an empty vector".into());
         }
