@@ -102,14 +102,14 @@ impl RenderablePayload for ExtensionOperationArg {
 
 /// Specification for an extension operation
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OperationSpec {
+pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
     pub extension_type: ExtensionType,
     pub validate: fn(ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
 }
 
-impl OperationSpec {
+impl ExtensionOperationSpec {
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -136,16 +136,16 @@ fn validate_withdraw_operation(
 }
 
 impl ExtensionType {
-    pub fn standard_operations(&self) -> Vec<OperationSpec> {
+    pub fn standard_operations(&self) -> Vec<ExtensionOperationSpec> {
         match self {
             ExtensionType::TreasuryManager => vec![
-                OperationSpec {
+                ExtensionOperationSpec {
                     name: "deposit".to_string(),
                     description: "Deposit funds into the treasury manager.".to_string(),
                     extension_type: ExtensionType::TreasuryManager,
                     validate: validate_deposit_operation,
                 },
-                OperationSpec {
+                ExtensionOperationSpec {
                     name: "withdraw".to_string(),
                     description: "Withdraw funds from the treasury manager.".to_string(),
                     extension_type: ExtensionType::TreasuryManager,
@@ -188,7 +188,7 @@ impl ExtensionSpec {
 
     /// Get all operations (standard + other) for this extension
     /// Returns error if there are conflicts
-    pub fn all_operations(&self) -> Result<BTreeMap<String, OperationSpec>, String> {
+    pub fn all_operations(&self) -> Result<BTreeMap<String, ExtensionOperationSpec>, String> {
         self.validate()?;
 
         let mut operations = BTreeMap::new();
@@ -205,7 +205,7 @@ impl ExtensionSpec {
 
     /// Get a specific operation by name
     /// Standard operations take precedence to ensure deterministic behavior
-    pub fn get_operation(&self, name: &str) -> Option<OperationSpec> {
+    pub fn get_operation(&self, name: &str) -> Option<ExtensionOperationSpec> {
         // validate() ensures no name conflicts, so we can safely look up operations this way
         for ext_type in &self.extension_types {
             for op in ext_type.standard_operations() {
@@ -523,8 +523,40 @@ impl TryFrom<RegisterExtension> for ValidatedRegisterExtension {
     }
 }
 
+/// Validates an extension WASM against the global ALLOWED_EXTENSIONS.
+pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
+    #[cfg(feature = "test")]
+    {
+        // In feature test mode, accept any wasm hash and return a test spec
+        // Validate the hash length
+        if wasm_module_hash.len() != 32 {
+            return Err(format!(
+                "Invalid wasm module hash length: expected 32 bytes, got {}",
+                wasm_module_hash.len()
+            ));
+        }
+
+        // Return a test extension spec
+        return Ok(ExtensionSpec {
+            name: "Test Extension".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::TreasuryAssetManagement,
+            extension_types: vec![ExtensionType::TreasuryManager],
+        });
+    }
+    #[cfg(all(test, not(feature = "test")))]
+    {
+        // In regular test mode (without feature), use the test allowed extensions
+        let test_allowed = create_test_allowed_extensions();
+        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
+    }
+    #[cfg(not(any(test, feature = "test")))]
+    {
+        validate_extension_wasm_with_allowed(wasm_module_hash, &ALLOWED_EXTENSIONS)
+    }
+}
+
 /// Validates an extension WASM against a provided set of allowed extensions.
-#[cfg(not(feature = "test"))]
 pub(crate) fn validate_extension_wasm_with_allowed(
     wasm_module_hash: &[u8],
     allowed_extensions: &BTreeMap<[u8; 32], ExtensionSpec>,
@@ -549,39 +581,6 @@ pub(crate) fn validate_extension_wasm_with_allowed(
         "Wasm module with hash {:?} is not allowed as an extension.",
         hex::encode(wasm_module_hash)
     ))
-}
-
-/// Validates an extension WASM against the global ALLOWED_EXTENSIONS.
-pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
-    #[cfg(feature = "test")]
-    {
-        // In feature test mode, accept any wasm hash and return a test spec
-        // Validate the hash length
-        if wasm_module_hash.len() != 32 {
-            return Err(format!(
-                "Invalid wasm module hash length: expected 32 bytes, got {}",
-                wasm_module_hash.len()
-            ));
-        }
-
-        // Return a test extension spec
-        return Ok(ExtensionSpec {
-            name: "Test Extension".to_string(),
-            version: ExtensionVersion(1),
-            topic: Topic::TreasuryAssetManagement,
-            extension_types: vec![ExtensionType::TreasuryManager],
-        });
-    }
-    #[cfg(test)]
-    {
-        // In regular test mode (without feature), use the test allowed extensions
-        let test_allowed = create_test_allowed_extensions();
-        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
-    }
-    #[cfg(not(any(test, feature = "test")))]
-    {
-        validate_extension_wasm_with_allowed(wasm_module_hash, &ALLOWED_EXTENSIONS)
-    }
 }
 
 async fn list_extensions(
@@ -1077,30 +1076,36 @@ mod tests {
             );
         }
 
-        // Create a valid operation arg for deposit (works for both deposit and withdraw in tests)
-        let operation_arg = ExtensionOperationArg {
-            value: Some(Precise {
-                value: Some(precise::Value::Map(PreciseMap {
-                    map: btreemap! {
-                        "treasury_allocation_sns_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(1000000))
+        // Create operation arg based on operation type
+        let operation_arg = if operation_name == "withdraw" {
+            // Withdraw operations now require empty arguments
+            ExtensionOperationArg { value: None }
+        } else {
+            // Deposit operations need the allocation values
+            ExtensionOperationArg {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
+                             // For withdraw tests, these fields will be ignored by deposit validator
+                            "recipient_principal".to_string() => Precise {
+                                value: Some(precise::Value::Text("rdmx6-jaaaa-aaaaa-aaadq-cai".to_string()))
+                            },
+                            "withdrawal_amount_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "withdrawal_amount_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
                         },
-                        "treasury_allocation_icp_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(2000000))
-                        },
-                        // For withdraw tests, these fields will be ignored by deposit validator
-                        "recipient_principal".to_string() => Precise {
-                            value: Some(precise::Value::Text("rdmx6-jaaaa-aaaaa-aaadq-cai".to_string()))
-                        },
-                        "withdrawal_amount_sns_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(1000000))
-                        },
-                        "withdrawal_amount_icp_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(2000000))
-                        },
-                    },
-                })),
-            }),
+                    })),
+                }),
+            }
         };
 
         let execute_operation = ExecuteExtensionOperation {
