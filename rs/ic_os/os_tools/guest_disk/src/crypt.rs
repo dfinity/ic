@@ -5,6 +5,9 @@ use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use std::path::Path;
 
+/// Number of bytes to use for the LUKS2 volume key
+const VOLUME_KEY_BYTES: usize = 512 / 8; // 512 bits
+
 /// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
 /// using the provided name and passphrase.
 pub fn activate_crypt_device(
@@ -73,7 +76,7 @@ pub fn format_crypt_device(device_path: &Path, passphrase: &[u8]) -> Result<Cryp
             EncryptionFormat::Luks2,
             ("aes", "xts-plain64"),
             None,
-            Right(512 / 8), // 512 bits
+            Right(VOLUME_KEY_BYTES),
             None,
         )
         .context("Failed to call format")?;
@@ -114,30 +117,45 @@ pub fn check_passphrase(device_path: &Path, passphrase: &[u8]) -> Result<()> {
 
 /// Destroys all key slots in the cryptographic device except for the one that is activated with the
 /// provided passphrase.
-pub fn destroy_key_slots_except(crypt_device: &mut CryptDevice, keep: &[u8]) -> Result<()> {
+pub fn destroy_key_slots_except(
+    crypt_device: &mut CryptDevice,
+    keyslots_to_keep: &[&[u8]],
+) -> Result<()> {
     // LUKS2 supports up to 32 key slots.
     const LUKS2_N_KEY_SLOTS: u32 = 32;
 
-    let key_slot_to_keep = crypt_device
-        .activate_handle()
-        .activate_by_passphrase(None, None, keep, CryptActivate::empty())
+    let key_slots_to_keep = keyslots_to_keep
+        .iter()
+        .map(|keep| {
+            crypt_device.activate_handle().activate_by_passphrase(
+                None,
+                None,
+                keep,
+                CryptActivate::empty(),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()
         .context("Cannot activate device with passphrase that we should keep")?;
 
     for key_slot in 0..LUKS2_N_KEY_SLOTS {
         // If this key slot is active and not the one we want to keep, destroy it.
-        if key_slot != key_slot_to_keep
+        if !key_slots_to_keep.contains(&key_slot)
             && matches!(
                 crypt_device.keyslot_handle().status(key_slot),
                 Ok(KeyslotInfo::Active)
             )
         {
-            let _ = crypt_device
-                .keyslot_handle()
-                .destroy(key_slot)
-                .inspect_err(|err| {
+            match crypt_device.keyslot_handle().destroy(key_slot) {
+                Ok(_) => {
+                    println!("Destroyed old key slot {key_slot}");
+                }
+                Err(err) => {
+                    // It's not a critical error if we fail to destroy a key slot, but it's a
+                    // security risk, so we should log it. We panic in debug builds.
                     debug_assert!(false, "Failed to remove old keyslot {key_slot}: {err:?}",);
                     eprintln!("Failed to remove old keyslot {key_slot}: {err:?}",)
-                });
+                }
+            }
         }
     }
     Ok(())

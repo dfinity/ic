@@ -7,6 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 pub const DEFAULT_GENERATED_KEY_PATH: &str = "/boot/config/store.keyfile";
+const GENERATED_KEY_SIZE_BYTES: usize = 16;
 
 pub struct GeneratedKeyDiskEncryption<'a> {
     pub key_path: &'a Path,
@@ -14,10 +15,11 @@ pub struct GeneratedKeyDiskEncryption<'a> {
 
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
+        let disk_encryption_key = self.generate_or_read_key()?;
         activate_crypt_device(
             device_path,
             crypt_name,
-            &self.generate_or_read_key()?,
+            &disk_encryption_key,
             activate_flags(partition),
         )
         .context("Failed to initialize crypt device")?;
@@ -46,7 +48,7 @@ impl GeneratedKeyDiskEncryption<'_> {
                 .permissions(Permissions::from_mode(0o600))
                 .tempfile_in(parent_dir)
                 .context("Could not create temporary file for boot partition key")?;
-            let rand_key = rand::random::<[u8; 16]>();
+            let rand_key = rand::random::<[u8; GENERATED_KEY_SIZE_BYTES]>();
             temp.write_all(&rand_key)
                 .context("Could not write generated key")?;
 
