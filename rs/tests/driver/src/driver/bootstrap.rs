@@ -644,19 +644,8 @@ fn create_setupos_config_image(
 
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
-    let old_ip = match nested_vm.get_vm() {
-        Ok(vm) => {
-            info!(env.logger(), "[{}] Got VM with IPv6: {}", name, vm.ipv6);
-            vm.ipv6
-        }
-        Err(e) => {
-            error!(
-                env.logger(),
-                "[{}] Failed to get VM for IPv6: {:?}", name, e
-            );
-            return Err(e);
-        }
-    };
+    let old_ip = nested_vm.get_vm()?.ipv6;
+    info!(env.logger(), "[{}] Got VM with IPv6: {}", name, old_ip);
     let segments = old_ip.segments();
     let prefix = format!(
         "{:04x}:{:04x}:{:04x}:{:04x}",
