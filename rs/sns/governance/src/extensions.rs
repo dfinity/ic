@@ -246,7 +246,11 @@ pub struct ValidatedRegisterExtension {
 pub struct ValidatedExecuteExtensionOperation {
     pub extension_canister_id: CanisterId,
     pub operation_name: String,
-    pub operation_arg: ExtensionOperationArg,
+    pub operation_arg: ValidatedOperationArg,
+}
+
+impl ValidatedExecuteExtensionOperation {
+    pub fn execute() {}
 }
 
 impl Governance {
@@ -390,46 +394,6 @@ impl Governance {
             })?;
 
         Ok(())
-    }
-}
-
-impl TryFrom<ExecuteExtensionOperation> for ValidatedExecuteExtensionOperation {
-    type Error = String;
-
-    fn try_from(value: ExecuteExtensionOperation) -> Result<Self, Self::Error> {
-        let ExecuteExtensionOperation {
-            extension_canister_id,
-            operation_name,
-            operation_arg,
-        } = value;
-
-        let Some(extension_canister_id) = extension_canister_id else {
-            return Err("extension_canister_id is required.".to_string());
-        };
-
-        let extension_canister_id = match CanisterId::try_from_principal_id(extension_canister_id) {
-            Ok(id) => id,
-            Err(err) => {
-                return Err(format!(
-                    "Cannot interpret extension_canister_id as canister ID: {}",
-                    err
-                ));
-            }
-        };
-
-        let Some(operation_name) = operation_name else {
-            return Err("operation_name is required.".to_string());
-        };
-
-        let Some(operation_arg) = operation_arg else {
-            return Err("operation_arg is required.".to_string());
-        };
-
-        Ok(Self {
-            extension_canister_id,
-            operation_name,
-            operation_arg,
-        })
     }
 }
 
@@ -652,10 +616,47 @@ async fn canister_module_hash(
 pub(crate) async fn validate_execute_extension_operation(
     env: &dyn Environment,
     root_canister_id: CanisterId,
-    extension_canister_id: CanisterId,
-    operation_name: String,
-    operation_arg: &ExtensionOperationArg,
-) -> Result<ValidatedOperationArg, GovernanceError> {
+    operation: ExecuteExtensionOperation,
+) -> Result<ValidatedExecuteExtensionOperation, GovernanceError> {
+    // Extract and validate basic fields
+    let ExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        operation_arg,
+    } = operation;
+
+    let Some(extension_canister_id) = extension_canister_id else {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "extension_canister_id is required.",
+        ));
+    };
+
+    let extension_canister_id =
+        CanisterId::try_from_principal_id(extension_canister_id).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Cannot interpret extension_canister_id as canister ID: {}",
+                    err
+                ),
+            )
+        })?;
+
+    let Some(operation_name) = operation_name else {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "operation_name is required.",
+        ));
+    };
+
+    let Some(operation_arg) = operation_arg else {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "operation_arg is required.",
+        ));
+    };
+
     let registered_extensions = list_extensions(env, root_canister_id).await?;
 
     if !registered_extensions.contains(&extension_canister_id.get()) {
@@ -702,17 +703,21 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    operation_spec
-        .validate(operation_arg.clone())
-        .map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!(
-                    "Extension canister {} operation {} validation failed: {}",
-                    extension_canister_id, operation_name, err
-                ),
-            )
-        })
+    let validated_arg = operation_spec.validate(operation_arg).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Extension canister {} operation {} validation failed: {}",
+                extension_canister_id, operation_name, err
+            ),
+        )
+    })?;
+
+    Ok(ValidatedExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        operation_arg: validated_arg,
+    })
 }
 
 /// Validated deposit operation arguments
@@ -874,12 +879,8 @@ mod tests {
     /// Helper function to set up common environment mocking for validate_execute_extension_operation tests
     fn setup_env_for_test(
         extension_registered: bool,
-    ) -> (
-        NativeEnvironment,
-        CanisterId,
-        CanisterId,
-        ExtensionOperationArg,
-    ) {
+        operation_name: &str,
+    ) -> (NativeEnvironment, CanisterId, ExecuteExtensionOperation) {
         let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
         let root_canister_id = CanisterId::from_u64(1000);
         let extension_canister_id = CanisterId::from_u64(2000);
@@ -957,104 +958,45 @@ mod tests {
             }),
         };
 
-        (env, root_canister_id, extension_canister_id, operation_arg)
-    }
-
-    #[test]
-    fn test_try_from_execute_extension_operation_success() {
-        let operation = ExecuteExtensionOperation {
-            extension_canister_id: Some(CanisterId::from_u64(123).get()),
-            operation_name: Some("deposit".to_string()),
-            operation_arg: Some(ExtensionOperationArg { value: None }),
+        let execute_operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(extension_canister_id.get()),
+            operation_name: Some(operation_name.to_string()),
+            operation_arg: Some(operation_arg),
         };
 
-        let result = ValidatedExecuteExtensionOperation::try_from(operation);
-        assert!(result.is_ok());
-
-        let validated = result.unwrap();
-        assert_eq!(validated.extension_canister_id, CanisterId::from_u64(123));
-        assert_eq!(validated.operation_name, "deposit");
-    }
-
-    #[test]
-    fn test_try_from_execute_extension_operation_missing_canister_id() {
-        let operation = ExecuteExtensionOperation {
-            extension_canister_id: None, // Missing
-            operation_name: Some("deposit".to_string()),
-            operation_arg: Some(ExtensionOperationArg { value: None }),
-        };
-
-        let result = ValidatedExecuteExtensionOperation::try_from(operation);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("extension_canister_id is required"));
-    }
-
-    #[test]
-    fn test_try_from_execute_extension_operation_missing_operation_name() {
-        let operation = ExecuteExtensionOperation {
-            extension_canister_id: Some(CanisterId::from_u64(123).get()),
-            operation_name: None, // Missing
-            operation_arg: Some(ExtensionOperationArg { value: None }),
-        };
-
-        let result = ValidatedExecuteExtensionOperation::try_from(operation);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("operation_name is required"));
+        (env, root_canister_id, execute_operation)
     }
 
     // Tests for validate_execute_extension_operation with proper environment mocking
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_success() {
-        let (env, root_canister_id, extension_canister_id, operation_arg) =
-            setup_env_for_test(true);
+        let (env, root_canister_id, execute_operation) = setup_env_for_test(true, "deposit");
 
         // Test with valid operation name - should succeed
-        let result = validate_execute_extension_operation(
-            &env,
-            root_canister_id,
-            extension_canister_id,
-            "deposit".to_string(),
-            &operation_arg,
-        )
-        .await;
+        let result =
+            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_withdraw_success() {
-        let (env, root_canister_id, extension_canister_id, operation_arg) =
-            setup_env_for_test(true);
+        let (env, root_canister_id, execute_operation) = setup_env_for_test(true, "withdraw");
 
         // Test with withdraw operation - should succeed (since test mode supports withdraw)
-        let result = validate_execute_extension_operation(
-            &env,
-            root_canister_id,
-            extension_canister_id,
-            "withdraw".to_string(),
-            &operation_arg,
-        )
-        .await;
+        let result =
+            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_unregistered_extension() {
-        let (env, root_canister_id, extension_canister_id, operation_arg) =
-            setup_env_for_test(false); // false = extension not registered
+        let (env, root_canister_id, execute_operation) = setup_env_for_test(false, "deposit"); // false = extension not registered
 
-        let result = validate_execute_extension_operation(
-            &env,
-            root_canister_id,
-            extension_canister_id,
-            "deposit".to_string(),
-            &operation_arg,
-        )
-        .await;
+        let result =
+            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -1067,18 +1009,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_invalid_operation_name() {
-        let (env, root_canister_id, extension_canister_id, operation_arg) =
-            setup_env_for_test(true);
+        let (env, root_canister_id, execute_operation) =
+            setup_env_for_test(true, "invalid_operation");
 
         // Test with invalid operation name - should fail
-        let result = validate_execute_extension_operation(
-            &env,
-            root_canister_id,
-            extension_canister_id,
-            "invalid_operation".to_string(),
-            &operation_arg,
-        )
-        .await;
+        let result =
+            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();

@@ -1515,20 +1515,12 @@ async fn validate_and_render_execute_extension_operation(
         extension_canister_id,
         operation_name,
         operation_arg,
-    } = execute.clone().try_into()?;
-
-    let validated_arg = validate_execute_extension_operation(
-        env,
-        root_canister_id,
-        extension_canister_id,
-        operation_name.clone(),
-        &operation_arg,
-    )
-    .await
-    .map_err(|err| err.error_message)?;
+    } = validate_execute_extension_operation(env, root_canister_id, execute.clone())
+        .await
+        .map_err(|err| err.error_message)?;
 
     // ValidatedOperationArg has a custom Display trait impl
-    let operation_arg_string = format!("{}", validated_arg);
+    let operation_arg_string = format!("{}", operation_arg);
 
     Ok(format!(
         r"# Proposal to execute extension operation:

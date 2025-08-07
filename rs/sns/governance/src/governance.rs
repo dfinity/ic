@@ -1,6 +1,6 @@
 use crate::extensions::{
     validate_execute_extension_operation, ExtensionType, ValidatedExecuteExtensionOperation,
-    ValidatedRegisterExtension,
+    ValidatedOperationArg, ValidatedRegisterExtension,
 };
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
@@ -2673,23 +2673,28 @@ impl Governance {
             extension_canister_id,
             operation_name,
             operation_arg,
-        } = execute_extension_operation.try_into().map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Invalid ExecuteExtensionOperation proposal: {:?}", err),
-            )
-        })?;
-
-        validate_execute_extension_operation(
+        } = validate_execute_extension_operation(
             &*self.env,
             self.proto.root_canister_id_or_panic(),
-            extension_canister_id,
-            operation_name,
-            &operation_arg,
+            execute_extension_operation,
         )
         .await?;
 
         let treasury_manager_canister_id = extension_canister_id;
+
+        // For now, we only support deposit operations
+        // TODO: Add logic to handle different operation types based on operation_arg
+        let operation_arg = match operation_arg {
+            ValidatedOperationArg::TreasuryManagerDeposit(deposit) => {
+                operation_arg.get_original_value()
+            }
+            _ => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    "Only deposit operations are currently supported",
+                ));
+            }
+        };
 
         let (arg, sns_amount_e8s, icp_amount_e8s) = self
             .construct_treasury_manager_deposit_payload(operation_arg)
