@@ -12951,6 +12951,7 @@ version = "0.1.0"
 dependencies = [
  "bip32 0.5.3",
  "bitcoin 0.28.2",
+ "candid",
  "hex",
  "hex-literal",
  "hmac",
