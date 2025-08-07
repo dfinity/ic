@@ -5,6 +5,8 @@
 // 4. Structure makes boundaries clear and easy to enforce
 // 5. Simple Organization
 
+extern crate core;
+
 use crate::pb::v1::{
     NodeMetrics as NodeMetricsProto, SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
 };

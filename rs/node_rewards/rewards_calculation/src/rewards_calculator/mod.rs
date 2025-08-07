@@ -16,6 +16,7 @@ use std::cmp::max;
 use std::collections::{BTreeMap, HashMap, HashSet};
 pub mod test_utils;
 
+#[derive(Debug)]
 pub struct RewardsCalculatorInput {
     pub reward_period: RewardPeriod,
     pub rewards_table: NodeRewardsTable,
@@ -83,12 +84,14 @@ pub fn calculate_rewards(
             performance_multiplier,
         } = step_3_performance_multiplier(&rewardable_nodes, &relative_nodes_fr, &extrapolated_fr);
 
+        println!("breaks");
         // Step 4: Compute base rewards for each node based on its region and node type
         let Step4Results {
             base_rewards,
             base_rewards_log,
         } = step_4_compute_base_rewards_type_region(&input.rewards_table, &rewardable_nodes);
 
+        println!("finish");
         // Step 5: Adjusted rewards for all the nodes based on their performance
         let Step5Results { adjusted_rewards } =
             step_5_adjust_node_rewards(&rewardable_nodes, &base_rewards, &performance_multiplier);
@@ -353,7 +356,7 @@ fn step_4_compute_base_rewards_type_region(
 
                 (base_rewards_daily, reward_coefficient_percent)
             })
-            .unwrap_or((dec!(1), dec!(100)))
+            .unwrap_or((dec!(1), dec!(1)))
     }
 
     fn is_type3(node_type: &NodeRewardType) -> bool {
@@ -420,6 +423,7 @@ fn step_4_compute_base_rewards_type_region(
             let avg_rate = avg(rates.as_slice()).unwrap_or_default();
             let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
 
+            println!("break {:?} {:?}", rates, coeff);
             let mut running_coefficient = dec!(1);
             let mut region_rewards = Vec::new();
             for _ in 0..rates_len {

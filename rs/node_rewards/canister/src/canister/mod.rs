@@ -113,6 +113,40 @@ impl NodeRewardsCanister {
             canister.last_metrics_update = post_sync_version;
         });
     }
+
+    fn calculate_rewards<S: RegistryDataStableMemory>(
+        &self,
+        request: GetNodeProvidersRewardsRequest,
+    ) -> Result<RewardsCalculatorResults, String> {
+        let reward_period =
+            RewardPeriod::new(request.from, request.to).map_err(|e| e.to_string())?;
+        let registry_querier = RegistryQuerier::new(self.registry_client.clone());
+
+        let version = registry_querier
+            .version_for_timestamp(reward_period.to.unix_ts_at_day_end())
+            .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
+        let rewards_table = registry_querier.get_rewards_table(version);
+        let daily_metrics_by_subnet = self
+            .metrics_manager
+            .daily_metrics_by_subnet(reward_period.from, reward_period.to);
+        let provider_rewardable_nodes = RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
+            &*self.registry_client,
+            reward_period.from,
+            reward_period.to,
+        )
+        .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
+
+        let input = RewardsCalculatorInput {
+            reward_period,
+            rewards_table,
+            daily_metrics_by_subnet,
+            provider_rewardable_nodes,
+        };
+        let result = rewards_calculation::rewards_calculator::calculate_rewards(input)
+            .map_err(|e| format!("Could not calculate rewards: {e:?}"));
+
+        result
+    }
 }
 
 // Exposed API Methods
@@ -205,6 +239,7 @@ impl NodeRewardsCanister {
             canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
             request: GetNodeProvidersRewardsRequest,
         ) -> Result<NodeProvidersRewards, String> {
+            println!("before sync");
             NodeRewardsCanister::schedule_registry_sync(canister)
                 .await
                 .map_err(|e| {
@@ -214,42 +249,13 @@ impl NodeRewardsCanister {
                         e
                     )
                 })?;
+
+            println!("scheduline sync");
             NodeRewardsCanister::schedule_metrics_sync(canister).await;
-            let (registry_client, metrics_manager) = canister.with(|canister| {
-                (
-                    canister.borrow().get_registry_client(),
-                    canister.borrow().get_metrics_manager(),
-                )
-            });
-
-            let reward_period =
-                RewardPeriod::new(request.from, request.to).map_err(|e| e.to_string())?;
-            let registry_querier = RegistryQuerier::new(registry_client.clone());
-
-            let version = registry_querier
-                .version_for_timestamp(reward_period.to.unix_ts_at_day_end())
-                .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
-            let rewards_table = registry_querier.get_rewards_table(version);
-            let daily_metrics_by_subnet =
-                metrics_manager.daily_metrics_by_subnet(reward_period.from, reward_period.to);
-            let provider_rewardable_nodes =
-                RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
-                    &*registry_client,
-                    reward_period.from,
-                    reward_period.to,
-                )
-                .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
-
-            let input = RewardsCalculatorInput {
-                reward_period,
-                rewards_table,
-                daily_metrics_by_subnet,
-                provider_rewardable_nodes,
-            };
-            let RewardsCalculatorResults {
-                provider_results, ..
-            } = rewards_calculation::rewards_calculator::calculate_rewards(input).unwrap();
-            let rewards_xdr_permyriad = provider_results
+            let result =
+                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
+            let rewards_xdr_permyriad = result
+                .provider_results
                 .iter()
                 .map(|(provider_id, provider_rewards)| {
                     (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)

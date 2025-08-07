@@ -44,6 +44,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:serde_json",
+    "@crate_index//:tabled",
     "@crate_index//:tokio",
 ]
 

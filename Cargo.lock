@@ -11810,6 +11810,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "chrono",
+ "flate2",
  "futures",
  "futures-util",
  "ic-base-types",
@@ -11828,7 +11829,9 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-node-provider-rewards",
+ "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
@@ -11839,8 +11842,13 @@ dependencies = [
  "pocket-ic",
  "prost 0.13.4",
  "rewards-calculation",
+ "rust_decimal",
+ "rust_decimal_macros",
  "serde",
  "serde_json",
+ "tabled",
+ "tar",
+ "tempfile",
  "tokio",
 ]
 
@@ -20543,7 +20551,6 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "tabled",
 ]
 
 [[package]]

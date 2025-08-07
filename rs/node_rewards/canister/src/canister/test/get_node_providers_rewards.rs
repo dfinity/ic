@@ -1,30 +1,48 @@
 use crate::canister::test::test_utils::{
-    setup_thread_local_canister_for_test, TestState, CANISTER_TEST, VM,
+    setup_thread_local_canister_for_test, tabled, TestState, CANISTER_TEST, VM,
 };
 use crate::canister::NodeRewardsCanister;
-use crate::metrics::MetricsManager;
+use crate::metrics::{ManagementCanisterClient, MetricsManager};
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
+use candid::{CandidType, Decode};
+use flate2::read::GzDecoder;
 use futures_util::FutureExt;
+use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
+use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
+use ic_nervous_system_canisters::registry::Registry;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_registry_canister_client::StableCanisterRegistryClient;
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
     NODE_REWARDS_TABLE_KEY,
 };
+use ic_registry_local_store::LocalStoreImpl;
+use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::PrincipalId;
+use indexmap::IndexMap;
 use maplit::btreemap;
+use prost::Message;
 use rewards_calculation::rewards_calculator::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
-use rewards_calculation::rewards_calculator_results::DayUtc;
+use rewards_calculation::rewards_calculator_results::{DayUtc, RewardsCalculatorResults};
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+use tar::Archive;
+use tempfile::tempdir;
+use tokio::fs;
 
 fn setup_data_for_test_rewards_calculation(
     fake_registry: Arc<FakeRegistry>,
@@ -312,17 +330,199 @@ fn test_get_node_providers_rewards() {
         from: DayUtc::from("2024-01-01").get(),
         to: DayUtc::from("2024-01-02").get(),
     };
-    let result =
-        NodeRewardsCanister::get_node_providers_rewards::<TestState>(&CANISTER_TEST, request)
-            .now_or_never()
-            .unwrap();
+    let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
+        &CANISTER_TEST,
+        request.clone(),
+    )
+    .now_or_never()
+    .unwrap();
 
-    // See rewards_calculation::rewards_calculator::tests::test_calculate_rewards_end_to_end for the expected values
+    let rewards_calculator_results: RewardsCalculatorResults = CANISTER_TEST
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .unwrap();
+    let expected = "\
+Rewards Calculator Results
+
++-Overall Performance for Provider: 6fyp7-3ibaa-aaaaa-aaaap-
+| Day UTC    | Underperforming Nodes | Total Daily Rewards |
++------------+-----------------------+---------------------+
+| 01-01-2024 | fnlpp                 | 87200.0000          |
+|            | yskjz                 |                     |
++------------+-----------------------+---------------------+
+| 02-01-2024 |                       | 50000               |
++------------+-----------------------+---------------------+
+
+Base Rewards Log:
+Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
+Region: North America,USA,California, Type: type3, Base Rewards Daily: 30000, Coefficient: 0.90
+Region: North America,USA,Nevada, Type: type3.1, Base Rewards Daily: 40000, Coefficient: 0.70
+Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards Daily Avg: 35000, Coefficient Avg: 0.80, Base Rewards Daily: 31500.00
+Type3* - Day: 02-01-2024 Region: North America:USA, Nodes Count: 1, Base Rewards Daily Avg: 30000, Coefficient Avg: 0.90, Base Rewards Daily: 30000
+
++-NodeId: zv7tz-zylaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 01-01-2024 | Assigned - yndj2 | 0.25      | 95/5                   | 0.05        | 0                        | 1                      | 10000        | 10000            |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 02-01-2024 | Assigned - yndj2 | 0.02      | 98/2                   | 0.02        | 0.00                     | 1                      | 10000        | 10000            |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+
++-NodeId: f6rsp-hqmaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 01-01-2024 | Assigned - yndj2 | 0.25      | 90/10                  | 0.10        | 0                        | 1                      | 31500.00     | 31500.00         |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 02-01-2024 | Unassigned       | N/A       | N/A                    | N/A         | 0                        | 1                      | 30000        | 30000            |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+
++-NodeId: ybquz-ianaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 01-01-2024 | Assigned - yndj2 | 0.25      | 75/25                  | 0.25        | 0.00                     | 1                      | 31500.00     | 31500.00         |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+
++-NodeId: fnlpp-iyoaa-aaaaa-aaaap-2ai-+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| Day UTC    | Status     | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
++------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 01-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0.1125                   | 0.9800                 | 10000        | 9800.0000        |
++------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 02-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0                        | 1                      | 10000        | 10000            |
++------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+
++-NodeId: yskjz-hipaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 01-01-2024 | Assigned - yndj2 | 0.25      | 30/70                  | 0.70        | 0.45                     | 0.44                   | 10000        | 4400.00          |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+
++-Overall Performance for Provider: djduj-3qcaa-aaaaa-aaaap-
+| Day UTC    | Underperforming Nodes | Total Daily Rewards |
++------------+-----------------------+---------------------+
+| 01-01-2024 |                       | 10000               |
++------------+-----------------------+---------------------+
+
+Base Rewards Log:
+Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
+
++-NodeId: 6qmi3-pavaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+| 01-01-2024 | Assigned - fbysm | 0.20      | 80/20                  | 0.20        | 0.00                     | 1                      | 10000        | 10000            |
++------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+";
+
+    assert_eq!(tabled(&rewards_calculator_results), expected);
+
     let expected = NodeProvidersRewards {
         rewards_xdr_permyriad: btreemap! {
             test_provider_id(1).0 => 87200 + 50000,
             test_provider_id(2).0 => 10000,
         },
     };
-    assert_eq!(result.rewards, Some(expected));
+    assert_eq!(result_endpoint.rewards, Some(expected));
+}
+
+pub async fn read_items(path: &str) -> Result<Vec<RegistryDelta>, Box<dyn std::error::Error>> {
+    let data = fs::read(path).await?;
+    let mut items = Vec::new();
+    let mut buf = &data[..];
+
+    while !buf.is_empty() {
+        let item = RegistryDelta::decode_length_delimited(&mut buf)?;
+        items.push(item);
+    }
+
+    Ok(items)
+}
+
+#[derive(Default, CandidType, candid::Deserialize)]
+struct SubnetMetricsExport {
+    metrics_by_subnet: BTreeMap<PrincipalId, Vec<NodeMetricsHistoryRecord>>,
+}
+
+#[test]
+fn test_real() {
+    let fake_registry = Arc::new(FakeRegistry::new());
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("canister")
+        .join("test")
+        .join("test_data")
+        .join("registry");
+
+    let mut file = File::open(&path).unwrap();
+    let mut file_bytes = Vec::new();
+    file.read_to_end(&mut file_bytes).unwrap();
+    let mut buf = &file_bytes[..];
+    let mut registry = IndexMap::new();
+    while !buf.is_empty() {
+        let delta = RegistryDelta::decode_length_delimited(&mut buf).unwrap();
+
+        for values in delta.values {
+            let string_key = std::str::from_utf8(&delta.key[..]).unwrap().to_string();
+            let value = if values.deletion_marker {
+                None
+            } else {
+                Some(values.value)
+            };
+            registry.insert(
+                (string_key, values.version, values.timestamp_nanoseconds),
+                value,
+            );
+        }
+    }
+
+    for ((string_key, version, timestamp_nanoseconds), value) in registry {
+        fake_registry.set_value_at_version_with_timestamp(
+            string_key,
+            version,
+            timestamp_nanoseconds,
+            value,
+        );
+    }
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("canister")
+        .join("test")
+        .join("test_data")
+        .join("subnets_metrics_export.candid");
+    let mut file = File::open(&path).unwrap();
+    let mut file_bytes = Vec::new();
+    file.read_to_end(&mut file_bytes).unwrap();
+
+    let mut buf = &file_bytes[..];
+    let exported_metrics = Decode!(buf, SubnetMetricsExport).unwrap();
+    let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().returning(move |args| {
+        match exported_metrics
+            .metrics_by_subnet
+            .get(&PrincipalId::from(args.subnet_id))
+        {
+            None => CallResult::Err((RejectionCode::Unknown, "Error".to_string())),
+            Some(subnet_metrics) => CallResult::Ok(subnet_metrics.clone()),
+        }
+    });
+    let metrics_manager = Rc::new(MetricsManager::new_test(mock));
+    let canister = NodeRewardsCanister::new(
+        Arc::new(StableCanisterRegistryClient::<TestState>::new(
+            fake_registry,
+        )),
+        metrics_manager,
+    );
+    CANISTER_TEST.with_borrow_mut(|c| *c = canister);
+    let request = GetNodeProvidersRewardsRequest {
+        from: DayUtc::from("2025-06-14").get(),
+        to: DayUtc::from("2025-07-13").get(),
+    };
+
+    println!("finished syncing");
+    let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
+        &CANISTER_TEST,
+        request.clone(),
+    )
+    .now_or_never()
+    .unwrap();
+    let rewards_calculator_results: RewardsCalculatorResults = CANISTER_TEST
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .unwrap();
+    println!("{}", tabled(&rewards_calculator_results));
 }
