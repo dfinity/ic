@@ -1,6 +1,7 @@
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_agent::agent::RejectCode;
+use ic_agent::AgentError;
 use ic_cdk::api::management_canister::main::{CanisterIdRecord, CanisterStatusResponse};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -77,20 +78,35 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
 
             let arg = CanisterIdRecord { canister_id };
             let subnet_id: Principal = node.subnet_id().unwrap().get().into();
-            let agent_call = |callee: &Principal| {
+            let agent_call = |callee: &Principal, effective_canister_id: &Principal| {
                 agent
                     .update(callee, "canister_status")
                     .with_arg(Encode!(&arg).unwrap())
-                    .with_effective_canister_id(subnet_id)
+                    .with_effective_canister_id(*effective_canister_id)
                     .call_and_wait()
             };
 
-            // Requesting `canister_status` using the subnet ID as the callee fails.
-            let err = agent_call(&subnet_id).await.unwrap_err();
-            info!(logger, "error from calling subnet ID: {:?}", err);
+            // Requesting `canister_status` using the subnet ID as the callee and as the effective canister ID fails.
+            let err = agent_call(&subnet_id, &subnet_id).await.unwrap_err();
+            match err {
+              AgentError::UncertifiedReject { reject, .. } => {
+                assert!(reject.reject_message.contains(&format!("Canister {} not found", subnet_id)));
+              }
+              _ => panic!("Unexpected error: {:?}", err),
+            };
 
-            // The same call using the management canister ID as the callee succeeds and returns a response of the corresponding type.
-            let res = agent_call(&Principal::management_canister()).await.unwrap();
+            // Requesting `canister_status` using the subnet ID as the callee and the canister ID as the effective canister ID fails, too.
+            let err = agent_call(&subnet_id, &canister_id).await.unwrap_err();
+            info!(
+                logger,
+                "error from calling subnet ID with different ecid: {:?}", err
+            );
+
+            // The same call using the management canister ID as the callee and the canister ID as the effective canister ID succeeds
+            // and returns a response of the corresponding type.
+            let res = agent_call(&Principal::management_canister(), &canister_id)
+                .await
+                .unwrap();
             let _ = Decode!(&res, CanisterStatusResponse).unwrap();
         }
     });
