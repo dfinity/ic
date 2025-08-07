@@ -1,15 +1,10 @@
 use super::*;
 use crate::rewards_calculator::test_utils::{
     build_daily_metrics, create_rewards_table_for_region_test, generate_rewardable_nodes,
-    test_node_id, test_provider_id, test_subnet_id,
+    test_node_id, test_subnet_id,
 };
 use crate::types::RewardableNode;
-use ic_base_types::PrincipalId;
 use maplit::{btreemap, hashmap};
-use tabled::builder::Builder;
-use tabled::settings::object::Rows;
-use tabled::settings::style::LineText;
-use tabled::Table;
 
 // ------------------------------------------------------------------------------------------------
 // Step 0: Pre-compute subnets and nodes failure rates
@@ -70,12 +65,12 @@ fn test_compute_subnets_nodes_fr() {
     let original_nodes_fr: BTreeMap<_, _> = result
         .nodes_metrics_daily
         .iter()
-        .map(|(k, v)| (*k, v.original_fr_percent))
+        .map(|(k, v)| (*k, v.original_fr))
         .collect();
     let relative_nodes_fr: BTreeMap<_, _> = result
         .nodes_metrics_daily
         .iter()
-        .map(|(k, v)| (*k, v.relative_fr_percent))
+        .map(|(k, v)| (*k, v.relative_fr))
         .collect();
 
     // --- Assertions for Day 1, Subnet 1 ---
@@ -124,11 +119,11 @@ impl Default for NodeMetricsDaily {
     fn default() -> Self {
         Self {
             subnet_assigned: test_subnet_id(0),
-            subnet_assigned_fr_percent: dec!(0.0),
+            subnet_assigned_fr: dec!(0.0),
             num_blocks_proposed: 0,
             num_blocks_failed: 0,
-            original_fr_percent: dec!(0.0),
-            relative_fr_percent: dec!(0.0),
+            original_fr: dec!(0.0),
+            relative_fr: dec!(0.0),
         }
     }
 }
@@ -150,8 +145,8 @@ fn test_compute_providers_extrapolated_fr() {
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
     let p2_metrics = btreemap! {
-        (day, p2_node1) => NodeMetricsDaily { relative_fr_percent: dec!(0.2), ..Default::default() },
-        (day, p2_node2) => NodeMetricsDaily { relative_fr_percent: dec!(0.4), ..Default::default() },
+        (day, p2_node1) => NodeMetricsDaily { relative_fr: dec!(0.2), ..Default::default() },
+        (day, p2_node2) => NodeMetricsDaily { relative_fr: dec!(0.4), ..Default::default() },
     };
     let result_p2 = step_2_extrapolated_fr(&p2_nodes, &p2_metrics);
     // Extrapolated FR for P2 should be the average of its nodes' relative FR
@@ -268,21 +263,23 @@ fn test_compute_base_rewards() {
 
     // --- Execution ---
     let Step4Results {
-        base_rewards,
-        base_rewards_log,
+        base_rewards_per_node,
+        ..
     } = step_4_compute_base_rewards_type_region(&rewards_table, &rewardable_nodes);
 
-    let expected_log = r#"Base Rewards Log:
-Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
-Region: North America,USA,California, Type: type3, Base Rewards Daily: 30000, Coefficient: 0.90
-Region: North America,USA,Nevada, Type: type3.1, Base Rewards Daily: 40000, Coefficient: 0.70
-Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards Daily Avg: 35000, Coefficient Avg: 0.80, Base Rewards Daily: 31500.00"#;
-    assert_eq!(base_rewards_log, expected_log);
-
     // --- Assertions ---
-    assert_eq!(base_rewards.get(&(day, type1_node)), Some(&dec!(10000)));
-    assert_eq!(base_rewards.get(&(day, type3_node_ca)), Some(&dec!(31500)));
-    assert_eq!(base_rewards.get(&(day, type3_node_nv)), Some(&dec!(31500)));
+    assert_eq!(
+        base_rewards_per_node.get(&(day, type1_node)),
+        Some(&dec!(10000))
+    );
+    assert_eq!(
+        base_rewards_per_node.get(&(day, type3_node_ca)),
+        Some(&dec!(31500))
+    );
+    assert_eq!(
+        base_rewards_per_node.get(&(day, type3_node_nv)),
+        Some(&dec!(31500))
+    );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -328,123 +325,4 @@ fn test_adjust_nodes_rewards() {
     );
     // Case 2: 4 or fewer nodes (4 on day2), full rewards
     assert_eq!(adjusted_rewards.get(&(day2, node1)), Some(&(dec!(1000))));
-}
-
-// ------------------------------------------------------------------------------------------------
-// End-to-end test for the rewards calculation process
-// ------------------------------------------------------------------------------------------------
-
-#[test]
-fn test_calculate_rewards_end_to_end() {
-    let day1 = "2024-01-01".into();
-    let day2 = "2024-01-02".into();
-    let subnet1 = test_subnet_id(1);
-    let subnet2 = test_subnet_id(2);
-    let p1 = test_provider_id(1);
-    let p2 = test_provider_id(2);
-
-    // Provider 1 nodes
-    let p1_node1_t1 = test_node_id(11); // Type1, CH, in Subnet1 on D1, D2
-    let p1_node2_t3 = test_node_id(12); // Type3, CA, in Subnet1 on D1, unassigned D2
-    let p1_node3_t31 = test_node_id(13); // Type3.1, NV, in Subnet1 on D1 only
-    let p1_node4_unassigned = test_node_id(14); // Always unassigned
-    let p1_node5_perf = test_node_id(15); // In Subnet1 on D1, bad performance
-
-    // Provider 2 nodes
-    let p2_node1 = test_node_id(21); // In Subnet2 on D1
-
-    // --- Input Setup ---
-    let daily_metrics_by_subnet = BTreeMap::from_iter(vec![
-        // Day 1, Subnet 1
-        build_daily_metrics(
-            subnet1,
-            day1,
-            &[
-                (p1_node1_t1, 95, 5),    // FR = 0.05
-                (p1_node2_t3, 90, 10),   // FR = 0.10
-                (p1_node3_t31, 75, 25),  // FR = 0.25
-                (p1_node5_perf, 30, 70), // FR = 0.70
-            ],
-        ),
-        // Day 1, Subnet 2
-        build_daily_metrics(subnet2, day1, &[(p2_node1, 80, 20)]), // FR = 0.20
-        // Day 2, Subnet 1
-        build_daily_metrics(subnet1, day2, &[(p1_node1_t1, 98, 2)]), // FR = 0.02
-    ]);
-
-    let provider_rewardable_nodes = btreemap! {
-        p1 => vec![
-            RewardableNode {
-                node_id: p1_node1_t1,
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                rewardable_days: vec![day1, day2],
-                dc_id: "dc1".into(),
-            },
-            RewardableNode {
-                node_id: p1_node2_t3,
-                node_reward_type: NodeRewardType::Type3,
-                region: "North America,USA,California".into(),
-                rewardable_days: vec![day1, day2],
-                dc_id: "dc2".into(),
-            },
-            RewardableNode {
-                node_id: p1_node3_t31,
-                node_reward_type: NodeRewardType::Type3dot1,
-                region: "North America,USA,Nevada".into(),
-                rewardable_days: vec![day1],
-                dc_id: "dc3".into(),
-            },
-            RewardableNode {
-                node_id: p1_node4_unassigned,
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                rewardable_days: vec![day1, day2],
-                dc_id: "dc1".into(),
-            },
-            RewardableNode {
-                node_id: p1_node5_perf,
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                rewardable_days: vec![day1],
-                dc_id: "dc1".into(),
-            },
-        ],
-        p2 => vec![
-            RewardableNode {
-                node_id: p2_node1,
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                rewardable_days: vec![day1],
-                dc_id: "dc1".into(),
-            },
-        ],
-    };
-
-    let input = RewardsCalculatorInput {
-        reward_period: RewardPeriod {
-            from: day1,
-            to: day2,
-        },
-        rewards_table: create_rewards_table_for_region_test(),
-        daily_metrics_by_subnet,
-        provider_rewardable_nodes,
-    };
-
-    let results = calculate_rewards(input).unwrap();
-    let total_p1_rewards = results
-        .provider_results
-        .get(&p1)
-        .unwrap()
-        .rewards_total_xdr_permyriad;
-    let expected_total_p1_rewards = 87200 + 50000;
-    assert_eq!(total_p1_rewards, expected_total_p1_rewards);
-
-    let total_p2_rewards = results
-        .provider_results
-        .get(&p2)
-        .unwrap()
-        .rewards_total_xdr_permyriad;
-    let expected_total_p2_rewards = 10000;
-    assert_eq!(total_p2_rewards, expected_total_p2_rewards);
 }

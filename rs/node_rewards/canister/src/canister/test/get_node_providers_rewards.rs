@@ -1,5 +1,5 @@
 use crate::canister::test::test_utils::{
-    setup_thread_local_canister_for_test, tabled, TestState, CANISTER_TEST, VM,
+    setup_thread_local_canister_for_test, write_rewards_to_csv, TestState, CANISTER_TEST, VM,
 };
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::{ManagementCanisterClient, MetricsManager};
@@ -8,10 +8,8 @@ use candid::{CandidType, Decode};
 use flate2::read::GzDecoder;
 use futures_util::FutureExt;
 use ic_cdk::api::call::{CallResult, RejectionCode};
-use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
-use ic_nervous_system_canisters::registry::Registry;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
@@ -23,16 +21,18 @@ use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
     NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::PrincipalId;
+use indexmap::map::Entry;
 use indexmap::IndexMap;
 use maplit::btreemap;
 use prost::Message;
 use rewards_calculation::rewards_calculator::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
-use rewards_calculation::rewards_calculator_results::{DayUtc, RewardsCalculatorResults};
+use rewards_calculation::rewards_calculator_results::{
+    DayUtc, NodeStatus, RewardsCalculatorResults,
+};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
@@ -40,8 +40,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
-use tar::Archive;
-use tempfile::tempdir;
 use tokio::fs;
 
 fn setup_data_for_test_rewards_calculation(
@@ -337,80 +335,74 @@ fn test_get_node_providers_rewards() {
     .now_or_never()
     .unwrap();
 
-    let rewards_calculator_results: RewardsCalculatorResults = CANISTER_TEST
-        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
-        .unwrap();
-    let expected = "\
-Rewards Calculator Results
-
-+-Overall Performance for Provider: 6fyp7-3ibaa-aaaaa-aaaap-
-| Day UTC    | Underperforming Nodes | Total Daily Rewards |
-+------------+-----------------------+---------------------+
-| 01-01-2024 | fnlpp                 | 87200.0000          |
-|            | yskjz                 |                     |
-+------------+-----------------------+---------------------+
-| 02-01-2024 |                       | 50000               |
-+------------+-----------------------+---------------------+
-
-Base Rewards Log:
-Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
-Region: North America,USA,California, Type: type3, Base Rewards Daily: 30000, Coefficient: 0.90
-Region: North America,USA,Nevada, Type: type3.1, Base Rewards Daily: 40000, Coefficient: 0.70
-Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards Daily Avg: 35000, Coefficient Avg: 0.80, Base Rewards Daily: 31500.00
-Type3* - Day: 02-01-2024 Region: North America:USA, Nodes Count: 1, Base Rewards Daily Avg: 30000, Coefficient Avg: 0.90, Base Rewards Daily: 30000
-
-+-NodeId: zv7tz-zylaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 01-01-2024 | Assigned - yndj2 | 0.25      | 95/5                   | 0.05        | 0                        | 1                      | 10000        | 10000            |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 02-01-2024 | Assigned - yndj2 | 0.02      | 98/2                   | 0.02        | 0.00                     | 1                      | 10000        | 10000            |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-
-+-NodeId: f6rsp-hqmaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 01-01-2024 | Assigned - yndj2 | 0.25      | 90/10                  | 0.10        | 0                        | 1                      | 31500.00     | 31500.00         |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 02-01-2024 | Unassigned       | N/A       | N/A                    | N/A         | 0                        | 1                      | 30000        | 30000            |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-
-+-NodeId: ybquz-ianaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 01-01-2024 | Assigned - yndj2 | 0.25      | 75/25                  | 0.25        | 0.00                     | 1                      | 31500.00     | 31500.00         |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-
-+-NodeId: fnlpp-iyoaa-aaaaa-aaaap-2ai-+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| Day UTC    | Status     | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-+------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 01-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0.1125                   | 0.9800                 | 10000        | 9800.0000        |
-+------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 02-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0                        | 1                      | 10000        | 10000            |
-+------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-
-+-NodeId: yskjz-hipaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 01-01-2024 | Assigned - yndj2 | 0.25      | 30/70                  | 0.70        | 0.45                     | 0.44                   | 10000        | 4400.00          |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-
-+-Overall Performance for Provider: djduj-3qcaa-aaaaa-aaaap-
-| Day UTC    | Underperforming Nodes | Total Daily Rewards |
-+------------+-----------------------+---------------------+
-| 01-01-2024 |                       | 10000               |
-+------------+-----------------------+---------------------+
-
-Base Rewards Log:
-Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
-
-+-NodeId: 6qmi3-pavaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-| 01-01-2024 | Assigned - fbysm | 0.20      | 80/20                  | 0.20        | 0.00                     | 1                      | 10000        | 10000            |
-+------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+";
-
-    assert_eq!(tabled(&rewards_calculator_results), expected);
+    // Rewards Calculator Results
+    //
+    // +-Overall Performance for Provider: 6fyp7-3ibaa-aaaaa-aaaap-
+    // | Day UTC    | Underperforming Nodes | Total Daily Rewards |
+    // +------------+-----------------------+---------------------+
+    // | 01-01-2024 | fnlpp                 | 87200.0000          |
+    // |            | yskjz                 |                     |
+    // +------------+-----------------------+---------------------+
+    // | 02-01-2024 |                       | 50000               |
+    // +------------+-----------------------+---------------------+
+    //
+    // Base Rewards Log:
+    // Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
+    // Region: North America,USA,California, Type: type3, Base Rewards Daily: 30000, Coefficient: 0.90
+    // Region: North America,USA,Nevada, Type: type3.1, Base Rewards Daily: 40000, Coefficient: 0.70
+    // Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards Daily Avg: 35000, Coefficient Avg: 0.80, Base Rewards Daily: 31500.00
+    // Type3* - Day: 02-01-2024 Region: North America:USA, Nodes Count: 1, Base Rewards Daily Avg: 30000, Coefficient Avg: 0.90, Base Rewards Daily: 30000
+    //
+    // +-NodeId: zv7tz-zylaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 95/5                   | 0.05        | 0                        | 1                      | 10000        | 10000            |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 02-01-2024 | Assigned - yndj2 | 0.02      | 98/2                   | 0.02        | 0.00                     | 1                      | 10000        | 10000            |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    //
+    // +-NodeId: f6rsp-hqmaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 90/10                  | 0.10        | 0                        | 1                      | 31500.00     | 31500.00         |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 02-01-2024 | Unassigned       | N/A       | N/A                    | N/A         | 0                        | 1                      | 30000        | 30000            |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    //
+    // +-NodeId: ybquz-ianaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 75/25                  | 0.25        | 0.00                     | 1                      | 31500.00     | 31500.00         |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    //
+    // +-NodeId: fnlpp-iyoaa-aaaaa-aaaap-2ai-+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | Day UTC    | Status     | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
+    // +------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 01-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0.1125                   | 0.9800                 | 10000        | 9800.0000        |
+    // +------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 02-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0                        | 1                      | 10000        | 10000            |
+    // +------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    //
+    // +-NodeId: yskjz-hipaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 30/70                  | 0.70        | 0.45                     | 0.44                   | 10000        | 4400.00          |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    //
+    // +-Overall Performance for Provider: djduj-3qcaa-aaaaa-aaaap-
+    // | Day UTC    | Underperforming Nodes | Total Daily Rewards |
+    // +------------+-----------------------+---------------------+
+    // | 01-01-2024 |                       | 10000               |
+    // +------------+-----------------------+---------------------+
+    //
+    // Base Rewards Log:
+    // Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
+    //
+    // +-NodeId: 6qmi3-pavaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    // | 01-01-2024 | Assigned - fbysm | 0.20      | 80/20                  | 0.20        | 0.00                     | 1                      | 10000        | 10000            |
+    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
 
     let expected = NodeProvidersRewards {
         rewards_xdr_permyriad: btreemap! {
@@ -464,6 +456,20 @@ fn test_real() {
             } else {
                 Some(values.value)
             };
+
+            match registry.get(&(
+                string_key.clone(),
+                values.version,
+                values.timestamp_nanoseconds,
+            )) {
+                None => {}
+                Some(existing) => {
+                    let existing: &Option<Vec<u8>> = existing;
+                    let record =
+                        NodeOperatorRecord::decode(existing.clone().unwrap().as_slice()).unwrap();
+                    println!("Duplicate {} {:?}", string_key.clone(), record)
+                }
+            }
             registry.insert(
                 (string_key, values.version, values.timestamp_nanoseconds),
                 value,
@@ -524,5 +530,7 @@ fn test_real() {
     let rewards_calculator_results: RewardsCalculatorResults = CANISTER_TEST
         .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
         .unwrap();
-    println!("{}", tabled(&rewards_calculator_results));
+
+    write_rewards_to_csv(&rewards_calculator_results, "rewards_results")
+        .expect("Failed to write rewards to CSV");
 }

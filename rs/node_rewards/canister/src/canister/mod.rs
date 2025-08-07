@@ -239,7 +239,6 @@ impl NodeRewardsCanister {
             canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
             request: GetNodeProvidersRewardsRequest,
         ) -> Result<NodeProvidersRewards, String> {
-            println!("before sync");
             NodeRewardsCanister::schedule_registry_sync(canister)
                 .await
                 .map_err(|e| {
@@ -249,8 +248,6 @@ impl NodeRewardsCanister {
                         e
                     )
                 })?;
-
-            println!("scheduline sync");
             NodeRewardsCanister::schedule_metrics_sync(canister).await;
             let result =
                 canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;

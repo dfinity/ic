@@ -1,7 +1,8 @@
-use crate::types::{RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
+use crate::types::{Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
 use candid::CandidType;
 use chrono::DateTime;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -81,47 +82,62 @@ impl DayUtc {
 #[derive(Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: SubnetId,
-    pub subnet_assigned_fr_percent: Decimal,
+    pub subnet_assigned_fr: Percent,
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
     /// The failure rate before subnet failure rate reduction.
     /// Calculated as `blocks_failed` / (`blocks_proposed` + `blocks_failed`)
-    pub original_fr_percent: Decimal,
+    pub original_fr: Percent,
     /// The failure rate reduced by the subnet assigned failure rate.
     /// Calculated as Max(0, `original_fr` - `subnet_assigned_fr`)
-    pub relative_fr_percent: Decimal,
+    pub relative_fr: Percent,
 }
 
 pub enum NodeStatus {
     Assigned { node_metrics: NodeMetricsDaily },
-    Unassigned { extrapolated_fr_percent: Decimal },
+    Unassigned { extrapolated_fr: Percent },
 }
 
 pub struct DailyResults {
     pub day: DayUtc,
     pub node_status: NodeStatus,
-    pub performance_multiplier_percent: Decimal,
-    pub rewards_reduction_percent: Decimal,
-    pub base_rewards_xdr_permyriad: Decimal,
-    pub adjusted_rewards_xdr_permyriad: Decimal,
+    pub performance_multiplier: Percent,
+    pub rewards_reduction: Percent,
+    pub base_rewards: XDRPermyriad,
+    pub adjusted_rewards: XDRPermyriad,
 }
 
 pub struct NodeResults {
     pub node_id: NodeId,
-    pub node_reward_type: String,
+    pub node_reward_type: NodeRewardType,
     pub region: String,
     pub dc_id: String,
     pub daily_results: Vec<DailyResults>,
 }
 
+pub struct BaseRewards {
+    pub node_reward_type: NodeRewardType,
+    pub region: Region,
+    pub monthly: XDRPermyriad,
+    pub daily: XDRPermyriad,
+}
+
+pub struct BaseRewardsType3 {
+    pub day: DayUtc,
+    pub region: Region,
+    pub nodes_count: usize,
+    pub value: XDRPermyriad,
+}
+
 pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: u64,
-    pub computation_log: String,
+    pub base_rewards: Vec<BaseRewards>,
+    pub base_rewards_type3: Vec<BaseRewardsType3>,
     pub nodes_results: Vec<NodeResults>,
 }
 
 pub struct RewardsCalculatorResults {
-    pub subnets_fr_percent: BTreeMap<(DayUtc, SubnetId), Decimal>,
+    pub subnets_fr: BTreeMap<(DayUtc, SubnetId), Percent>,
     pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
 

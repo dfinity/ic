@@ -1,7 +1,6 @@
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
 use crate::storage::METRICS_MANAGER;
-use ic_base_types::{NodeId, PrincipalId};
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
@@ -13,18 +12,16 @@ use ic_registry_canister_client::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use rewards_calculation::rewards_calculator_results::{
-    DailyResults, DayUtc, NodeProviderRewards, NodeResults, NodeStatus, RewardsCalculatorResults,
+    DayUtc, NodeStatus, RewardsCalculatorResults,
 };
 use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fs::{create_dir_all, File};
+use std::io::Write;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
-use tabled::builder::Builder;
-use tabled::settings::object::Rows;
-use tabled::settings::style::LineText;
-use tabled::Table;
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -65,173 +62,204 @@ pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Rc<M
     (fake_registry, metrics_manager)
 }
 
-// ------------------------------------------------------------------------------------------------
-// Helper functions for tabled output
-// ------------------------------------------------------------------------------------------------
+pub fn write_rewards_to_csv(
+    results: &RewardsCalculatorResults,
+    output_path: &str,
+) -> std::io::Result<()> {
+    use std::collections::BTreeMap;
 
-struct DailyProviderSummary {
-    underperforming_nodes: Vec<NodeId>,
-    total_rewards: Decimal,
-}
+    let base_path = Path::new(output_path).join("result");
+    create_dir_all(&base_path)?;
 
-/// Aggregates results across all nodes for a provider to calculate daily summaries.
-/// This separates data calculation from presentation.
-fn calculate_daily_summaries(
-    results: &NodeProviderRewards,
-) -> BTreeMap<DayUtc, DailyProviderSummary> {
-    let mut summaries: BTreeMap<DayUtc, DailyProviderSummary> = BTreeMap::new();
+    // Write subnets_failure_rate.csv
+    let subnets_path = base_path.join("subnets_failure_rate.csv");
+    let mut subnets_file = csv::Writer::from_writer(File::create(&subnets_path)?);
+    subnets_file.write_record(&["day", "subnet_id", "failure_rate"])?;
+    for ((day, subnet_id), fr) in &results.subnets_fr {
+        subnets_file.write_record(&[
+            day.to_string(),
+            subnet_id.to_string().split('-').next().unwrap().to_string(),
+            format!("{:.4}", fr),
+        ])?;
+    }
+    subnets_file.flush()?;
 
-    for NodeResults {
-        node_id,
-        daily_results,
-        ..
-    } in &results.nodes_results
-    {
-        for DailyResults {
-            day,
-            adjusted_rewards_xdr_permyriad,
-            performance_multiplier_percent,
-            ..
-        } in daily_results
-        {
-            let summary = summaries.entry(*day).or_insert(DailyProviderSummary {
-                underperforming_nodes: Vec::new(),
-                total_rewards: dec!(0),
-            });
+    for (np_id, provider_result) in &results.provider_results {
+        let np_folder = base_path.join(format!("{}", np_id));
+        create_dir_all(&np_folder)?;
 
-            summary.total_rewards += adjusted_rewards_xdr_permyriad;
-            if performance_multiplier_percent < &dec!(1) {
-                summary.underperforming_nodes.push(*node_id);
+        // base_rewards.csv
+        let mut writer =
+            csv::Writer::from_writer(File::create(np_folder.join("base_rewards.csv"))?);
+        writer.write_record(&[
+            "node_reward_type",
+            "region",
+            "monthly_xdr_permyriad",
+            "daily_xdr_permyriad",
+        ])?;
+        for br in &provider_result.base_rewards {
+            writer.write_record(&[
+                format!("{:?}", br.node_reward_type),
+                br.region.to_string(),
+                format!("{:.4}", br.monthly),
+                format!("{:.4}", br.daily),
+            ])?;
+        }
+        writer.flush()?;
+
+        // base_rewards_type3.csv
+        let mut writer =
+            csv::Writer::from_writer(File::create(np_folder.join("base_rewards_type3.csv"))?);
+        writer.write_record(&["day", "region", "nodes_count", "xdr_permyriad"])?;
+        for br in &provider_result.base_rewards_type3 {
+            writer.write_record(&[
+                br.day.to_string(),
+                br.region.to_string(),
+                br.nodes_count.to_string(),
+                format!("{:.4}", br.value),
+            ])?;
+        }
+        writer.flush()?;
+
+        // nodes_results.csv
+        let mut writer =
+            csv::Writer::from_writer(File::create(np_folder.join("nodes_results.csv"))?);
+
+        writer.write_record(&[
+            "node_id",
+            "node_reward_type",
+            "region",
+            "dc_id",
+            "day",
+            "status",
+            "subnet_assigned",
+            "subnet_assigned_fr",
+            "num_blocks_proposed",
+            "num_blocks_failed",
+            "original_fr",
+            "relative_fr",
+            "extrapolated_fr",
+            "performance_multiplier",
+            "rewards_reduction",
+            "base_rewards_xdr_permyriad",
+            "adjusted_rewards_xdr_permyriad",
+        ])?;
+
+        for node in &provider_result.nodes_results {
+            for day_result in &node.daily_results {
+                let (
+                    status_str,
+                    subnet_assigned,
+                    subnet_fr,
+                    blocks_proposed,
+                    blocks_failed,
+                    original_fr,
+                    relative_fr,
+                    extrapolated_fr,
+                ) = match &day_result.node_status {
+                    NodeStatus::Assigned { node_metrics } => (
+                        "assigned",
+                        node_metrics
+                            .subnet_assigned
+                            .to_string()
+                            .split('-')
+                            .next()
+                            .unwrap()
+                            .to_string(),
+                        format!("{:.4}", node_metrics.subnet_assigned_fr),
+                        node_metrics.num_blocks_proposed.to_string(),
+                        node_metrics.num_blocks_failed.to_string(),
+                        format!("{:.4}", node_metrics.original_fr),
+                        format!("{:.4}", node_metrics.relative_fr),
+                        "".to_string(), // extrapolated_fr unused
+                    ),
+                    NodeStatus::Unassigned { extrapolated_fr } => (
+                        "unassigned",
+                        "".to_string(),
+                        "".to_string(),
+                        "".to_string(),
+                        "".to_string(),
+                        "".to_string(),
+                        "".to_string(),
+                        format!("{:.4}", extrapolated_fr),
+                    ),
+                };
+
+                writer.write_record(&[
+                    node.node_id
+                        .to_string()
+                        .split('-')
+                        .next()
+                        .unwrap()
+                        .to_string(),
+                    format!("{:?}", node.node_reward_type),
+                    node.region.clone(),
+                    node.dc_id.clone(),
+                    day_result.day.to_string(),
+                    status_str.to_string(),
+                    subnet_assigned,
+                    subnet_fr,
+                    blocks_proposed,
+                    blocks_failed,
+                    original_fr,
+                    relative_fr,
+                    extrapolated_fr,
+                    format!("{:.4}", day_result.performance_multiplier),
+                    format!("{:.4}", day_result.rewards_reduction),
+                    format!("{:.4}", day_result.base_rewards),
+                    format!("{:.4}", day_result.adjusted_rewards),
+                ])?;
             }
         }
-    }
-    summaries
-}
+        writer.flush()?;
 
-/// Helper functions for building tables.
-const NODE_HEADERS: [&'static str; 9] = [
-    "Day UTC",
-    "Status",
-    "Subnet FR",
-    "Blocks Proposed/Failed",
-    "Original FR",
-    "FR relative/extrapolated",
-    "Performance Multiplier",
-    "Base Rewards",
-    "Adjusted Rewards",
-];
+        // overall_rewards_per_day.csv
+        let mut writer =
+            csv::Writer::from_writer(File::create(np_folder.join("overall_rewards_per_day.csv"))?);
+        writer.write_record(&[
+            "day",
+            "total_adjusted_rewards_xdr_permyriad",
+            "nodes_in_registry",
+            "underperforming_nodes",
+        ])?;
 
-const SUMMARY_HEADERS: [&'static str; 3] =
-    ["Day UTC", "Underperforming Nodes", "Total Daily Rewards"];
+        let mut daily_totals: BTreeMap<DayUtc, Decimal> = BTreeMap::new();
+        let mut nodes_total: BTreeMap<DayUtc, usize> = BTreeMap::new();
+        let mut underperforming: BTreeMap<DayUtc, Vec<String>> = BTreeMap::new();
 
-pub fn tabled(results: &RewardsCalculatorResults) -> String {
-    let mut all_tables = vec!["Rewards Calculator Results".to_string()];
+        for node in &provider_result.nodes_results {
+            for res in &node.daily_results {
+                let day = res.day;
+                *daily_totals.entry(day).or_default() += res.adjusted_rewards;
+                *nodes_total.entry(day).or_default() += 1;
 
-    for (provider_id, provider_results) in &results.provider_results {
-        // 1. Aggregate the daily summaries for the provider.
-        let daily_summaries = calculate_daily_summaries(provider_results);
-
-        // 2. Build and add the provider's summary table.
-        all_tables.push(build_provider_summary_table(provider_id, &daily_summaries));
-
-        // 3. Add the computation log.
-        all_tables.push(provider_results.computation_log.clone());
-
-        // 4. First, generate tables for each individual node.
-        let node_tables: Vec<String> = provider_results
-            .nodes_results
-            .iter()
-            .map(|node_results| build_node_table(&node_results.node_id, node_results))
-            .collect();
-        all_tables.extend(node_tables);
-    }
-
-    all_tables.join("\n\n")
-}
-
-fn build_node_table(node_id: &NodeId, node_results: &NodeResults) -> String {
-    let mut builder = Builder::default();
-    builder.push_record(NODE_HEADERS);
-
-    for result in &node_results.daily_results {
-        let mut row = vec![result.day.to_string()];
-        let (status_cols, perf_cols) = format_row_segments(result);
-        row.extend(status_cols);
-        row.extend(perf_cols);
-        builder.push_record(row);
-    }
-
-    let title = format!("NodeId: {}", node_id.get());
-    apply_title(builder.build(), title)
-}
-
-/// Builds the summary table for a single node provider.
-fn build_provider_summary_table(
-    provider_id: &PrincipalId,
-    summaries: &BTreeMap<DayUtc, DailyProviderSummary>,
-) -> String {
-    let mut builder = Builder::default();
-    builder.push_record(SUMMARY_HEADERS);
-
-    for (day, summary) in summaries {
-        let node_ids: Vec<String> = summary
-            .underperforming_nodes
-            .iter()
-            .map(|id| id.get().to_string().split('-').next().unwrap().to_string())
-            .collect();
-
-        builder.push_record([
-            day.to_string(),
-            node_ids.join("\n"),
-            summary.total_rewards.to_string(),
-        ]);
-    }
-
-    let title = format!("Overall Performance for Provider: {}", provider_id);
-    apply_title(builder.build(), title)
-}
-
-/// Helper to format row data, separating status-specific and common columns.
-fn format_row_segments(results: &DailyResults) -> (Vec<String>, Vec<String>) {
-    let status_columns = match &results.node_status {
-        NodeStatus::Assigned { node_metrics } => {
-            let subnet_prefix = node_metrics.subnet_assigned.get().to_string();
-            vec![
-                format!("Assigned - {}", &subnet_prefix[..5]),
-                node_metrics
-                    .subnet_assigned_fr_percent
-                    .round_dp(4)
-                    .to_string(),
-                format!(
-                    "{}/{}",
-                    node_metrics.num_blocks_proposed, node_metrics.num_blocks_failed
-                ),
-                node_metrics.original_fr_percent.round_dp(4).to_string(),
-                node_metrics.relative_fr_percent.round_dp(4).to_string(),
-            ]
+                if res.performance_multiplier < Decimal::ONE {
+                    underperforming.entry(day).or_default().push(
+                        node.node_id
+                            .to_string()
+                            .split('-')
+                            .next()
+                            .unwrap()
+                            .to_string(),
+                    );
+                }
+            }
         }
-        NodeStatus::Unassigned {
-            extrapolated_fr_percent,
-        } => vec![
-            "Unassigned".to_string(),
-            "N/A".to_string(),
-            "N/A".to_string(),
-            "N/A".to_string(),
-            extrapolated_fr_percent.round_dp(4).to_string(),
-        ],
-    };
 
-    let performance_columns = vec![
-        results.performance_multiplier_percent.to_string(),
-        results.base_rewards_xdr_permyriad.to_string(),
-        results.adjusted_rewards_xdr_permyriad.to_string(),
-    ];
+        for (day, total) in &daily_totals {
+            let nodes = underperforming
+                .get(day)
+                .map(|v| v.join(","))
+                .unwrap_or_else(|| "".to_string());
+            let nodes_in_registry = nodes_total.remove(day).unwrap_or_default().to_string();
+            writer.write_record(&[
+                day.to_string(),
+                format!("{:.4}", total),
+                nodes_in_registry,
+                nodes,
+            ])?;
+        }
+    }
 
-    (status_columns, performance_columns)
-}
-
-/// Applies a consistent title style to a table.
-fn apply_title(mut table: Table, title: String) -> String {
-    table.with(LineText::new(title, Rows::first()).offset(2));
-    table.to_string()
+    Ok(())
 }

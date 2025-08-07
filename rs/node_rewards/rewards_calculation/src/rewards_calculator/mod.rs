@@ -1,6 +1,7 @@
 use crate::rewards_calculator_results::{
-    DailyResults, DayUtc, NodeMetricsDaily, NodeProviderRewards, NodeResults, NodeStatus, Percent,
-    RewardCalculatorError, RewardsCalculatorResults, XDRPermyriad,
+    BaseRewards, BaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily, NodeProviderRewards,
+    NodeResults, NodeStatus, Percent, RewardCalculatorError, RewardsCalculatorResults,
+    XDRPermyriad,
 };
 use crate::types::{
     NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
@@ -77,24 +78,26 @@ pub fn calculate_rewards(
         // Step 3: Compute performance multiplier for each node for each provider
         let relative_nodes_fr = provider_nodes_metrics_daily
             .iter()
-            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr_percent))
+            .map(|((day, node_id), metrics)| ((*day, *node_id), metrics.relative_fr))
             .collect::<BTreeMap<_, _>>();
         let Step3Results {
             reward_reduction,
             performance_multiplier,
         } = step_3_performance_multiplier(&rewardable_nodes, &relative_nodes_fr, &extrapolated_fr);
 
-        println!("breaks");
         // Step 4: Compute base rewards for each node based on its region and node type
         let Step4Results {
+            base_rewards_per_node,
             base_rewards,
-            base_rewards_log,
+            base_rewards_type3,
         } = step_4_compute_base_rewards_type_region(&input.rewards_table, &rewardable_nodes);
 
-        println!("finish");
         // Step 5: Adjusted rewards for all the nodes based on their performance
-        let Step5Results { adjusted_rewards } =
-            step_5_adjust_node_rewards(&rewardable_nodes, &base_rewards, &performance_multiplier);
+        let Step5Results { adjusted_rewards } = step_5_adjust_node_rewards(
+            &rewardable_nodes,
+            &base_rewards_per_node,
+            &performance_multiplier,
+        );
 
         // Step 6: Construct provider results
         let provider_results = step_6_construct_provider_results(
@@ -103,16 +106,17 @@ pub fn calculate_rewards(
             extrapolated_fr,
             reward_reduction,
             performance_multiplier,
-            base_rewards,
+            base_rewards_per_node,
             adjusted_rewards,
-            base_rewards_log,
+            base_rewards,
+            base_rewards_type3,
         );
 
         results_per_provider.insert(provider_id, provider_results);
     }
 
     Ok(RewardsCalculatorResults {
-        subnets_fr_percent: subnets_fr,
+        subnets_fr: subnets_fr,
         provider_results: results_per_provider,
     })
 }
@@ -178,11 +182,11 @@ fn step_0_subnets_nodes_fr(
                 (day, node_id),
                 NodeMetricsDaily {
                     subnet_assigned: subnet_id,
-                    subnet_assigned_fr_percent: subnet_fr,
+                    subnet_assigned_fr: subnet_fr,
                     num_blocks_proposed,
                     num_blocks_failed,
-                    original_fr_percent: original_fr,
-                    relative_fr_percent: relative_fr,
+                    original_fr: original_fr,
+                    relative_fr: relative_fr,
                 },
             );
         }
@@ -235,7 +239,7 @@ fn step_2_extrapolated_fr(
         grouped_fr
             .entry(*day)
             .or_default()
-            .push(metrics.relative_fr_percent);
+            .push(metrics.relative_fr);
     }
 
     // Include all rewardable days even if there was no data
@@ -330,14 +334,15 @@ const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
 #[derive(Default)]
 struct Step4Results {
-    base_rewards: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
-    base_rewards_log: String,
+    base_rewards: Vec<BaseRewards>,
+    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_per_node: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
 }
 fn step_4_compute_base_rewards_type_region(
     node_rewards_table: &NodeRewardsTable,
     rewardable_nodes: &[RewardableNode],
 ) -> Step4Results {
-    fn get_daily_rate(
+    fn get_monthly_rate(
         rewards_table: &NodeRewardsTable,
         region: &Region,
         node_reward_type: &NodeRewardType,
@@ -345,8 +350,7 @@ fn step_4_compute_base_rewards_type_region(
         rewards_table
             .get_rate(region, &node_reward_type.to_string())
             .map(|rate| {
-                let base_rewards_daily =
-                    Decimal::from(rate.xdr_permyriad_per_node_per_month) / REWARDS_TABLE_DAYS;
+                let base_rewards_monthly = Decimal::from(rate.xdr_permyriad_per_node_per_month);
                 // Default reward_coefficient_percent is set to 80%, which is used as a fallback only in the
                 // unlikely case that the type3 entry in the reward table:
                 // a) has xdr_permyriad_per_node_per_month entry set for this region, but
@@ -354,7 +358,7 @@ fn step_4_compute_base_rewards_type_region(
                 let reward_coefficient_percent =
                     Decimal::from(rate.reward_coefficient_percent.unwrap_or(80)) / dec!(100);
 
-                (base_rewards_daily, reward_coefficient_percent)
+                (base_rewards_monthly, reward_coefficient_percent)
             })
             .unwrap_or((dec!(1), dec!(1)))
     }
@@ -374,21 +378,15 @@ fn step_4_compute_base_rewards_type_region(
     let mut base_rewards = BTreeMap::new();
     let mut base_rewards_type3 = BTreeMap::new();
     let mut base_rewards_per_node = BTreeMap::new();
-    let mut base_rewards_log = vec!["Base Rewards Log:".to_string()];
 
     for node in rewardable_nodes {
-        let (base_rewards_daily, coefficient) =
-            get_daily_rate(node_rewards_table, &node.region, &node.node_reward_type);
+        let (base_rewards_monthly, coefficient) =
+            get_monthly_rate(node_rewards_table, &node.region, &node.node_reward_type);
+        let base_rewards_daily = base_rewards_monthly / REWARDS_TABLE_DAYS;
 
         base_rewards
             .entry((node.node_reward_type, node.region.clone()))
-            .or_insert_with(|| {
-                base_rewards_log.push(format!(
-                    "Region: {}, Type: {}, Base Rewards Daily: {}, Coefficient: {}",
-                    node.region, node.node_reward_type, base_rewards_daily, coefficient
-                ));
-                base_rewards_daily
-            });
+            .or_insert((base_rewards_daily, base_rewards_monthly));
 
         // For nodes which are type3* the base rewards for the single node is computed as the average of base rewards
         // on DC Country level. Moreover, to de-stimulate the same NP having too many nodes in the same country,
@@ -419,25 +417,19 @@ fn step_4_compute_base_rewards_type_region(
     let base_rewards_type3 = base_rewards_type3
         .into_iter()
         .map(|((day, region), (rates, coeff))| {
-            let rates_len = rates.len();
+            let nodes_count = rates.len();
             let avg_rate = avg(rates.as_slice()).unwrap_or_default();
             let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
 
-            println!("break {:?} {:?}", rates, coeff);
             let mut running_coefficient = dec!(1);
             let mut region_rewards = Vec::new();
-            for _ in 0..rates_len {
+            for _ in 0..nodes_count {
                 region_rewards.push(avg_rate * running_coefficient);
                 running_coefficient *= avg_coeff;
             }
             let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
 
-            base_rewards_log.push(format!(
-                "Type3* - Day: {} Region: {}, Nodes Count: {}, Base Rewards Daily Avg: {}, Coefficient Avg: {}, Base Rewards Daily: {}",
-                day, region, rates_len, avg_rate, avg_coeff, region_rewards_avg
-            ));
-
-            ((day, region), region_rewards_avg)
+            ((day, region), (region_rewards_avg, nodes_count))
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -446,22 +438,49 @@ fn step_4_compute_base_rewards_type_region(
             let base_rewards_for_day = if is_type3(&node.node_reward_type) {
                 let region_key = type3_region_key(&node.region);
 
-                base_rewards_type3
+                let (base_rewards_daily, _) = base_rewards_type3
                     .get(&(day, region_key))
-                    .expect("Type3 base rewards expected for provider")
+                    .expect("Type3 base rewards expected for provider");
+                base_rewards_daily
             } else {
-                base_rewards
+                let (base_rewards_daily, _) = base_rewards
                     .get(&(node.node_reward_type, node.region.clone()))
-                    .expect("base rewards expected for each node")
+                    .expect("base rewards expected for each node");
+                base_rewards_daily
             };
 
             base_rewards_per_node.insert((*day, node.node_id), *base_rewards_for_day);
         }
     }
 
+    let base_rewards_type3 = base_rewards_type3
+        .into_iter()
+        .map(
+            |((day, region), (daily_rewards, nodes_count))| BaseRewardsType3 {
+                day: *day,
+                region,
+                nodes_count,
+                value: daily_rewards,
+            },
+        )
+        .collect();
+
+    let base_rewards = base_rewards
+        .into_iter()
+        .map(
+            |((node_reward_type, region), (daily_rewards, monthly_rewards))| BaseRewards {
+                node_reward_type,
+                region,
+                monthly: monthly_rewards,
+                daily: daily_rewards,
+            },
+        )
+        .collect();
+
     Step4Results {
-        base_rewards: base_rewards_per_node,
-        base_rewards_log: base_rewards_log.join("\n"),
+        base_rewards_per_node,
+        base_rewards_type3,
+        base_rewards,
     }
 }
 
@@ -531,9 +550,10 @@ fn step_6_construct_provider_results(
     extrapolated_fr: HashMap<DayUtc, Percent>,
     mut reward_reduction: HashMap<(DayUtc, NodeId), Percent>,
     mut performance_multiplier: HashMap<(DayUtc, NodeId), Percent>,
-    mut base_rewards: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
+    mut base_rewards_per_node: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
     mut adjusted_rewards: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
-    computation_log: String,
+    base_rewards: Vec<BaseRewards>,
+    base_rewards_type3: Vec<BaseRewardsType3>,
 ) -> NodeProviderRewards {
     let mut results_by_node = Vec::new();
     let mut rewards_total_xdr_permyriad = Decimal::ZERO;
@@ -555,7 +575,7 @@ fn step_6_construct_provider_results(
                     .expect("Extrapolated FR expected for every provider");
 
                 NodeStatus::Unassigned {
-                    extrapolated_fr_percent: *extrapolated_fr,
+                    extrapolated_fr: *extrapolated_fr,
                 }
             };
 
@@ -567,7 +587,7 @@ fn step_6_construct_provider_results(
                 .remove(&(day, node.node_id))
                 .expect("Performance multiplier should be present in rewards");
 
-            let base_rewards_xdr_permyriad = base_rewards
+            let base_rewards_xdr_permyriad = base_rewards_per_node
                 .remove(&(day, node.node_id))
                 .expect("Base rewards should be present in rewards");
 
@@ -580,16 +600,16 @@ fn step_6_construct_provider_results(
             daily_results.push(DailyResults {
                 day,
                 node_status,
-                performance_multiplier_percent,
-                rewards_reduction_percent,
-                base_rewards_xdr_permyriad,
-                adjusted_rewards_xdr_permyriad,
+                performance_multiplier: performance_multiplier_percent,
+                rewards_reduction: rewards_reduction_percent,
+                base_rewards: base_rewards_xdr_permyriad,
+                adjusted_rewards: adjusted_rewards_xdr_permyriad,
             });
         }
 
         results_by_node.push(NodeResults {
             node_id: node.node_id,
-            node_reward_type: node_reward_type.to_string(),
+            node_reward_type,
             region,
             dc_id,
             daily_results,
@@ -600,7 +620,8 @@ fn step_6_construct_provider_results(
 
     NodeProviderRewards {
         rewards_total_xdr_permyriad,
-        computation_log,
+        base_rewards,
+        base_rewards_type3,
         nodes_results: results_by_node,
     }
 }
