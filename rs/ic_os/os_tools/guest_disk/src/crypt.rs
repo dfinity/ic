@@ -9,11 +9,11 @@ use std::path::Path;
 const VOLUME_KEY_BYTES: usize = 512 / 8; // 512 bits
 
 /// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
-/// using the provided name and passphrase.
+/// using the provided name and encryption key.
 pub fn activate_crypt_device(
     device_path: &Path,
     name: &str,
-    passphrase: &[u8],
+    encryption_key: &[u8],
     flags: CryptActivate,
 ) -> Result<CryptDevice> {
     if !device_path.exists() {
@@ -30,7 +30,7 @@ pub fn activate_crypt_device(
 
     crypt_device
         .activate_handle()
-        .activate_by_passphrase(Some(name), None, passphrase, flags)
+        .activate_by_passphrase(Some(name), None, encryption_key, flags)
         .context("Failed to activate cryptographic device")?;
 
     Ok(crypt_device)
@@ -50,13 +50,13 @@ pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
 }
 
 /// Formats the given cryptographic device with LUKS2 and initializes it with the provided
-/// passphrase.
+/// encryption key.
 /// WARNING: Leads to data loss on the device!
-pub fn format_crypt_device(device_path: &Path, passphrase: &[u8]) -> Result<CryptDevice> {
+pub fn format_crypt_device(device_path: &Path, encryption_key: &[u8]) -> Result<CryptDevice> {
     let mut crypt_device =
         CryptInit::init(device_path).context("Failed to initialize cryptographic device")?;
     println!(
-        "Formatting {} with LUKS2 and initializing it with a passphrase",
+        "Formatting {} with LUKS2 and initializing it with an encryption key",
         device_path.display()
     );
     // TODO: We should revisit the use of Pbkdf2 and consider using the LUKS2 default KDF, Argon2i
@@ -82,7 +82,7 @@ pub fn format_crypt_device(device_path: &Path, passphrase: &[u8]) -> Result<Cryp
         .context("Failed to call format")?;
     crypt_device
         .keyslot_handle()
-        .add_by_key(None, None, passphrase, CryptVolumeKey::empty())
+        .add_by_key(None, None, encryption_key, CryptVolumeKey::empty())
         .context("Could not add key to cryptographic device")?;
 
     Ok(crypt_device)
@@ -101,30 +101,30 @@ fn open_luks2_device(device_path: &Path) -> Result<CryptDevice> {
     Ok(crypt_device)
 }
 
-/// Checks if the provided passphrase can activate the cryptographic device at the given path.
+/// Checks if the provided encryption key can activate the cryptographic device at the given path.
 /// Does not activate the device.
 #[cfg(test)] // Currently only used in tests
-pub fn check_passphrase(device_path: &Path, passphrase: &[u8]) -> Result<()> {
+pub fn check_encryption_key(device_path: &Path, encryption_key: &[u8]) -> Result<()> {
     let mut crypt_device = open_luks2_device(device_path).context("Failed to open LUKS2 device")?;
 
     crypt_device
         .activate_handle()
-        .activate_by_passphrase(None, None, passphrase, CryptActivate::empty())
+        .activate_by_passphrase(None, None, encryption_key, CryptActivate::empty())
         .context("Failed to activate device")?;
 
     Ok(())
 }
 
 /// Destroys all key slots in the cryptographic device except for the one that is activated with the
-/// provided passphrase.
+/// provided encryption keys.
 pub fn destroy_key_slots_except(
     crypt_device: &mut CryptDevice,
-    keyslots_to_keep: &[&[u8]],
+    encryption_keys_to_keep: &[&[u8]],
 ) -> Result<()> {
     // LUKS2 supports up to 32 key slots.
     const LUKS2_N_KEY_SLOTS: u32 = 32;
 
-    let key_slots_to_keep = keyslots_to_keep
+    let key_slots_to_keep = encryption_keys_to_keep
         .iter()
         .map(|keep| {
             crypt_device.activate_handle().activate_by_passphrase(
@@ -135,7 +135,7 @@ pub fn destroy_key_slots_except(
             )
         })
         .collect::<Result<Vec<_>, _>>()
-        .context("Cannot activate device with passphrase that we should keep")?;
+        .context("Cannot activate device with encryption key that we should keep")?;
 
     for key_slot in 0..LUKS2_N_KEY_SLOTS {
         // If this key slot is active and not the one we want to keep, destroy it.

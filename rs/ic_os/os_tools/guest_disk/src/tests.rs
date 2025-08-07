@@ -1,5 +1,5 @@
 use crate::crypt::{
-    activate_crypt_device, check_passphrase, deactivate_crypt_device, format_crypt_device,
+    activate_crypt_device, check_encryption_key, deactivate_crypt_device, format_crypt_device,
 };
 use crate::{crypt_name, run, Args, Partition};
 use anyhow::Result;
@@ -275,10 +275,10 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     fs::write("/dev/mapper/vda10-crypt", "hello world").unwrap();
     deactive_crypt_device_with_check("vda10-crypt");
 
-    check_passphrase(&fixture.device.path().unwrap(), PREVIOUS_KEY)
+    check_encryption_key(&fixture.device.path().unwrap(), PREVIOUS_KEY)
         .expect("previous key should unlock the store partition");
 
-    check_passphrase(&fixture.device.path().unwrap(), DEPRECATED_KEY)
+    check_encryption_key(&fixture.device.path().unwrap(), DEPRECATED_KEY)
         .expect("deprecated key should unlock the store partition");
 
     // This is where the real testing starts. We open the disk with open() - in production, this
@@ -293,7 +293,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
 
     // Check that the SEV key unlocks the device, the previous key unlocks the device, and the
     // deprecated key is removed.
-    check_passphrase(&fixture.device.path().unwrap(), PREVIOUS_KEY)
+    check_encryption_key(&fixture.device.path().unwrap(), PREVIOUS_KEY)
         .expect("previous key should unlock the store partition");
 
     let sev_key = fixture
@@ -303,10 +303,10 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         })
         .unwrap();
 
-    check_passphrase(&fixture.device.path().unwrap(), sev_key.as_bytes())
+    check_encryption_key(&fixture.device.path().unwrap(), sev_key.as_bytes())
         .expect("SEV key should unlock the store partition");
 
-    check_passphrase(&fixture.device.path().unwrap(), DEPRECATED_KEY)
+    check_encryption_key(&fixture.device.path().unwrap(), DEPRECATED_KEY)
         .expect_err("deprecated key should not unlock the store partition");
 }
 
