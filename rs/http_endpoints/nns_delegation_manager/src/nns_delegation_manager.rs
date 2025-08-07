@@ -300,8 +300,7 @@ async fn try_fetch_delegation_from_nns(
         format!("Timed out while connecting to the nns node after {CONNECTION_TIMEOUT:?}")
     })??;
 
-    // any effective canister id can be used when invoking read_state here
-    let uri = "/api/v2/canister/aaaaa-aa/read_state";
+    let uri = format!("/api/v2/subnet/{nns_subnet_id}/read_state");
 
     info!(
         log,
