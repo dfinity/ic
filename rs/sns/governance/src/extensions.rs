@@ -104,43 +104,24 @@ impl RenderablePayload for ExtensionOperationArg {
 
 /// Specification for an extension operation
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum OperationSpec {
-    /// Operations that need special governance validation and support
-    GovernanceSupported {
-        name: String,
-        description: String,
-        extension_type: ExtensionKind,
-        validate: fn(ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
-    },
-    /// Operations that just pass through to the extension without special validation
-    GovernancePassthrough {
-        name: String,
-        description: String,
-        // Extensions can expose their own validation functions for these operations
-    },
+pub struct OperationSpec {
+    pub name: String,
+    pub description: String,
+    pub extension_type: ExtensionKind,
+    pub validate: fn(ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
 }
 
 impl OperationSpec {
     pub fn name(&self) -> &str {
-        match self {
-            Self::GovernanceSupported { name, .. } | Self::GovernancePassthrough { name, .. } => {
-                name
-            }
-        }
+        &self.name
     }
 
     pub fn description(&self) -> &str {
-        match self {
-            Self::GovernanceSupported { description, .. }
-            | Self::GovernancePassthrough { description, .. } => description,
-        }
+        &self.description
     }
 
     pub fn validate(&self, arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
-        match self {
-            Self::GovernanceSupported { validate, .. } => validate(arg),
-            Self::GovernancePassthrough { .. } => Ok(ValidatedOperationArg::Unprocessed(arg)),
-        }
+        (self.validate)(arg)
     }
 }
 
@@ -160,13 +141,13 @@ impl ExtensionKind {
     pub fn standard_operations(&self) -> Vec<OperationSpec> {
         match self {
             ExtensionKind::TreasuryManager => vec![
-                OperationSpec::GovernanceSupported {
+                OperationSpec {
                     name: "deposit".to_string(),
                     description: "Deposit funds into the treasury manager.".to_string(),
                     extension_type: ExtensionKind::TreasuryManager,
                     validate: validate_deposit_operation,
                 },
-                OperationSpec::GovernanceSupported {
+                OperationSpec {
                     name: "withdraw".to_string(),
                     description: "Withdraw funds from the treasury manager.".to_string(),
                     extension_type: ExtensionKind::TreasuryManager,
@@ -188,8 +169,7 @@ pub struct ExtensionSpec {
     pub topic: Topic,
     /// The extension types this extension implements (can be multiple)
     pub extension_types: Vec<ExtensionKind>,
-    /// Additional operations beyond the standard ones from extension_types
-    pub other_operations: BTreeMap<String, OperationSpec>,
+    // Custom per-extension operations can be added here in the future
     // TODO: Add a way to specify initialization arguments schema for the extension.
 }
 
@@ -202,30 +182,8 @@ impl ExtensionSpec {
             return Err("ExtensionSpec can only have one extension type at a time".to_string());
         }
 
-        let mut seen_operations = BTreeMap::new();
-
-        // First, collect all standard operations
-        for ext_type in &self.extension_types {
-            for op in ext_type.standard_operations() {
-                let name = op.name();
-                if let Some(existing_type) = seen_operations.insert(name.to_string(), ext_type) {
-                    return Err(format!(
-                        "Operation '{}' is defined by multiple extension types: {:?} and {:?}",
-                        name, existing_type, ext_type
-                    ));
-                }
-            }
-        }
-
-        // Check that other_operations don't conflict with standard operations
-        for (name, _) in &self.other_operations {
-            if seen_operations.contains_key(name) {
-                return Err(format!(
-                    "Custom operation '{}' conflicts with a standard operation from extension type {:?}",
-                    name, seen_operations.get(name).unwrap()
-                ));
-            }
-        }
+        // NOTE - if we support custom operations, we will need validation to prevent
+        // name collisions.
 
         Ok(())
     }
@@ -244,11 +202,6 @@ impl ExtensionSpec {
             }
         }
 
-        // Add other operations (already validated for no conflicts)
-        for (name, op) in &self.other_operations {
-            operations.insert(name.clone(), op.clone());
-        }
-
         Ok(operations)
     }
 
@@ -264,8 +217,7 @@ impl ExtensionSpec {
             }
         }
 
-        // Then check other operations
-        self.other_operations.get(name).cloned()
+        None
     }
 }
 
@@ -886,6 +838,12 @@ pub(crate) async fn get_sns_token_symbol(
     Ok(symbol)
 }
 
+/// Helper function to validate test operations - just returns unprocessed
+#[cfg(any(test, feature = "test"))]
+fn validate_test_operation(arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
+    Ok(ValidatedOperationArg::Unprocessed(arg))
+}
+
 /// Helper function to create test allowed extensions map
 #[cfg(any(test, feature = "test"))]
 fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
@@ -900,13 +858,7 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
             extension_types: vec![ExtensionKind::TreasuryManager],
-            other_operations: btreemap! {
-                // Example of an additional operation beyond standard treasury operations
-                "delegate_treasury_authority".to_string() => OperationSpec::GovernancePassthrough {
-                    name: "delegate_treasury_authority".to_string(),
-                    description: "Delegate treasury management authority to a set of principals.".to_string(),
-                },
-            },
+
         }
     }
 }
@@ -1382,7 +1334,6 @@ mod tests {
                 ExtensionKind::TreasuryManager,
                 ExtensionKind::TreasuryManager,
             ],
-            other_operations: BTreeMap::new(),
         };
 
         let result = spec.validate();
@@ -1398,7 +1349,6 @@ mod tests {
             version: ExtensionVersion(1),
             topic: Topic::ProtocolCanisterManagement,
             extension_types: vec![ExtensionKind::TreasuryManager],
-            other_operations: BTreeMap::new(),
         };
 
         assert!(spec.validate().is_ok());
