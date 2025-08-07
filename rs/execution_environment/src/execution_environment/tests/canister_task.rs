@@ -234,7 +234,7 @@ fn global_timer_can_be_cancelled() {
     env.advance_time(Duration::from_secs(1));
     // Setup global timer to increase a global counter
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
-    let deadline = now_nanos + 10; // set the deadline in 10 rounds from now
+    let deadline = now_nanos + 1_000; // set the deadline in 1_000 rounds from now, i.e., far in the future so that the timer does not trigger before getting cancelled
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
         .api_global_timer_set(deadline)
@@ -262,7 +262,8 @@ fn global_timer_can_be_cancelled() {
         .unwrap();
     assert_eq!(result, WasmResult::Reply(deadline.to_le_bytes().into()));
 
-    // The timer should not be called
+    // The timer should not be called even after bumping time by 1s = 1_000_000_000ns
+    // to exceed the deadline.
     env.advance_time(Duration::from_secs(1));
     // We execute three rounds to exercise all possible method types (update, heartbeat, global timer).
     for _ in 0..3 {
