@@ -1,6 +1,6 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
-
+#![allow(clippy::result_large_err)]
 use crate::consensus::{
     check_protocol_version,
     metrics::ValidatorMetrics,
@@ -1759,7 +1759,7 @@ impl Validator {
     fn dedup_change_actions(&self, name: &str, actions: Mutations) -> Mutations {
         let mut change_set = Mutations::new();
         for action in actions {
-            change_set.dedup_push(action).unwrap_or_else(|action| {
+            if let Some(duplicate_action) = change_set.dedup_push(action) {
                 self.metrics
                     .duplicate_artifact
                     .with_label_values(&[name])
@@ -1768,9 +1768,9 @@ impl Validator {
                     self.log,
                     "Duplicated {} detected in changeset {:?}",
                     name,
-                    action
+                    duplicate_action
                 )
-            })
+            }
         }
         change_set
     }

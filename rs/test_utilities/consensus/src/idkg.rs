@@ -82,22 +82,22 @@ pub fn empty_response() -> ConsensusResponse {
     ConsensusResponse::new(CallbackId::from(0), Payload::Data(vec![]))
 }
 
-pub fn key_transcript_for_tests(key_id: &MasterPublicKeyId) -> IDkgTranscript {
+pub fn key_transcript_for_tests(key_id: &IDkgMasterPublicKeyId) -> IDkgTranscript {
     let rng = &mut reproducible_rng();
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let alg = AlgorithmId::from(key_id);
+    let alg = AlgorithmId::from(key_id.inner());
     generate_key_transcript(&env, &dealers, &receivers, alg, rng)
 }
 
-pub fn pre_signature_for_tests(key_id: &MasterPublicKeyId) -> PreSignature {
+pub fn pre_signature_for_tests(key_id: &IDkgMasterPublicKeyId) -> PreSignature {
     let rng = &mut reproducible_rng();
     let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let alg = AlgorithmId::from(key_id);
-    match key_id {
+    let alg = AlgorithmId::from(key_id.inner());
+    match key_id.inner() {
         MasterPublicKeyId::Ecdsa(_) => {
             let key = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
             let pre_sig =

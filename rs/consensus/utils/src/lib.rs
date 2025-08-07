@@ -448,8 +448,8 @@ pub fn get_subnet_record(
     }
 }
 
-/// Return the oldest registry version of transcripts in the given IDKG summary payload that are
-/// referenced by the given replicated state.
+/// Return the oldest registry version of transcripts that were matched to signature
+/// request contexts in the given replicated state.
 pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option<RegistryVersion> {
     state
         .signature_request_contexts()

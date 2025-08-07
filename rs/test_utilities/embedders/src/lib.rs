@@ -125,6 +125,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
