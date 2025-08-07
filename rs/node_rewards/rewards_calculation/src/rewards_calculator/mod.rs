@@ -115,7 +115,7 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
-        subnets_fr: subnets_fr,
+        subnets_fr,
         provider_results: results_per_provider,
     })
 }
@@ -184,8 +184,8 @@ fn step_0_subnets_nodes_fr(
                     subnet_assigned_fr: subnet_fr,
                     num_blocks_proposed,
                     num_blocks_failed,
-                    original_fr: original_fr,
-                    relative_fr: relative_fr,
+                    original_fr,
+                    relative_fr,
                 },
             );
         }
