@@ -1817,7 +1817,8 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             }
         };
 
-        let mut paths = dir_list_recursive(checkpoint_path).map_err(convert_io_err)?;
+        let mut paths =
+            dir_list_recursive(checkpoint_path, &mut thread_pool).map_err(convert_io_err)?;
         // Remove the unverified checkpoint marker from the list of paths,
         // since another thread might also be validating the checkpoint and may have already deleted the marker.
         // Marking the unverified marker as read-only is unnecessary for this function's purpose and may cause an error.
@@ -2677,21 +2678,35 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+fn dir_list_recursive(
+    path: &Path,
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<Vec<PathBuf>> {
     let mut result = Vec::new();
-    fn add_content(path: &Path, result: &mut Vec<PathBuf>) -> std::io::Result<()> {
-        result.push(path.to_path_buf());
-        let metadata = path.metadata()?;
-        if metadata.is_dir() {
-            let entries = path.read_dir()?;
-            for entry_result in entries {
-                let entry = entry_result?;
-                add_content(&entry.path(), result)?;
-            }
-        }
-        Ok(())
+    let mut paths_to_iterate = vec![path.to_path_buf()];
+    while !paths_to_iterate.is_empty() {
+        let next_paths_to_iterate = maybe_parallel_map(
+            thread_pool,
+            paths_to_iterate.iter(),
+            |path| -> std::io::Result<Vec<PathBuf>> {
+                let metadata = path.metadata()?;
+                if metadata.is_dir() {
+                    path.read_dir()?
+                        .map(|entry_result| entry_result.map(|entry| entry.path()))
+                        .collect::<Result<Vec<_>, _>>()
+                } else {
+                    Ok(Vec::new())
+                }
+            },
+        )
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+        result.append(&mut paths_to_iterate);
+        paths_to_iterate = next_paths_to_iterate;
     }
-    add_content(path, &mut result)?;
     Ok(result)
 }
 
