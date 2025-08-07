@@ -139,7 +139,7 @@ use super::{
 };
 use crate::{
     driver::{
-        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
+        constants::{self, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -148,7 +148,7 @@ use crate::{
         tnet::TNet,
         virtualmachine::{destroy_vm, restart_vm, start_vm},
     },
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -222,7 +222,6 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
-const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
@@ -648,7 +647,7 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
-            latest_version = retry_with_msg_async!(
+            latest_version = retry_with_msg_async_quiet!(
                 format!(
                     "check if latest registry version >= {}",
                     min_version.to_string()
@@ -696,7 +695,7 @@ impl TopologySnapshot {
         let backoff = Duration::from_secs(2);
         let prev_version: Arc<TokioMutex<RegistryVersion>> =
             Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
-        let version = retry_with_msg_async!(
+        let version = retry_with_msg_async_quiet!(
             "block_for_newest_mainnet_registry_version",
             &self.env.logger(),
             duration,
@@ -1345,7 +1344,6 @@ impl HasGroupSetup for TestEnv {
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -1500,7 +1498,9 @@ pub trait SshSession: HasTestEnv {
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
         let mut channel = session.channel_session()?;
-        channel.exec("bash").unwrap();
+        channel.exec("bash").map_err(|e| {
+            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+        })?;
 
         channel.write_all(script.as_bytes())?;
         channel.flush()?;
@@ -2160,6 +2160,20 @@ macro_rules! retry_with_msg_async {
     };
 }
 
+/// This is a quieter version of retry_with_msg_async that only logs the initial attempt and final result, not every intermediate failure.
+#[macro_export]
+macro_rules! retry_with_msg_async_quiet {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::driver::test_env_api::retry_async_quiet(
+            format!("{} [{}:{}]", $msg, file!(), line!()),
+            $log,
+            $timeout,
+            $backoff,
+            $f,
+        )
+    };
+}
+
 pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
     msg: S,
     log: &slog::Logger,
@@ -2201,6 +2215,52 @@ where
                     "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
                     trunc_error(err_msg)
                 );
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+/// A quieter version of `retry_async` that only logs the initial attempt and final result.
+/// This reduces log noise when there are many retry attempts.
+pub async fn retry_async_quiet<S: AsRef<str>, F, Fut, R>(
+    msg: S,
+    log: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    f: F,
+) -> Result<R>
+where
+    Fut: Future<Output = Result<R>>,
+    F: Fn() -> Fut,
+{
+    let msg = msg.as_ref();
+    let mut attempt = 1;
+    let start = Instant::now();
+    debug!(
+        log,
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
+    );
+    loop {
+        match f().await {
+            Ok(v) => {
+                debug!(
+                    log,
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = format!("{:?}", err);
+                if start.elapsed() > timeout {
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. \n Last error: {err_msg}",
+                        start.elapsed(),
+                    )));
+                }
+                debug!(log, "Func=\"{msg}\" failed on attempt {attempt}",);
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }
@@ -2451,22 +2511,6 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         GroupName {
             message: "Created new InfraProvider group".to_string(),
             group: group.to_string(),
-        },
-    );
-    event.emit_log(log);
-}
-
-pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Deserialize, Serialize)]
-    pub struct KibanaUrl {
-        message: String,
-        url: String,
-    }
-    let event = log_events::LogEvent::new(
-        KIBANA_URL_CREATED_EVENT_NAME.to_string(),
-        KibanaUrl {
-            message: "Replica logs will appear in Kibana".to_string(),
-            url: kibana_url.to_string(),
         },
     );
     event.emit_log(log);

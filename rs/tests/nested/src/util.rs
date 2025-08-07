@@ -29,7 +29,7 @@ use ic_system_test_driver::{
         submit_update_nodes_hostos_version_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
-    retry_with_msg_async,
+    retry_with_msg_async_quiet,
     util::runtime_from_url,
 };
 use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
@@ -316,7 +316,7 @@ pub async fn wait_for_guest_version(
     timeout: Duration,
     backoff: Duration,
 ) -> Result<String> {
-    retry_with_msg_async!(
+    retry_with_msg_async_quiet!(
         "Waiting until the guest returns a version",
         logger,
         timeout,
@@ -326,10 +326,13 @@ pub async fn wait_for_guest_version(
                 .await
                 .unwrap_or("unavailable".to_string());
             if current_version != "unavailable" {
-                info!(logger, "Guest reported version '{}'", current_version);
+                info!(
+                    logger,
+                    "SUCCESS: Guest reported version '{}'", current_version
+                );
                 Ok(current_version)
             } else {
-                bail!("Guest version is still unavailable")
+                bail!("FAIL: Guest version is still unavailable")
             }
         }
     )
@@ -345,7 +348,7 @@ pub async fn wait_for_expected_guest_version(
     timeout: Duration,
     backoff: Duration,
 ) -> Result<()> {
-    retry_with_msg_async!(
+    retry_with_msg_async_quiet!(
         format!(
             "Waiting until the guest is on the expected version '{}'",
             expected_version
@@ -360,11 +363,11 @@ pub async fn wait_for_expected_guest_version(
             if current_version == expected_version {
                 info!(
                     logger,
-                    "Guest is now on expected version '{}'", current_version
+                    "SUCCESS: Guest is now on expected version '{}'", current_version
                 );
                 Ok(())
             } else {
-                bail!("Guest is still on version '{}'", current_version)
+                bail!("FAIL: Guest is still on version '{}'", current_version)
             }
         }
     )

@@ -98,7 +98,7 @@ pub fn deliver_batches(
             break;
         };
         let replica_version = block.version().clone();
-        let block_stats = BlockStats::from(&block);
+        let mut block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
             log,
@@ -157,7 +157,13 @@ pub fn deliver_batches(
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
-            get_idkg_subnet_public_keys_and_pre_signatures(&block, &summary_block, pool, log);
+            get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &summary_block,
+                pool,
+                log,
+                block_stats.idkg_stats.as_mut(),
+            );
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
 
         // Add vetKD keys to this map as well

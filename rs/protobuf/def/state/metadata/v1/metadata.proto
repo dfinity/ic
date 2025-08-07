@@ -31,6 +31,7 @@ message SubnetTopology {
   reserved 5;
   reserved "ecdsa_keys_held";
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
+  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
 }
 
 message SubnetsEntry {
@@ -374,6 +375,7 @@ message SystemMetadata {
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
 
+  // TODO: deprecate in favour of information in NetworkTopology
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 22;
 }
 

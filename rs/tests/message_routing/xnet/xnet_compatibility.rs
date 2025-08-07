@@ -45,7 +45,7 @@ use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const DKG_INTERVAL: u64 = 9;

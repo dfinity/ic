@@ -41,8 +41,7 @@ mod tests {
 
     #[test]
     fn test_retry_if_busy_failure() {
-        let result: Result<(), _> =
-            retry_if_busy(|| Err(io::Error::new(io::ErrorKind::Other, "fail")));
+        let result: Result<(), _> = retry_if_busy(|| Err(io::Error::other("fail")));
         assert!(result.is_err());
     }
 }

@@ -50,6 +50,7 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
+        "internet_identity": "internet_identity_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
         "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
     },
@@ -88,11 +89,13 @@ canisters(
         "sns_archive": "mainnet_ic-icrc1-archive",
         "sns_index": "mainnet_ic-icrc1-index-ng",
         "node-rewards": "mainnet_node-rewards-canister",
+        "internet_identity": "internet_identity_dev_at_mainnet_commit",
         "cycles_ledger": "mainnet_cycles_ledger_canister",
         "cycles_ledger_index": "mainnet_cycles_ledger_index",
     },
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
+        "internet_identity": "dfinity/internet-identity",
     },
 )
 
@@ -144,7 +147,7 @@ rust_register_toolchains(
         "fastbuild": "none",
         "opt": "none",
     }},
-    versions = ["1.86.0"],
+    versions = ["1.88.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
@@ -156,7 +159,8 @@ load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
-    cargo_lockfile = "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
+    cargo_lockfile = "//:Cargo.Bazel.toml.lock",
+    # the fuzzing lockfile contains fuzzing-specific annotations
     lockfile = "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
     sanitizers_enabled = SANITIZERS_ENABLED,
 )

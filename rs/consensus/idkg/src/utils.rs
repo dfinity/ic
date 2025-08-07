@@ -2,7 +2,7 @@
 
 use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
-    metrics::IDkgPayloadMetrics,
+    metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
@@ -11,7 +11,7 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -52,6 +52,8 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
 };
+
+pub const CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS: &str = "idkg_resolve_transcript_refs_error";
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct InvalidChainCacheError(String);
@@ -523,9 +525,10 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
     last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
+    mut stats: Option<&mut IDkgPayloadStats>,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    BTreeMap<MasterPublicKeyId, AvailablePreSignatures>,
+    BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
 ) {
     let Some(idkg_payload) = current_block.payload.as_ref().as_idkg() else {
         return (BTreeMap::new(), BTreeMap::new());
@@ -550,11 +553,25 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
 
         match block_reader.transcript(&transcript_ref) {
             Ok(key_transcript) => {
-                if let Some(public_key) = get_subnet_master_public_key(&key_transcript, log) {
-                    public_keys.insert(key_id.clone().into(), public_key);
+                match get_master_public_key_from_transcript(&key_transcript) {
+                    Ok(public_key) => {
+                        public_keys.insert(key_id.clone().into(), public_key);
+                    }
+                    Err(err) => {
+                        if let Some(ref mut stats) = stats {
+                            stats.transcript_resolution_errors += 1;
+                        }
+                        error!(
+                            log,
+                            "{}: Failed to retrieve IDKg subnet master public key of key id {}: {:?}",
+                            CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
+                            key_id,
+                            err
+                        );
+                    }
                 }
                 pre_signatures.insert(
-                    key_id.clone().into(),
+                    key_id.clone(),
                     AvailablePreSignatures {
                         key_transcript,
                         pre_signatures: BTreeMap::new(),
@@ -562,10 +579,16 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                 );
             }
             Err(err) => {
-                // TODO(CON-1549): Increment counter metric
-                warn!(
+                if let Some(ref mut stats) = stats {
+                    stats.transcript_resolution_errors += 1;
+                }
+                error!(
                     log,
-                    "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
+                    "{}: Failed to translate key transcript ref {:?} of key {}: {:?}",
+                    CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
+                    transcript_ref,
+                    key_id,
+                    err
                 );
             }
         }
@@ -584,31 +607,22 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     entry.pre_signatures.insert(*pre_sig_id, pre_sig);
                 }
                 Err(err) => {
-                    // TODO(CON-1549): Increment counter metric
-                    warn!(log, "Failed to translate Pre-signature ref: {:?}", err);
+                    if let Some(ref mut stats) = stats {
+                        stats.transcript_resolution_errors += 1;
+                    }
+                    error!(
+                        log,
+                        "{}: Failed to translate Pre-signature ref of key {}: {:?}",
+                        CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
+                        key_id,
+                        err
+                    );
                 }
             }
         }
     }
 
     (public_keys, pre_signatures)
-}
-
-fn get_subnet_master_public_key(
-    transcript: &IDkgTranscript,
-    log: &ReplicaLogger,
-) -> Option<MasterPublicKey> {
-    match get_master_public_key_from_transcript(transcript) {
-        Ok(public_key) => Some(public_key),
-        Err(err) => {
-            warn!(
-                log,
-                "Failed to retrieve IDKg subnet master public key: {:?}", err
-            );
-
-            None
-        }
-    }
 }
 
 /// Updates the latest purge height, and returns true if
@@ -622,7 +636,7 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::test_utils::{
-        create_available_pre_signature_with_key_transcript, set_up_idkg_payload,
+        create_available_pre_signature_with_key_transcript_and_height, set_up_idkg_payload,
         IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -919,21 +933,23 @@ mod tests {
         idkg_payload: &mut IDkgPayload,
         key_transcript: UnmaskedTranscript,
         key_id: &IDkgMasterPublicKeyId,
+        height: Height,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
-            let id = create_available_pre_signature_with_key_transcript(
+            let id = create_available_pre_signature_with_key_transcript_and_height(
                 idkg_payload,
                 i,
                 key_id.clone(),
                 Some(key_transcript),
+                height,
             );
             pre_sig_ids.push(id);
         }
         pre_sig_ids
     }
 
-    fn make_block(idkg_payload: Option<IDkgPayload>) -> Block {
+    fn make_block(idkg_payload: Option<IDkgPayload>, height: Height) -> Block {
         Block::new(
             CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
             Payload::new(
@@ -943,7 +959,7 @@ mod tests {
                     idkg: idkg_payload,
                 }),
             ),
-            Height::from(100),
+            height,
             ic_types::consensus::Rank(456),
             ValidationContext {
                 registry_version: RegistryVersion::from(99),
@@ -963,6 +979,7 @@ mod tests {
 
     fn test_get_idkg_subnet_public_keys_and_pre_signatures(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
+        let height = Height::from(100);
         let (mut idkg_payload, env, block_reader) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
@@ -992,6 +1009,7 @@ mod tests {
             &mut idkg_payload,
             current_key_transcript_ref.unmasked_transcript(),
             &key_id,
+            height,
         );
 
         let (dealers, receivers) = env.choose_dealers_and_receivers(
@@ -1013,18 +1031,24 @@ mod tests {
                 &mut idkg_payload,
                 old_key_transcript_ref,
                 &key_id,
+                height,
             );
 
-        let block = make_block(Some(idkg_payload));
+        let block = make_block(Some(idkg_payload), height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { pool, .. } = dependencies(pool_config, 1);
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
-
-            let (public_keys, pre_signatures) =
-                get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
-
+            let mut stats = IDkgPayloadStats::default();
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                Some(&mut stats),
+            );
+            assert_eq!(stats.transcript_resolution_errors, 0);
             assert_eq!(public_keys.len(), 1);
             assert!(public_keys.contains_key(key_id.inner()));
 
@@ -1050,15 +1074,65 @@ mod tests {
     }
 
     #[test]
+    fn test_failure_to_resolve_should_increase_error_counter() {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        let mut rng = reproducible_rng();
+        let transcript_ref_height = Height::from(101);
+        let block_height = Height::from(100);
+        let (mut idkg_payload, _, _) = set_up_idkg_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 8,
+            vec![key_id.clone()],
+            /*should_create_key_transcript=*/ true,
+        );
+        let current_key_transcript_ref = idkg_payload
+            .single_key_transcript()
+            .current
+            .clone()
+            .unwrap();
+        add_available_pre_signatures_with_key_transcript(
+            &mut idkg_payload,
+            current_key_transcript_ref.unmasked_transcript(),
+            &key_id,
+            transcript_ref_height,
+        );
+        let block = make_block(Some(idkg_payload), block_height);
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let log = no_op_logger();
+            let pool_reader = PoolReader::new(&pool);
+            let mut stats = IDkgPayloadStats::default();
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                Some(&mut stats),
+            );
+            assert_eq!(stats.transcript_resolution_errors, 1);
+            assert!(public_keys.is_empty());
+            assert!(pre_signatures.is_empty());
+        });
+    }
+
+    #[test]
     fn test_block_without_idkg_should_not_deliver_data() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { pool, .. } = dependencies(pool_config, 1);
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
-            let block = make_block(None);
-            let (public_keys, pre_signatures) =
-                get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
-
+            let block = make_block(None, Height::from(100));
+            let mut stats = IDkgPayloadStats::default();
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                Some(&mut stats),
+            );
+            assert_eq!(stats.transcript_resolution_errors, 0);
             assert!(public_keys.is_empty());
             assert!(pre_signatures.is_empty());
         })
@@ -1074,6 +1148,7 @@ mod tests {
 
     fn test_block_without_key_should_not_deliver_data(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
+        let height = Height::from(100);
         let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
@@ -1099,18 +1174,24 @@ mod tests {
             &mut idkg_payload,
             key_transcript_ref,
             &key_id,
+            height,
         );
 
-        let block = make_block(Some(idkg_payload));
+        let block = make_block(Some(idkg_payload), height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { pool, .. } = dependencies(pool_config, 1);
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
-
-            let (public_keys, pre_signatures) =
-                get_idkg_subnet_public_keys_and_pre_signatures(&block, &block, &pool_reader, &log);
-
+            let mut stats = IDkgPayloadStats::default();
+            let (public_keys, pre_signatures) = get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &block,
+                &pool_reader,
+                &log,
+                Some(&mut stats),
+            );
+            assert_eq!(stats.transcript_resolution_errors, 0);
             assert!(public_keys.is_empty());
             assert!(pre_signatures.is_empty());
         })

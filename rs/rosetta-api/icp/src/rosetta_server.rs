@@ -367,12 +367,7 @@ impl RosettaApiServer {
         *server_lock = match replace(&mut *server_lock, ServerState::Failed) {
             ServerState::Started => ServerState::Started,
             ServerState::OfflineStarted => ServerState::OfflineStarted,
-            ServerState::Failed => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "run previously failed!",
-                ))
-            }
+            ServerState::Failed => return Err(io::Error::other("run previously failed!")),
             ServerState::Unstarted(server) if offline => {
                 info!("Running in offline mode");
                 server.await?;

@@ -17,7 +17,7 @@ use ic_replicated_state::{
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExportedFunctions, NumWasmPages,
+    CanisterStatus, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
@@ -145,7 +145,6 @@ pub struct ExecutionStateBits {
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
     pub last_full_execution_round: ExecutionRound,
-    pub call_context_manager: Option<CallContextManager>,
     pub compute_allocation: ComputeAllocation,
     pub accumulated_priority: AccumulatedPriority,
     pub priority_credit: AccumulatedPriority,

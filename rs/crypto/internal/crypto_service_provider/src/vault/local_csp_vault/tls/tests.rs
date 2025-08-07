@@ -313,7 +313,7 @@ mod keygen {
     #[test]
     fn should_fail_with_transient_internal_error_if_tls_keygen_persistence_fails() {
         let mut pks_returning_io_error = MockPublicKeyStore::new();
-        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+        let io_error = std::io::Error::other("oh no!");
         pks_returning_io_error
             .expect_set_once_tls_certificate()
             .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
