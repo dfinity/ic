@@ -150,7 +150,7 @@ fn validate_deposit_operation(arg: ExtensionOperationArg) -> Result<ValidatedOpe
     ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
 }
 
-/// Validates withdraw operation arguments  
+/// Validates withdraw operation arguments (currently no validation, just passes through)
 fn validate_withdraw_operation(
     arg: ExtensionOperationArg,
 ) -> Result<ValidatedOperationArg, String> {
@@ -812,15 +812,7 @@ impl RenderablePayload for ValidatedDepositOperationArg {
 /// Validated withdraw operation arguments
 #[derive(Debug, Clone)]
 pub struct ValidatedWithdrawOperationArg {
-    /// Recipient of the withdrawal
-    pub recipient_principal: PrincipalId,
-    /// Amount of SNS tokens to withdraw
-    pub withdrawal_amount_sns_e8s: u64,
-    /// Amount of ICP tokens to withdraw
-    pub withdrawal_amount_icp_e8s: u64,
-    /// Optional memo
-    pub memo: Option<String>,
-    /// Original Precise value with all fields
+    /// Original operation arguments
     original: ExtensionOperationArg,
 }
 
@@ -828,75 +820,20 @@ impl TryFrom<ExtensionOperationArg> for ValidatedWithdrawOperationArg {
     type Error = String;
 
     fn try_from(arg: ExtensionOperationArg) -> Result<Self, Self::Error> {
-        let ExtensionOperationArg { value: Some(value) } = &arg else {
+        // For now, just ensure arguments are provided
+        // No actual validation is performed
+        if arg.value.is_none() {
             return Err("Withdraw operation arguments must be provided".to_string());
-        };
+        }
 
-        let map = match &value.value {
-            Some(precise::Value::Map(PreciseMap { map })) => map,
-            _ => return Err("Withdraw operation arguments must be a PreciseMap".to_string()),
-        };
-
-        let recipient_text = map
-            .get("recipient_principal")
-            .and_then(|p| match &p.value {
-                Some(precise::Value::Text(t)) => Some(t.as_str()),
-                _ => None,
-            })
-            .ok_or_else(|| "recipient_principal must be a Text value".to_string())?;
-
-        let recipient_principal = PrincipalId::from_str(recipient_text)
-            .map_err(|e| format!("Invalid recipient principal: {}", e))?;
-
-        let withdrawal_amount_sns_e8s = map
-            .get("withdrawal_amount_sns_e8s")
-            .and_then(|p| match &p.value {
-                Some(precise::Value::Nat(n)) => Some(*n),
-                _ => None,
-            })
-            .ok_or_else(|| "withdrawal_amount_sns_e8s must be a Nat value".to_string())?;
-
-        let withdrawal_amount_icp_e8s = map
-            .get("withdrawal_amount_icp_e8s")
-            .and_then(|p| match &p.value {
-                Some(precise::Value::Nat(n)) => Some(*n),
-                _ => None,
-            })
-            .ok_or_else(|| "withdrawal_amount_icp_e8s must be a Nat value".to_string())?;
-
-        let memo = map.get("memo").and_then(|p| match &p.value {
-            Some(precise::Value::Text(t)) => Some(t.clone()),
-            _ => None,
-        });
-
-        Ok(Self {
-            recipient_principal,
-            withdrawal_amount_sns_e8s,
-            withdrawal_amount_icp_e8s,
-            memo,
-            original: arg,
-        })
+        Ok(Self { original: arg })
     }
 }
 
 impl RenderablePayload for ValidatedWithdrawOperationArg {
     fn render_for_proposal(&self) -> String {
-        let mut output = format!(
-            r#"### Treasury Withdrawal
-
-**Recipient:** {}  
-**SNS Tokens:** {} e8s  
-**ICP Tokens:** {} e8s"#,
-            self.recipient_principal,
-            self.withdrawal_amount_sns_e8s,
-            self.withdrawal_amount_icp_e8s
-        );
-
-        if let Some(memo) = &self.memo {
-            output.push_str(&format!("  \n**Memo:** {}", memo));
-        }
-
-        output
+        // Since we're not parsing the fields yet, just show the raw operation
+        self.original.render_for_proposal()
     }
 }
 
