@@ -7,7 +7,7 @@ mod provisional;
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
-use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
@@ -324,8 +324,8 @@ impl CanisterControllersChangeRecord {
 ///    snapshot_id : blob;
 ///    taken_at_timestamp : nat64;
 ///    source: variant {
-///         taken_from_canister;
-///         metadata_upload;
+///         taken_from_canister : reserved;
+///         metadata_upload : reserved;
 ///    };
 /// }
 /// ```
@@ -3887,22 +3887,27 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
 pub enum SnapshotSource {
-    #[default]
     #[serde(rename = "taken_from_canister")]
-    TakenFromCanister,
+    TakenFromCanister(Reserved),
     #[serde(rename = "metadata_upload")]
-    MetadataUpload,
+    MetadataUpload(Reserved),
+}
+
+impl Default for SnapshotSource {
+    fn default() -> Self {
+        Self::TakenFromCanister(Reserved)
+    }
 }
 
 impl From<SnapshotSource> for pb_canister_state_bits::SnapshotSource {
     fn from(value: SnapshotSource) -> Self {
         match value {
-            SnapshotSource::TakenFromCanister => {
+            SnapshotSource::TakenFromCanister(_) => {
                 pb_canister_state_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::MetadataUpload => {
+            SnapshotSource::MetadataUpload(_) => {
                 pb_canister_state_bits::SnapshotSource::UploadedManually
             }
         }
@@ -3921,10 +3926,10 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
                 })
             }
             pb_canister_state_bits::SnapshotSource::TakenFromCanister => {
-                Ok(SnapshotSource::TakenFromCanister)
+                Ok(SnapshotSource::TakenFromCanister(Reserved))
             }
             pb_canister_state_bits::SnapshotSource::UploadedManually => {
-                Ok(SnapshotSource::MetadataUpload)
+                Ok(SnapshotSource::MetadataUpload(Reserved))
             }
         }
     }
@@ -3933,8 +3938,8 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// Struct used for encoding/decoding
 /// (record {
 ///     source : variant {
-///         taken_from_canister;
-///         metadata_upload;
+///         taken_from_canister : reserved;
+///         metadata_upload : reserved;
 ///     };
 ///     taken_at_timestamp : nat64;
 ///     wasm_module_size : nat64;

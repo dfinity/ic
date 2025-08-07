@@ -63,8 +63,8 @@ type change_details = variant {
       snapshot_id : snapshot_id;
       taken_at_timestamp : nat64;
       source : variant {
-        taken_from_canister;
-        metadata_upload;
+        taken_from_canister : reserved;
+        metadata_upload : reserved;
       };
     };
     // Deprecated: `settings_change` is used instead.
@@ -500,8 +500,8 @@ type read_canister_snapshot_metadata_args = record {
 
 type read_canister_snapshot_metadata_response = record {
     source : variant {
-        taken_from_canister;
-        metadata_upload;
+        taken_from_canister: reserved;
+        metadata_upload : reserved;
     };
     taken_at_timestamp : nat64;
     wasm_module_size : nat64;
