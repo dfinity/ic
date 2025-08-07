@@ -325,7 +325,7 @@ impl CanisterControllersChangeRecord {
 ///    taken_at_timestamp : nat64;
 ///    source: variant {
 ///         taken_from_canister;
-///         uploaded_manually;
+///         metadata_upload;
 ///    };
 /// }
 /// ```
@@ -3934,7 +3934,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// (record {
 ///     source : variant {
 ///         taken_from_canister;
-///         uploaded_manually;
+///         metadata_upload;
 ///     };
 ///     taken_at_timestamp : nat64;
 ///     wasm_module_size : nat64;
