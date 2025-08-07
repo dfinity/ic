@@ -1,6 +1,7 @@
 use anyhow::Result;
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use ic_agent::agent::RejectCode;
+use ic_cdk::api::management_canister::main::{CanisterIdRecord, CanisterStatusResponse};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
@@ -12,10 +13,13 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{assert_reject, block_on, UniversalCanister};
 use ic_types::Cycles;
+use ic_utils::interfaces::ManagementCanister;
+use slog::info;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .add_test(systest!(ingress_message_to_subnet_id_fails))
         .add_test(systest!(
             non_nns_canister_attempt_to_create_canister_on_another_subnet_fails
         ))
@@ -34,6 +38,62 @@ pub fn setup(env: TestEnv) {
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+}
+
+/// Tests that an ingress message to a subnet ID fails.
+pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
+    let logger = env.logger();
+    let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let sys_node = env.get_first_healthy_system_node_snapshot();
+    let sys_no_nns_node = env.get_first_healthy_system_but_not_nns_node_snapshot();
+    let ver_app_agent = ver_app_node.build_default_agent();
+    let app_agent = app_node.build_default_agent();
+    let sys_agent = sys_node.build_default_agent();
+    let sys_no_nns_agent = sys_no_nns_node.build_default_agent();
+    block_on(async move {
+        // Check that an ingress message to a subnet ID fails
+        // by successfully creating a canister using the provisional API (via an agent)
+        // and then requesting `canister_status` for that canister
+        // using the subnet ID as the callee (instead of the management canister ID).
+        for (agent, node) in [
+            (&ver_app_agent, &ver_app_node),
+            (&app_agent, &app_node),
+            (&sys_agent, &sys_node),
+            (&sys_no_nns_agent, &sys_no_nns_node),
+        ] {
+            let mgr = ManagementCanister::create(agent);
+
+            // Successfully create a canister on the corresponding subnet.
+            let effective_canister_id = node.effective_canister_id();
+            let canister_id: Principal = mgr
+                .create_canister()
+                .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(effective_canister_id)
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0;
+
+            let arg = CanisterIdRecord { canister_id };
+            let subnet_id: Principal = node.subnet_id().unwrap().get().into();
+            let agent_call = |callee: &Principal| {
+                agent
+                    .update(callee, "canister_status")
+                    .with_arg(Encode!(&arg).unwrap())
+                    .with_effective_canister_id(subnet_id)
+                    .call_and_wait()
+            };
+
+            // Requesting `canister_status` using the subnet ID as the callee fails.
+            let err = agent_call(&subnet_id).await.unwrap_err();
+            info!(logger, "error from calling subnet ID: {:?}", err);
+
+            // The same call using the management canister ID as the callee succeeds and returns a response of the corresponding type.
+            let res = agent_call(&Principal::management_canister()).await.unwrap();
+            let _ = Decode!(&res, CanisterStatusResponse).unwrap();
+        }
+    });
 }
 
 /// Tests whether creating a canister on a subnet other than self fails when not
