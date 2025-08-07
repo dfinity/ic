@@ -3918,10 +3918,10 @@ impl Default for SnapshotSource {
 impl From<SnapshotSource> for pb_canister_state_bits::SnapshotSource {
     fn from(value: SnapshotSource) -> Self {
         match value {
-            SnapshotSource::TakenFromCanister(_) => {
+            SnapshotSource::TakenFromCanister(Reserved) => {
                 pb_canister_state_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::MetadataUpload(_) => {
+            SnapshotSource::MetadataUpload(Reserved) => {
                 pb_canister_state_bits::SnapshotSource::UploadedManually
             }
         }
