@@ -389,7 +389,7 @@ fn test_open_store_multiple_times_with_different_keys() {
 
         fixture
             .open(Partition::Store)
-            .expect(&format!("Failed to open store partition on iteration {i}"));
+            .unwrap_or_else(|_| panic!("Failed to open store partition on iteration {i}"));
         assert!(Path::new("/dev/mapper/vda10-crypt").exists());
         deactive_crypt_device_with_check("vda10-crypt");
     }
