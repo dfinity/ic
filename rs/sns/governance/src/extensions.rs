@@ -179,8 +179,12 @@ impl ExtensionKind {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+struct ExtensionVersion(u64);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionSpec {
     pub name: String,
+    pub version: ExtensionVersion,
     pub topic: Topic,
     /// The extension types this extension implements (can be multiple)
     pub extension_types: Vec<ExtensionKind>,
@@ -192,6 +196,12 @@ pub struct ExtensionSpec {
 impl ExtensionSpec {
     /// Validates that there are no operation name conflicts
     pub fn validate(&self) -> Result<(), String> {
+        // This restriction may be relaxed later, but at present each extension type can only
+        // have one responsibility.
+        if self.extension_types.len() > 1 {
+            return Err("ExtensionSpec can only have one extension type at a time".to_string());
+        }
+
         let mut seen_operations = BTreeMap::new();
 
         // First, collect all standard operations
@@ -576,33 +586,24 @@ impl TryFrom<RegisterExtension> for ValidatedRegisterExtension {
     }
 }
 
-pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
-    // In testing, any wasm module hash is allowed.
-    if cfg!(test) || cfg!(feature = "test") {
-        let spec = ExtensionSpec {
-            name: "My Test Extension".to_string(),
-            topic: Topic::TreasuryAssetManagement,
-            extension_types: vec![ExtensionKind::TreasuryManager],
-            other_operations: btreemap! {
-                // Example of an additional operation beyond standard treasury operations
-                "delegate_treasury_authority".to_string() => OperationSpec::GovernancePassthrough {
-                    name: "delegate_treasury_authority".to_string(),
-                    description: "Delegate treasury management authority to a set of principals.".to_string(),
-                },
-            },
-        };
+/// Validates an extension WASM against a provided set of allowed extensions.
+pub(crate) fn validate_extension_wasm_with_allowed(
+    wasm_module_hash: &[u8],
+    allowed_extensions: &BTreeMap<[u8; 32], ExtensionSpec>,
+) -> Result<ExtensionSpec, String> {
+    // Convert the hash to the expected array size if needed
+    let hash_array: [u8; 32] = if wasm_module_hash.len() == 32 {
+        wasm_module_hash.try_into().unwrap()
+    } else {
+        return Err(format!(
+            "Invalid wasm module hash length: expected 32 bytes, got {}",
+            wasm_module_hash.len()
+        ));
+    };
 
+    if let Some(spec) = allowed_extensions.get(&hash_array) {
         // Validate the spec to ensure no conflicting method names.
         spec.validate()?;
-
-        return Ok(spec);
-    }
-
-    // In production, check against the allowed extensions.
-    if let Some(spec) = ALLOWED_EXTENSIONS.get(wasm_module_hash) {
-        // Validate the spec to ensure no conflicting method names.
-        spec.validate()?;
-
         return Ok(spec.clone());
     }
 
@@ -610,6 +611,20 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
         "Wasm module with hash {:?} is not allowed as an extension.",
         hex::encode(wasm_module_hash)
     ))
+}
+
+/// Validates an extension WASM against the global ALLOWED_EXTENSIONS.
+pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
+    #[cfg(any(test, feature = "test"))]
+    {
+        // In tests, use the test allowed extensions
+        let test_allowed = create_test_allowed_extensions();
+        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
+    }
+    #[cfg(not(any(test, feature = "test")))]
+    {
+        validate_extension_wasm_with_allowed(wasm_module_hash, &ALLOWED_EXTENSIONS)
+    }
 }
 
 async fn list_extensions(
@@ -871,6 +886,31 @@ pub(crate) async fn get_sns_token_symbol(
     Ok(symbol)
 }
 
+/// Helper function to create test allowed extensions map
+#[cfg(any(test, feature = "test"))]
+fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
+    // Using a predictable test hash
+    let test_hash: [u8; 32] = [
+        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ];
+    btreemap! {
+        test_hash => ExtensionSpec {
+            name: "My Test Extension".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::TreasuryAssetManagement,
+            extension_types: vec![ExtensionKind::TreasuryManager],
+            other_operations: btreemap! {
+                // Example of an additional operation beyond standard treasury operations
+                "delegate_treasury_authority".to_string() => OperationSpec::GovernancePassthrough {
+                    name: "delegate_treasury_authority".to_string(),
+                    description: "Delegate treasury management authority to a set of principals.".to_string(),
+                },
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -920,15 +960,20 @@ mod tests {
 
         // Mock canister_info call for extension canister (only needed if extension is registered)
         if extension_registered {
+            // Get the test hash from our test allowed extensions
+            let test_hash: Vec<u8> = vec![
+                1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ];
             env.set_call_canister_response(
                 CanisterId::ic_00(),
                 "canister_info",
                 Encode!(&CanisterInfoRequest::new(extension_canister_id, Some(1))).unwrap(),
                 Ok(Encode!(&CanisterInfoResponse::new(
-                    0,                      // total_num_changes
-                    vec![],                 // recent_changes
-                    Some(vec![1, 2, 3, 4]), // module_hash - any hash works in test mode
-                    vec![],                 // controllers
+                    0,               // total_num_changes
+                    vec![],          // recent_changes
+                    Some(test_hash), // module_hash matching our test allowed extensions
+                    vec![],          // controllers
                 ))
                 .unwrap()),
             );
@@ -1324,5 +1369,38 @@ mod tests {
 
         let rendered = unprocessed_arg.render_for_proposal();
         assert!(rendered.contains("No payload provided"));
+    }
+
+    #[test]
+    fn test_extension_spec_validate_multiple_extension_types() {
+        // Test that ExtensionSpec can only have one extension type at a time
+        let spec = ExtensionSpec {
+            name: "test_extension".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::ProtocolCanisterManagement,
+            extension_types: vec![
+                ExtensionKind::TreasuryManager,
+                ExtensionKind::TreasuryManager,
+            ],
+            other_operations: BTreeMap::new(),
+        };
+
+        let result = spec.validate();
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "ExtensionSpec can only have one extension type at a time"
+        );
+
+        // Test that single extension type validates successfully
+        let spec = ExtensionSpec {
+            name: "test_extension".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::ProtocolCanisterManagement,
+            extension_types: vec![ExtensionKind::TreasuryManager],
+            other_operations: BTreeMap::new(),
+        };
+
+        assert!(spec.validate().is_ok());
     }
 }
