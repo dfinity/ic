@@ -19,7 +19,7 @@ pub struct ReplicaVersionRecord {
 pub struct GuestLaunchMeasurements {
     /// A list of valid SEV-SNP measurements. One release can have multiple valid
     /// measurements, e.g. depending on the kernel command line used to launch the
-    /// guest.
+    /// guest. Must be non-empty.
     #[prost(message, repeated, tag = "1")]
     pub guest_launch_measurements: ::prost::alloc::vec::Vec<GuestLaunchMeasurement>,
 }

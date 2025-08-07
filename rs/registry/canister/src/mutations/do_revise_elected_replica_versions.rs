@@ -239,6 +239,12 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(measurements) = &self.guest_launch_measurements
+            && measurements.guest_launch_measurements.is_empty()
+        {
+            return Err("guest_launch_measurements must not be an empty vector".into());
+        }
+
         if self.is_electing_a_version()? || self.is_unelecting_a_version() {
             Ok(())
         } else {
