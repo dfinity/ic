@@ -1329,7 +1329,7 @@ mod tests {
         let spec = ExtensionSpec {
             name: "test_extension".to_string(),
             version: ExtensionVersion(1),
-            topic: Topic::ProtocolCanisterManagement,
+            topic: Topic::Governance,
             extension_types: vec![
                 ExtensionType::TreasuryManager,
                 ExtensionType::TreasuryManager,
@@ -1347,7 +1347,7 @@ mod tests {
         let spec = ExtensionSpec {
             name: "test_extension".to_string(),
             version: ExtensionVersion(1),
-            topic: Topic::ProtocolCanisterManagement,
+            topic: Topic::Governance,
             extension_types: vec![ExtensionType::TreasuryManager],
         };
 
