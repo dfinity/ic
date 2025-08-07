@@ -318,7 +318,7 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
     // The store partition is encrypted with the current SEV key but not with the previous key.
     format_crypt_device(
         &fixture.device.path().unwrap(),
-        &fixture
+        fixture
             .sev_key_deriver
             .derive_key(Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
