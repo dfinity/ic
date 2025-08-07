@@ -1654,7 +1654,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
         amount: Nat::from(0u64),
         expected_allowance: None,
         expires_at: None,
-        fee: args.fee.map(Nat::from),
+        fee: args.fee,
         memo: None,
         created_at_time: None,
     };

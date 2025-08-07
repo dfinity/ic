@@ -2251,7 +2251,7 @@ fn test_remove_approval() {
         let args = RemoveApprovalArgs {
             from_subaccount,
             spender: spender_address,
-            fee: Some(Tokens::from_e8s(FEE)),
+            fee: Some(Nat::from(FEE)),
         };
         let response =
             env.execute_ingress_as(p1, canister_id, "remove_approval", Encode!(&args).unwrap());

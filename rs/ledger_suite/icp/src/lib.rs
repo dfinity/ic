@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Nat};
 use dfn_protobuf::ProtoBuf;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -1302,7 +1302,7 @@ pub type Allowances = Vec<Allowance>;
 pub struct RemoveApprovalArgs {
     pub from_subaccount: Option<Icrc1Subaccount>,
     pub spender: AccountIdBlob,
-    pub fee: Option<Tokens>,
+    pub fee: Option<Nat>,
 }
 #[cfg(test)]
 mod test {

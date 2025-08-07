@@ -505,7 +505,7 @@ type TipOfChainRes = record {
 type RemoveApprovalArgs = record {
   from_subaccount : opt SubAccount;
   spender : AccountIdentifier;
-  fee : opt Tokens
+  fee : opt Icrc1Tokens
 };
 
 service: (LedgerCanisterPayload) -> {
