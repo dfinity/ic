@@ -34,7 +34,10 @@ use util::{
 use anyhow::bail;
 
 const HOST_VM_NAME: &str = "host-1";
-const FOUR_VM_NAMES: [&str; 4] = ["host-1", "host-2", "host-3", "host-4"];
+
+fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
+    (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
+}
 
 const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
@@ -88,27 +91,22 @@ fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
 }
 
 /// Prepare the environment for nested tests.
-/// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv) {
+/// SetupOS -> HostOS -> GuestOS (x num_hosts)
+pub fn config(env: TestEnv, num_hosts: usize) {
     setup_ic_infrastructure(&env);
-    setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
-    setup_vector_targets_for_vm(&env, HOST_VM_NAME);
+    let host_vm_names = get_host_vm_names(num_hosts);
+    let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
+    setup_nested_vm_group(env.clone(), &host_vm_names_refs);
+
+    for vm_name in &host_vm_names {
+        setup_vector_targets_for_vm(&env, vm_name);
+    }
 }
+
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
 pub fn simple_config(env: TestEnv) {
     simple_setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
-}
-
-/// Prepare the environment for nested tests with four nested VMs.
-/// SetupOS -> HostOS -> GuestOS (x4)
-pub fn config_four_vms(env: TestEnv) {
-    setup_ic_infrastructure(&env);
-    setup_nested_vm_group(env.clone(), &FOUR_VM_NAMES);
-
-    for vm_name in FOUR_VM_NAMES {
-        setup_vector_targets_for_vm(&env, vm_name);
-    }
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -158,6 +156,7 @@ pub fn registration(env: TestEnv) {
 }
 
 /// Test that all four VMs can register with the network successfully.
+/// This test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
 pub fn nns_recovery_test(env: TestEnv) {
     let logger = env.logger();
 
