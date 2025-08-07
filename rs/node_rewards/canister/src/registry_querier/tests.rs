@@ -297,8 +297,9 @@ fn test_rewardable_nodes_deleted_nodes() {
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
-        &REGISTRY_STORE,
-        reward_period,
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        reward_period.from,
+        reward_period.to,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -340,8 +341,9 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
-        &REGISTRY_STORE,
-        reward_period,
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        reward_period.from,
+        reward_period.to,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -402,8 +404,9 @@ fn test_node_re_registered_after_deletion() {
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
-        &REGISTRY_STORE,
-        reward_period,
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        reward_period.from,
+        reward_period.to,
     )
     .expect("Failed to fetch rewardables");
 
@@ -431,9 +434,13 @@ fn test_node_operator_data_returns_expected_data() {
 
     let version = 39667;
     let no_2_id = PrincipalId::new_user_test_id(30);
-    let data = RegistryQuerier::node_operator_data(&REGISTRY_STORE, no_2_id, version.into())
-        .unwrap()
-        .unwrap();
+    let data = RegistryQuerier::node_operator_data(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        no_2_id,
+        version.into(),
+    )
+    .unwrap()
+    .unwrap();
 
     assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
     assert_eq!(data.dc_id, "y");
@@ -441,9 +448,13 @@ fn test_node_operator_data_returns_expected_data() {
 
     let version = 39675;
     let no_1_id = PrincipalId::new_user_test_id(10);
-    let data = RegistryQuerier::node_operator_data(&REGISTRY_STORE, no_1_id, version.into())
-        .unwrap()
-        .unwrap();
+    let data = RegistryQuerier::node_operator_data(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        no_1_id,
+        version.into(),
+    )
+    .unwrap()
+    .unwrap();
 
     assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
     assert_eq!(data.dc_id, "x");
@@ -451,7 +462,7 @@ fn test_node_operator_data_returns_expected_data() {
 
     let not_yet_added_no_version = 39652;
     let data = RegistryQuerier::node_operator_data(
-        &REGISTRY_STORE,
+        &*REGISTRY_STORE.with(|store| store.clone()),
         no_1_id,
         not_yet_added_no_version.into(),
     )
