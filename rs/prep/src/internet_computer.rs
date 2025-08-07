@@ -82,7 +82,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
 /// initial nodes multiplied by this value.
-pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 2;
+pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 4;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
