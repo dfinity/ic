@@ -1238,6 +1238,8 @@ pub struct QueryStats {
 /// Struct used for encoding/decoding
 /// `(record {
 ///     status : variant { running; stopping; stopped };
+///     ready_for_migration: bool,
+///     version: nat64,
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
 ///     controller: principal;
@@ -1266,6 +1268,8 @@ pub struct QueryStats {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
+    ready_for_migration: bool,
+    version: u64,
     module_hash: Option<Vec<u8>>,
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
@@ -1296,6 +1300,8 @@ impl CanisterStatusResultV2 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         status: CanisterStatusType,
+        ready_for_migration: bool,
+        version: u64,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1326,6 +1332,8 @@ impl CanisterStatusResultV2 {
     ) -> Self {
         Self {
             status,
+            ready_for_migration,
+            version,
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
@@ -1369,6 +1377,19 @@ impl CanisterStatusResultV2 {
 
     pub fn status(&self) -> CanisterStatusType {
         self.status.clone()
+    }
+
+    pub fn ready_for_migration(&self) -> bool {
+        self.ready_for_migration
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Helper to facilitate comparing canister settings that differ only in the canister version.
+    pub fn ignore_version(self) -> Self {
+        Self { version: 0, ..self }
     }
 
     pub fn module_hash(&self) -> Option<Vec<u8>> {

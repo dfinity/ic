@@ -2113,6 +2113,13 @@ fn observe_replicated_state_metrics(
             .observe(count as f64);
     }
 
+    for (key_id, stash) in state.pre_signature_stashes() {
+        metrics
+            .pre_signature_stash_size
+            .with_label_values(&[&key_id.to_string()])
+            .set(stash.pre_signatures.len() as i64);
+    }
+
     let observe_reading = |status: CanisterStatusType, num: i64| {
         metrics
             .registered_canisters

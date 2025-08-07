@@ -887,11 +887,13 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::CanisterStatus) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    let ready_for_migration = state.ready_for_migration(&args.get_canister_id());
                     self.get_canister_status(
                         *msg.sender(),
                         args.get_canister_id(),
                         &mut state,
                         registry_settings.subnet_size,
+                        ready_for_migration,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -2227,11 +2229,18 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        ready_for_migration: bool,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.metadata.cost_schedule;
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
-            .get_canister_status(sender, canister, subnet_size, cost_schedule)
+            .get_canister_status(
+                sender,
+                canister,
+                subnet_size,
+                cost_schedule,
+                ready_for_migration,
+            )
             .map(|status| status.encode())
             .map_err(|err| err.into())
     }

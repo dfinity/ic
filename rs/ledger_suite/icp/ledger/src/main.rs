@@ -231,7 +231,8 @@ async fn send(
         Operation::Mint { to, amount }
     } else if to == minting_acc {
         assert_eq!(fee, Tokens::ZERO, "Fee for burning should be zero");
-        let min_burn_amount = LEDGER.read().unwrap().transfer_fee;
+        let balance = LEDGER.read().unwrap().balances().account_balance(&from);
+        let min_burn_amount = LEDGER.read().unwrap().transfer_fee.min(balance);
         if amount < min_burn_amount {
             panic!("Burns lower than {} are not allowed", min_burn_amount);
         }

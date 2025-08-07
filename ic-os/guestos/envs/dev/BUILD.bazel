@@ -43,3 +43,15 @@ artifact_bundle(
     prefix = "guest-os/disk-img-dev",
     visibility = ["//visibility:public"],
 )
+
+# Export checksums & build artifacts for update images
+artifact_bundle(
+    name = "bundle-update",
+    testonly = True,
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
+    prefix = "guest-os/update-img-dev",
+    visibility = ["//visibility:public"],
+)
