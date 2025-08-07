@@ -5,5 +5,5 @@ benches:
       instructions: 15240
       heap_increase: 0
       stable_memory_increase: 0
-    scopes: { }
+    scopes: {}
 version: 0.1.15
