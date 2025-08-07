@@ -2982,7 +2982,7 @@ fn canister_snapshot_roundtrip_succeeds() {
         .get_canister_history()
         .clone();
     let history_after = canister_history
-        .get_changes(canister_history.get_total_num_changes() as usize)
+        .get_changes(1)
         .map(|c| (**c).clone())
         .collect::<Vec<CanisterChange>>();
     let last_canister_change: &CanisterChange = history_after.last().unwrap();
