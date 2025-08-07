@@ -62,12 +62,9 @@ fn setup_ic_infrastructure(env: &TestEnv) {
 
 /// Setup vector targets for a single VM
 fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
-    let vm = env.get_nested_vm(vm_name).unwrap_or_else(|e| {
-        panic!(
-            "Expected nested vm {vm_name} to exist, but got error: {:?}",
-            e
-        )
-    });
+    let vm = env
+        .get_nested_vm(vm_name)
+        .unwrap_or_else(|e| panic!("Expected nested vm {vm_name} to exist, but got error: {e:?}"));
 
     let network = vm.get_nested_network().unwrap();
 

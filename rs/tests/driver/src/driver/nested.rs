@@ -169,7 +169,7 @@ impl NestedVms for TestEnv {
         let nested_network = NestedNetwork { guest_ip, host_ip };
         info!(
             self.logger(),
-            "Nested network for VM '{}': Host IP: {}, Guest IP: {}", name, host_ip, guest_ip
+            "Nested network for VM '{name}': Host IP: {host_ip}, Guest IP: {guest_ip}"
         );
         let mapped_vm = AllocatedVm {
             ipv6: host_ip,

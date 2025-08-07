@@ -40,7 +40,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::ReplicaVersion;
-use slog::{error, info, warn, Logger};
+use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
     convert::Into,
