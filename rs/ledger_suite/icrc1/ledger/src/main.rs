@@ -885,7 +885,7 @@ fn tokens_to_f64(tokens: Tokens) -> f64 {
     tokens.to_u256().as_f64()
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

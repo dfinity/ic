@@ -180,7 +180,7 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     Ok(())
 }
 
-#[query(decoding_quota = 10000)]
+#[query]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => with_canister_state(|state| {
