@@ -43,8 +43,14 @@ component_files = {
     Label("ic/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
 
     # init
+    Label("init/generate-store-key/generate-store-key.sh"): "/opt/ic/bin/generate-store-key.sh",
+    Label("init/generate-store-key/generate-store-key.service"): "/etc/systemd/system/generate-store-key.service",
     Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
     Label("init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
+    Label("init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
+    Label("init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
+    Label("init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
+    Label("init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
     Label("init/setup-encryption/setup-encryption.sh"): "/opt/ic/bin/setup-encryption.sh",
     Label("init/setup-encryption/setup-encryption.service"): "/etc/systemd/system/setup-encryption.service",
     Label("init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
@@ -52,7 +58,7 @@ component_files = {
     Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
-    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/config/guestos/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
