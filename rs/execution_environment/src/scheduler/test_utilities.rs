@@ -798,6 +798,11 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_store_pre_signatures_in_state(mut self, status: FlagStatus) -> Self {
+        self.scheduler_config.store_pre_signatures_in_state = status;
+        self
+    }
+
     pub fn with_batch_time(self, batch_time: Time) -> Self {
         Self { batch_time, ..self }
     }

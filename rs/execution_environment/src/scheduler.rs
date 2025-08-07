@@ -1538,6 +1538,7 @@ impl Scheduler for SchedulerImpl {
                 &mut csprng,
                 registry_settings,
                 self.metrics.as_ref(),
+                &self.config,
             );
         }
 
