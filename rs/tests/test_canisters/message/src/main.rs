@@ -71,16 +71,17 @@ thread_local! {
     static PRNG: RefCell<rand_chacha::ChaCha8Rng> = RefCell::new(rand_chacha::ChaCha8Rng::seed_from_u64(ic_cdk::api::time() as u64));
 }
 
-type ResponseTypePlaceholder = String;
-type CallErrorTypePlaceholder = String;
+type HttpResponse = String;
+type HttpError = String;
 type ParametersError = String;
+type HttpRequest = String;
 
 #[ic_cdk::update]
 pub async fn k_of_n_http_requests(
-    url: String,
+    request: HttpRequest,
     k: usize,
     n: usize,
-) -> Result<Vec<Result<ResponseTypePlaceholder, CallErrorTypePlaceholder>>, ParametersError> {
+) -> Result<Vec<Result<HttpResponse, HttpError>>, ParametersError> {
     if k > n {
         return Err("k must be less than or equal to n".to_string());
     }
@@ -102,7 +103,7 @@ pub async fn k_of_n_http_requests(
                 "http_request",
                 (
                     ic_management_canister_types_private::CanisterHttpRequestArgs {
-                        url: url.clone(),
+                        url: request.clone(),
                         method: ic_management_canister_types_private::HttpMethod::GET,
                         body: None,
                         headers: ic_management_canister_types_private::BoundedVec::new(vec![]),
@@ -134,12 +135,12 @@ pub async fn k_of_n_http_requests(
 }
 
 #[ic_cdk::update]
-pub async fn nonreplicated_http_request() -> Vec<Result<ResponseTypePlaceholder, CallErrorTypePlaceholder>> {}
+pub async fn nonreplicated_http_request() -> Vec<Result<HttpResponse, HttpError>> {}
 
 #[ic_cdk::update]
 pub async fn multi_http_request(
-    url: String,
-) -> Vec<Result<ResponseTypePlaceholder, CallErrorTypePlaceholder>> {
+    request: HttpRequest,
+) -> Vec<Result<HttpResponse, HttpError>> {
     let node_ids = subnet_node_ids();
     let futures = node_ids.into_iter().map(|node_id| {
         ic_cdk::api::call::call_with_payment::<
@@ -150,7 +151,7 @@ pub async fn multi_http_request(
             "http_request",
             (
                 ic_management_canister_types_private::CanisterHttpRequestArgs {
-                    url: url.clone(),
+                    url: request.clone(),
                     method: ic_management_canister_types_private::HttpMethod::GET,
                     body: None,
                     headers: ic_management_canister_types_private::BoundedVec::new(vec![]),
