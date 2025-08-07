@@ -128,7 +128,7 @@ fn validate_deposit_operation(arg: ExtensionOperationArg) -> Result<ValidatedOpe
     ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
 }
 
-/// Validates withdraw operation arguments (currently no validation, just passes through)
+/// Validates withdraw operation arguments (currently requires empty arguments)
 fn validate_withdraw_operation(
     arg: ExtensionOperationArg,
 ) -> Result<ValidatedOperationArg, String> {
@@ -158,7 +158,7 @@ impl ExtensionType {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ExtensionVersion(u64);
+pub struct ExtensionVersion(u64);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionSpec {
@@ -520,6 +520,7 @@ impl TryFrom<RegisterExtension> for ValidatedRegisterExtension {
 }
 
 /// Validates an extension WASM against a provided set of allowed extensions.
+#[cfg(not(feature = "test"))]
 pub(crate) fn validate_extension_wasm_with_allowed(
     wasm_module_hash: &[u8],
     allowed_extensions: &BTreeMap<[u8; 32], ExtensionSpec>,
@@ -548,9 +549,28 @@ pub(crate) fn validate_extension_wasm_with_allowed(
 
 /// Validates an extension WASM against the global ALLOWED_EXTENSIONS.
 pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
-    #[cfg(any(test, feature = "test"))]
+    #[cfg(feature = "test")]
     {
-        // In tests, use the test allowed extensions
+        // In feature test mode, accept any wasm hash and return a test spec
+        // Validate the hash length
+        if wasm_module_hash.len() != 32 {
+            return Err(format!(
+                "Invalid wasm module hash length: expected 32 bytes, got {}",
+                wasm_module_hash.len()
+            ));
+        }
+
+        // Return a test extension spec
+        return Ok(ExtensionSpec {
+            name: "Test Extension".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::TreasuryAssetManagement,
+            extension_types: vec![ExtensionType::TreasuryManager],
+        });
+    }
+    #[cfg(test)]
+    {
+        // In regular test mode (without feature), use the test allowed extensions
         let test_allowed = create_test_allowed_extensions();
         validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
     }
@@ -921,10 +941,10 @@ impl TryFrom<ExtensionOperationArg> for ValidatedWithdrawOperationArg {
     type Error = String;
 
     fn try_from(arg: ExtensionOperationArg) -> Result<Self, Self::Error> {
-        // For now, just ensure arguments are provided
-        // No actual validation is performed
-        if arg.value.is_none() {
-            return Err("Withdraw operation arguments must be provided".to_string());
+        // For now, only allow empty arguments
+        // This ensures withdraw operations don't accept parameters yet
+        if arg.value.is_some() {
+            return Err("Withdraw operation does not accept arguments at this time".to_string());
         }
 
         Ok(Self { original: arg })
@@ -1258,60 +1278,31 @@ mod tests {
 
     #[test]
     fn test_validate_withdraw_operation() {
-        // Test valid withdraw operation (just needs to have arguments)
-        let valid_arg = ExtensionOperationArg {
-            value: Some(Precise {
-                value: Some(precise::Value::Map(PreciseMap {
-                    map: btreemap! {
-                        "recipient_principal".to_string() => Precise {
-                            value: Some(precise::Value::Text("abc123".to_string())),
-                        },
-                        "withdrawal_amount_sns_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(1000000)),
-                        },
-                        "withdrawal_amount_icp_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(2000000)),
-                        },
-                    },
-                })),
-            }),
-        };
-
+        // Test valid withdraw operation - must have empty arguments
+        let valid_arg = ExtensionOperationArg { value: None };
         let result = validate_withdraw_operation(valid_arg.clone());
         assert!(result.is_ok());
 
         match result.unwrap() {
             ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
                 // Should just wrap the original
-                assert_eq!(withdraw.original.value, valid_arg.value);
+                assert_eq!(withdraw.original.value, None);
             }
             _ => panic!("Expected TreasuryManagerWithdraw variant"),
         }
 
-        // Test no arguments provided - should fail
-        let no_args = ExtensionOperationArg { value: None };
-        let result = validate_withdraw_operation(no_args);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Withdraw operation arguments must be provided"));
-
-        // Test any non-None value should pass (no validation of contents)
+        // Test with argument - should fail
         let minimal_arg = ExtensionOperationArg {
             value: Some(Precise {
                 value: Some(precise::Value::Text("anything".to_string())),
             }),
         };
 
-        let result = validate_withdraw_operation(minimal_arg.clone());
-        assert!(result.is_ok());
-
-        match result.unwrap() {
-            ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
-                assert_eq!(withdraw.original.value, minimal_arg.value);
-            }
-            _ => panic!("Expected TreasuryManagerWithdraw variant"),
-        }
+        let result = validate_withdraw_operation(minimal_arg);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Withdraw operation does not accept arguments at this time"));
     }
 
     #[test]
