@@ -218,8 +218,7 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
-    let delegation_from_nns = nns_delegation_reader
-        .get_delegation(CanisterRangesFormat::Flat, Some(effective_canister_id));
+    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
     let query_execution_response = query_execution_service
         .oneshot((user_query.clone(), delegation_from_nns))
         .await

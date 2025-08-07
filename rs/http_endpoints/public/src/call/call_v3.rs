@@ -192,7 +192,6 @@ async fn call_sync_v3(
     };
 
     let message_id = ingress_submitter.message_id();
-    let canister_id = ingress_submitter.canister_id();
 
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
@@ -202,7 +201,7 @@ async fn call_sync_v3(
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
             let delegation_from_nns =
-                nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
+                nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -307,8 +306,7 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns =
-        nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat, Some(canister_id));
+    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

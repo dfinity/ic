@@ -1,4 +1,4 @@
-use ic_types::{messages::CertificateDelegation, CanisterId};
+use ic_types::messages::CertificateDelegation;
 use tokio::sync::watch;
 
 #[derive(Copy, Clone)]
@@ -9,8 +9,10 @@ pub enum CanisterRangesFormat {
     /// Corresponds to the /subnet/{subnet_id}/canister_ranges path in the state tree.
     Flat,
     //// Canister ranges are represented as a tree of canister ranges.
-    //// Corresponds to the /canister_ranges/{subnet_id} path in the state tree.
-    // Tree,
+    //// Corresponds to the /canister_ranges/{subnet_id} subtree in the state tree.
+    // Tree(CanisterId),
+    //// Both canister ranges subtrees are going to be pruned out.
+    // Pruned
 }
 
 #[derive(Clone)]
@@ -24,18 +26,18 @@ impl NNSDelegationReader {
         Self { receiver }
     }
 
-    /// Returns the most recent NNS delegation with the canister ranges in the specified format.
-    /// If canister_id is given, canister ranges subtrees are pruned in such a way that it's
-    /// still possible to prove that the specified canister id is assigned to the subnet.
-    /// Otherwise, the entire delegation is returned.
+    /// Returns the most recent NNS delegation.
+    /// Depending on the specified canister ranges format, either /subnet/{subnet_id}/canister_ranges,
+    /// or /canister_ranges/{subnet_id}, or both will be pruned from the state tree.
     pub fn get_delegation(
         &self,
         canister_ranges_format: CanisterRangesFormat,
-        _canister_id: Option<CanisterId>,
     ) -> Option<CertificateDelegation> {
         let delegation = self.receiver.borrow().clone()?;
 
         match canister_ranges_format {
+            // At the moment, we only request /subnet/{subnet_id}/canister_ranges from the NNS,
+            // so there is nothing to prune.
             CanisterRangesFormat::Flat => Some(delegation),
         }
     }

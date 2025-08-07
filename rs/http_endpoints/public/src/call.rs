@@ -301,11 +301,6 @@ impl IngressMessageSubmitter {
         self.message.id()
     }
 
-    /// Returns the id of the canister the ingress message is for.
-    pub(crate) fn canister_id(&self) -> CanisterId {
-        self.message.canister_id()
-    }
-
     /// Attempts to submit the ingress message to the ingress pool.
     /// An [`HttpError`] is returned if P2P is not running.
     pub(crate) fn try_submit(self) -> Result<(), HttpError> {
