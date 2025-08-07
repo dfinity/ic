@@ -1,4 +1,7 @@
-use crate::extensions::{ExtensionKind, ValidatedRegisterExtension};
+use crate::extensions::{
+    validate_execute_extension_operation, ExtensionKind, ValidatedExecuteExtensionOperation,
+    ValidatedRegisterExtension,
+};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
 use crate::pb::v1::governance::GovernanceCachedMetrics;
@@ -89,6 +92,7 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
+use sns_treasury_manager::Error as TreasuryManagerError;
 
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
@@ -127,6 +131,7 @@ use maplit::{btreemap, hashset};
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use sns_treasury_manager::Balances;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2363,8 +2368,8 @@ impl Governance {
                 )
             })?;
 
-        let RegisterExtensionResponse { result } =
-            candid::Decode!(&reply, RegisterExtensionResponse).map_err(|err| {
+        let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
+            .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!("Could not decode RegisterExtensionResponse: {err:?}"),
@@ -2403,6 +2408,14 @@ impl Governance {
         &mut self,
         register_extension: RegisterExtension,
     ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
         // Step 0. Validate the RegisterExtension proposal.
         let ValidatedRegisterExtension { wasm, init, spec } =
             register_extension.try_into().map_err(|err| {
@@ -2441,7 +2454,8 @@ impl Governance {
 
         let treasury_manager_canister_id = extension_canister_id;
 
-        let (arg, sns_amount_e8s, icp_amount_e8s) = self.construct_treasury_manager_init(init)?;
+        let (arg, sns_amount_e8s, icp_amount_e8s) =
+            self.construct_treasury_manager_init_payload(init).await?;
 
         self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
             .await?;
@@ -2486,7 +2500,7 @@ impl Governance {
             .map(|reply| {
                 // This line is to ensure we handle the reply properly if it's ever
                 // changed to not be empty.
-                match candid::Decode!(&reply, RegisterDappCanistersResponse) {
+                match Decode!(&reply, RegisterDappCanistersResponse) {
                     Ok(RegisterDappCanistersResponse {}) => {}
                     Err(_) => log!(ERROR, "Could not decode RegisterDappCanistersResponse!"),
                 };
@@ -2538,7 +2552,7 @@ impl Governance {
             .and_then(|reply| {
                 // This line is to ensure we handle the reply properly if it's ever
                 // changed to not be empty.
-                match candid::Decode!(&reply, SetDappControllersResponse) {
+                match Decode!(&reply, SetDappControllersResponse) {
                     Ok(SetDappControllersResponse { failed_updates }) => {
                         if failed_updates.is_empty() {
                             log!(
@@ -2645,12 +2659,80 @@ impl Governance {
 
     async fn perform_execute_extension_operation(
         &self,
-        _execute_extension_operation: ExecuteExtensionOperation,
+        execute_extension_operation: ExecuteExtensionOperation,
     ) -> Result<(), GovernanceError> {
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidCommand,
-            "ExecuteExtensionOperation is not supported yet.",
-        ))
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
+        let ValidatedExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = execute_extension_operation.try_into().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid ExecuteExtensionOperation proposal: {:?}", err),
+            )
+        })?;
+
+        validate_execute_extension_operation(
+            &*self.env,
+            self.proto.root_canister_id_or_panic(),
+            extension_canister_id,
+            operation_name,
+            &operation_arg,
+        )
+        .await?;
+
+        let treasury_manager_canister_id = extension_canister_id;
+
+        let (arg, sns_amount_e8s, icp_amount_e8s) = self
+            .construct_treasury_manager_deposit_payload(operation_arg)
+            .await?;
+
+        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
+            .await?;
+
+        let balances = self
+            .env
+            .call_canister(treasury_manager_canister_id, "deposit", arg)
+            .await
+            .map_err(|(code, err)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Canister method call {}.deposit failed with code {:?}: {}",
+                        treasury_manager_canister_id, code, err
+                    ),
+                )
+            })
+            .and_then(|blob| {
+                Decode!(&blob, Result<Balances, TreasuryManagerError>).map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error decoding TreasuryManager.deposit response: {:?}", err),
+                    )
+                })
+            })?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("TreasuryManager.deposit failed: {:?}", err),
+                )
+            })?;
+
+        log!(
+            INFO,
+            "TreasuryManager.deposit succeeded with response: {:?}",
+            balances
+        );
+
+        Ok(())
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
@@ -3199,7 +3281,7 @@ impl Governance {
                 candid::decode_one::<CanisterInfoResponse>(&b)
                 .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{}", e)))
             })
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
+            .map_err(|err: (Option<i32>, String)| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
 
         let ledger_canister_info_version_number_before_upgrade: u64 =
             ledger_canister_info
@@ -3330,7 +3412,7 @@ impl Governance {
                 )
             })
             .and_then(
-                |reply| match candid::Decode!(&reply, ManageDappCanisterSettingsResponse) {
+                |reply| match Decode!(&reply, ManageDappCanisterSettingsResponse) {
                     Ok(ManageDappCanisterSettingsResponse { failure_reason }) => failure_reason
                         .map_or(Ok(()), |failure_reason| {
                             Err(GovernanceError::new_with_message(

@@ -9438,10 +9438,8 @@ name = "ic-http-endpoints-public"
 version = "0.9.0"
 dependencies = [
  "askama",
- "assert_matches",
  "async-trait",
  "axum 0.8.4",
- "axum-server",
  "byte-unit",
  "bytes",
  "cfg-if 1.0.0",
@@ -9457,7 +9455,6 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-canonical-state",
- "ic-certification 0.9.0",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
@@ -9480,16 +9477,13 @@ dependencies = [
  "ic-pprof",
  "ic-protobuf",
  "ic-read-state-response-parser",
- "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
- "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
- "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
@@ -9505,7 +9499,6 @@ dependencies = [
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
- "rcgen",
  "reqwest 0.12.15",
  "rstest",
  "rustls 0.23.27",
@@ -11135,15 +11128,18 @@ dependencies = [
 name = "ic-nervous-system-root"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "dfn_core",
  "ic-cdk 0.17.2",
  "ic-crypto-sha2",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
+ "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
  "serde",
  "serde_bytes",
+ "tokio",
 ]
 
 [[package]]
@@ -11308,6 +11304,46 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "maplit",
+]
+
+[[package]]
+name = "ic-nns-delegation-manager"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "axum 0.8.4",
+ "axum-server",
+ "futures",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
+ "ic-certification 0.9.0",
+ "ic-certification-test-utils",
+ "ic-config",
+ "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
+ "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-metrics",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-types",
+ "ic-types",
+ "prometheus 0.13.4",
+ "rand 0.8.5",
+ "rcgen",
+ "rustls 0.23.27",
+ "serde_cbor",
+ "slog",
+ "tokio",
+ "tokio-rustls 0.26.1",
+ "tokio-util",
+ "tower 0.5.2",
 ]
 
 [[package]]
@@ -12626,6 +12662,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-messaging",
  "ic-metrics",
+ "ic-nns-delegation-manager",
  "ic-pprof",
  "ic-protobuf",
  "ic-registry-client",
@@ -13166,6 +13203,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-temporary",
  "ic-nervous-system-timestamp",
  "ic-nns-constants",
  "ic-protobuf",
@@ -17420,6 +17458,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-registry-keys",
+ "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
