@@ -209,7 +209,7 @@ pub(crate) async fn update_nodes_hostos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-pub(crate) fn setup_nested_vm(env: TestEnv, names: &[&str]) {
+pub(crate) fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
     info!(logger, "Setting up nested VM(s) ...");
 
@@ -255,7 +255,7 @@ pub(crate) fn setup_nested_vm(env: TestEnv, names: &[&str]) {
 }
 
 /// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
-pub(crate) fn simple_setup_nested_vm(env: TestEnv, names: &[&str]) {
+pub(crate) fn simple_setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
     info!(
         logger,

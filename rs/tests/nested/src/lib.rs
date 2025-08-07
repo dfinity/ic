@@ -25,9 +25,10 @@ use slog::info;
 mod util;
 use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
-    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
-    simple_setup_nested_vm, start_nested_vm_group, update_nodes_hostos_version,
-    update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
+    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
+    setup_nested_vm_group, simple_setup_nested_vm_group, start_nested_vm_group,
+    update_nodes_hostos_version, update_unassigned_nodes, wait_for_expected_guest_version,
+    wait_for_guest_version,
 };
 
 use anyhow::bail;
@@ -90,20 +91,20 @@ fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
 /// SetupOS -> HostOS -> GuestOS
 pub fn config(env: TestEnv) {
     setup_ic_infrastructure(&env);
-    setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
+    setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
     setup_vector_targets_for_vm(&env, HOST_VM_NAME);
 }
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
 pub fn simple_config(env: TestEnv) {
-    simple_setup_nested_vm(env.clone(), &[HOST_VM_NAME]);
+    simple_setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
 }
 
 /// Prepare the environment for nested tests with four nested VMs.
 /// SetupOS -> HostOS -> GuestOS (x4)
 pub fn config_four_vms(env: TestEnv) {
     setup_ic_infrastructure(&env);
-    setup_nested_vm(env.clone(), &FOUR_VM_NAMES);
+    setup_nested_vm_group(env.clone(), &FOUR_VM_NAMES);
 
     for vm_name in FOUR_VM_NAMES {
         setup_vector_targets_for_vm(&env, vm_name);
