@@ -40,20 +40,13 @@ impl<'a> TestFixture<'a> {
         let temp_dir = tempdir().unwrap();
         let previous_key_path = temp_dir.path().join("previous_key");
         let generated_key_path = temp_dir.path().join("generated_key");
-        let mut mock_guest_firmware = MockSevGuestFirmware::new();
-        mock_guest_firmware
-            .expect_get_derived_key()
-            .returning(|_, _| Ok([42; 32]));
-
-        let sev_key_deriver = SevKeyDeriver::new_for_test(Box::new(mock_guest_firmware));
-
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
 
         Self {
             device,
             previous_key_path,
             generated_key_path,
-            sev_key_deriver,
+            sev_key_deriver: mock_sev_key_deriver([42; 32]),
             guestos_config,
             _temp_dir: temp_dir,
             _guard: guard,
@@ -150,6 +143,15 @@ fn cleanup() {
     for partition in [Partition::Store, Partition::Var] {
         deactive_crypt_device_with_check(crypt_name(partition));
     }
+}
+
+fn mock_sev_key_deriver(seed: [u8; 32]) -> SevKeyDeriver {
+    let mut mock_guest_firmware = MockSevGuestFirmware::new();
+    mock_guest_firmware
+        .expect_get_derived_key()
+        .returning(move |_, _| Ok(seed));
+
+    SevKeyDeriver::new_for_test(Box::new(mock_guest_firmware))
 }
 
 #[test]
@@ -350,4 +352,45 @@ fn test_fails_to_open_var_if_key_doesnt_work() {
     fixture
         .open(Partition::Var)
         .expect_err("Expected setup_disk_encryption to fail due to wrong key");
+}
+
+// This test checks that we can open the store partition multiple times with different keys.
+// This simulates multiple upgrades after each other.
+#[test]
+fn test_open_store_multiple_times_with_different_keys() {
+    let mut fixture = TestFixture::new(true);
+    fixture.format(Partition::Store).unwrap();
+    fs::write(
+        &fixture.previous_key_path,
+        fixture
+            .sev_key_deriver
+            .derive_key(Key::DiskEncryptionKey {
+                device_path: &fixture.device.path().unwrap(),
+            })
+            .unwrap(),
+    )
+    .unwrap();
+
+    for i in 0..5 {
+        // Simulate saving the previous key during upgrade.
+        fs::write(
+            &fixture.previous_key_path,
+            fixture
+                .sev_key_deriver
+                .derive_key(Key::DiskEncryptionKey {
+                    device_path: &fixture.device.path().unwrap(),
+                })
+                .unwrap(),
+        )
+        .unwrap();
+
+        // After an upgrade, the firmware derives a new key.
+        fixture.sev_key_deriver = mock_sev_key_deriver([i; 32]);
+
+        fixture
+            .open(Partition::Store)
+            .expect(&format!("Failed to open store partition on iteration {i}"));
+        assert!(Path::new("/dev/mapper/vda10-crypt").exists());
+        deactive_crypt_device_with_check("vda10-crypt");
+    }
 }

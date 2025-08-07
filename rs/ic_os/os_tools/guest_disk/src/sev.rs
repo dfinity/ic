@@ -47,7 +47,7 @@ impl SevDiskEncryption<'_> {
         // In the end, the store partition will have two keys:
         // 1. The previous key that was used to unlock the partition before the upgrade.
         // 2. The new key that is used to unlock the partition after the upgrade.
-        if let Err(err) = destroy_key_slots_except(&mut crypt_device, &[&previous_key, &new_key]) {
+        if let Err(err) = destroy_key_slots_except(&mut crypt_device, &[&previous_key, new_key]) {
             // It's not a critical error if we fail to destroy the key slots, but it's a security
             // risk, so we should log it. We panic in debug builds.
             debug_assert!(false, "Failed to destroy key slots: {err:?}");
