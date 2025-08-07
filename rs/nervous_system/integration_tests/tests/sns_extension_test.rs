@@ -40,7 +40,6 @@ use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
 use sns_treasury_manager::BalanceBook;
 use sns_treasury_manager::BalancesRequest;
-use sns_treasury_manager::WithdrawRequest;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
