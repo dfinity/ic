@@ -20,7 +20,6 @@ use maplit::btreemap;
 use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
 };
-use std::str::FromStr;
 
 use std::{collections::BTreeMap, fmt::Display};
 
@@ -799,11 +798,14 @@ impl TryFrom<ExtensionOperationArg> for ValidatedDepositOperationArg {
 
 impl RenderablePayload for ValidatedDepositOperationArg {
     fn render_for_proposal(&self) -> String {
+        let raw_payload = self.original.render_for_proposal();
         format!(
             r#"### Treasury Deposit
 
 **SNS Tokens:** {} e8s  
-**ICP Tokens:** {} e8s"#,
+**ICP Tokens:** {} e8s
+
+{raw_payload}"#,
             self.treasury_allocation_sns_e8s, self.treasury_allocation_icp_e8s
         )
     }
@@ -1087,5 +1089,240 @@ mod tests {
         assert!(error
             .error_message
             .contains("does not have an operation named invalid_operation"));
+    }
+
+    #[test]
+    fn test_validate_deposit_operation() {
+        // Test valid deposit operation
+        let valid_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000)),
+                        },
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000)),
+                        },
+                    },
+                })),
+            }),
+        };
+
+        let result = validate_deposit_operation(valid_arg.clone());
+        assert!(result.is_ok());
+
+        match result.unwrap() {
+            ValidatedOperationArg::TreasuryManagerDeposit(deposit) => {
+                assert_eq!(deposit.treasury_allocation_sns_e8s, 1000000);
+                assert_eq!(deposit.treasury_allocation_icp_e8s, 2000000);
+            }
+            _ => panic!("Expected TreasuryManagerDeposit variant"),
+        }
+
+        // Test missing SNS amount
+        let missing_sns_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000)),
+                        },
+                    },
+                })),
+            }),
+        };
+
+        let result = validate_deposit_operation(missing_sns_arg);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+
+        // Test missing ICP amount
+        let missing_icp_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000)),
+                        },
+                    },
+                })),
+            }),
+        };
+
+        let result = validate_deposit_operation(missing_icp_arg);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("treasury_allocation_icp_e8s must be a Nat value"));
+
+        // Test wrong type for SNS amount
+        let wrong_type_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Text("not a number".to_string())),
+                        },
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000)),
+                        },
+                    },
+                })),
+            }),
+        };
+
+        let result = validate_deposit_operation(wrong_type_arg);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+
+        // Test no arguments provided
+        let no_args = ExtensionOperationArg { value: None };
+        let result = validate_deposit_operation(no_args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Deposit operation arguments must be provided"));
+
+        // Test not a map
+        let not_map_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Text("not a map".to_string())),
+            }),
+        };
+
+        let result = validate_deposit_operation(not_map_arg);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Deposit operation arguments must be a PreciseMap"));
+    }
+
+    #[test]
+    fn test_validate_withdraw_operation() {
+        // Test valid withdraw operation (just needs to have arguments)
+        let valid_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "recipient_principal".to_string() => Precise {
+                            value: Some(precise::Value::Text("abc123".to_string())),
+                        },
+                        "withdrawal_amount_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000)),
+                        },
+                        "withdrawal_amount_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000)),
+                        },
+                    },
+                })),
+            }),
+        };
+
+        let result = validate_withdraw_operation(valid_arg.clone());
+        assert!(result.is_ok());
+
+        match result.unwrap() {
+            ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
+                // Should just wrap the original
+                assert_eq!(withdraw.original.value, valid_arg.value);
+            }
+            _ => panic!("Expected TreasuryManagerWithdraw variant"),
+        }
+
+        // Test no arguments provided - should fail
+        let no_args = ExtensionOperationArg { value: None };
+        let result = validate_withdraw_operation(no_args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Withdraw operation arguments must be provided"));
+
+        // Test any non-None value should pass (no validation of contents)
+        let minimal_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Text("anything".to_string())),
+            }),
+        };
+
+        let result = validate_withdraw_operation(minimal_arg.clone());
+        assert!(result.is_ok());
+
+        match result.unwrap() {
+            ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
+                assert_eq!(withdraw.original.value, minimal_arg.value);
+            }
+            _ => panic!("Expected TreasuryManagerWithdraw variant"),
+        }
+    }
+
+    #[test]
+    fn test_validated_operation_arg_render() {
+        // Test deposit rendering
+        let deposit_arg =
+            ValidatedOperationArg::TreasuryManagerDeposit(ValidatedDepositOperationArg {
+                treasury_allocation_sns_e8s: 1000000,
+                treasury_allocation_icp_e8s: 2000000,
+                original: ExtensionOperationArg {
+                    value: Some(Precise {
+                        value: Some(precise::Value::Map(PreciseMap {
+                            map: btreemap! {
+                                "treasury_allocation_sns_e8s".to_string() => Precise {
+                                    value: Some(precise::Value::Nat(1000000)),
+                                },
+                                "treasury_allocation_icp_e8s".to_string() => Precise {
+                                    value: Some(precise::Value::Nat(2000000)),
+                                },
+                                "other_field".to_string() => Precise {
+                                    value: Some(precise::Value::Text("Some Value".to_string())),
+                                },
+                            },
+                        })),
+                    }),
+                },
+            });
+
+        let rendered = deposit_arg.render_for_proposal();
+        assert!(rendered.contains("Treasury Deposit"));
+        assert!(rendered.contains("1000000"));
+        assert!(rendered.contains("2000000"));
+        assert!(rendered.contains("Raw Payload"));
+        assert!(rendered.contains("treasury_allocation_sns_e8s"));
+        assert!(rendered.contains("treasury_allocation_icp_e8s"));
+        assert!(rendered.contains("other_field"));
+        assert!(rendered.contains("Some Value"));
+
+        // Test withdraw rendering
+        let withdraw_arg =
+            ValidatedOperationArg::TreasuryManagerWithdraw(ValidatedWithdrawOperationArg {
+                original: ExtensionOperationArg {
+                    value: Some(Precise {
+                        value: Some(precise::Value::Map(PreciseMap {
+                            map: btreemap! {
+                                "test".to_string() => Precise {
+                                    value: Some(precise::Value::Text("data".to_string())),
+                                },
+                            },
+                        })),
+                    }),
+                },
+            });
+
+        let rendered = withdraw_arg.render_for_proposal();
+        assert!(rendered.contains("Extension Operation"));
+        assert!(rendered.contains("Raw Payload"));
+        assert!(rendered.contains("test"));
+        assert!(rendered.contains("data"));
+
+        // Test unprocessed rendering
+        let unprocessed_arg =
+            ValidatedOperationArg::Unprocessed(ExtensionOperationArg { value: None });
+
+        let rendered = unprocessed_arg.render_for_proposal();
+        assert!(rendered.contains("No payload provided"));
     }
 }
