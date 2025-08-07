@@ -340,6 +340,20 @@ pub fn lookup_path<'a>(
     Some(tref)
 }
 
+/// Descends into the subtree of `t` following the given `prefix`, and then descends one more step into the largest label smaller than `label`.
+/// Returns a pair of references (label, subtree), where `label` is the actual last label traversed, and `subtree` is the subtree found under the label.
+pub fn lookup_lower_bound<'a>(
+    t: &'a LabeledTree<Vec<u8>>,
+    prefix: &[&[u8]],
+    label: &[u8],
+) -> Option<(&'a Label, &'a LabeledTree<Vec<u8>>)> {
+    let tref = lookup_path(t, prefix)?;
+    match tref {
+        LabeledTree::Leaf(_) => None,
+        LabeledTree::SubTree(children) => children.lower_bound(&Label::from(label)),
+    }
+}
+
 /// A *binary* Merkle tree representation of a [`LabeledTree`].
 ///
 /// A [`LabeledTree::Leaf`] is converted to a [`HashTree::Leaf`]. The value
@@ -603,6 +617,65 @@ impl MixedHashTree {
         }
         LookupStatus::Found(t)
     }
+
+    /// Returns a copy of the tree with everything pruned except the paths in `paths`.
+    pub fn filtered(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
+        fn filtered_inner(
+            tree: &MixedHashTree,
+            paths: &LabeledTree<()>,
+            depth: u8,
+        ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(MixedHashTreeFilterError::TooDeepRecursion);
+            }
+
+            match (tree, paths) {
+                // Pruned and empty subtrees are always kept.
+                (tree @ MixedHashTree::Empty, _) => Ok(tree.clone()),
+                (tree @ MixedHashTree::Pruned(_), _) => Ok(tree.clone()),
+                // Path ends in an inner node so we simply keep the entire subtree.
+                (tree, LabeledTree::Leaf(_)) => Ok(tree.clone()),
+                // On a fork, filter both sides.
+                (MixedHashTree::Fork(b), paths) => {
+                    let l = filtered_inner(&b.0, paths, depth + 1)?;
+                    let r = filtered_inner(&b.1, paths, depth + 1)?;
+                    let both_pruned = matches!(
+                        (&l, &r),
+                        (MixedHashTree::Pruned(_), MixedHashTree::Pruned(_))
+                    );
+                    let tree = MixedHashTree::Fork(Box::new((l, r)));
+                    if both_pruned {
+                        Ok(MixedHashTree::Pruned(tree.digest()))
+                    } else {
+                        Ok(tree)
+                    }
+                }
+                // On a label, check if it is in `path`.
+                (
+                    tree @ MixedHashTree::Labeled(label, mixed_hash_tree),
+                    LabeledTree::SubTree(flat_map),
+                ) => match flat_map.get(label) {
+                    Some(subtree) => {
+                        let mixed_hash_tree = filtered_inner(mixed_hash_tree, subtree, depth + 1)?;
+                        Ok(MixedHashTree::Labeled(
+                            label.clone(),
+                            Box::new(mixed_hash_tree),
+                        ))
+                    }
+                    None => Ok(MixedHashTree::Pruned(tree.digest())),
+                },
+                // The tree ends in a leaf, but the path still continues. Invalid input.
+                (MixedHashTree::Leaf(_items), LabeledTree::SubTree(_flat_map)) => {
+                    Err(MixedHashTreeFilterError::PathTooLong)
+                }
+            }
+        }
+
+        filtered_inner(self, paths, 0)
+    }
 }
 
 /// An error indicating that a hash tree doesn't correspond to a valid
@@ -640,6 +713,14 @@ pub enum MixedHashTreeConversionError {
     Pruned,
     /// Too deep recursion due to a too large tree depth
     TooDeepRecursion,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum MixedHashTreeFilterError {
+    /// Too deep recursion due to a too large tree depth
+    TooDeepRecursion,
+    /// The hash tree ends in a leaf before the end of the filter path.
+    PathTooLong,
 }
 
 /// The maximum recursion depth of [`serde_cbor`] deserialization is currently 128.
