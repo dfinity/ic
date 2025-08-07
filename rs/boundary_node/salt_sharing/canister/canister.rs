@@ -66,7 +66,7 @@ fn get_salt() -> GetSaltResponse {
     Err(GetSaltError::Unauthorized)
 }
 
-#[query(decoding_quota = 10000)]
+#[query]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => export_metrics_as_http_response(),

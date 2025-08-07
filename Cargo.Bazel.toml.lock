@@ -3627,8 +3627,8 @@ dependencies = [
  "ic-canister-log",
  "ic-canister-sig-creation",
  "ic-cbor",
- "ic-cdk 0.17.2",
  "ic-cdk 0.18.0-alpha.2",
+ "ic-cdk 0.18.5",
  "ic-cdk-timers",
  "ic-certificate-verification",
  "ic-certification",
@@ -3637,7 +3637,7 @@ dependencies = [
  "ic-http-certification",
  "ic-http-gateway",
  "ic-identity-hsm",
- "ic-management-canister-types",
+ "ic-management-canister-types 0.3.1",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",
@@ -5953,7 +5953,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a7344f41493cbf591f13ae9f90181076f808a83af799815c3074b19c693d2e"
 dependencies = [
  "candid",
- "ic-cdk-executor",
+ "ic-cdk-executor 0.1.0",
  "ic-cdk-macros 0.17.2",
  "ic0 0.23.0",
  "serde",
@@ -5968,9 +5968,26 @@ checksum = "3c9c87d961de7d2935a0bf19f4d6afe76f3d508b853ff5267e999beadd7e9286"
 dependencies = [
  "candid",
  "ic-cdk-macros 0.18.0-alpha.2",
- "ic-error-types",
- "ic-management-canister-types",
+ "ic-error-types 0.1.0",
+ "ic-management-canister-types 0.3.1",
  "ic0 0.24.0",
+ "serde",
+ "serde_bytes",
+ "slotmap",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "ic-cdk"
+version = "0.18.5"
+source = "git+https://github.com/oggy-dfin/cdk-rs.git?branch=main#4aacbde32b850c4e7e3d527983fe821ea8c8e532"
+dependencies = [
+ "candid",
+ "ic-cdk-executor 1.0.1",
+ "ic-cdk-macros 0.18.5",
+ "ic-error-types 0.2.0",
+ "ic-management-canister-types 0.3.2",
+ "ic0 1.0.0",
  "serde",
  "serde_bytes",
  "slotmap",
@@ -5982,6 +5999,15 @@ name = "ic-cdk-executor"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "903057edd3d4ff4b3fe44a64eaee1ceb73f579ba29e3ded372b63d291d7c16c2"
+
+[[package]]
+name = "ic-cdk-executor"
+version = "1.0.1"
+source = "git+https://github.com/oggy-dfin/cdk-rs.git?branch=main#4aacbde32b850c4e7e3d527983fe821ea8c8e532"
+dependencies = [
+ "ic0 1.0.0",
+ "slotmap",
+]
 
 [[package]]
 name = "ic-cdk-macros"
@@ -6008,6 +6034,18 @@ dependencies = [
  "quote",
  "serde",
  "serde_tokenstream",
+ "syn 2.0.101",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.18.5"
+source = "git+https://github.com/oggy-dfin/cdk-rs.git?branch=main#4aacbde32b850c4e7e3d527983fe821ea8c8e532"
+dependencies = [
+ "candid",
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
  "syn 2.0.101",
 ]
 
@@ -6072,6 +6110,17 @@ name = "ic-error-types"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be844216781d6f4a0853b5a8d63dee8d1b6ee0b9aef310d8c0cb82a6796d7072"
+dependencies = [
+ "serde",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "ic-error-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbeeb3d91aa179d6496d7293becdacedfc413c825cac79fd54ea1906f003ee55"
 dependencies = [
  "serde",
  "strum 0.26.3",
@@ -6196,6 +6245,16 @@ name = "ic-management-canister-types"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98554c2d8a30c00b6bfda18062fdcef21215cad07a52d8b8b1eb3130e51bfe71"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
+name = "ic-management-canister-types"
+version = "0.3.2"
+source = "git+https://github.com/oggy-dfin/cdk-rs.git?branch=main#4aacbde32b850c4e7e3d527983fe821ea8c8e532"
 dependencies = [
  "candid",
  "serde",
@@ -6430,6 +6489,11 @@ name = "ic0"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673a6b846467547f3fc61f95d246aadff03e368b53c931655300b9d1bd05a55a"
+
+[[package]]
+name = "ic0"
+version = "1.0.0"
+source = "git+https://github.com/oggy-dfin/cdk-rs.git?branch=main#4aacbde32b850c4e7e3d527983fe821ea8c8e532"
 
 [[package]]
 name = "ic_bls12_381"
@@ -9550,7 +9614,7 @@ dependencies = [
  "flate2",
  "hex",
  "ic-certification",
- "ic-management-canister-types",
+ "ic-management-canister-types 0.3.1",
  "ic-transport-types 0.39.3",
  "reqwest 0.12.15",
  "schemars",

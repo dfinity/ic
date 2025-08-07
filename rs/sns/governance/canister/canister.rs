@@ -696,7 +696,7 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(hidden = true)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {
