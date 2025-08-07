@@ -41,6 +41,8 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     "decode_candid_by_instructions_test_input",
     "stable_memory_ops",
     "stable_memory_ops_test_input",
+    "motoko_shim",
+    "motoko_shim_test_input",
 ];
 
 enum SandboxCrate {
