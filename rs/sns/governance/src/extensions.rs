@@ -28,11 +28,11 @@ lazy_static! {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ExtensionKind {
+pub enum ExtensionType {
     TreasuryManager,
 }
 
-impl Display for ExtensionKind {
+impl Display for ExtensionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TreasuryManager => write!(f, "TreasuryManager"),
@@ -107,7 +107,7 @@ impl RenderablePayload for ExtensionOperationArg {
 pub struct OperationSpec {
     pub name: String,
     pub description: String,
-    pub extension_type: ExtensionKind,
+    pub extension_type: ExtensionType,
     pub validate: fn(ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
 }
 
@@ -137,20 +137,20 @@ fn validate_withdraw_operation(
     ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
 }
 
-impl ExtensionKind {
+impl ExtensionType {
     pub fn standard_operations(&self) -> Vec<OperationSpec> {
         match self {
-            ExtensionKind::TreasuryManager => vec![
+            ExtensionType::TreasuryManager => vec![
                 OperationSpec {
                     name: "deposit".to_string(),
                     description: "Deposit funds into the treasury manager.".to_string(),
-                    extension_type: ExtensionKind::TreasuryManager,
+                    extension_type: ExtensionType::TreasuryManager,
                     validate: validate_deposit_operation,
                 },
                 OperationSpec {
                     name: "withdraw".to_string(),
                     description: "Withdraw funds from the treasury manager.".to_string(),
-                    extension_type: ExtensionKind::TreasuryManager,
+                    extension_type: ExtensionType::TreasuryManager,
                     validate: validate_withdraw_operation,
                 },
             ],
@@ -168,7 +168,7 @@ pub struct ExtensionSpec {
     pub version: ExtensionVersion,
     pub topic: Topic,
     /// The extension types this extension implements (can be multiple)
-    pub extension_types: Vec<ExtensionKind>,
+    pub extension_types: Vec<ExtensionType>,
     // Custom per-extension operations can be added here in the future
     // TODO: Add a way to specify initialization arguments schema for the extension.
 }
@@ -685,7 +685,7 @@ pub(crate) async fn validate_execute_extension_operation(
     };
 
     // Currently only support extensions that implement TreasuryManager
-    if extension_spec.extension_types != vec![ExtensionKind::TreasuryManager] {
+    if extension_spec.extension_types != vec![ExtensionType::TreasuryManager] {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             "Only extensions implementing TreasuryManager are currently supported.",
@@ -857,7 +857,7 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
             name: "My Test Extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
-            extension_types: vec![ExtensionKind::TreasuryManager],
+            extension_types: vec![ExtensionType::TreasuryManager],
 
         }
     }
@@ -1331,8 +1331,8 @@ mod tests {
             version: ExtensionVersion(1),
             topic: Topic::ProtocolCanisterManagement,
             extension_types: vec![
-                ExtensionKind::TreasuryManager,
-                ExtensionKind::TreasuryManager,
+                ExtensionType::TreasuryManager,
+                ExtensionType::TreasuryManager,
             ],
         };
 
@@ -1348,7 +1348,7 @@ mod tests {
             name: "test_extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::ProtocolCanisterManagement,
-            extension_types: vec![ExtensionKind::TreasuryManager],
+            extension_types: vec![ExtensionType::TreasuryManager],
         };
 
         assert!(spec.validate().is_ok());

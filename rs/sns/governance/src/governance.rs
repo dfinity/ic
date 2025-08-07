@@ -1,5 +1,5 @@
 use crate::extensions::{
-    validate_execute_extension_operation, ExtensionKind, ValidatedExecuteExtensionOperation,
+    validate_execute_extension_operation, ExtensionType, ValidatedExecuteExtensionOperation,
     ValidatedRegisterExtension,
 };
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
@@ -2445,7 +2445,7 @@ impl Governance {
             .await?;
 
         // Step 2. Validate the init arguments.
-        if spec.extension_types != vec![ExtensionKind::TreasuryManager] {
+        if spec.extension_types != vec![ExtensionType::TreasuryManager] {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Only TreasuryManager extensions are currently supported.",
