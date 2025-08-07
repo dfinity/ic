@@ -3895,6 +3895,20 @@ pub enum SnapshotSource {
     MetadataUpload(Reserved),
 }
 
+impl SnapshotSource {
+    /// Alternative to the literal variant `SnapshotSource::TakenFromCanister(candid::Reserved)`
+    /// for consumers that don't want to depend on Candid directly.
+    pub fn taken_from_canister() -> Self {
+        Self::TakenFromCanister(Reserved)
+    }
+
+    /// Alternative to the literal variant `SnapshotSource::MetadataUpload(candid::Reserved)`
+    /// for consumers that don't want to depend on Candid directly.
+    pub fn metadata_upload() -> Self {
+        Self::MetadataUpload(Reserved)
+    }
+}
+
 impl Default for SnapshotSource {
     fn default() -> Self {
         Self::TakenFromCanister(Reserved)
@@ -4472,7 +4486,9 @@ mod tests {
     fn compatibility_for_snapshot_source() {
         // If this fails, you are making a potentially incompatible change to `SnapshotSource`.
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
-        let actual_variants: Vec<i32> = SnapshotSource::iter().map(|x| x as i32).collect();
+        let actual_variants: Vec<i32> = SnapshotSource::iter()
+            .map(|x| pb_canister_state_bits::SnapshotSource::from(x) as i32)
+            .collect();
         let expected_variants = vec![0, 1];
         assert_eq!(actual_variants, expected_variants);
     }

@@ -2122,7 +2122,7 @@ impl CanisterManager {
             };
 
             // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
-            if snapshot.source() == SnapshotSource::MetadataUpload
+            if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved)
                 && !globals_match(
                     &new_execution_state.exported_globals,
                     &execution_snapshot.exported_globals,
@@ -2158,7 +2158,7 @@ impl CanisterManager {
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
         // Otherwise, the snapshot is invalid.
-        if snapshot.source() == SnapshotSource::MetadataUpload {
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
             let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
             let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
             if !snapshot_hook_status
@@ -2592,7 +2592,7 @@ impl CanisterManager {
             self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload {
+        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 

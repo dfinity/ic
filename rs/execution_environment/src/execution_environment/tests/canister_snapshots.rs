@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -1672,7 +1672,7 @@ fn load_canister_snapshot_succeeds() {
             canister_version_before,
             snapshot_id,
             snapshot_taken_at_timestamp,
-            SnapshotSource::TakenFromCanister,
+            SnapshotSource::TakenFromCanister(Reserved),
         )
     );
     let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
@@ -2122,7 +2122,7 @@ fn read_canister_snapshot_metadata_succeeds() {
         panic!("expected WasmResult::Reply")
     };
     let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
-    assert_eq!(metadata.source, SnapshotSource::TakenFromCanister);
+    assert_eq!(metadata.source, SnapshotSource::TakenFromCanister(Reserved));
     assert_eq!(
         metadata.stable_memory_size,
         WASM_PAGE_SIZE_IN_BYTES as u64 * stable_pages
@@ -2989,7 +2989,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     let CanisterChangeDetails::CanisterLoadSnapshot(rec) = last_canister_change.details() else {
         panic!("Expected load snapshot")
     };
-    assert_eq!(rec.source(), SnapshotSource::MetadataUpload);
+    assert_eq!(rec.source(), SnapshotSource::MetadataUpload(Reserved));
 }
 
 #[test]
