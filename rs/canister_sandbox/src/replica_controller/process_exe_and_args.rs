@@ -43,6 +43,8 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     "stable_memory_ops_test_input",
     "motoko_shim",
     "motoko_shim_test_input",
+    "motoko_diff",
+    "motoko_diff_test_input",
 ];
 
 enum SandboxCrate {
