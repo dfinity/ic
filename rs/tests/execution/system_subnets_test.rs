@@ -15,7 +15,6 @@ use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{assert_reject, block_on, UniversalCanister};
 use ic_types::Cycles;
 use ic_utils::interfaces::ManagementCanister;
-use slog::info;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -43,7 +42,6 @@ pub fn setup(env: TestEnv) {
 
 /// Tests that an ingress message to a subnet ID fails.
 pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
-    let logger = env.logger();
     let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
     let app_node = env.get_first_healthy_application_node_snapshot();
     let sys_node = env.get_first_healthy_system_node_snapshot();
@@ -86,21 +84,31 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                     .call_and_wait()
             };
 
-            // Requesting `canister_status` using the subnet ID as the callee and as the effective canister ID fails.
+            // Requesting `canister_status` using the subnet ID as the callee and as the effective canister ID fails
+            // in the execution environment.
             let err = agent_call(&subnet_id, &subnet_id).await.unwrap_err();
             match err {
-              AgentError::UncertifiedReject { reject, .. } => {
-                assert!(reject.reject_message.contains(&format!("Canister {} not found", subnet_id)));
-              }
-              _ => panic!("Unexpected error: {:?}", err),
+                AgentError::UncertifiedReject { reject, .. } => {
+                    assert!(reject
+                        .reject_message
+                        .contains(&format!("Canister {} not found", subnet_id)));
+                }
+                _ => panic!("Unexpected error: {:?}", err),
             };
 
-            // Requesting `canister_status` using the subnet ID as the callee and the canister ID as the effective canister ID fails, too.
+            // Requesting `canister_status` using the subnet ID as the callee and the canister ID as the effective canister ID fails
+            // in the HTTP handler.
             let err = agent_call(&subnet_id, &canister_id).await.unwrap_err();
-            info!(
-                logger,
-                "error from calling subnet ID with different ecid: {:?}", err
-            );
+            match err {
+                AgentError::HttpError(payload) => {
+                    let error_message = String::from_utf8(payload.content).unwrap();
+                    assert!(error_message.contains(&format!(
+                        "Specified CanisterId {} does not match effective canister id in URL {}",
+                        subnet_id, canister_id
+                    )));
+                }
+                _ => panic!("Unexpected error: {:?}", err),
+            };
 
             // The same call using the management canister ID as the callee and the canister ID as the effective canister ID succeeds
             // and returns a response of the corresponding type.
