@@ -151,7 +151,6 @@ fn match_contexts_with_stashed_pre_signatures(
     contexts: &mut [&mut SignWithThresholdContext],
     height: Height,
 ) {
-    // Assign pre-signatures to unmatched contexts until `max_ongoing_signatures` is reached.
     for context in contexts.iter_mut() {
         if !context.requires_pre_signature() {
             continue;
@@ -165,7 +164,7 @@ fn match_contexts_with_stashed_pre_signatures(
             continue;
         };
         let Some((pre_sig_id, pre_signature)) = stash.pre_signatures.pop_first() else {
-            // No pre-signatures available for this key ID.
+            // No pre-signature available in the stash for this key ID.
             continue;
         };
         match_context_with_pre_signature(
@@ -556,6 +555,7 @@ mod tests {
         pre_signature_stashes: &mut BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
         store_pre_signatures_in_state: FlagStatus,
     ) {
+        // Call the function under test with the given arguments and some dummy parameters.
         update_signature_request_contexts(
             ExecutionRound::new(10),
             delivered_pre_signatures,
