@@ -20,7 +20,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use sns_treasury_manager::{
-    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
+    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
 
 use std::{collections::BTreeMap, fmt::Display};
@@ -795,17 +795,56 @@ async fn execute_treasury_manager_deposit(
 async fn execute_treasury_manager_withdraw(
     governance: &Governance,
     treasury_manager_canister_id: CanisterId,
-    withdraw_arg: &ValidatedWithdrawOperationArg,
+    _withdraw_arg: &ValidatedWithdrawOperationArg,
 ) -> Result<(), GovernanceError> {
-    // TODO: Implement withdraw execution
-    // 1. Construct withdraw payload
-    // 2. Call withdraw on treasury manager (it handles the transfers)
-    // 3. Log success
+    let request = WithdrawRequest {
+        withdraw_accounts: None,
+    };
+    let payload: Vec<u8> = candid::encode_one(&request).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Error encoding WithdrawRequest: {}", err),
+        )
+    })?;
 
-    Err(GovernanceError::new_with_message(
-        ErrorType::InvalidProposal,
-        "Withdraw operations are not yet implemented",
-    ))
+    let balances = governance
+        .env
+        .call_canister(treasury_manager_canister_id, "withdraw", payload)
+        .await
+        .map_err(|(code, err)| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Canister method call {}.withdraw failed with code {:?}: {}",
+                    treasury_manager_canister_id, code, err
+                ),
+            )
+        })
+        .and_then(|blob| {
+            Decode!(&blob, sns_treasury_manager::TreasuryManagerResult).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error decoding TreasuryManager.withdraw response: {:?}",
+                        err
+                    ),
+                )
+            })
+        })?
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("TreasuryManager.withdraw failed: {:?}", err),
+            )
+        })?;
+
+    log!(
+        INFO,
+        "TreasuryManager.deposit succeeded with response: {:?}",
+        balances
+    );
+
+    Ok(())
 }
 
 /// Validated deposit operation arguments
@@ -862,7 +901,7 @@ impl RenderablePayload for ValidatedDepositOperationArg {
         format!(
             r#"### Treasury Deposit
 
-**SNS Tokens:** {} e8s  
+**SNS Tokens:** {} e8s
 **ICP Tokens:** {} e8s
 
 {raw_payload}"#,
