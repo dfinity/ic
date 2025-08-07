@@ -1,5 +1,6 @@
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
+    logs::INFO,
     pb::{
         sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
         v1::{
@@ -12,6 +13,7 @@ use crate::{
 };
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canister_log::log;
 use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
@@ -49,8 +51,6 @@ pub enum ValidatedOperationArg {
     // Future: other extension type operations would go here
     // VotingCreatePoll(ValidatedCreatePollArg),
     // etc.
-    // This one is for generic operations that governance doesn't validate
-    Unprocessed(ExtensionOperationArg),
 }
 
 impl ValidatedOperationArg {
@@ -59,7 +59,6 @@ impl ValidatedOperationArg {
         match self {
             Self::TreasuryManagerDeposit(arg) => &arg.original,
             Self::TreasuryManagerWithdraw(arg) => &arg.original,
-            Self::Unprocessed(arg) => &arg,
         }
     }
 
@@ -68,7 +67,6 @@ impl ValidatedOperationArg {
         match self {
             Self::TreasuryManagerDeposit(args) => args.render_for_proposal(),
             Self::TreasuryManagerWithdraw(args) => args.render_for_proposal(),
-            Self::Unprocessed(args) => args.render_for_proposal(),
         }
     }
 }
@@ -250,7 +248,26 @@ pub struct ValidatedExecuteExtensionOperation {
 }
 
 impl ValidatedExecuteExtensionOperation {
-    pub fn execute() {}
+    pub async fn execute(&self, governance: &Governance) -> Result<(), GovernanceError> {
+        match &self.operation_arg {
+            ValidatedOperationArg::TreasuryManagerDeposit(deposit_arg) => {
+                execute_treasury_manager_deposit(
+                    governance,
+                    self.extension_canister_id,
+                    deposit_arg,
+                )
+                .await
+            }
+            ValidatedOperationArg::TreasuryManagerWithdraw(withdraw_arg) => {
+                execute_treasury_manager_withdraw(
+                    governance,
+                    self.extension_canister_id,
+                    withdraw_arg,
+                )
+                .await
+            }
+        }
+    }
 }
 
 impl Governance {
@@ -720,6 +737,77 @@ pub(crate) async fn validate_execute_extension_operation(
     })
 }
 
+/// Execute a treasury manager deposit operation
+async fn execute_treasury_manager_deposit(
+    governance: &Governance,
+    treasury_manager_canister_id: CanisterId,
+    deposit_arg: &ValidatedDepositOperationArg,
+) -> Result<(), GovernanceError> {
+    // 1. Construct deposit payload
+    let (arg, sns_amount_e8s, icp_amount_e8s) = governance
+        .construct_treasury_manager_deposit_payload(deposit_arg.original.clone())
+        .await?;
+
+    // 2. Transfer funds from treasury to treasury manager
+    governance
+        .deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
+        .await?;
+
+    // 3. Call deposit on treasury manager
+    let balances = governance
+        .env
+        .call_canister(treasury_manager_canister_id, "deposit", arg)
+        .await
+        .map_err(|(code, err)| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Canister method call {}.deposit failed with code {:?}: {}",
+                    treasury_manager_canister_id, code, err
+                ),
+            )
+        })
+        .and_then(|blob| {
+            Decode!(&blob, sns_treasury_manager::TreasuryManagerResult).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error decoding TreasuryManager.deposit response: {:?}", err),
+                )
+            })
+        })?
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("TreasuryManager.deposit failed: {:?}", err),
+            )
+        })?;
+
+    log!(
+        INFO,
+        "TreasuryManager.deposit succeeded with response: {:?}",
+        balances
+    );
+
+    Ok(())
+}
+
+/// Execute a treasury manager withdraw operation
+async fn execute_treasury_manager_withdraw(
+    governance: &Governance,
+    treasury_manager_canister_id: CanisterId,
+    withdraw_arg: &ValidatedWithdrawOperationArg,
+) -> Result<(), GovernanceError> {
+    // TODO: Implement withdraw execution
+    // 1. Construct withdraw payload
+    // 2. Call withdraw on treasury manager (it handles the transfers)
+    // 3. Log success
+
+    Err(GovernanceError::new_with_message(
+        ErrorType::InvalidProposal,
+        "Withdraw operations are not yet implemented",
+    ))
+}
+
 /// Validated deposit operation arguments
 #[derive(Debug, Clone)]
 pub struct ValidatedDepositOperationArg {
@@ -841,12 +929,6 @@ pub(crate) async fn get_sns_token_symbol(
         })??;
 
     Ok(symbol)
-}
-
-/// Helper function to validate test operations - just returns unprocessed
-#[cfg(any(test, feature = "test"))]
-fn validate_test_operation(arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
-    Ok(ValidatedOperationArg::Unprocessed(arg))
 }
 
 /// Helper function to create test allowed extensions map
@@ -1250,13 +1332,6 @@ mod tests {
         assert!(rendered.contains("Raw Payload"));
         assert!(rendered.contains("test"));
         assert!(rendered.contains("data"));
-
-        // Test unprocessed rendering
-        let unprocessed_arg =
-            ValidatedOperationArg::Unprocessed(ExtensionOperationArg { value: None });
-
-        let rendered = unprocessed_arg.render_for_proposal();
-        assert!(rendered.contains("No payload provided"));
     }
 
     #[test]
