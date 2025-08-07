@@ -573,8 +573,6 @@ mod tests {
 
     use tokio::time::timeout;
 
-    use crate::CanisterRangesFormat;
-
     use super::*;
 
     const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
