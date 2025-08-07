@@ -157,9 +157,10 @@ fn fake_ecdsa_matched_pre_signature(
     key_id: &EcdsaKeyId,
     height: Height,
     id: PreSigId,
+    rv: RegistryVersion,
 ) -> EcdsaMatchedPreSignature {
     let rng = &mut reproducible_rng();
-    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let env = CanisterThresholdSigTestEnvironment::new_with_registry_version(4, rv, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let alg = AlgorithmId::from(key_id.curve);
@@ -178,9 +179,10 @@ fn fake_schnorr_matched_pre_signature(
     key_id: &SchnorrKeyId,
     height: Height,
     id: PreSigId,
+    rv: RegistryVersion,
 ) -> SchnorrMatchedPreSignature {
     let rng = &mut reproducible_rng();
-    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let env = CanisterThresholdSigTestEnvironment::new_with_registry_version(4, rv, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let alg = AlgorithmId::from(key_id.algorithm);
@@ -203,19 +205,20 @@ fn fake_signature_request_args(
     key_id: MasterPublicKeyId,
     height: Height,
     pre_sig_id: Option<PreSigId>,
+    rv: RegistryVersion,
 ) -> ThresholdArguments {
     match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             message_hash: [0; 32],
             pre_signature: pre_sig_id
-                .map(|id| fake_ecdsa_matched_pre_signature(&key_id, height, id)),
+                .map(|id| fake_ecdsa_matched_pre_signature(&key_id, height, id, rv)),
             key_id,
         }),
         MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
             message: Arc::new(vec![1; 48]),
             taproot_tree_root: None,
             pre_signature: pre_sig_id
-                .map(|id| fake_schnorr_matched_pre_signature(&key_id, height, id)),
+                .map(|id| fake_schnorr_matched_pre_signature(&key_id, height, id, rv)),
             key_id,
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
@@ -232,9 +235,10 @@ pub fn fake_signature_request_context(
     key_id: MasterPublicKeyId,
     pseudo_random_id: [u8; 32],
 ) -> SignWithThresholdContext {
+    let rv = RegistryVersion::from(10);
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, Height::from(0), None),
+        args: fake_signature_request_args(key_id, Height::from(0), None, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id,
@@ -248,10 +252,11 @@ pub fn fake_signature_request_context_with_pre_sig(
     key_id: IDkgMasterPublicKeyId,
     pre_signature: Option<PreSigId>,
 ) -> (CallbackId, SignWithThresholdContext) {
+    let rv = RegistryVersion::from(10);
     let height = Height::from(1);
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id.into(), height, pre_signature),
+        args: fake_signature_request_args(key_id.into(), height, pre_signature, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -266,10 +271,11 @@ pub fn fake_signature_request_context_from_id(
     pre_sig_id: PreSigId,
     request_id: RequestId,
 ) -> (CallbackId, SignWithThresholdContext) {
+    let rv = RegistryVersion::from(10);
     let height = request_id.height;
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, height, Some(pre_sig_id)),
+        args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -277,6 +283,23 @@ pub fn fake_signature_request_context_from_id(
         nonce: Some([0; 32]),
     };
     (request_id.callback_id, context)
+}
+
+pub fn fake_signature_request_context_with_registry_version(
+    pre_sig_id: Option<PreSigId>,
+    key_id: &MasterPublicKeyId,
+    rv: RegistryVersion,
+) -> SignWithThresholdContext {
+    let height = Height::from(1);
+    SignWithThresholdContext {
+        request: RequestBuilder::new().build(),
+        args: fake_signature_request_args(key_id.clone(), height, pre_sig_id, rv),
+        derivation_path: Arc::new(vec![]),
+        batch_time: UNIX_EPOCH,
+        pseudo_random_id: [1; 32],
+        matched_pre_signature: pre_sig_id.map(|pid| (pid, height)),
+        nonce: Some([0; 32]),
+    }
 }
 
 pub fn fake_state_with_signature_requests<T>(
@@ -789,25 +812,4 @@ pub fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSig
 // Creates a test signature input
 pub fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
     create_sig_inputs_with_height(caller, Height::new(100), key_id.clone())
-}
-
-pub fn add_available_quadruple_to_payload(
-    idkg_payload: &mut IDkgPayload,
-    pre_signature_id: PreSigId,
-    registry_version: RegistryVersion,
-) {
-    let sig_inputs = create_sig_inputs(
-        pre_signature_id.id() as u8,
-        &fake_ecdsa_idkg_master_public_key_id(),
-    );
-    idkg_payload.available_pre_signatures.insert(
-        pre_signature_id,
-        sig_inputs.sig_inputs_ref.pre_signature().unwrap(),
-    );
-    for (t_ref, mut transcript) in sig_inputs.idkg_transcripts {
-        transcript.registry_version = registry_version;
-        idkg_payload
-            .idkg_transcripts
-            .insert(t_ref.transcript_id, transcript);
-    }
 }
