@@ -11,7 +11,7 @@ use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveErro
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
@@ -126,7 +126,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let subnet_type = self.subnet_type;
         let delegation_from_nns = self
             .nns_delegation_reader
-            .get_delegation(CanisterRangesFormat::Flat);
+            .get_delegation_with_flat_canister_ranges();
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.

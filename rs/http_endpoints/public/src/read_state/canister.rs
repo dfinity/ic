@@ -19,7 +19,7 @@ use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
@@ -223,7 +223,7 @@ pub(crate) async fn canister_read_state(
         };
 
         let signature = certification.signed.signature.signature.get().0;
-        let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
+        let delegation_from_nns = nns_delegation_reader.get_delegation_with_flat_canister_ranges();
         let res = HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,

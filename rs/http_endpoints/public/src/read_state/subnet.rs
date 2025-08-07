@@ -15,7 +15,7 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_state_manager::StateReader;
-use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{
@@ -158,7 +158,7 @@ pub(crate) async fn read_state_subnet(
         };
 
         let signature = certification.signed.signature.signature.get().0;
-        let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
+        let delegation_from_nns = nns_delegation_reader.get_delegation_with_flat_canister_ranges();
         Cbor(HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,

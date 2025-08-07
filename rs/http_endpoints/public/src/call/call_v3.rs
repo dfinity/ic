@@ -30,7 +30,7 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
-use ic_nns_delegation_manager::{CanisterRangesFormat, NNSDelegationReader};
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::certification::Certification,
@@ -201,7 +201,7 @@ async fn call_sync_v3(
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
             let delegation_from_nns =
-                nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
+                nns_delegation_reader.get_delegation_with_flat_canister_ranges();
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -306,7 +306,7 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFormat::Flat);
+    let delegation_from_nns = nns_delegation_reader.get_delegation_with_flat_canister_ranges();
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

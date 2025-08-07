@@ -252,6 +252,7 @@ async fn try_fetch_delegation_from_nns(
         }
     };
 
+    // TODO(CON-1487): request the /canister_ranges/{subnet_id} subtree as well
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
             read_state: HttpReadState {
@@ -836,7 +837,7 @@ mod tests {
 
         rx.receiver.changed().await.unwrap();
 
-        assert!(rx.get_delegation(CanisterRangesFormat::Flat).is_none());
+        assert!(rx.get_delegation_with_flat_canister_ranges().is_none());
     }
 
     #[tokio::test]
@@ -863,7 +864,7 @@ mod tests {
         rx.receiver.changed().await.unwrap();
 
         let delegation = rx
-            .get_delegation(CanisterRangesFormat::Flat)
+            .get_delegation_with_flat_canister_ranges()
             .expect("Should return some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
             .expect("Should return a certificate which can be deserialized");
