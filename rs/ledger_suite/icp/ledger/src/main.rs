@@ -49,12 +49,11 @@ use icp_ledger::{
     BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MEMO_SIZE_BYTES,
 };
-use icrc_ledger_types::icrc1::{
-    account::Subaccount as Icrc1Subaccount, transfer::TransferError as Icrc1TransferError,
-};
+use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
@@ -1645,12 +1644,9 @@ fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowan
 
 #[update]
 #[candid_method(update)]
-async fn remove_approval(
-    from_subaccount: Option<Icrc1Subaccount>,
-    spender: AccountIdBlob,
-) -> Result<Nat, ApproveError> {
+async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> {
     let approve_arg = ApproveArgs {
-        from_subaccount,
+        from_subaccount: args.from_subaccount,
         spender: Account {
             owner: Principal::anonymous(),
             subaccount: None,
@@ -1658,11 +1654,11 @@ async fn remove_approval(
         amount: Nat::from(0u64),
         expected_allowance: None,
         expires_at: None,
-        fee: None,
+        fee: args.fee.map(Nat::from),
         memo: None,
         created_at_time: None,
     };
-    let spender = AccountIdentifier::from_address(spender).unwrap_or_else(|e| {
+    let spender = AccountIdentifier::from_address(args.spender).unwrap_or_else(|e| {
         trap(&format!("Invalid account identifier: {}", e));
     });
     let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;

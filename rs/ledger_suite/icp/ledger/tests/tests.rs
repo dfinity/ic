@@ -20,8 +20,8 @@ use icp_ledger::{
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
     IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
     LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TimeStamp, TipOfChainRes, UpgradeArgs, DEFAULT_TRANSFER_FEE,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, UpgradeArgs,
+    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -2248,12 +2248,13 @@ fn test_remove_approval() {
 
     let remove_approval = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
         let spender_address = AccountIdentifier::new(spender, None).to_address();
-        let response = env.execute_ingress_as(
-            p1,
-            canister_id,
-            "remove_approval",
-            Encode!(&from_subaccount, &spender_address).unwrap(),
-        );
+        let args = RemoveApprovalArgs {
+            from_subaccount,
+            spender: spender_address,
+            fee: Some(Tokens::from_e8s(FEE)),
+        };
+        let response =
+            env.execute_ingress_as(p1, canister_id, "remove_approval", Encode!(&args).unwrap());
         let result = Decode!(&response.expect("failed to remove approval").bytes(), Result<Nat, ApproveError> )
         .expect("failed to decode remove_approval response");
         assert!(result.is_ok());
