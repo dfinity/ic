@@ -51,12 +51,12 @@ pub enum ValidatedOperationArg {
     // VotingCreatePoll(ValidatedCreatePollArg),
     // etc.
     // This one is for generic operations that governance doesn't validate
-    Unprocessed(Precise),
+    Unprocessed(ExtensionOperationArg),
 }
 
 impl ValidatedOperationArg {
     /// Returns the original Precise value that was validated
-    pub fn get_original_value(&self) -> &Precise {
+    pub fn get_original_value(&self) -> &ExtensionOperationArg {
         match self {
             Self::TreasuryManagerDeposit(arg) => &arg.original,
             Self::TreasuryManagerWithdraw(arg) => &arg.original,
@@ -73,7 +73,7 @@ pub enum OperationSpec {
         name: String,
         description: String,
         extension_type: ExtensionKind,
-        validate: fn(Precise) -> Result<ValidatedOperationArg, String>,
+        validate: fn(ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
     },
     /// Operations that just pass through to the extension without special validation
     GovernancePassthrough {
@@ -98,15 +98,24 @@ impl OperationSpec {
             | Self::GovernancePassthrough { description, .. } => description,
         }
     }
+
+    pub fn validate(&self, arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
+        match self {
+            Self::GovernanceSupported { validate, .. } => validate(arg),
+            Self::GovernancePassthrough { .. } => Ok(ValidatedOperationArg::Unprocessed(arg)),
+        }
+    }
 }
 
 /// Validates deposit operation arguments
-fn validate_deposit_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
+fn validate_deposit_operation(arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
     ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
 }
 
 /// Validates withdraw operation arguments  
-fn validate_withdraw_operation(arg: Precise) -> Result<ValidatedOperationArg, String> {
+fn validate_withdraw_operation(
+    arg: ExtensionOperationArg,
+) -> Result<ValidatedOperationArg, String> {
     ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
 }
 
@@ -689,60 +698,17 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    // Handle the operation based on its type
-    match &operation_spec {
-        OperationSpec::GovernanceSupported { validate, .. } => {
-            // Validate the operation arguments using the operation's validation function
-            let validated_args = validate(
-                operation_arg
-                    .value
-                    .clone()
-                    .unwrap_or(Precise { value: None }),
+    operation_spec
+        .validate(operation_arg.clone())
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Extension canister {} operation {} validation failed: {}",
+                    extension_canister_id, operation_name, err
+                ),
             )
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "Invalid arguments for operation {}: {}",
-                        operation_name, err
-                    ),
-                )
-            })?;
-
-            // Could add additional governance-specific validation here
-            // For example, check treasury limits based on the validated amounts
-            // You can now pattern match on validated_args to get the specific type:
-            match &validated_args {
-                ValidatedOperationArg::TreasuryManagerDeposit(deposit_args) => {
-                    // deposit_args is ValidatedDepositOperationArg with typed fields
-                    // e.g., deposit_args.treasury_allocation_sns_e8s
-                }
-                ValidatedOperationArg::TreasuryManagerWithdraw(withdraw_args) => {
-                    // withdraw_args is ValidatedWithdrawOperationArg with typed fields
-                    // e.g., withdraw_args.recipient_principal, withdraw_args.withdrawal_amount_sns_e8s
-                }
-                ValidatedOperationArg::Unprocessed(_) => {
-                    // This case shouldn't happen for governance-supported operations
-                    unreachable!(
-                        "Governance-supported operations should return specific validated types"
-                    )
-                }
-            }
-
-            Ok(validated_args)
-        }
-        OperationSpec::GovernancePassthrough { .. } => {
-            // For passthrough operations, we don't do any special validation
-            // The operation arguments will be passed directly to the extension
-            // Return the unprocessed arguments
-            Ok(ValidatedOperationArg::Unprocessed(
-                operation_arg
-                    .value
-                    .clone()
-                    .unwrap_or(Precise { value: None }),
-            ))
-        }
-    }
+        })
 }
 
 /// Validated deposit operation arguments
@@ -753,13 +719,17 @@ pub struct ValidatedDepositOperationArg {
     /// Amount of ICP tokens to allocate from treasury
     pub treasury_allocation_icp_e8s: u64,
     /// Original Precise value with all fields
-    original: Precise,
+    original: ExtensionOperationArg,
 }
 
-impl TryFrom<Precise> for ValidatedDepositOperationArg {
+impl TryFrom<ExtensionOperationArg> for ValidatedDepositOperationArg {
     type Error = String;
 
-    fn try_from(value: Precise) -> Result<Self, Self::Error> {
+    fn try_from(arg: ExtensionOperationArg) -> Result<Self, Self::Error> {
+        let ExtensionOperationArg { value: Some(value) } = &arg else {
+            return Err("Deposit operation arguments must be provided".to_string());
+        };
+
         let map = match &value.value {
             Some(precise::Value::Map(PreciseMap { map })) => map,
             _ => return Err("Deposit operation arguments must be a PreciseMap".to_string()),
@@ -784,7 +754,7 @@ impl TryFrom<Precise> for ValidatedDepositOperationArg {
         Ok(Self {
             treasury_allocation_sns_e8s,
             treasury_allocation_icp_e8s,
-            original: value,
+            original: arg,
         })
     }
 }
@@ -801,13 +771,17 @@ pub struct ValidatedWithdrawOperationArg {
     /// Optional memo
     pub memo: Option<String>,
     /// Original Precise value with all fields
-    original: Precise,
+    original: ExtensionOperationArg,
 }
 
-impl TryFrom<Precise> for ValidatedWithdrawOperationArg {
+impl TryFrom<ExtensionOperationArg> for ValidatedWithdrawOperationArg {
     type Error = String;
 
-    fn try_from(value: Precise) -> Result<Self, Self::Error> {
+    fn try_from(arg: ExtensionOperationArg) -> Result<Self, Self::Error> {
+        let ExtensionOperationArg { value: Some(value) } = &arg else {
+            return Err("Withdraw operation arguments must be provided".to_string());
+        };
+
         let map = match &value.value {
             Some(precise::Value::Map(PreciseMap { map })) => map,
             _ => return Err("Withdraw operation arguments must be a PreciseMap".to_string()),
@@ -850,7 +824,7 @@ impl TryFrom<Precise> for ValidatedWithdrawOperationArg {
             withdrawal_amount_sns_e8s,
             withdrawal_amount_icp_e8s,
             memo,
-            original: value,
+            original: arg,
         })
     }
 }
