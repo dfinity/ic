@@ -601,8 +601,6 @@ pub struct TaskQueue {
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
-    #[prost(message, optional, tag = "3")]
-    pub call_context_manager: ::core::option::Option<CallContextManager>,
     #[prost(uint64, tag = "4")]
     pub compute_allocation: u64,
     #[prost(int64, tag = "5")]

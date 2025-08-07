@@ -231,7 +231,8 @@ async fn send(
         Operation::Mint { to, amount }
     } else if to == minting_acc {
         assert_eq!(fee, Tokens::ZERO, "Fee for burning should be zero");
-        let min_burn_amount = LEDGER.read().unwrap().transfer_fee;
+        let balance = LEDGER.read().unwrap().balances().account_balance(&from);
+        let min_burn_amount = LEDGER.read().unwrap().transfer_fee.min(balance);
         if amount < min_burn_amount {
             panic!("Burns lower than {} are not allowed", min_burn_amount);
         }
@@ -1345,10 +1346,7 @@ fn get_nodes_() {
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let ledger = LEDGER.try_read().map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to get a LEDGER for read: {}", err),
-        )
+        std::io::Error::other(format!("Failed to get a LEDGER for read: {}", err))
     })?;
     let archive_guard = ledger.blockchain.archive.read().unwrap();
     let num_archives = archive_guard

@@ -960,8 +960,8 @@ fn test_hash_plan() {
     .expect("failed to compute manifest");
 
     // Compute the manifest incrementally.
-    let mut files = Vec::new();
-    files_with_sizes(root, "".into(), &mut files).expect("failed to traverse the files");
+    let mut files =
+        files_with_sizes(root, "".into(), &mut thread_pool).expect("failed to traverse the files");
     // We sort the table to make sure that the table is the same on all replicas
     files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
 
@@ -1151,6 +1151,7 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
             FileWithSize("wasm_b".into(), 2048 * 1024),
         ],
         max_chunk_size,
+        &mut thread_pool,
     )
     .expect("Failed to get dirty chunks");
     assert_eq!(
@@ -1389,8 +1390,12 @@ fn all_same_inodes_are_detected() {
             .unwrap(),
     };
 
-    let mut files = Vec::new();
-    files_with_sizes(target.path(), "".into(), &mut files).unwrap();
+    let files = files_with_sizes(
+        target.path(),
+        "".into(),
+        &mut scoped_threadpool::Pool::new(NUM_THREADS),
+    )
+    .unwrap();
 
     let result = dirty_pages_to_dirty_chunks(
         &no_op_logger(),
@@ -1398,6 +1403,7 @@ fn all_same_inodes_are_detected() {
         &CheckpointLayout::new_untracked(target.path().to_path_buf(), Height::new(1)).unwrap(),
         &files,
         1024 * 1024,
+        &mut scoped_threadpool::Pool::new(NUM_THREADS),
     )
     .unwrap();
 
