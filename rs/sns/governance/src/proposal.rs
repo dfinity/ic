@@ -1527,7 +1527,7 @@ async fn validate_and_render_execute_extension_operation(
     .await
     .map_err(|err| err.error_message)?;
 
-    let display_args = format!("{:#?}", validated_arg);
+    let display_args = format!("{}", validated_arg);
 
     Ok(format!(
         r"# Proposal to execute extension operation:

@@ -63,6 +63,44 @@ impl ValidatedOperationArg {
             Self::Unprocessed(arg) => &arg,
         }
     }
+
+    /// Renders the operation arguments as markdown suitable for proposal display
+    pub fn render_for_proposal(&self) -> String {
+        match self {
+            Self::TreasuryManagerDeposit(args) => args.render_for_proposal(),
+            Self::TreasuryManagerWithdraw(args) => args.render_for_proposal(),
+            Self::Unprocessed(args) => args.render_for_proposal(),
+        }
+    }
+}
+
+impl Display for ValidatedOperationArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.render_for_proposal())
+    }
+}
+
+/// Trait for payloads that can be rendered as markdown for proposal display
+pub trait RenderablePayload {
+    /// Renders the payload as markdown suitable for proposal display
+    fn render_for_proposal(&self) -> String;
+}
+
+impl RenderablePayload for ExtensionOperationArg {
+    fn render_for_proposal(&self) -> String {
+        match &self.value {
+            Some(value) => format!(
+                r#"### Extension Operation
+
+**Raw Payload:**
+```
+{:#?}
+```"#,
+                value
+            ),
+            None => "### Extension Operation\n\n*No payload provided*".to_string(),
+        }
+    }
 }
 
 /// Specification for an extension operation
@@ -759,6 +797,18 @@ impl TryFrom<ExtensionOperationArg> for ValidatedDepositOperationArg {
     }
 }
 
+impl RenderablePayload for ValidatedDepositOperationArg {
+    fn render_for_proposal(&self) -> String {
+        format!(
+            r#"### Treasury Deposit
+
+**SNS Tokens:** {} e8s  
+**ICP Tokens:** {} e8s"#,
+            self.treasury_allocation_sns_e8s, self.treasury_allocation_icp_e8s
+        )
+    }
+}
+
 /// Validated withdraw operation arguments
 #[derive(Debug, Clone)]
 pub struct ValidatedWithdrawOperationArg {
@@ -826,6 +876,27 @@ impl TryFrom<ExtensionOperationArg> for ValidatedWithdrawOperationArg {
             memo,
             original: arg,
         })
+    }
+}
+
+impl RenderablePayload for ValidatedWithdrawOperationArg {
+    fn render_for_proposal(&self) -> String {
+        let mut output = format!(
+            r#"### Treasury Withdrawal
+
+**Recipient:** {}  
+**SNS Tokens:** {} e8s  
+**ICP Tokens:** {} e8s"#,
+            self.recipient_principal,
+            self.withdrawal_amount_sns_e8s,
+            self.withdrawal_amount_icp_e8s
+        );
+
+        if let Some(memo) = &self.memo {
+            output.push_str(&format!("  \n**Memo:** {}", memo));
+        }
+
+        output
     }
 }
 
