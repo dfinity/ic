@@ -8,22 +8,30 @@ to regenerate Cargo Bazel lockfiles.
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-def sanitize_external_crates(sanitizers_enabled):
-    FUZZING_ANNOTATION = [crate.annotation(rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING)] if sanitizers_enabled else []
-    return {
-        "candid": FUZZING_ANNOTATION,
-        "wasmtime": FUZZING_ANNOTATION,
-        "bitcoin": FUZZING_ANNOTATION,
-        "bincode": FUZZING_ANNOTATION,
-        "ic-stable-structures": FUZZING_ANNOTATION,
-    }
-
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
-def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
+def external_crates_repository(name, cargo_lockfile, lockfile):
     CRATE_ANNOTATIONS = {
+        "bincode": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
+        "bitcoin": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
+        "candid": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
         # The upgrade to rust-1.86.0 in https://github.com/dfinity/ic/commit/d1dc4c2dc813c70611425749551c5ac40c8d5e40
         # was initially reverted since it caused the `//rs/pocket_ic_server:...` and `//packages/pocket-ic:...` tests
         # to fail on x86_64-apple-darwin.
@@ -73,6 +81,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "ic-stable-structures": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -169,8 +183,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "metrics-proxy": [crate.annotation(
             gen_binaries = True,
         )],
+        "wasmtime": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
     }
-    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
+
     crates_repository(
         name = name,
         isolated = True,

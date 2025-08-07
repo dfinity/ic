@@ -151,18 +151,11 @@ rust_register_toolchains(
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
-load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
-
-sanitizers_enabled_env(name = "sanitizers_enabled_env")
-
-load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
     cargo_lockfile = "//:Cargo.Bazel.toml.lock",
-    # the fuzzing lockfile contains fuzzing-specific annotations
-    lockfile = "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
-    sanitizers_enabled = SANITIZERS_ENABLED,
+    lockfile = "//:Cargo.Bazel.json.lock",
 )
 
 load("@crate_index//:defs.bzl", "crate_repositories")

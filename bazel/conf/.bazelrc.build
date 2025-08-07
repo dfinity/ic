@@ -90,7 +90,6 @@ test --flaky_test_attempts=1
 build:dev --compilation_mode=fastbuild
 
 # Fuzzing configuration
-build:fuzzing --action_env="SANITIZERS_ENABLED=1"
 # fuzzers use nightly features so we tell rustc to allow nightly features
 build:fuzzing --@rules_rust//rust/settings:extra_rustc_env=RUSTC_BOOTSTRAP=1 --@rules_rust//rust/settings:extra_exec_rustc_env=RUSTC_BOOTSTRAP=1
 build:fuzzing --build_tag_filters=fuzz_test

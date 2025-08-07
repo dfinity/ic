@@ -80,12 +80,10 @@ fi
 if [ "${CRATES:-}" == "" ]; then
     echo "Repinning all crates"
     CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
-    SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
 else
     echo "Repinning ${#CRATES[@]} crates"
     for crate in "${CRATES[@]}"; do
         echo "Repinning crate: ${crate}"
         CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
-        SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
     done
 fi
