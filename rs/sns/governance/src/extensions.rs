@@ -217,6 +217,10 @@ impl ExtensionSpec {
 
         None
     }
+
+    pub fn supports_extension_type(&self, extension_type: ExtensionType) -> bool {
+        self.extension_types.contains(&extension_type)
+    }
 }
 
 impl Display for ExtensionSpec {
@@ -723,7 +727,7 @@ pub(crate) async fn validate_execute_extension_operation(
     };
 
     // Currently only support extensions that implement TreasuryManager
-    if extension_spec.extension_types != vec![ExtensionType::TreasuryManager] {
+    if !extension_spec.supports_extension_type(ExtensionType::TreasuryManager) {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             "Only extensions implementing TreasuryManager are currently supported.",
