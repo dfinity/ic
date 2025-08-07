@@ -20,15 +20,18 @@ async fn main() {
     let mut join_handle =
         tokio::spawn(async move { orchestrator.start_tasks(cancellation_token_clone).await });
 
-    tokio::select! {
-        _ = shutdown_signal(logger.clone()) => {},
-        _ = &mut join_handle => {}
-    }
+    let result = tokio::select! {
+        _ = shutdown_signal(logger.clone()) => {
+            info!(logger, "Shutting down orchestrator...");
+            cancellation_token.cancel();
+            join_handle.await
+        },
+        result = &mut join_handle => {
+            result
+        },
+    };
 
-    info!(logger, "Shutting down orchestrator...");
-    cancellation_token.cancel();
-
-    match join_handle.await {
+    match result {
         Err(err) if err.is_panic() => {
             warn!(logger, "Orchestrator panicked: {err}")
         }

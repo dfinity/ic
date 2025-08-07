@@ -31,15 +31,18 @@ async fn main() {
     info!(logger, "Start polling registry.");
     let mut handle = tokio::task::spawn(future);
 
-    tokio::select! {
-        _ = shutdown_signal(logger.clone()) => {},
-        _ = &mut handle => {},
-    }
+    let result = tokio::select! {
+        _ = shutdown_signal(logger.clone()) => {
+            info!(logger, "Shutting down the registry replicator");
+            cancellation_token.cancel();
+            handle.await
+        },
+        result = &mut handle => {
+            result
+        },
+    };
 
-    info!(logger, "Shutting down the registry replicator");
-    cancellation_token.cancel();
-
-    match handle.await {
+    match result {
         Err(err) if err.is_panic() => {
             warn!(logger, "Registry replicator task panicked: {err}");
         }
