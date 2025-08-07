@@ -377,7 +377,7 @@ fn ingress_induction_cost_valid_subnet_message() {
             .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
             .build()
             .into();
-        let effective_canister_id = extract_effective_canister_id(&msg, subnet_id).unwrap();
+        let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let num_bytes = msg.arg().len() + msg.method_name().len();
 
@@ -412,7 +412,7 @@ fn ingress_induction_cost_valid_subnet_message_free_schedule() {
             .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
             .build()
             .into();
-        let effective_canister_id = extract_effective_canister_id(&msg, subnet_id).unwrap();
+        let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let num_bytes = msg.arg().len() + msg.method_name().len();
 

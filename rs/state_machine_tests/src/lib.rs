@@ -3827,8 +3827,7 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload);
-        let effective_canister_id =
-            extract_effective_canister_id(msg.content(), self.get_subnet_id()).unwrap();
+        let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             msg.content(),

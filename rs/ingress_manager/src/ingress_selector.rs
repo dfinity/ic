@@ -473,7 +473,7 @@ impl IngressManager {
 
         // Do not include the message if the recipient is Stopping or Stopped.
         let msg = signed_ingress.content();
-        if !msg.is_addressed_to_subnet(self.subnet_id) {
+        if !msg.is_addressed_to_subnet() {
             let canister_id = msg.canister_id();
             let canister_state = state.canister_state(&canister_id).ok_or({
                 ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(
@@ -496,12 +496,9 @@ impl IngressManager {
         }
 
         // Skip the message if there aren't enough cycles to induct the message.
-        let effective_canister_id =
-            extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
-                ValidationError::InvalidArtifact(
-                    InvalidIngressPayloadReason::InvalidManagementMessage,
-                )
-            })?;
+        let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
+            ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
+        })?;
         let subnet_size = state
             .metadata
             .network_topology

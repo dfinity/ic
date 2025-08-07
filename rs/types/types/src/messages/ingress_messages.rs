@@ -8,7 +8,7 @@ use crate::{
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
     },
-    CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
+    CanisterId, CountBytes, PrincipalId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
@@ -67,9 +67,8 @@ impl SignedIngressContent {
     }
 
     /// Checks whether the given ingress message is addressed to the subnet (rather than to a canister).
-    pub fn is_addressed_to_subnet(&self, own_subnet_id: SubnetId) -> bool {
-        let canister_id = self.canister_id();
-        is_subnet_id(canister_id, own_subnet_id)
+    pub fn is_addressed_to_subnet(&self) -> bool {
+        self.canister_id() == IC_00
     }
 
     pub fn ingress_expiry(&self) -> Time {
@@ -369,9 +368,8 @@ pub struct Ingress {
 
 impl Ingress {
     /// Checks whether the given ingress message is addressed to the subnet (rather than to a canister).
-    pub fn is_addressed_to_subnet(&self, own_subnet_id: SubnetId) -> bool {
-        let canister_id = self.receiver;
-        is_subnet_id(canister_id, own_subnet_id)
+    pub fn is_addressed_to_subnet(&self) -> bool {
+        self.receiver == IC_00
     }
 }
 
@@ -487,9 +485,8 @@ impl ParseIngressError {
 /// Helper function to extract the effective canister id from the payload of an ingress message.
 pub fn extract_effective_canister_id(
     ingress: &SignedIngressContent,
-    subnet_id: SubnetId,
 ) -> Result<Option<CanisterId>, ParseIngressError> {
-    if !ingress.is_addressed_to_subnet(subnet_id) {
+    if !ingress.is_addressed_to_subnet() {
         return Ok(None);
     }
     match Method::from_str(ingress.method_name()) {
@@ -610,11 +607,6 @@ pub fn extract_effective_canister_id(
     }
 }
 
-/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
-pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
-    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
-}
-
 #[cfg(test)]
 mod test {
     use crate::messages::ingress_messages::{
@@ -637,7 +629,7 @@ mod test {
                 ingress_expiry: 0,
                 nonce: None,
             };
-            let result = extract_effective_canister_id(&msg, subnet_id);
+            let result = extract_effective_canister_id(&msg);
             assert!(
                 matches!(result, Err(ParseIngressError::InvalidSubnetPayload(_))),
                 "Expected InvalidSubnetPayload error, got: {:?}",
@@ -659,7 +651,7 @@ mod test {
                 nonce: None,
             };
             assert_eq!(
-                extract_effective_canister_id(&msg, subnet_id),
+                extract_effective_canister_id(&msg),
                 Err(ParseIngressError::UnknownSubnetMethod)
             );
         }
