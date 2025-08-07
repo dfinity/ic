@@ -34,6 +34,7 @@ tower = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 axum-server = { workspace = true }
+criterion = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-registry-client-fake = { path = "../../registry/fake" }

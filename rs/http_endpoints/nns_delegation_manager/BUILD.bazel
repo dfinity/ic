@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
@@ -62,6 +63,24 @@ rust_test(
         "@crate_index//:rand",
         "@crate_index//:rcgen",
         "@crate_index//:rustls",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_ic_bench(
+    name = "nns_delegation_reader_bench",
+    testonly = True,
+    srcs = ["benches/nns_delegation_reader.rs"],
+    deps = [
+        # Keep sorted.
+        ":nns_delegation_manager",
+        "//rs/certification/test-utils",
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
 )

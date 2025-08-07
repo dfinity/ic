@@ -11315,6 +11315,7 @@ dependencies = [
  "assert_matches",
  "axum 0.8.4",
  "axum-server",
+ "criterion",
  "futures",
  "http-body-util",
  "hyper 1.6.0",
