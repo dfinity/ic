@@ -43,7 +43,7 @@ fn sync_all() {
 
 #[test]
 fn test_sync_zero_registry_version() {
-    let (fake_registry, _) = setup_thread_local_canister_for_test();
+    let fake_registry = setup_thread_local_canister_for_test();
     let subnets: Vec<SubnetId> = vec![
         subnet_id(0),
         subnet_id(1),
@@ -74,7 +74,7 @@ fn test_sync_zero_registry_version() {
 
 #[test]
 fn test_sync_non_zero_registry_version() {
-    let (fake_registry, _) = setup_thread_local_canister_for_test();
+    let fake_registry = setup_thread_local_canister_for_test();
 
     // Set the registry version to 1, which is non-zero.
     let subnets_first_sync: Vec<SubnetId> = vec![

@@ -43,7 +43,6 @@ itertools = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 futures-util = { workspace = true }
-ic-registry-local-store = { path = "../../registry/local_store" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent", features = ["test"] }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
@@ -51,16 +50,9 @@ ic-nns-test-utils = { path = "../../nns/test_utils" }
 maplit = "1.0.2"
 chrono = "0.4.41"
 pocket-ic = { path = "../../../packages/pocket-ic" }
-rust_decimal = "1.37.1"
-rust_decimal_macros = "1.37.1"
 serde_json = { workspace = true }
-tabled = "0.20.0"
 tokio = { workspace = true }
-flate2 = "1.0"
-tar = "0.4"
-tempfile = "3.3"
-ic-registry-transport = { path = "../../registry/transport" }
-csv = "1.3.1"
+
 
 [features]
 test = []

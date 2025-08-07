@@ -7,23 +7,15 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
 };
-use ic_node_rewards_canister_api::providers_rewards::{
-    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
-};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
-use ic_registry_canister_client::{
-    get_decoded_value, CanisterRegistryClient, RegistryDataStableMemory,
-};
+use ic_registry_canister_client::{get_decoded_value, CanisterRegistryClient};
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::RegistryVersion;
-use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
-use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
-use rewards_calculation::types::RewardPeriod;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -113,40 +105,6 @@ impl NodeRewardsCanister {
             canister.last_metrics_update = post_sync_version;
         });
     }
-
-    fn calculate_rewards<S: RegistryDataStableMemory>(
-        &self,
-        request: GetNodeProvidersRewardsRequest,
-    ) -> Result<RewardsCalculatorResults, String> {
-        let reward_period =
-            RewardPeriod::new(request.from, request.to).map_err(|e| e.to_string())?;
-        let registry_querier = RegistryQuerier::new(self.registry_client.clone());
-
-        let version = registry_querier
-            .version_for_timestamp(reward_period.to.unix_ts_at_day_end())
-            .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
-        let rewards_table = registry_querier.get_rewards_table(version);
-        let daily_metrics_by_subnet = self
-            .metrics_manager
-            .daily_metrics_by_subnet(reward_period.from, reward_period.to);
-        let provider_rewardable_nodes = RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
-            &*self.registry_client,
-            reward_period.from,
-            reward_period.to,
-        )
-        .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
-
-        let input = RewardsCalculatorInput {
-            reward_period,
-            rewards_table,
-            daily_metrics_by_subnet,
-            provider_rewardable_nodes,
-        };
-        let result = rewards_calculation::rewards_calculator::calculate_rewards(input)
-            .map_err(|e| format!("Could not calculate rewards: {e:?}"));
-
-        result
-    }
 }
 
 // Exposed API Methods
@@ -217,51 +175,6 @@ impl NodeRewardsCanister {
 
             calculate_rewards_v0(&rewards_table, &node_operators, &data_centers)
                 .map(|rewards| (rewards, version))
-        }
-    }
-
-    pub async fn get_node_providers_rewards<S: RegistryDataStableMemory>(
-        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-        request: GetNodeProvidersRewardsRequest,
-    ) -> GetNodeProvidersRewardsResponse {
-        return match inner_get_node_providers_rewards::<S>(canister, request).await {
-            Ok(rewards) => GetNodeProvidersRewardsResponse {
-                rewards: Some(rewards),
-                error: None,
-            },
-            Err(e) => GetNodeProvidersRewardsResponse {
-                rewards: None,
-                error: Some(e),
-            },
-        };
-
-        async fn inner_get_node_providers_rewards<S: RegistryDataStableMemory>(
-            canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-            request: GetNodeProvidersRewardsRequest,
-        ) -> Result<NodeProvidersRewards, String> {
-            NodeRewardsCanister::schedule_registry_sync(canister)
-                .await
-                .map_err(|e| {
-                    format!(
-                        "Could not sync registry store to latest version, \
-                    please try again later: {:?}",
-                        e
-                    )
-                })?;
-            NodeRewardsCanister::schedule_metrics_sync(canister).await;
-            let result =
-                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
-            let rewards_xdr_permyriad = result
-                .provider_results
-                .iter()
-                .map(|(provider_id, provider_rewards)| {
-                    (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
-                })
-                .collect();
-
-            Ok(NodeProvidersRewards {
-                rewards_xdr_permyriad,
-            })
         }
     }
 }
