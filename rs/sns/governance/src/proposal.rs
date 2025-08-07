@@ -1527,14 +1527,15 @@ async fn validate_and_render_execute_extension_operation(
     .await
     .map_err(|err| err.error_message)?;
 
-    let display_args = format!("{}", validated_arg);
+    // ValidatedOperationArg has a custom Display trait impl
+    let operation_arg_string = format!("{}", validated_arg);
 
     Ok(format!(
         r"# Proposal to execute extension operation:
 
 * Extension canister ID: `{extension_canister_id}`
 * Operation name: `{operation_name}`
-* Operation argument: `{display_args}`
+* Operation argument: `{operation_arg_string}`
 #"
     ))
 }
