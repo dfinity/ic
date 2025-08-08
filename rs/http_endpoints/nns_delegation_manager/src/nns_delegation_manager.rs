@@ -37,7 +37,10 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::{metrics::DelegationManagerMetrics, NNSDelegationReader};
+use crate::{
+    metrics::DelegationManagerMetrics, nns_delegation_reader::NNSDelegationBuilder,
+    NNSDelegationReader,
+};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -97,7 +100,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx))
+    (join_handle, NNSDelegationReader::new(rx, subnet_id))
 }
 
 struct DelegationManager {
@@ -112,7 +115,7 @@ struct DelegationManager {
 }
 
 impl DelegationManager {
-    async fn fetch(&self) -> Option<CertificateDelegation> {
+    async fn fetch(&self) -> Option<NNSDelegationBuilder> {
         let _timer = self.metrics.update_duration.start_timer();
 
         let delegation = load_root_delegation(
@@ -128,9 +131,9 @@ impl DelegationManager {
         .await;
 
         if let Some(delegation) = delegation.as_ref() {
-            self.metrics
-                .delegation_size
-                .observe(delegation.certificate.len() as f64);
+            //self.metrics
+            //    .delegation_size
+            //    .observe(delegation.certificate.len() as f64);
         }
 
         self.metrics.updates.inc();
@@ -138,7 +141,7 @@ impl DelegationManager {
         delegation
     }
 
-    async fn run(self, sender: watch::Sender<Option<CertificateDelegation>>) {
+    async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
         let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
         // Since we can't distinguish between yet uninitialized and simply not present
         // (because we are on the NNS subnet) certification delegation, we explicitely keep
@@ -152,7 +155,7 @@ impl DelegationManager {
 
             let mut delegation = self.fetch().await;
 
-            sender.send_if_modified(move |old_delegation: &mut Option<CertificateDelegation>| {
+            sender.send_if_modified(move |old_delegation: &mut Option<NNSDelegationBuilder>| {
                 let modified = if &delegation != old_delegation {
                     std::mem::swap(old_delegation, &mut delegation);
                     true
@@ -179,7 +182,7 @@ async fn load_root_delegation(
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
     metrics: &DelegationManagerMetrics,
-) -> Option<CertificateDelegation> {
+) -> Option<NNSDelegationBuilder> {
     // On the NNS subnet. No delegation needs to be fetched.
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -240,7 +243,7 @@ async fn try_fetch_delegation_from_nns(
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
-) -> Result<CertificateDelegation, BoxError> {
+) -> Result<NNSDelegationBuilder, BoxError> {
     let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, nns_subnet_id) {
         Ok(node_topology) => node_topology,
         Err(err) => {
@@ -358,7 +361,7 @@ async fn try_fetch_delegation_from_nns(
     let parsed_delegation: Certificate = serde_cbor::from_slice(&response.certificate)
         .map_err(|e| format!("failed to parse delegation certificate: {}", e))?;
 
-    let labeled_tree = LabeledTree::try_from(parsed_delegation.tree)
+    let labeled_tree = LabeledTree::try_from(parsed_delegation.tree.clone())
         .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;
 
     let own_public_key_from_registry = match registry_client
@@ -409,13 +412,8 @@ async fn try_fetch_delegation_from_nns(
     )
     .map_err(|err| format!("invalid subnet delegation certificate: {:?} ", err))?;
 
-    let delegation = CertificateDelegation {
-        subnet_id: Blob(subnet_id.get().to_vec()),
-        certificate: response.certificate,
-    };
-
-    info!(log, "Setting NNS delegation to: {:?}", delegation);
-    Ok(delegation)
+    info!(log, "Setting NNS delegation to: {:?}", response.certificate);
+    Ok(NNSDelegationBuilder::new(parsed_delegation, subnet_id))
 }
 
 async fn connect(
