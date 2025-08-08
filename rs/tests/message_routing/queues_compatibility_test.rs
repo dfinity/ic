@@ -99,14 +99,9 @@ fn download_mainnet_binary(
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            download_binary(
-                log,
-                version,
-                binary_name.into(),
-                target_dir,
-            )
-            .await
-            .map_err(|e| e.into())
+            download_binary(log, version, binary_name.into(), target_dir)
+                .await
+                .map_err(|e| e.into())
         }
     ))
     .expect("Failed to Download")
