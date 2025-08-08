@@ -17,7 +17,7 @@ use crate::{
             get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -97,10 +97,6 @@ pub fn init_ic(
 
     let replica_version = get_guestos_img_version()?;
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
-    let initial_replica_version = InitialReplicaVersion {
-        version: replica_version.clone(),
-    };
-    initial_replica_version.write_attribute(test_env);
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -558,6 +554,12 @@ pub fn setup_nested_vms(
 ) -> anyhow::Result<()> {
     let mut result = Ok(());
 
+    info!(
+        farm.logger,
+        "Starting setup_nested_vms for {} node(s)",
+        nodes.len()
+    );
+
     thread::scope(|s| {
         let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
         for node in nodes {
@@ -586,6 +588,11 @@ pub fn setup_nested_vms(
         }
 
         // Wait for all threads to finish and return an error if any of them fails.
+        info!(
+            farm.logger,
+            "Waiting for {} VM setup threads to complete",
+            join_handles.len()
+        );
         for jh in join_handles {
             if let Err(e) = jh.join().expect("Waiting for a thread failed") {
                 warn!(farm.logger, "Setting up VM failed with: {:?}", e);
@@ -612,7 +619,13 @@ fn create_setupos_config_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let tmp_dir = env.get_path("setupos");
+    info!(
+        env.logger(),
+        "[{}] Starting create_setupos_config_image", name
+    );
+
+    // Create a unique temporary directory for this thread to avoid conflicts
+    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
@@ -628,6 +641,7 @@ fn create_setupos_config_image(
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
     let old_ip = nested_vm.get_vm()?.ipv6;
+    info!(env.logger(), "[{}] Got VM with IPv6: {}", name, old_ip);
     let segments = old_ip.segments();
     let prefix = format!(
         "{:04x}:{:04x}:{:04x}:{:04x}",
@@ -644,7 +658,7 @@ fn create_setupos_config_image(
 
     // Prep data dir
     let data_dir = tmp_dir.join("data");
-    std::fs::create_dir(&data_dir)?;
+    std::fs::create_dir_all(&data_dir)?;
 
     // Prep config contents
     let mut cmd = Command::new(create_setupos_config);
@@ -708,5 +722,9 @@ fn create_setupos_config_image(
         bail!("Could not inject configs into image");
     }
 
+    info!(
+        env.logger(),
+        "[{}] Successfully created config image at: {:?}", name, config_image
+    );
     Ok(config_image)
 }

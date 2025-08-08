@@ -46,7 +46,7 @@ pub(crate) fn setup_thread_local_canister_for_test() -> Arc<FakeRegistry> {
             fake_registry.clone(),
         ))
         .clone(),
-        Rc::new(MetricsManager::new(mock)),
+        Rc::new(MetricsManager::new_test(mock)),
     );
     CANISTER_TEST.with_borrow_mut(|c| *c = canister);
     // To do thorough tests, this is all we currently need to mock, as everything else

@@ -87,7 +87,7 @@
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
-  "internet_identity": {
+  "internet_identity_test": {
     "sha256": "5ef7c4592e1cd9d17438ae750b48d6d321d1705ea3e82672770a49f98b041948",
     "tag": "release-2025-07-31"
   },
@@ -98,6 +98,10 @@
   "lifeline": {
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
+  },
+  "nns_dapp_test": {
+    "sha256": "2248471cc5e090756246bd4e71333af3bffb884a42c40b52cb94615a26b7f3d2",
+    "tag": "proposal-137363"
   },
   "node-rewards": {
     "rev": "5128134d24b7a5b8e24a3d5d40c4cce9d81fd375",
@@ -114,6 +118,10 @@
   "sns-wasm": {
     "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
     "sha256": "2b3d631d7c158ef62d71e5f167535bc7f3fa48fe87301361c89f4f37458d60c1"
+  },
+  "sns_aggregator_test": {
+    "sha256": "f4af69470afc76f50bbb845d001f42c135f4a7976c70bff9fe3ea4d86d2216aa",
+    "tag": "proposal-137283-agg"
   },
   "sns_archive": {
     "rev": "83923a194d39835e8a7d9549f9f0831b962a60c2",
