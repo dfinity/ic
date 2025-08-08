@@ -152,3 +152,9 @@ build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
 build --sandbox_add_mount_pair=/tmp/zig-cache
 # Allow writes to the shared cache
 build --sandbox_writable_path=/tmp/zig-cache
+
+# use with: bazel build --config=container @jemalloc//:libjemalloc --subcommands --sandbox_debug
+common:container --spawn_strategy=docker --strategy=Javac=docker --genrule_strategy=docker
+common:container --experimental_docker_image=ghcr.io/dfinity/ic-build
+common:container --experimental_enable_docker_sandbox
+common:container --experimental_docker_verbose

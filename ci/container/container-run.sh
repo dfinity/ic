@@ -80,11 +80,14 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
     fi
 fi
 
+: <<'FOO'
 if findmnt /hoststorage >/dev/null; then
     eprintln "Purging non-relevant container images"
     sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
+FOO
 
+: <<'COMMENT'
 WORKDIR="/ic"
 USER=$(whoami)
 
@@ -99,25 +102,22 @@ PODMAN_RUN_ARGS=(
     --entrypoint=
     --init
     --pull=missing
+    --hostuser="$USER"
 )
-
-if podman version | grep -qE 'Version:\s+4.'; then
-    PODMAN_RUN_ARGS+=(
-        --hostuser="$USER"
-    )
-fi
 
 if [ "$(id -u)" = "1000" ]; then
     CTR_HOME="/home/ubuntu"
 else
     CTR_HOME="/ic"
 fi
+COMMENT
 
 CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 
 ZIG_CACHE="${CACHE_DIR}/zig-cache"
 mkdir -p "${ZIG_CACHE}"
 
+: <<'COMMENT'
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
@@ -194,6 +194,8 @@ if [ -f "$HOME/.container-run.conf" ]; then
     source "$HOME/.container-run.conf"
 fi
 
+COMMENT
+
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
 # every byte of standard output to the journal, and that
@@ -205,13 +207,6 @@ if tty >/dev/null 2>&1; then
 else
     tty_arg=
 fi
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
-# Privileged rootful podman is required due to requirements of IC-OS guest build;
-# additionally, we need to use hosts's cgroups and network.
-if [ $# -eq 0 ]; then
-    set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
-else
-    set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
-fi
+#other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
+set -x
+exec sudo podman "${PODMAN_ARGS[@]}" "$@"
