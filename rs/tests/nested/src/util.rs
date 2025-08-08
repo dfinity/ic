@@ -69,7 +69,7 @@ pub(crate) async fn elect_guestos_version(
     target_version: ReplicaVersion,
     sha256: String,
     upgrade_urls: Vec<String>,
-    guest_launch_measurements: GuestLaunchMeasurements,
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
@@ -83,7 +83,7 @@ pub(crate) async fn elect_guestos_version(
         Some(target_version),
         Some(sha256),
         upgrade_urls,
-        Some(guest_launch_measurements),
+        guest_launch_measurements,
         vec![],
     )
     .await;

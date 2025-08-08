@@ -4,7 +4,6 @@ use super::Step;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_system_test_driver::{
     driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot},
     nns::{
