@@ -9,10 +9,10 @@ use tokio::sync::watch;
 
 #[derive(Clone, Eq, PartialEq)]
 pub(crate) struct NNSDelegationBuilder {
-    flat_delegation: CertificateDelegation,
-    delegation_without_ranges: CertificateDelegation,
-    tree_certificate: Certificate,
-    full_labeled_tree: LabeledTree<Vec<u8>>,
+    delegation_with_flat_canister_ranges: CertificateDelegation,
+    delegation_without_canister_ranges: CertificateDelegation,
+    certificate_with_tree_canister_ranges: Certificate,
+    labeled_tree_with_both_canister_ranges_formats: LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
 }
 
@@ -48,15 +48,18 @@ impl NNSDelegationBuilder {
 
         Self {
             subnet_id,
-            flat_delegation: Self::create_certificate_delegation(flat_certificate, subnet_id)
-                .expect("FIXME"),
-            delegation_without_ranges: Self::create_certificate_delegation(
+            delegation_with_flat_canister_ranges: Self::create_certificate_delegation(
+                flat_certificate,
+                subnet_id,
+            )
+            .expect("FIXME"),
+            delegation_without_canister_ranges: Self::create_certificate_delegation(
                 certification_without_ranges,
                 subnet_id,
             )
             .expect("FIXME"),
-            tree_certificate,
-            full_labeled_tree,
+            certificate_with_tree_canister_ranges: tree_certificate,
+            labeled_tree_with_both_canister_ranges_formats: full_labeled_tree,
         }
     }
 
@@ -65,7 +68,7 @@ impl NNSDelegationBuilder {
         // Note: even if the function does return `Some` it is not guaranteed, that the leaf
         // actually contains the canister id.
         let Some((label, _subtree)) = lookup_lower_bound(
-            &self.full_labeled_tree,
+            &self.labeled_tree_with_both_canister_ranges_formats,
             &[&b"canister_ranges".to_vec(), &self.subnet_id.get().to_vec()],
             &canister_id.get().to_vec(),
         ) else {
@@ -73,11 +76,11 @@ impl NNSDelegationBuilder {
             // This could mean that the routing table has changed but we haven't refreshed the
             // NNS delegation just yet.
             // In that case, we return the delegation without canister ranges.
-            return self.delegation_without_ranges.clone();
+            return self.delegation_without_canister_ranges.clone();
         };
 
         let certificate = match Self::prune_state_tree(
-            &self.tree_certificate,
+            &self.certificate_with_tree_canister_ranges,
             vec![Path::new(vec![
                 b"canister_ranges".into(),
                 self.subnet_id.get().into(),
@@ -89,7 +92,7 @@ impl NNSDelegationBuilder {
             Err(_err) => {
                 // FIXME(kpop): return a full delegation instead.
                 // FIXME(kpop): log an error
-                return self.delegation_without_ranges.clone();
+                return self.delegation_without_canister_ranges.clone();
             }
         };
 
@@ -98,7 +101,7 @@ impl NNSDelegationBuilder {
             Err(_err) => {
                 // FIXME(kpop): return a full delegation instead.
                 // FIXME(kpop): log an error
-                self.delegation_without_ranges.clone()
+                self.delegation_without_canister_ranges.clone()
             }
         }
     }
@@ -173,14 +176,14 @@ impl NNSDelegationReader {
         self.receiver
             .borrow()
             .as_ref()
-            .map(|builder| builder.flat_delegation.clone())
+            .map(|builder| builder.delegation_with_flat_canister_ranges.clone())
     }
 
     pub fn get_delegation_without_canister_ranges(&self) -> Option<CertificateDelegation> {
         self.receiver
             .borrow()
             .as_ref()
-            .map(|builder| builder.delegation_without_ranges.clone())
+            .map(|builder| builder.delegation_without_canister_ranges.clone())
     }
 
     pub fn get_delegation_with_tree_canister_ranges(
