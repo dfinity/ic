@@ -49,8 +49,9 @@ use icp_ledger::{
     BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -1513,7 +1514,11 @@ fn query_encoded_blocks(
     }
 }
 
-fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, ApproveError> {
+fn icrc2_approve_not_async(
+    caller: Principal,
+    arg: ApproveArgs,
+    override_spender: Option<AccountIdentifier>,
+) -> Result<Nat, ApproveError> {
     if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
         trap("Anonymous principal cannot approve token transfers on the ledger.");
     }
@@ -1531,7 +1536,11 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, A
     if from_account.owner == arg.spender.owner {
         trap("self approval is not allowed");
     }
-    let spender = AccountIdentifier::from(arg.spender);
+    let spender = if let Some(override_spender) = override_spender {
+        override_spender
+    } else {
+        AccountIdentifier::from(arg.spender)
+    };
     let minting_acc = LEDGER
         .read()
         .unwrap()
@@ -1617,7 +1626,7 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, A
 #[update]
 #[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    let block_index = icrc2_approve_not_async(caller(), arg)?;
+    let block_index = icrc2_approve_not_async(caller(), arg, None)?;
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
@@ -1632,6 +1641,32 @@ fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowan
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
     }
+}
+
+#[update]
+#[candid_method(update)]
+async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> {
+    let approve_arg = ApproveArgs {
+        from_subaccount: args.from_subaccount,
+        spender: Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        },
+        amount: Nat::from(0u64),
+        expected_allowance: None,
+        expires_at: None,
+        fee: args.fee,
+        memo: None,
+        created_at_time: None,
+    };
+    let spender = AccountIdentifier::from_address(args.spender).unwrap_or_else(|e| {
+        trap(&format!("Invalid account identifier: {}", e));
+    });
+    let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;
+
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    Ok(block_index)
 }
 
 #[query]
