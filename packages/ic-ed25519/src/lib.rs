@@ -13,7 +13,7 @@ use hex_literal::hex;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_cdk::management_canister::{CanisterId, SchnorrAlgorithm, SchnorrKeyId};
 
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
@@ -483,13 +483,13 @@ impl Signature {
     }
 }
 
-/// An identifier for the mainnet production key
+/// Error indicating an unknown master key
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum MasterPublicKeyId {
-    /// The production master key
-    Key1,
-    /// The test master key
-    TestKey1,
+pub enum UnknownMasterKeyId {
+    /// Unexpected algorithm (must be Ed25519)
+    WrongAlgorithm,
+    /// Unknown key identifier
+    UnknownKeyId,
 }
 
 /// An Ed25519 public key
@@ -775,16 +775,23 @@ impl PublicKey {
     }
 
     /// Return the public master keys used in the production mainnet
-    pub fn mainnet_key(key_id: MasterPublicKeyId) -> Self {
-        match key_id {
-            MasterPublicKeyId::Key1 => Self::deserialize_raw(&hex!(
+    pub fn for_mainnet_key(key_id: &SchnorrKeyId) -> Result<Self, UnknownMasterKeyId> {
+        if key_id.algorithm != SchnorrAlgorithm::Ed25519 {
+            return Err(UnknownMasterKeyId::WrongAlgorithm);
+        }
+
+        if key_id.name == "key_1" {
+            return Ok(Self::deserialize_raw(&hex!(
                 "476374d9df3a8af28d3164dc2422cff894482eadd1295290b6d9ad92b2eeaa5c"
             ))
-            .expect("Hardcoded master key was rejected"),
-            MasterPublicKeyId::TestKey1 => Self::deserialize_raw(&hex!(
+            .expect("Hardcoded master key was rejected"));
+        } else if key_id.name == "test_key_1" {
+            return Ok(Self::deserialize_raw(&hex!(
                 "6c0824beb37621bcca6eecc237ed1bc4e64c9c59dcb85344aa7f9cc8278ee31f"
             ))
-            .expect("Hardcoded master key was rejected"),
+            .expect("Hardcoded master key was rejected"));
+        } else {
+            Err(UnknownMasterKeyId::UnknownKeyId)
         }
     }
 
@@ -792,15 +799,15 @@ impl PublicKey {
     ///
     /// This is an offline equivalent to the `schnorr_public_key` management canister call
     pub fn derive_mainnet_key(
-        key_id: MasterPublicKeyId,
+        key_id: &SchnorrKeyId,
         canister_id: &CanisterId,
         derivation_path: &[Vec<u8>],
-    ) -> (Self, [u8; 32]) {
-        let mk = PublicKey::mainnet_key(key_id);
-        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+    ) -> Result<(Self, [u8; 32]), UnknownMasterKeyId> {
+        let mk = PublicKey::for_mainnet_key(key_id)?;
+        Ok(mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
             canister_id.as_slice(),
             derivation_path,
-        ))
+        )))
     }
 
     /// Derive a public key from this public key using a derivation path

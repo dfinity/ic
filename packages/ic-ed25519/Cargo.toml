@@ -19,7 +19,7 @@ pem = "1"
 rand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
-candid = { workspace = true }
+ic-cdk = "0.18"
 
 [features]
 default = ["rand"]

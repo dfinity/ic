@@ -600,11 +600,13 @@ fn offline_key_derivation_matches_mainnet_for_key_1() {
     let canister_id = ic_ed25519::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
     let derivation_path = [hex!("ABCDEF").to_vec(), hex!("012345").to_vec()];
 
+    let key_1 = SchnorrKeyId { algorithm: SchnorrAlgorithm::Ed25519, name: "key_1".to_string() };
+
     let dpk = PublicKey::derive_mainnet_key(
-        ic_ed25519::MasterPublicKeyId::Key1,
+        &key_1,
         &canister_id,
         &derivation_path,
-    );
+    ).unwrap();
 
     assert_eq!(
         hex::encode(dpk.0.serialize_raw()),
@@ -622,11 +624,14 @@ fn offline_key_derivation_matches_mainnet_for_test_key_1() {
         "Threshold".as_bytes().to_vec(),
         "Signatures".as_bytes().to_vec(),
     ];
+
+    let test_key_1 = SchnorrKeyId { algorithm: SchnorrAlgorithm::Ed25519, name: "test_key_1".to_string() };
+
     let dpk = PublicKey::derive_mainnet_key(
-        ic_ed25519::MasterPublicKeyId::TestKey1,
+        &test_key_1,
         &canister_id,
         &derivation_path,
-    );
+    ).unwrap();
 
     assert_eq!(
         hex::encode(dpk.0.serialize_raw()),
