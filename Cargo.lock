@@ -1794,12 +1794,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bytecount"
-version = "0.6.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
-
-[[package]]
 name = "bytemuck"
 version = "1.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2049,7 +2043,6 @@ dependencies = [
  "futures",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
- "ic-test-utilities",
  "ic-types",
  "serde",
  "serde_json",
@@ -6344,6 +6337,7 @@ dependencies = [
  "ic-config",
  "ic-consensus-manager",
  "ic-interfaces",
+ "ic-limits",
  "ic-metrics",
  "ic-protobuf",
  "ic-test-utilities",
@@ -7698,6 +7692,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-metrics",
  "ic-p2p-test-utils",
@@ -7762,6 +7757,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -8473,7 +8469,6 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
- "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
  "tempfile",
@@ -8497,7 +8492,6 @@ dependencies = [
  "ic-crypto-tls-cert-validation",
  "ic-crypto-utils-basic-sig",
  "ic-protobuf",
- "ic-test-utilities",
  "ic-types",
  "serde",
 ]
@@ -9492,6 +9486,7 @@ dependencies = [
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
+ "ic-limits",
  "ic-logger",
  "ic-metrics",
  "ic-pprof",
@@ -9769,10 +9764,8 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
- "ic-nns-constants",
  "ic-stable-structures",
  "icp-ledger",
- "lazy_static",
  "pocket-ic",
  "serde",
  "serde_bytes",
@@ -10067,7 +10060,6 @@ dependencies = [
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
  "ic-certification 3.0.3",
- "ic-crypto-tree-hash",
  "ic-http-types",
  "ic-icrc1",
  "ic-icrc1-test-utils",
@@ -16425,7 +16417,6 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-cdk 0.17.2",
- "ic-cdk-timers",
  "ic-error-types 0.2.0",
  "ic-http-types",
  "ic-icrc1",
@@ -18402,17 +18393,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "papergrid"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6978128c8b51d8f4080631ceb2302ab51e32cc6e8615f735ee2f83fd269ae3f1"
-dependencies = [
- "bytecount",
- "fnv",
- "unicode-width 0.2.0",
-]
-
-[[package]]
 name = "parity-scale-codec"
 version = "3.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18999,6 +18979,7 @@ dependencies = [
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-limits",
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
@@ -19321,28 +19302,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr2"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "proc-macro-error2"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
-dependencies = [
- "proc-macro-error-attr2",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
 ]
 
 [[package]]
@@ -20643,7 +20602,6 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "tabled",
 ]
 
 [[package]]
@@ -22957,30 +22915,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tabled"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
-dependencies = [
- "papergrid",
- "tabled_derive",
- "testing_table",
-]
-
-[[package]]
-name = "tabled_derive"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea5d1b13ca6cff1f9231ffd62f15eefd72543dab5e468735f1a456728a02846"
-dependencies = [
- "heck 0.5.0",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
 name = "tagptr"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23154,15 +23088,6 @@ dependencies = [
  "ssh2",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "testing_table"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f8daae29995a24f65619e19d8d31dea5b389f3d853d8bf297bbf607cd0014cc"
-dependencies = [
- "unicode-width 0.2.0",
 ]
 
 [[package]]
