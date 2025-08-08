@@ -2,7 +2,9 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use canister_test::PrincipalId;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, can_store_msg, install_nns_and_check_progress, store_message,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -16,7 +18,10 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::HasVectorTargets,
     },
-    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    nns::{
+        remove_nodes_via_endpoint, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
     retry_with_msg,
     util::{block_on, runtime_from_url},
 };
@@ -211,6 +216,10 @@ pub fn nns_recovery_test(env: TestEnv) {
     info!(logger, "Adding all four nodes to the NNS subnet...");
     let nns_subnet = new_topology.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
+
+    // Store the original node ID before adding new nodes
+    let original_node_id = nns_subnet.nodes().next().unwrap().node_id;
+
     let nodes_to_add = new_topology.unassigned_nodes().collect::<Vec<_>>();
     let node_ids: Vec<_> = nodes_to_add.iter().map(|n| n.node_id).collect();
 
@@ -266,6 +275,50 @@ pub fn nns_recovery_test(env: TestEnv) {
     info!(
         logger,
         "Success: All four nodes have been added to the NNS subnet"
+    );
+
+    info!(
+        logger,
+        "Removing original node {:?} from the NNS subnet", original_node_id
+    );
+
+    block_on(remove_nodes_via_endpoint(
+        nns_node.get_public_url(),
+        &[original_node_id],
+    ))
+    .unwrap();
+
+    info!(
+        logger,
+        "Waiting for the original node to be removed from the subnet..."
+    );
+    let topology_after_removal = block_on(
+        final_topology.block_for_newer_registry_version_within_duration(
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+        ),
+    )
+    .unwrap();
+
+    // Verify that the original node is now unassigned
+    let num_unassigned_nodes = topology_after_removal.unassigned_nodes().count();
+    assert_eq!(
+        num_unassigned_nodes, 1,
+        "Original node should be unassigned, but found {} unassigned nodes",
+        num_unassigned_nodes
+    );
+
+    let nns_subnet = topology_after_removal.root_subnet();
+    let num_nns_node = nns_subnet.nodes().count();
+    assert_eq!(
+        num_nns_node, 4,
+        "NNS subnet should have 4 nodes after removing the original node, but found {} nodes",
+        num_nns_node
+    );
+
+    info!(
+        logger,
+        "Success: Original single node has been removed from the NNS subnet"
     );
 }
 
