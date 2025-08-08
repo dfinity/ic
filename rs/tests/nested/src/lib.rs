@@ -247,9 +247,8 @@ pub fn nns_recovery_test(env: TestEnv) {
         proposal_id,
     ));
 
-    // Wait for the nodes to be assigned to the subnet
     info!(logger, "Waiting for nodes to be assigned to the subnet...");
-    let final_topology = block_on(
+    let new_topology = block_on(
         new_topology.block_for_newer_registry_version_within_duration(
             Duration::from_secs(60),
             Duration::from_secs(2),
@@ -257,20 +256,19 @@ pub fn nns_recovery_test(env: TestEnv) {
     )
     .unwrap();
 
-    // Verify that all nodes are now assigned to the subnet
-    let num_unassigned_nodes = final_topology.unassigned_nodes().count();
+    let num_unassigned_nodes = new_topology.unassigned_nodes().count();
     assert_eq!(
         num_unassigned_nodes, 0,
         "All nodes should be assigned to the NNS subnet, but found {} unassigned nodes",
         num_unassigned_nodes
     );
 
-    let nns_subnet_final = final_topology.root_subnet();
-    let num_nodes_in_subnet = nns_subnet_final.nodes().count();
+    let nns_subnet = new_topology.root_subnet();
+    let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
-        num_nodes_in_subnet, 5,
+        num_nns_nodes, 5,
         "NNS subnet should have 5 nodes (1 original + 4 new), but found {} nodes",
-        num_nodes_in_subnet
+        num_nns_nodes
     );
 
     info!(
@@ -294,27 +292,19 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Waiting for the original node to be removed from the subnet..."
     );
     let topology_after_removal = block_on(
-        final_topology.block_for_newer_registry_version_within_duration(
+        new_topology.block_for_newer_registry_version_within_duration(
             Duration::from_secs(60),
             Duration::from_secs(2),
         ),
     )
     .unwrap();
 
-    // Verify that the original node is now unassigned
-    let num_unassigned_nodes = topology_after_removal.unassigned_nodes().count();
-    assert_eq!(
-        num_unassigned_nodes, 1,
-        "Original node should be unassigned, but found {} unassigned nodes",
-        num_unassigned_nodes
-    );
-
     let nns_subnet = topology_after_removal.root_subnet();
-    let num_nns_node = nns_subnet.nodes().count();
+    let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
-        num_nns_node, 4,
+        num_nns_nodes, 4,
         "NNS subnet should have 4 nodes after removing the original node, but found {} nodes",
-        num_nns_node
+        num_nns_nodes
     );
 
     info!(
@@ -349,11 +339,11 @@ pub fn nns_recovery_test(env: TestEnv) {
     );
 
     // First, store a message to verify the subnet is working
-    let test_node = nns_nodes.first().unwrap();
+    let nns_node = nns_nodes.first().unwrap();
     let test_msg = "subnet breaking test message";
     let test_can_id = store_message_with_retries(
-        &test_node.get_public_url(),
-        test_node.effective_canister_id(),
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
         test_msg,
         &logger,
     );
@@ -361,7 +351,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     // Verify the message can be read
     assert!(can_read_msg(
         &logger,
-        &test_node.get_public_url(),
+        &nns_node.get_public_url(),
         test_can_id,
         test_msg
     ));
@@ -382,29 +372,18 @@ pub fn nns_recovery_test(env: TestEnv) {
             node.get_ip_addr()
         );
 
-        let ssh_result = node.block_on_bash_script(ssh_command);
-        match ssh_result {
-            Ok(output) => {
-                info!(
-                    logger,
-                    "SSH command executed successfully on node {}: {}",
-                    i + 1,
-                    output
-                );
-            }
-            Err(e) => {
-                info!(
-                    logger,
-                    "SSH command failed on node {} (this might be expected): {}",
-                    i + 1,
-                    e
-                );
-            }
-        }
+        let output = node.block_on_bash_script(ssh_command).expect(&format!(
+            "SSH command failed on node {} ({:?})",
+            i + 1,
+            node.get_ip_addr()
+        ));
+        info!(
+            logger,
+            "SSH command executed successfully on node {}: {}",
+            i + 1,
+            output
+        );
     }
-
-    // help: unnecessary wait for the changes to take effect?
-    std::thread::sleep(Duration::from_secs(10));
 
     // Test if the subnet is broken by trying to store a new message
     info!(
@@ -416,7 +395,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     // Try to store a message - this should fail if the subnet is broken
     let can_store = can_store_msg(
         &logger,
-        &test_node.get_public_url(),
+        &nns_node.get_public_url(),
         test_can_id,
         new_test_msg,
     );
@@ -427,9 +406,8 @@ pub fn nns_recovery_test(env: TestEnv) {
             "SUCCESS: Subnet is broken - cannot store new messages"
         );
 
-        // Verify that read operations still work (they should in a broken subnet)
         info!(logger, "Verifying that read operations still work...");
-        let can_read = can_read_msg(&logger, &test_node.get_public_url(), test_can_id, test_msg);
+        let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
 
         if can_read {
             info!(
@@ -437,19 +415,28 @@ pub fn nns_recovery_test(env: TestEnv) {
                 "SUCCESS: Read operations still work as expected in broken subnet"
             );
         } else {
+            // help: questions for consensus: should this be a warning or an error? In the recovery tests I looked at, we expect the read to succeed after breaking the subnet?
             info!(
                 logger,
                 "WARNING: Read operations also failed - this might indicate a different issue"
             );
         }
     } else {
-        info!(
-            logger,
-            "WARNING: Subnet appears to still be functional - breaking may not have worked"
+        panic!(
+            "FAILURE: Subnet is still functional after breaking attempt - the breaking mechanism did not work as expected"
         );
     }
 
     info!(logger, "Subnet breaking test completed");
+
+    // TODO: Generate recovery artifacts (and get EXPECTED_RECOVERY_HASH)
+    // TODO: Get version/hash of recovery-dev image
+    // Create a VM to host the recovery artifacts and recovery-dev image (may be trickey to have the VM host the recovery-dev image? Hmmmm. Can always just hard code URL in recovery-upgrader.sh, but not ideal)
+    // SSH into the HostOS node and
+    //         * Update /etc/hosts of the node to point at our hosting VM
+    //              Note: hopefully this doesn't effect the networking of the node?
+    //         * Update BOOT_ARGS_A with version/hash of recovery dev image and reboot node
+    // TODO: ...
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
