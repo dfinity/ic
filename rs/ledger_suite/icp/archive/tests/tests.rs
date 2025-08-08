@@ -5,7 +5,6 @@ use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
-
 use icp_ledger::Operation::Mint;
 use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
 use pocket_ic::PocketIcBuilder;

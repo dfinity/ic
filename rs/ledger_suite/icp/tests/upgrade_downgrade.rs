@@ -12,7 +12,6 @@ use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
     account_balance, archives, query_blocks, query_encoded_blocks, transfer, LEDGER_CANISTER_ID,
 };
-
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
     AccountIdentifier, CandidBlock, CandidTransaction, LedgerCanisterInitPayload,
