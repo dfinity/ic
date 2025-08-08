@@ -2,7 +2,12 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use canister_test::PrincipalId;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, can_store_msg, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message_with_retries,
+};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -14,10 +19,15 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::HasVectorTargets,
     },
+    nns::{
+        remove_nodes_via_endpoint, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
     retry_with_msg,
-    util::block_on,
+    util::{block_on, runtime_from_url},
 };
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
+use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use reqwest::Client;
 
 use slog::info;
@@ -176,7 +186,7 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     // Wait for all four nodes to register by repeatedly waiting for registry updates
     // and checking if we have 4 unassigned nodes
-    retry_with_msg!(
+    let new_topology = retry_with_msg!(
         "Waiting for all four nodes to register and appear as unassigned nodes",
         logger.clone(),
         NODE_REGISTRATION_TIMEOUT,
@@ -192,8 +202,8 @@ pub fn nns_recovery_test(env: TestEnv) {
 
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
             if num_unassigned_nodes == 4 {
-                info!(logger, "SUCCESS: All four nodes have registered");
-                Ok(())
+                info!(logger, "Success: All four nodes have registered");
+                Ok(new_topology)
             } else {
                 bail!(
                     "Expected 4 unassigned nodes, but found {}",
@@ -203,6 +213,230 @@ pub fn nns_recovery_test(env: TestEnv) {
         }
     )
     .unwrap();
+
+    info!(logger, "Adding all four nodes to the NNS subnet...");
+    let nns_subnet = new_topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+
+    // Store the original node ID before adding new nodes
+    let original_node_id = nns_subnet.nodes().next().unwrap().node_id;
+
+    let nodes_to_add = new_topology.unassigned_nodes().collect::<Vec<_>>();
+    let node_ids: Vec<_> = nodes_to_add.iter().map(|n| n.node_id).collect();
+
+    let proposal_payload = AddNodesToSubnetPayload {
+        subnet_id: nns_subnet.subnet_id.get(),
+        node_ids,
+    };
+
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+
+    let proposal_id = block_on(submit_external_proposal_with_test_id(
+        &governance,
+        NnsFunction::AddNodeToSubnet,
+        proposal_payload,
+    ));
+
+    info!(
+        logger,
+        "Executing the proposal to add all four nodes to the NNS subnet"
+    );
+    block_on(vote_execute_proposal_assert_executed(
+        &governance,
+        proposal_id,
+    ));
+
+    info!(logger, "Waiting for nodes to be assigned to the subnet...");
+    let new_topology = block_on(
+        new_topology.block_for_newer_registry_version_within_duration(
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+        ),
+    )
+    .unwrap();
+
+    let num_unassigned_nodes = new_topology.unassigned_nodes().count();
+    assert_eq!(
+        num_unassigned_nodes, 0,
+        "All nodes should be assigned to the NNS subnet, but found {} unassigned nodes",
+        num_unassigned_nodes
+    );
+
+    let nns_subnet = new_topology.root_subnet();
+    let num_nns_nodes = nns_subnet.nodes().count();
+    assert_eq!(
+        num_nns_nodes, 5,
+        "NNS subnet should have 5 nodes (1 original + 4 new), but found {} nodes",
+        num_nns_nodes
+    );
+
+    info!(
+        logger,
+        "Success: All four nodes have been added to the NNS subnet"
+    );
+
+    info!(
+        logger,
+        "Removing original node {:?} from the NNS subnet", original_node_id
+    );
+
+    block_on(remove_nodes_via_endpoint(
+        nns_node.get_public_url(),
+        &[original_node_id],
+    ))
+    .unwrap();
+
+    info!(
+        logger,
+        "Waiting for the original node to be removed from the subnet..."
+    );
+    let topology_after_removal = block_on(
+        new_topology.block_for_newer_registry_version_within_duration(
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+        ),
+    )
+    .unwrap();
+
+    let nns_subnet = topology_after_removal.root_subnet();
+    let num_nns_nodes = nns_subnet.nodes().count();
+    assert_eq!(
+        num_nns_nodes, 4,
+        "NNS subnet should have 4 nodes after removing the original node, but found {} nodes",
+        num_nns_nodes
+    );
+
+    info!(
+        logger,
+        "Success: Original single node has been removed from the NNS subnet"
+    );
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
+    info!(
+        logger,
+        "Waiting for NNS subnet to become healthy after membership changes..."
+    );
+    let nns_nodes: Vec<_> = topology_after_removal.root_subnet().nodes().collect();
+    for node in &nns_nodes {
+        node.await_status_is_healthy().unwrap();
+    }
+    info!(logger, "NNS subnet is healthy");
+
+    info!(logger, "Storing a message to verify the subnet is working");
+    let progress_node = nns_nodes.first().unwrap();
+    cert_state_makes_progress_with_retries(
+        &progress_node.get_public_url(),
+        progress_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(300),
+        Duration::from_secs(10),
+    );
+
+    info!(
+        logger,
+        "Breaking the NNS subnet by breaking the replica on all 4 nested nodes..."
+    );
+
+    // First, store a message to verify the subnet is working
+    let nns_node = nns_nodes.first().unwrap();
+    let test_msg = "subnet breaking test message";
+    let test_can_id = store_message_with_retries(
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
+        test_msg,
+        &logger,
+    );
+
+    // Verify the message can be read
+    assert!(can_read_msg(
+        &logger,
+        &nns_node.get_public_url(),
+        test_can_id,
+        test_msg
+    ));
+    info!(
+        logger,
+        "Subnet is healthy - message stored and read successfully"
+    );
+
+    // SSH into all guestOS nodes and break the replica
+    let ssh_command =
+        "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
+
+    for (i, node) in nns_nodes.iter().enumerate() {
+        info!(
+            logger,
+            "Breaking the replica on node {} ({:?})...",
+            i + 1,
+            node.get_ip_addr()
+        );
+
+        let output = node.block_on_bash_script(ssh_command).expect(&format!(
+            "SSH command failed on node {} ({:?})",
+            i + 1,
+            node.get_ip_addr()
+        ));
+        info!(
+            logger,
+            "SSH command executed successfully on node {}: {}",
+            i + 1,
+            output
+        );
+    }
+
+    // Test if the subnet is broken by trying to store a new message
+    info!(
+        logger,
+        "Testing if the subnet is broken by attempting to store a new message..."
+    );
+    let new_test_msg = "subnet broken test message";
+
+    // Try to store a message - this should fail if the subnet is broken
+    let can_store = can_store_msg(
+        &logger,
+        &nns_node.get_public_url(),
+        test_can_id,
+        new_test_msg,
+    );
+
+    if !can_store {
+        info!(
+            logger,
+            "SUCCESS: Subnet is broken - cannot store new messages"
+        );
+
+        info!(logger, "Verifying that read operations still work...");
+        let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
+
+        if can_read {
+            info!(
+                logger,
+                "SUCCESS: Read operations still work as expected in broken subnet"
+            );
+        } else {
+            // help: questions for consensus: should this be a warning or an error? In the recovery tests I looked at, we expect the read to succeed after breaking the subnet?
+            info!(
+                logger,
+                "WARNING: Read operations also failed - this might indicate a different issue"
+            );
+        }
+    } else {
+        panic!(
+            "FAILURE: Subnet is still functional after breaking attempt - the breaking mechanism did not work as expected"
+        );
+    }
+
+    info!(logger, "Subnet breaking test completed");
+
+    // TODO: Generate recovery artifacts (and get EXPECTED_RECOVERY_HASH)
+    // TODO: Get version/hash of recovery-dev image
+    // Create a VM to host the recovery artifacts and recovery-dev image (may be trickey to have the VM host the recovery-dev image? Hmmmm. Can always just hard code URL in recovery-upgrader.sh, but not ideal)
+    // SSH into the HostOS node and
+    //         * Update /etc/hosts of the node to point at our hosting VM
+    //              Note: hopefully this doesn't effect the networking of the node?
+    //         * Update BOOT_ARGS_A with version/hash of recovery dev image and reboot node
+    // TODO: ...
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
