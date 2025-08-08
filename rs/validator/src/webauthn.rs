@@ -75,7 +75,7 @@ mod tests {
         ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
     use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
+    use ic_test_utilities_crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_types::ids::{message_test_id, node_test_id};
     use ic_types::{
         crypto::SignableMock,

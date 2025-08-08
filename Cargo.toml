@@ -378,6 +378,7 @@ members = [
     "rs/test_utilities/artifact_pool",
     "rs/test_utilities/compare_dirs",
     "rs/test_utilities/consensus",
+    "rs/test_utilities/crypto",
     "rs/test_utilities/execution_environment",
     "rs/test_utilities/load_wasm",
     "rs/test_utilities/logger",

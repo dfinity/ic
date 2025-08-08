@@ -559,7 +559,7 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

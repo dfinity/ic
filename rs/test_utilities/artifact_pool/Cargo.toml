@@ -19,7 +19,7 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
-ic-test-utilities = { path = "../" }
 ic-test-utilities-consensus = { path = "../consensus" }
+ic-test-utilities-crypto = { path = "../crypto" }
 ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
