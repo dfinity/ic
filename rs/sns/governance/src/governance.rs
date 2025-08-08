@@ -2669,7 +2669,7 @@ impl Governance {
 
         let validated_operation = validate_execute_extension_operation(
             &*self.env,
-            self.proto.root_canister_id_or_panic(),
+            &self.proto,
             execute_extension_operation,
         )
         .await?;

@@ -449,7 +449,7 @@ pub(crate) async fn validate_and_render_action(
                 .await
         }
         proposal::Action::ExecuteExtensionOperation(execute) => {
-            validate_and_render_execute_extension_operation(env, execute, root_canister_id).await
+            validate_and_render_execute_extension_operation(env, execute, governance_proto).await
         }
         proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
@@ -1509,13 +1509,13 @@ pub async fn validate_and_render_execute_nervous_system_function(
 async fn validate_and_render_execute_extension_operation(
     env: &dyn Environment,
     execute: &ExecuteExtensionOperation,
-    root_canister_id: CanisterId,
+    governance_proto: &Governance,
 ) -> Result<String, String> {
     let ValidatedExecuteExtensionOperation {
         extension_canister_id,
         operation_name,
         operation_arg,
-    } = validate_execute_extension_operation(env, root_canister_id, execute.clone())
+    } = validate_execute_extension_operation(env, governance_proto, execute.clone())
         .await
         .map_err(|err| err.error_message)?;
 

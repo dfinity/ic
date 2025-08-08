@@ -1,6 +1,7 @@
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
     logs::INFO,
+    pb::v1::Governance as GovernanceProto,
     pb::{
         sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
         v1::{
@@ -647,7 +648,7 @@ async fn canister_module_hash(
 // TODO: Enforce 50% treasury limits.
 pub(crate) async fn validate_execute_extension_operation(
     env: &dyn Environment,
-    root_canister_id: CanisterId,
+    governance_proto: &GovernanceProto,
     operation: ExecuteExtensionOperation,
 ) -> Result<ValidatedExecuteExtensionOperation, GovernanceError> {
     // Extract and validate basic fields
@@ -689,6 +690,7 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
+    let root_canister_id = governance_proto.root_canister_id_or_panic();
     let registered_extensions = list_extensions(env, root_canister_id).await?;
 
     if !registered_extensions.contains(&extension_canister_id.get()) {
@@ -1015,9 +1017,17 @@ mod tests {
     fn setup_env_for_test(
         extension_registered: bool,
         operation_name: &str,
-    ) -> (NativeEnvironment, CanisterId, ExecuteExtensionOperation) {
+    ) -> (
+        NativeEnvironment,
+        GovernanceProto,
+        ExecuteExtensionOperation,
+    ) {
         let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
         let root_canister_id = CanisterId::from_u64(1000);
+        let governance_proto = GovernanceProto {
+            root_canister_id: Some(root_canister_id.get()),
+            ..Default::default()
+        };
         let extension_canister_id = CanisterId::from_u64(2000);
 
         // Mock list_sns_canisters call
@@ -1105,39 +1115,39 @@ mod tests {
             operation_arg: Some(operation_arg),
         };
 
-        (env, root_canister_id, execute_operation)
+        (env, governance_proto, execute_operation)
     }
 
     // Tests for validate_execute_extension_operation with proper environment mocking
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_deposit_success() {
-        let (env, root_canister_id, execute_operation) = setup_env_for_test(true, "deposit");
+        let (env, governance_proto, execute_operation) = setup_env_for_test(true, "deposit");
 
         // Test with valid operation name - should succeed
         let result =
-            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
+            validate_execute_extension_operation(&env, &governance_proto, execute_operation).await;
 
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_withdraw_success() {
-        let (env, root_canister_id, execute_operation) = setup_env_for_test(true, "withdraw");
+        let (env, governance_proto, execute_operation) = setup_env_for_test(true, "withdraw");
 
         // Test with withdraw operation - should succeed (since test mode supports withdraw)
         let result =
-            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
+            validate_execute_extension_operation(&env, &governance_proto, execute_operation).await;
 
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_unregistered_extension() {
-        let (env, root_canister_id, execute_operation) = setup_env_for_test(false, "deposit"); // false = extension not registered
+        let (env, governance_proto, execute_operation) = setup_env_for_test(false, "deposit"); // false = extension not registered
 
         let result =
-            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
+            validate_execute_extension_operation(&env, &governance_proto, execute_operation).await;
 
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::NotFound as i32);
@@ -1149,12 +1159,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_invalid_operation_name() {
-        let (env, root_canister_id, execute_operation) =
+        let (env, governance_proto, execute_operation) =
             setup_env_for_test(true, "invalid_operation");
 
         // Test with invalid operation name - should fail
         let result =
-            validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
+            validate_execute_extension_operation(&env, &governance_proto, execute_operation).await;
 
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
