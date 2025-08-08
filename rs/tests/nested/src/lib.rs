@@ -3,7 +3,8 @@ use std::time::Duration;
 
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, can_store_msg, install_nns_and_check_progress, store_message,
+    can_read_msg, can_store_msg, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message_with_retries,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
@@ -320,6 +321,135 @@ pub fn nns_recovery_test(env: TestEnv) {
         logger,
         "Success: Original single node has been removed from the NNS subnet"
     );
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
+    info!(
+        logger,
+        "Waiting for NNS subnet to become healthy after membership changes..."
+    );
+    let nns_nodes: Vec<_> = topology_after_removal.root_subnet().nodes().collect();
+    for node in &nns_nodes {
+        node.await_status_is_healthy().unwrap();
+    }
+    info!(logger, "NNS subnet is healthy");
+
+    info!(logger, "Storing a message to verify the subnet is working");
+    let progress_node = nns_nodes.first().unwrap();
+    cert_state_makes_progress_with_retries(
+        &progress_node.get_public_url(),
+        progress_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(300),
+        Duration::from_secs(10),
+    );
+
+    info!(
+        logger,
+        "Breaking the NNS subnet by breaking the replica on all 4 nested nodes..."
+    );
+
+    // First, store a message to verify the subnet is working
+    let test_node = nns_nodes.first().unwrap();
+    let test_msg = "subnet breaking test message";
+    let test_can_id = store_message_with_retries(
+        &test_node.get_public_url(),
+        test_node.effective_canister_id(),
+        test_msg,
+        &logger,
+    );
+
+    // Verify the message can be read
+    assert!(can_read_msg(
+        &logger,
+        &test_node.get_public_url(),
+        test_can_id,
+        test_msg
+    ));
+    info!(
+        logger,
+        "Subnet is healthy - message stored and read successfully"
+    );
+
+    // SSH into all guestOS nodes and break the replica
+    let ssh_command =
+        "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
+
+    for (i, node) in nns_nodes.iter().enumerate() {
+        info!(
+            logger,
+            "Breaking the replica on node {} ({:?})...",
+            i + 1,
+            node.get_ip_addr()
+        );
+
+        let ssh_result = node.block_on_bash_script(ssh_command);
+        match ssh_result {
+            Ok(output) => {
+                info!(
+                    logger,
+                    "SSH command executed successfully on node {}: {}",
+                    i + 1,
+                    output
+                );
+            }
+            Err(e) => {
+                info!(
+                    logger,
+                    "SSH command failed on node {} (this might be expected): {}",
+                    i + 1,
+                    e
+                );
+            }
+        }
+    }
+
+    // help: unnecessary wait for the changes to take effect?
+    std::thread::sleep(Duration::from_secs(10));
+
+    // Test if the subnet is broken by trying to store a new message
+    info!(
+        logger,
+        "Testing if the subnet is broken by attempting to store a new message..."
+    );
+    let new_test_msg = "subnet broken test message";
+
+    // Try to store a message - this should fail if the subnet is broken
+    let can_store = can_store_msg(
+        &logger,
+        &test_node.get_public_url(),
+        test_can_id,
+        new_test_msg,
+    );
+
+    if !can_store {
+        info!(
+            logger,
+            "SUCCESS: Subnet is broken - cannot store new messages"
+        );
+
+        // Verify that read operations still work (they should in a broken subnet)
+        info!(logger, "Verifying that read operations still work...");
+        let can_read = can_read_msg(&logger, &test_node.get_public_url(), test_can_id, test_msg);
+
+        if can_read {
+            info!(
+                logger,
+                "SUCCESS: Read operations still work as expected in broken subnet"
+            );
+        } else {
+            info!(
+                logger,
+                "WARNING: Read operations also failed - this might indicate a different issue"
+            );
+        }
+    } else {
+        info!(
+            logger,
+            "WARNING: Subnet appears to still be functional - breaking may not have worked"
+        );
+    }
+
+    info!(logger, "Subnet breaking test completed");
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
