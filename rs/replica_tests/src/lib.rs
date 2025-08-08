@@ -263,6 +263,7 @@ pub fn get_ic_config() -> IcConfig {
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,
         /* release_package_sha256_hex= */ None,
+        /* guest_launch_measurements= */ None,
         /* provisional_whitelist */ Some(provisional_whitelist),
         None,
         None,

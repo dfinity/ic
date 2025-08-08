@@ -74,11 +74,13 @@ fn test(test_env: TestEnv) {
     // Note: we're pulling a wrong URL on purpose to simulate a failed upgrade
     let upgrade_url = get_guestos_initial_update_img_url().unwrap();
     let sha256 = get_guestos_update_img_sha256().unwrap();
+    let guest_launch_measurements = get_guestos_initial_launch_measurements().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
         &logger,
         &sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
 

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use super::Step;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -13,8 +14,6 @@ use ic_system_test_driver::{
 };
 use itertools::Itertools;
 use slog::info;
-
-use super::Step;
 
 #[derive(Clone)]
 pub struct RetireElectedVersions {
@@ -90,6 +89,7 @@ impl Step for RetireElectedVersions {
             None,
             None,
             vec![],
+            None,
             versions_to_unelect,
         ));
 

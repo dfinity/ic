@@ -25,6 +25,7 @@ use x509_cert::spki; // re-export of spki crate
 
 use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION};
 
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     dc::v1::DataCenterRecord,
@@ -264,6 +265,8 @@ pub struct IcConfig {
     initial_release_package_url: Option<Url>,
     /// The hash of the initial release package.
     initial_release_package_sha256_hex: Option<String>,
+    /// The guest launch measurements of the initial release package.
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
     /// Should the tool generate the subnet records.
     generate_subnet_records: bool,
     /// The index of the NNS subnet, if any.
@@ -385,6 +388,7 @@ impl IcConfig {
         nns_subnet_index: Option<u64>,
         release_package_url: Option<Url>,
         release_package_sha256_hex: Option<String>,
+        guest_launch_measurements: Option<GuestLaunchMeasurements>,
         provisional_whitelist: Option<ProvisionalWhitelist>,
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
@@ -400,6 +404,7 @@ impl IcConfig {
             initial_release_package_sha256_hex: release_package_sha256_hex,
             initial_registry_node_operator_entries: Vec::new(),
             initial_dc_records: Vec::new(),
+            guest_launch_measurements,
             provisional_whitelist,
             initial_mutations: Vec::new(),
             initial_node_operator,
@@ -614,7 +619,7 @@ impl IcConfig {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: self.guest_launch_measurements,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
