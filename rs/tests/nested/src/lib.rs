@@ -505,6 +505,9 @@ pub fn upgrade_guestos(env: TestEnv) {
         let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
+        let guest_launch_measurements =
+            get_guestos_launch_measurements().expect("no launch measurements");
+
         // check that GuestOS is on the expected version (initial version)
         let client = Client::builder()
             .danger_accept_invalid_certs(true)
@@ -523,7 +526,14 @@ pub fn upgrade_guestos(env: TestEnv) {
         .expect("guest didn't come up as expected");
 
         // elect the new GuestOS version (upgrade version)
-        elect_guestos_version(&nns_node, target_version.clone(), sha256, vec![upgrade_url]).await;
+        elect_guestos_version(
+            &nns_node,
+            target_version.clone(),
+            sha256,
+            vec![upgrade_url],
+            guest_launch_measurements,
+        )
+        .await;
 
         // check that the registry was updated after blessing the new guestos version
         let reg_ver2 = registry_canister.get_latest_version().await.unwrap();
