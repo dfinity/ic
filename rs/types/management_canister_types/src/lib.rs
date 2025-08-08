@@ -4510,7 +4510,7 @@ mod tests {
         let actual_variants: Vec<i32> = SnapshotSource::iter()
             .map(|x| pb_canister_state_bits::SnapshotSource::from(x) as i32)
             .collect();
-        let expected_variants = vec![0, 1];
+        let expected_variants = vec![1, 2];
         assert_eq!(actual_variants, expected_variants);
     }
 
