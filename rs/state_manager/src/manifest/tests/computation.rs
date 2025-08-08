@@ -1151,6 +1151,7 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
             FileWithSize("wasm_b".into(), 2048 * 1024),
         ],
         max_chunk_size,
+        &mut thread_pool,
     )
     .expect("Failed to get dirty chunks");
     assert_eq!(
@@ -1402,6 +1403,7 @@ fn all_same_inodes_are_detected() {
         &CheckpointLayout::new_untracked(target.path().to_path_buf(), Height::new(1)).unwrap(),
         &files,
         1024 * 1024,
+        &mut scoped_threadpool::Pool::new(NUM_THREADS),
     )
     .unwrap();
 

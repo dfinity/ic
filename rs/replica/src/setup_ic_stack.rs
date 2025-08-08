@@ -9,7 +9,6 @@ use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_http_endpoints_public::start_nns_delegation_manager;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
@@ -21,6 +20,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_manager::start_nns_delegation_manager;
 use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;

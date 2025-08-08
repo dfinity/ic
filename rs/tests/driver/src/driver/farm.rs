@@ -8,7 +8,7 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{read_dependency_to_string, HasIcDependencies};
+use crate::driver::test_env_api::{read_dependency_to_string, HasFarmUrl};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;

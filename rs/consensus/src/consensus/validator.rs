@@ -1672,13 +1672,13 @@ impl Validator {
         }
 
         let summary = block.payload.as_ref().as_summary();
-        let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
+        let registry_version = if summary.idkg.is_some() {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
                 .get_state_at(height)
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_idkg_state_registry_version(idkg, state.get_ref())
+            get_oldest_idkg_state_registry_version(state.get_ref())
         } else {
             None
         };
@@ -1921,9 +1921,9 @@ pub mod test {
         assert_changeset_matches_pattern,
         fake::*,
         idkg::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests, request_id,
+            empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
+            fake_signature_request_context_with_registry_version,
+            fake_state_with_signature_requests,
         },
         matches_pattern,
     };
@@ -1941,6 +1941,7 @@ pub mod test {
             NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        messages::CallbackId,
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
@@ -2150,26 +2151,34 @@ pub mod test {
 
             let height = Height::from(0);
             let key_id = fake_ecdsa_idkg_master_public_key_id();
-            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+            // Create three quadruple Ids and contexts, context "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
-            let pre_sig_id2 = PreSigId(2);
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(
-                    request_id(1, height),
-                    key_id.clone(),
-                    Some(pre_sig_id1),
+                (
+                    CallbackId::new(1),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id1),
+                        key_id.inner(),
+                        RegistryVersion::from(3),
+                    ),
                 ),
-                fake_signature_request_context_with_pre_sig(
-                    request_id(2, height),
-                    key_id.clone(),
-                    None,
+                (
+                    CallbackId::new(2),
+                    fake_signature_request_context_with_registry_version(
+                        None,
+                        key_id.inner(),
+                        RegistryVersion::from(1),
+                    ),
                 ),
-                fake_signature_request_context_with_pre_sig(
-                    request_id(3, height),
-                    key_id.clone(),
-                    Some(pre_sig_id3),
+                (
+                    CallbackId::new(3),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id3),
+                        key_id.inner(),
+                        RegistryVersion::from(2),
+                    ),
                 ),
             ];
 
@@ -2210,12 +2219,7 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut idkg = empty_idkg_payload(subnet_test_id(0));
-            // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
-
+            let idkg = empty_idkg_payload(subnet_test_id(0));
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
