@@ -703,8 +703,8 @@ mod test {
     use ic_management_canister_types_private::{
         MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
     };
-    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::idkg::*;
+    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{

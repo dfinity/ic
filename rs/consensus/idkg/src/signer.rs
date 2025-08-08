@@ -941,8 +941,8 @@ mod tests {
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, ThresholdArguments, VetKdArguments,
     };
-    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::{idkg::*, IDkgStatsNoOp};
+    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
         ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3},
