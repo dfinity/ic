@@ -150,14 +150,6 @@ impl TestIDkgBlockReader {
         }
     }
 
-    pub(crate) fn new_with_height(height: Height) -> Self {
-        Self {
-            height,
-
-            ..Default::default()
-        }
-    }
-
     pub(crate) fn for_complainer_test(
         key_id: &IDkgMasterPublicKeyId,
         height: Height,

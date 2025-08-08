@@ -968,10 +968,6 @@ mod test {
             None,
         );
         // First signature should now be in "unreported" agreement
-        println!(
-            "Signature agreements: {:?}",
-            idkg_payload.signature_agreements
-        );
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
         assert_matches!(
             idkg_payload

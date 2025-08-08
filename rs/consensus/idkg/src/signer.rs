@@ -878,15 +878,15 @@ mod tests {
         let requested = BTreeMap::from([
             (
                 id_1.callback_id,
-                Some((id_1, create_sig_inputs2(1, &key_id))),
+                Some((id_1, create_threshold_sig_inputs(1, &key_id))),
             ),
             (
                 id_2.callback_id,
-                Some((id_2, create_sig_inputs2(2, &key_id))),
+                Some((id_2, create_threshold_sig_inputs(2, &key_id))),
             ),
             (
                 id_3.callback_id,
-                Some((id_3, create_sig_inputs2(3, &key_id))),
+                Some((id_3, create_threshold_sig_inputs(3, &key_id))),
             ),
             (id_4.callback_id, None),
         ]);
@@ -1016,7 +1016,7 @@ mod tests {
             create_signature_share(&key_id, NODE_3, ids[2]),
         ];
 
-        // The block has pre-signatures for requests 0, 3, 4
+        // The state has requests 0, 3, 4, each paired with a pre-signature ID.
         let requests: Vec<_> = [0, 3, 4]
             .into_iter()
             .map(|i: usize| (ids[i], generator.next_pre_signature_id()))

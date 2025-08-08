@@ -741,7 +741,7 @@ mod tests {
             .expect_latest_certified_height()
             .returning(move || height);
 
-        let block_reader = TestIDkgBlockReader::new_with_height(height.increment());
+        let block_reader = TestIDkgBlockReader::for_pre_signer_test(height.increment(), vec![]);
 
         let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);

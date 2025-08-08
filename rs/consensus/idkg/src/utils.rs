@@ -229,7 +229,9 @@ pub(super) fn block_chain_cache(
 pub enum BuildSignatureInputsError {
     /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
     ContextIncomplete,
+    /// The tECDSA signature inputs could not be created because the context is malformed
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
+    /// The tSchnorr signature inputs could not be created because the context is malformed
     ThresholdSchnorrSigInputsCreationError(ThresholdSchnorrSigInputsCreationError),
 }
 
@@ -256,15 +258,15 @@ pub(super) fn build_signature_inputs(
                 .pre_signature
                 .as_ref()
                 .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+            let request_id = RequestId {
+                callback_id,
+                height: matched_data.height,
+            };
             let nonce = Id::from(
                 context
                     .nonce
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
-            let request_id = RequestId {
-                callback_id,
-                height: matched_data.height,
-            };
             let inputs = ThresholdSigInputs::Ecdsa(
                 ThresholdEcdsaSigInputs::new(
                     &ExtendedDerivationPath {
@@ -285,15 +287,15 @@ pub(super) fn build_signature_inputs(
                 .pre_signature
                 .as_ref()
                 .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+            let request_id = RequestId {
+                callback_id,
+                height: matched_data.height,
+            };
             let nonce = Id::from(
                 context
                     .nonce
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
-            let request_id = RequestId {
-                callback_id,
-                height: matched_data.height,
-            };
             let inputs = ThresholdSigInputs::Schnorr(
                 ThresholdSchnorrSigInputs::new(
                     &ExtendedDerivationPath {

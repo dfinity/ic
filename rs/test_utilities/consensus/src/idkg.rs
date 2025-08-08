@@ -357,6 +357,7 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
 }
 
 #[derive(Clone)]
+/// TODO(CON-1561): Rename this
 pub struct TestSigInputs {
     pub idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     pub pre_signature_ref: PreSignatureRef,
@@ -735,12 +736,16 @@ pub fn create_schnorr_sig_inputs_with_args(
     }
 }
 
-// Creates a test signature input
+/// Creates a test signature input
+/// TODO(CON-1561): Rename this
 pub fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
     create_sig_inputs_with_height(caller, Height::new(100), key_id.clone())
 }
 
-pub fn create_sig_inputs2(caller: u8, key_id: &IDkgMasterPublicKeyId) -> ThresholdSigInputs {
+pub fn create_threshold_sig_inputs(
+    caller: u8,
+    key_id: &IDkgMasterPublicKeyId,
+) -> ThresholdSigInputs {
     let path = ExtendedDerivationPath {
         caller: PrincipalId::try_from(&vec![caller]).unwrap(),
         derivation_path: vec![],
