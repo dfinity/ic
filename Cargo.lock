@@ -14278,6 +14278,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-crypto",
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",

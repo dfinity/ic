@@ -53,7 +53,8 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
+use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_crypto::mock_random_number_generator;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
