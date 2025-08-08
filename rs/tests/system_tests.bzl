@@ -140,10 +140,12 @@ def _run_system_test(ctx):
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
+    runtime_deps = []
+
     if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
+        runtime_deps.append([ctx.file._k8sconfig])
 
-    runtime_deps = [depset([ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -181,7 +183,7 @@ run_system_test = rule(
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
         "_k8s": attr.label(default = "//rs/tests:k8s"),
-        "_k8sconfig": attr.label(allow_single_file = True, default = "@kubeconfig//:kubeconfig.yaml"),
+        "_k8sconfig": attr.label(allow_single_file = True, default = None),
         "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.string_keyed_label_dict(allow_files = True),
