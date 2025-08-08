@@ -19,6 +19,12 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
 
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_FETCH: &str = "state_sync_size_bytes_total{op=\"fetch\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES: &str =
+    "state_sync_size_bytes_total{op=\"copy_files\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
+    "state_sync_size_bytes_total{op=\"copy_chunks\"}";
+
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
@@ -239,6 +245,25 @@ async fn assert_state_sync_has_happened(
                 logger,
                 "State sync finishes successfully in {} seconds",
                 res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
+            );
+
+            let res = fetch_metrics::<u64>(
+                logger,
+                rejoin_node.clone(),
+                vec![
+                    STATE_SYNC_SIZE_BYTES_TOTAL_FETCH,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS,
+                ],
+            )
+            .await;
+
+            info!(
+                logger,
+                "State sync size summary, fetch: {} bytes, copy files: {} bytes, copy chunks: {} bytes",
+                res[STATE_SYNC_SIZE_BYTES_TOTAL_FETCH][0],
+                res[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES][0],
+                res[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS][0],
             );
 
             return;
