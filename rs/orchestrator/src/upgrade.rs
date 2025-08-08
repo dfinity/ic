@@ -39,11 +39,11 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
 pub(crate) enum OrchestratorControlFlow {
-    /// The replica is assigned to the subnet with the given subnet id.
+    /// The node is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
-    /// The replica is unassigned.
+    /// The node is unassigned.
     Unassigned,
-    /// The replica should stop the orchestrator.
+    /// The node should stop the orchestrator.
     Stop,
 }
 
