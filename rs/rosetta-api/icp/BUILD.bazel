@@ -167,6 +167,7 @@ rust_test_suite_with_extra_srcs(
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
         "//rs/nns/governance:governance-canister-test",
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
@@ -181,6 +182,7 @@ rust_test_suite_with_extra_srcs(
     env = {
         "RUST_TEST_THREADS": "4",
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",

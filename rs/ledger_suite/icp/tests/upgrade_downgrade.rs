@@ -12,10 +12,7 @@ use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
     account_balance, archives, query_blocks, query_encoded_blocks, transfer, LEDGER_CANISTER_ID,
 };
-use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
-};
+
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
     AccountIdentifier, CandidBlock, CandidTransaction, LedgerCanisterInitPayload,
@@ -143,15 +140,15 @@ impl Setup {
     }
 
     fn upgrade_ledger_canister(&self, upgrade_to_version: UpgradeToVersion, should_succeed: bool) {
-        let ledger_wasm = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_wasm(),
-            UpgradeToVersion::Latest => build_ledger_wasm(),
+        let ledger_wasm_bytes = match upgrade_to_version {
+            UpgradeToVersion::MainNet => std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet ledger wasm"),
+            UpgradeToVersion::Latest => std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read ledger wasm"),
         };
         let ledger_upgrade_args = LedgerCanisterUpgradePayload::builder().build().unwrap();
         let canister_id = candid::Principal::from(LEDGER_CANISTER_ID);
         match self.pocket_ic.upgrade_canister(
             canister_id,
-            ledger_wasm.bytes(),
+            ledger_wasm_bytes,
             Encode!(&ledger_upgrade_args).unwrap(),
             None,
         ) {
@@ -180,9 +177,9 @@ impl Setup {
 
     fn upgrade_archive_canisters(&self, upgrade_to_version: UpgradeToVersion) {
         let (archive_wasm_bytes, upgrade_arg) = match upgrade_to_version {
-            UpgradeToVersion::MainNet => (build_mainnet_ledger_archive_wasm().bytes(), vec![]),
+            UpgradeToVersion::MainNet => (std::fs::read(std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet archive wasm"), vec![]),
             UpgradeToVersion::Latest => {
-                (build_ledger_archive_wasm().bytes(), Encode!(&()).unwrap())
+                (std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap()).expect("Could not read archive wasm"), Encode!(&()).unwrap())
             }
         };
         let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
@@ -209,13 +206,13 @@ impl Setup {
     }
 
     fn upgrade_index_canister(&self, upgrade_to_version: UpgradeToVersion) {
-        let index_wasm = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_index_wasm(),
-            UpgradeToVersion::Latest => build_ledger_index_wasm(),
+        let index_wasm_bytes = match upgrade_to_version {
+            UpgradeToVersion::MainNet => std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet index wasm"),
+            UpgradeToVersion::Latest => std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap()).expect("Could not read index wasm"),
         };
         let canister_id = candid::Principal::from(LEDGER_INDEX_CANISTER_ID);
         self.pocket_ic
-            .upgrade_canister(canister_id, index_wasm.bytes(), vec![], None)
+            .upgrade_canister(canister_id, index_wasm_bytes, vec![], None)
             .unwrap();
         let expected_module_hash = mainnet_index_canister_sha256sum();
         self.assert_canister_module_hash(
@@ -277,23 +274,23 @@ impl SetupBuilder {
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
 
         // Install the (mainnet) NNS canisters.
-        let ledger_wasm = build_mainnet_ledger_wasm();
+        let ledger_wasm_bytes = std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet ledger wasm");
         install_canister(
             &pocket_ic,
             "ICP Ledger",
             LEDGER_CANISTER_ID,
             Encode!(&ledger_canister_init_payload).unwrap(),
-            ledger_wasm.bytes(),
+            ledger_wasm_bytes,
             None,
         );
 
-        let index_wasm = build_mainnet_ledger_index_wasm();
+        let index_wasm_bytes = std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet index wasm");
         install_canister(
             &pocket_ic,
             "ICP Index",
             LEDGER_INDEX_CANISTER_ID,
             Encode!(&index_canister_init_args).unwrap(),
-            index_wasm.bytes(),
+            index_wasm_bytes,
             None,
         );
 
@@ -307,26 +304,26 @@ impl SetupBuilder {
 }
 
 fn mainnet_ledger_canister_sha256sum() -> Vec<u8> {
-    let ledger_wasm = build_mainnet_ledger_wasm();
+    let ledger_wasm_bytes = std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet ledger wasm");
 
     let mut state = Sha256::new();
-    state.write(ledger_wasm.clone().bytes().as_slice());
+    state.write(ledger_wasm_bytes.as_slice());
     state.finish().to_vec()
 }
 
 fn mainnet_archive_canister_sha256sum() -> Vec<u8> {
-    let archive_wasm = build_mainnet_ledger_archive_wasm();
+    let archive_wasm_bytes = std::fs::read(std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet archive wasm");
 
     let mut state = Sha256::new();
-    state.write(archive_wasm.clone().bytes().as_slice());
+    state.write(archive_wasm_bytes.as_slice());
     state.finish().to_vec()
 }
 
 fn mainnet_index_canister_sha256sum() -> Vec<u8> {
-    let index_wasm = build_mainnet_ledger_index_wasm();
+    let index_wasm_bytes = std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap()).expect("Could not read mainnet index wasm");
 
     let mut state = Sha256::new();
-    state.write(index_wasm.clone().bytes().as_slice());
+    state.write(index_wasm_bytes.as_slice());
     state.finish().to_vec()
 }
 

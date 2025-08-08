@@ -16,7 +16,7 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_tokens_u256::U256;
-use ic_ledger_test_utils::build_ledger_wasm;
+
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
@@ -245,10 +245,11 @@ impl RosettaTestingEnvironmentBuilder {
             }))
             .build()
             .unwrap();
+        let ledger_wasm_bytes = std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read ledger wasm");
         pocket_ic
             .install_canister(
                 canister_id,
-                build_ledger_wasm().bytes().to_vec(),
+                ledger_wasm_bytes,
                 Encode!(&init_args).unwrap(),
                 None,
             )

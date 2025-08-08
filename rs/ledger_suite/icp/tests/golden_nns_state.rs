@@ -12,10 +12,7 @@ use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_ledger_tip};
-use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
-};
+
 use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
@@ -290,15 +287,33 @@ impl Setup {
         let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
         let master_wasms = Wasms {
-            ledger: build_ledger_wasm(),
-            index: build_ledger_index_wasm(),
-            archive: build_ledger_archive_wasm(),
+            ledger: Wasm::from_bytes(
+                std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read ledger wasm")
+            ),
+            index: Wasm::from_bytes(
+                std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read index wasm")
+            ),
+            archive: Wasm::from_bytes(
+                std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read archive wasm")
+            ),
         };
 
         let mainnet_wasms = Wasms {
-            ledger: build_mainnet_ledger_wasm(),
-            index: build_mainnet_ledger_index_wasm(),
-            archive: build_mainnet_ledger_archive_wasm(),
+            ledger: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet ledger wasm")
+            ),
+            index: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet index wasm")
+            ),
+            archive: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet archive wasm")
+            ),
         };
 
         Self {
