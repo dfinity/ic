@@ -445,7 +445,6 @@ mod tests {
     #[test]
     fn test_check_address() {
         use crate::address::ParseAddressError::BadWitnessLength;
-        use bitcoin::util::address::Payload;
         use bitcoin::Address;
         use std::str::FromStr;
 
@@ -479,14 +478,15 @@ mod tests {
             "bc1q088j3hnr0htc8fjwhk337aply0w3fwj33a56fqkdqfpq8dupgx6q4l0e39",
         ];
         for p2wsh_address in valid_p2wsh_addresses {
-            let expected_p2wsh_pkhash = match Address::from_str(p2wsh_address).unwrap().payload {
-                Payload::WitnessProgram { program, .. } => program,
-                _ => panic!("expected P2WSH address"),
-            };
+            let expected_p2wsh_pkhash = Address::from_str(p2wsh_address)
+                .unwrap()
+                .assume_checked()
+                .witness_program()
+                .unwrap();
+            let mut bytes = [0_u8; 32];
+            bytes.copy_from_slice(expected_p2wsh_pkhash.program().as_bytes());
             assert_eq!(
-                Ok(BitcoinAddress::P2wshV0(
-                    expected_p2wsh_pkhash.try_into().unwrap()
-                )),
+                Ok(BitcoinAddress::P2wshV0(bytes)),
                 BitcoinAddress::parse(p2wsh_address, Network::Mainnet)
             );
         }
@@ -503,14 +503,15 @@ mod tests {
         ];
 
         for taproot_address in taproot_addresses {
-            let expected_taproot_pkhash = match Address::from_str(taproot_address).unwrap().payload
-            {
-                Payload::WitnessProgram { program, .. } => program,
-                _ => panic!("expected taproot address"),
-            };
-            let expected_taproot_pkhash = expected_taproot_pkhash.try_into().unwrap();
+            let expected_taproot_pkhash = Address::from_str(taproot_address)
+                .unwrap()
+                .assume_checked()
+                .witness_program()
+                .unwrap();
+            let mut bytes = [0_u8; 32];
+            bytes.copy_from_slice(expected_taproot_pkhash.program().as_bytes());
             assert_eq!(
-                Ok(BitcoinAddress::P2trV1(expected_taproot_pkhash)),
+                Ok(BitcoinAddress::P2trV1(bytes)),
                 BitcoinAddress::parse(taproot_address, Network::Mainnet)
             );
         }
