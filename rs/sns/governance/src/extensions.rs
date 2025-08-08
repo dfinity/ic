@@ -525,51 +525,43 @@ impl TryFrom<RegisterExtension> for ValidatedRegisterExtension {
 
 /// Validates an extension WASM against the global ALLOWED_EXTENSIONS.
 pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec, String> {
-    #[cfg(feature = "test")]
-    {
-        // In feature test mode, accept any wasm hash and return a test spec
-        // Validate the hash length
-        if wasm_module_hash.len() != 32 {
-            return Err(format!(
-                "Invalid wasm module hash length: expected 32 bytes, got {}",
-                wasm_module_hash.len()
-            ));
-        }
+    // Validate the hash length
+    if wasm_module_hash.len() != 32 {
+        return Err(format!(
+            "Invalid wasm module hash length: expected 32 bytes, got {}",
+            wasm_module_hash.len()
+        ));
+    }
 
-        // Return a test extension spec
-        return Ok(ExtensionSpec {
+    if cfg!(feature = "test") {
+        // In feature test mode, accept any wasm hash and return a test spec
+        Ok(ExtensionSpec {
             name: "Test Extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
             extension_types: vec![ExtensionType::TreasuryManager],
-        });
-    }
-    #[cfg(all(test, not(feature = "test")))]
-    {
+        })
+    } else if cfg!(all(test, not(feature = "test"))) {
         // In regular test mode (without feature), use the test allowed extensions
         let test_allowed = create_test_allowed_extensions();
         validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
-    }
-    #[cfg(not(any(test, feature = "test")))]
-    {
+    } else {
         validate_extension_wasm_with_allowed(wasm_module_hash, &ALLOWED_EXTENSIONS)
     }
 }
 
 /// Validates an extension WASM against a provided set of allowed extensions.
-pub(crate) fn validate_extension_wasm_with_allowed(
+fn validate_extension_wasm_with_allowed(
     wasm_module_hash: &[u8],
     allowed_extensions: &BTreeMap<[u8; 32], ExtensionSpec>,
 ) -> Result<ExtensionSpec, String> {
-    // Convert the hash to the expected array size if needed
-    let hash_array: [u8; 32] = if wasm_module_hash.len() == 32 {
-        wasm_module_hash.try_into().unwrap()
-    } else {
-        return Err(format!(
+    // Should never fail, b/c we validate the length before calling this.
+    let hash_array: [u8; 32] = wasm_module_hash
+        .try_into()
+        .map_err(|_| format!(
             "Invalid wasm module hash length: expected 32 bytes, got {}",
             wasm_module_hash.len()
-        ));
-    };
+        ))?;
 
     if let Some(spec) = allowed_extensions.get(&hash_array) {
         // Validate the spec to ensure no conflicting method names.
@@ -1120,14 +1112,14 @@ mod tests {
     // Tests for validate_execute_extension_operation with proper environment mocking
 
     #[tokio::test]
-    async fn test_validate_execute_extension_operation_success() {
+    async fn test_validate_execute_extension_operation_deposit_success() {
         let (env, root_canister_id, execute_operation) = setup_env_for_test(true, "deposit");
 
         // Test with valid operation name - should succeed
         let result =
             validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
-        assert!(result.is_ok());
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -1138,7 +1130,7 @@ mod tests {
         let result =
             validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
-        assert!(result.is_ok());
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -1148,7 +1140,6 @@ mod tests {
         let result =
             validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
-        assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::NotFound as i32);
         assert!(error.error_message.contains("Extension canister"));
@@ -1166,7 +1157,6 @@ mod tests {
         let result =
             validate_execute_extension_operation(&env, root_canister_id, execute_operation).await;
 
-        assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
         assert!(error
@@ -1192,10 +1182,9 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(valid_arg.clone());
-        assert!(result.is_ok());
+        let result = validate_deposit_operation(valid_arg.clone()).unwrap();
 
-        match result.unwrap() {
+        match result {
             ValidatedOperationArg::TreasuryManagerDeposit(deposit) => {
                 assert_eq!(deposit.treasury_allocation_sns_e8s, 1000000);
                 assert_eq!(deposit.treasury_allocation_icp_e8s, 2000000);
@@ -1216,10 +1205,8 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(missing_sns_arg);
-        assert!(result.is_err());
+        let result = validate_deposit_operation(missing_sns_arg).unwrap_err();
         assert!(result
-            .unwrap_err()
             .contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test missing ICP amount
@@ -1235,10 +1222,8 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(missing_icp_arg);
-        assert!(result.is_err());
+        let result = validate_deposit_operation(missing_icp_arg).unwrap_err();
         assert!(result
-            .unwrap_err()
             .contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Test wrong type for SNS amount
@@ -1257,18 +1242,14 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(wrong_type_arg);
-        assert!(result.is_err());
+        let result = validate_deposit_operation(wrong_type_arg).unwrap_err();
         assert!(result
-            .unwrap_err()
             .contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test no arguments provided
         let no_args = ExtensionOperationArg { value: None };
-        let result = validate_deposit_operation(no_args);
-        assert!(result.is_err());
+        let result = validate_deposit_operation(no_args).unwrap_err();
         assert!(result
-            .unwrap_err()
             .contains("Deposit operation arguments must be provided"));
 
         // Test not a map
@@ -1278,10 +1259,8 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(not_map_arg);
-        assert!(result.is_err());
+        let result = validate_deposit_operation(not_map_arg).unwrap_err();
         assert!(result
-            .unwrap_err()
             .contains("Deposit operation arguments must be a PreciseMap"));
     }
 
@@ -1289,10 +1268,9 @@ mod tests {
     fn test_validate_withdraw_operation() {
         // Test valid withdraw operation - must have empty arguments
         let valid_arg = ExtensionOperationArg { value: None };
-        let result = validate_withdraw_operation(valid_arg.clone());
-        assert!(result.is_ok());
+        let result = validate_withdraw_operation(valid_arg.clone()).unwrap();
 
-        match result.unwrap() {
+        match result {
             ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
                 // Should just wrap the original
                 assert_eq!(withdraw.original.value, None);
@@ -1307,10 +1285,8 @@ mod tests {
             }),
         };
 
-        let result = validate_withdraw_operation(minimal_arg);
-        assert!(result.is_err());
+        let result = validate_withdraw_operation(minimal_arg).unwrap_err();
         assert!(result
-            .unwrap_err()
             .contains("Withdraw operation does not accept arguments at this time"));
     }
 
