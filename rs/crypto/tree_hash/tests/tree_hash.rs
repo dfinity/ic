@@ -2486,6 +2486,53 @@ fn labeled_tree_lookup() {
 }
 
 #[test]
+fn labeled_tree_lookup_lower_bound() {
+    use LabeledTree::{Leaf, SubTree};
+    let b_leaf = Leaf(b"leaf_b".to_vec());
+    let c_leaf = Leaf(b"leaf_c".to_vec());
+    let a_subtree = SubTree(flatmap! {
+            Label::from("b") => b_leaf.clone()
+    });
+
+    let t: LabeledTree<Vec<u8>> = SubTree(flatmap! {
+        Label::from("sig") => SubTree(flatmap!{
+                Label::from("a") => a_subtree.clone(),
+                Label::from("c") => c_leaf.clone(),
+        })
+    });
+
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"b"[..]),
+        Some((&Label::from("b"), &b_leaf))
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"c"[..]),
+        Some((&Label::from("b"), &b_leaf))
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"a"[..]),
+        None
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..]], &b"d"[..]),
+        Some((&Label::from("c"), &c_leaf))
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..]], &b"c"[..]),
+        Some((&Label::from("c"), &c_leaf))
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..]], &b"b"[..]),
+        Some((&Label::from("a"), &a_subtree))
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..]], &b"a"[..]),
+        Some((&Label::from("a"), &a_subtree))
+    );
+    assert_eq!(lookup_lower_bound(&t, &[&b"sig"[..]], &b"0"[..]), None);
+}
+
+#[test]
 fn mixed_hash_tree_lookup() {
     use LookupStatus::{Absent, Found, Unknown};
     use MixedHashTree::{Empty, Leaf};
@@ -3285,5 +3332,82 @@ fn witness_generator_exceeding_recursion_depth_should_error() {
         Err(WitnessGenerationError::TooDeepRecursion(
             MAX_HASH_TREE_DEPTH + 1
         ))
+    );
+}
+
+#[test]
+fn filtered_mixed_hash_tree() {
+    let label_a = Label::from("label_a");
+    let label_a_3 = Label::from("label_a_3");
+    let label_a_3_2 = Label::from("label_a_3_2");
+    let label_b = Label::from("label_b");
+    let label_b_2 = Label::from("label_b_2");
+    let label_b_4 = Label::from("label_b_4");
+    let label_b_4_3 = Label::from("label_b_4_3");
+    let label_c = Label::from("label_c");
+
+    let subtree_a_3_map = flatmap!(
+        label_a_3_2 => LabeledTree::Leaf(Vec::from("contents_a_3_2")));
+    let subtree_a_map = flatmap!(
+        label_a_3 => LabeledTree::SubTree(subtree_a_3_map),
+    );
+    let subtree_b_4_map = flatmap!(
+        label_b_4_3 => LabeledTree::Leaf(Vec::from("contents_b_4_3")));
+    let subtree_b_map = flatmap!(
+        label_b_2 => LabeledTree::SubTree(FlatMap::new()),
+        label_b_4.clone() => LabeledTree::SubTree(subtree_b_4_map.clone()),
+    );
+    let root_map = flatmap!(
+        label_a.clone() => LabeledTree::SubTree(subtree_a_map.clone()),
+        label_b.clone() => LabeledTree::SubTree(subtree_b_map),
+        label_c => LabeledTree::Leaf(Vec::from("contents_c")),
+    );
+    let partial_tree = LabeledTree::SubTree(root_map);
+
+    let builder = tree_with_three_levels();
+    let witness_generator = builder.witness_generator().unwrap();
+    let mixed_hash_tree = witness_generator.mixed_hash_tree(&partial_tree).unwrap();
+    let digest = mixed_hash_tree.digest();
+    assert_eq!(*witness_generator.hash_tree().digest(), digest);
+
+    let partial_tree = sparse_labeled_tree_from_paths(&[
+        Path::from(vec![
+            "label_a".into(),
+            "label_a_3".into(),
+            "label_a_3_2".into(),
+        ]),
+        Path::from(vec!["label_b".into(), "label_b_4".into()]),
+    ])
+    .unwrap();
+
+    let filtered_hash_tree = mixed_hash_tree.filtered(&partial_tree).unwrap();
+
+    assert_eq!(digest, filtered_hash_tree.digest());
+
+    let subtree_b_map_filtered = flatmap!(
+        label_b_4 => LabeledTree::SubTree(subtree_b_4_map),
+    );
+    let smaller_root_map = flatmap!(
+        label_a => LabeledTree::SubTree(subtree_a_map),
+        label_b => LabeledTree::SubTree(subtree_b_map_filtered),
+    );
+    let smaller_partial_tree = LabeledTree::SubTree(smaller_root_map);
+
+    let expected_hash_tree = witness_generator
+        .mixed_hash_tree(&smaller_partial_tree)
+        .unwrap();
+    assert_eq!(expected_hash_tree, filtered_hash_tree);
+
+    let too_long_partial_tree = sparse_labeled_tree_from_paths(&[Path::from(vec![
+        "label_a".into(),
+        "label_a_3".into(),
+        "label_a_3_2".into(),
+        "too_long".into(),
+    ])])
+    .unwrap();
+
+    assert_eq!(
+        mixed_hash_tree.filtered(&too_long_partial_tree),
+        Err(MixedHashTreeFilterError::PathTooLong)
     );
 }
