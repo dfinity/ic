@@ -41,10 +41,6 @@ use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
-/// Maximum message length of a synthetic reject response produced by message
-/// routing.
-pub const MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
-
 /// Input queue type: local or remote subnet.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum InputQueueType {

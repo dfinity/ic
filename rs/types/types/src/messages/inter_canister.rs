@@ -610,6 +610,27 @@ impl RequestOrResponse {
     }
 }
 
+/// Generates a reject `Response` for a `Request` message with the provided
+/// `RejectCode` and error message.
+pub fn generate_reject_response(
+    request: &Request,
+    reject_code: RejectCode,
+    message: String,
+) -> Response {
+    Response {
+        originator: request.sender,
+        respondent: request.receiver,
+        originator_reply_callback: request.sender_reply_callback,
+        refund: request.payment,
+        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+            reject_code,
+            message,
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        )),
+        deadline: request.deadline,
+    }
+}
+
 /// Convenience `CountBytes` implementation that returns the same value as
 /// `RequestOrResponse::Request(self).count_bytes()`, so we don't need to wrap
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
