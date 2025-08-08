@@ -53,7 +53,7 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
         nns_node,
         &target_version,
         &logger,
-        &sha256,
+        sha256,
         guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
