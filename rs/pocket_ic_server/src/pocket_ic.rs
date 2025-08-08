@@ -44,6 +44,7 @@ use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{RegistryValue, ZERO_REGISTRY_VERSION};
 use ic_interfaces_state_manager::StateReader;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{no_op_logger, ReplicaLogger};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, EcdsaCurve,
@@ -80,7 +81,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus, SignedIngress,
+        QueryResponseHash, ReplicaHealthStatus,
     },
     time::GENESIS,
     CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
@@ -2658,9 +2659,7 @@ impl Operation for CallRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
-                #[allow(clippy::disallowed_methods)]
-                let (s, mut r) =
-                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
+                let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(

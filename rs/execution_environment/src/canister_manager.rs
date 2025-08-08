@@ -1029,6 +1029,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
+        ready_for_migration: bool,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
@@ -1042,6 +1043,8 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect::<Vec<PrincipalId>>();
+
+        let version = canister.system_state.canister_version;
 
         let canister_memory_usage = canister.memory_usage();
         let canister_wasm_memory_usage = canister.wasm_memory_usage();
@@ -1063,6 +1066,8 @@ impl CanisterManager {
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
+            ready_for_migration,
+            version,
             canister
                 .execution_state
                 .as_ref()
