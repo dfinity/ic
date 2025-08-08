@@ -202,7 +202,7 @@ impl ExtensionSpec {
         Ok(())
     }
 
-    /// Get all operations (standard + other) for this extension
+    /// Get all operations for this extension
     /// Returns error if there are conflicts
     pub fn all_operations(&self) -> Result<BTreeMap<String, ExtensionOperationSpec>, String> {
         self.validate()?;
@@ -1018,7 +1018,6 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
             extension_types: vec![ExtensionType::TreasuryManager],
-
         }
     }
 }
@@ -1193,6 +1192,8 @@ mod tests {
 
     #[test]
     fn test_validate_deposit_operation() {
+        let (env, governance_proto, _) = setup_env_for_test(true, "deposit");
+
         // Test valid deposit operation
         let valid_arg = ExtensionOperationArg {
             value: Some(Precise {
@@ -1209,7 +1210,8 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(valid_arg.clone()).unwrap();
+        let result =
+            validate_deposit_operation(&env, &governance_proto, valid_arg.clone()).unwrap();
 
         match result {
             ValidatedOperationArg::TreasuryManagerDeposit(deposit) => {
@@ -1232,7 +1234,8 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(missing_sns_arg).unwrap_err();
+        let result =
+            validate_deposit_operation(&env, &governance_proto, missing_sns_arg).unwrap_err();
         assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test missing ICP amount
@@ -1248,7 +1251,8 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(missing_icp_arg).unwrap_err();
+        let result =
+            validate_deposit_operation(&env, &governance_proto, missing_icp_arg).unwrap_err();
         assert!(result.contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Test wrong type for SNS amount
@@ -1267,12 +1271,13 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(wrong_type_arg).unwrap_err();
+        let result =
+            validate_deposit_operation(&env, &governance_proto, wrong_type_arg).unwrap_err();
         assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test no arguments provided
         let no_args = ExtensionOperationArg { value: None };
-        let result = validate_deposit_operation(no_args).unwrap_err();
+        let result = validate_deposit_operation(&env, &governance_proto, no_args).unwrap_err();
         assert!(result.contains("Deposit operation arguments must be provided"));
 
         // Test not a map
@@ -1282,15 +1287,18 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(not_map_arg).unwrap_err();
+        let result = validate_deposit_operation(&env, &governance_proto, not_map_arg).unwrap_err();
         assert!(result.contains("Deposit operation arguments must be a PreciseMap"));
     }
 
     #[test]
     fn test_validate_withdraw_operation() {
+        let (env, governance_proto, _) = setup_env_for_test(true, "withdraw");
+
         // Test valid withdraw operation - must have empty arguments
         let valid_arg = ExtensionOperationArg { value: None };
-        let result = validate_withdraw_operation(valid_arg.clone()).unwrap();
+        let result =
+            validate_withdraw_operation(&env, &governance_proto, valid_arg.clone()).unwrap();
 
         match result {
             ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
@@ -1307,7 +1315,7 @@ mod tests {
             }),
         };
 
-        let result = validate_withdraw_operation(minimal_arg).unwrap_err();
+        let result = validate_withdraw_operation(&env, &governance_proto, minimal_arg).unwrap_err();
         assert!(result.contains("Withdraw operation does not accept arguments at this time"));
     }
 
