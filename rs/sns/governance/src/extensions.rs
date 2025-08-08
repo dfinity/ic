@@ -107,7 +107,11 @@ pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
     pub extension_type: ExtensionType,
-    pub validate: fn(ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
+    pub validate: fn(
+        &dyn Environment,
+        &GovernanceProto,
+        ExtensionOperationArg,
+    ) -> Result<ValidatedOperationArg, String>,
 }
 
 impl ExtensionOperationSpec {
@@ -119,18 +123,29 @@ impl ExtensionOperationSpec {
         &self.description
     }
 
-    pub fn validate(&self, arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
-        (self.validate)(arg)
+    async fn validate_operation_arg(
+        &self,
+        env: &dyn Environment,
+        governance_proto: &GovernanceProto,
+        arg: ExtensionOperationArg,
+    ) -> Result<ValidatedOperationArg, String> {
+        (self.validate)(env, governance_proto, arg)
     }
 }
 
 /// Validates deposit operation arguments
-fn validate_deposit_operation(arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
+fn validate_deposit_operation(
+    _env: &dyn Environment,
+    _governance_proto: &GovernanceProto,
+    arg: ExtensionOperationArg,
+) -> Result<ValidatedOperationArg, String> {
     ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
 }
 
 /// Validates withdraw operation arguments (currently requires empty arguments)
 fn validate_withdraw_operation(
+    _env: &dyn Environment,
+    _governance_proto: &GovernanceProto,
     arg: ExtensionOperationArg,
 ) -> Result<ValidatedOperationArg, String> {
     ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
@@ -737,15 +752,18 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    let validated_arg = operation_spec.validate(operation_arg).map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "Extension canister {} operation {} validation failed: {}",
-                extension_canister_id, operation_name, err
-            ),
-        )
-    })?;
+    let validated_arg = operation_spec
+        .validate_operation_arg(env, governance_proto, operation_arg)
+        .await
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Extension canister {} operation {} validation failed: {}",
+                    extension_canister_id, operation_name, err
+                ),
+            )
+        })?;
 
     Ok(ValidatedExecuteExtensionOperation {
         extension_canister_id,
