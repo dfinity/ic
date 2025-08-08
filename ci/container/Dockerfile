@@ -197,5 +197,5 @@ WORKDIR /
 # In GitHub that is the case and we need 1001 and we set it via ARG.
 ARG CI_USER="root"
 USER $CI_USER
-ENTRYPOINT ["/entrypoint.sh"]
+#ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
