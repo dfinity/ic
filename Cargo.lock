@@ -2043,7 +2043,6 @@ dependencies = [
  "futures",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
- "ic-test-utilities",
  "ic-types",
  "serde",
  "serde_json",
@@ -8448,7 +8447,6 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
- "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
  "tempfile",
@@ -8472,7 +8470,6 @@ dependencies = [
  "ic-crypto-tls-cert-validation",
  "ic-crypto-utils-basic-sig",
  "ic-protobuf",
- "ic-test-utilities",
  "ic-types",
  "serde",
 ]
