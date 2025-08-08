@@ -80,6 +80,7 @@ rust_ic_bench(
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:pprof",
         "@crate_index//:rand",
         "@crate_index//:serde_cbor",
         "@crate_index//:tokio",

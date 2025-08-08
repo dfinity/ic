@@ -11337,6 +11337,7 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
+ "pprof",
  "prometheus 0.13.4",
  "rand 0.8.5",
  "rcgen",

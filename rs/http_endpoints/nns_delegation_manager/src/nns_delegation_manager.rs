@@ -20,8 +20,8 @@ use ic_registry_client_helpers::{
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope,
+        Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+        HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
     NodeId, RegistryVersion, SubnetId,
@@ -100,7 +100,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx, subnet_id))
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 struct DelegationManager {
@@ -413,7 +413,11 @@ async fn try_fetch_delegation_from_nns(
     .map_err(|err| format!("invalid subnet delegation certificate: {:?} ", err))?;
 
     info!(log, "Setting NNS delegation to: {:?}", response.certificate);
-    Ok(NNSDelegationBuilder::new(parsed_delegation, subnet_id))
+    Ok(NNSDelegationBuilder::new(
+        parsed_delegation,
+        labeled_tree,
+        subnet_id,
+    ))
 }
 
 async fn connect(

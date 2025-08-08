@@ -6,6 +6,10 @@ description.workspace = true
 documentation.workspace = true
 edition.workspace = true
 
+[[bench]]
+name = "nns_delegation_reader"
+harness = false
+
 [dependencies]
 axum = { workspace = true }
 futures = { workspace = true }
@@ -42,5 +46,6 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+pprof = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
