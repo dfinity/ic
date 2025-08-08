@@ -166,6 +166,7 @@ use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -1189,6 +1190,10 @@ pub fn get_guestos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
+pub fn get_guestos_launch_measurements() -> Result<Option<GuestLaunchMeasurements>> {
+    read_guest_launch_measurements("ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE")
+}
+
 /// Pull the URL of the initial GuestOS update image from the environment.
 ///
 /// With the initial image, there is also a corresponding initial update image.
@@ -1220,6 +1225,10 @@ pub fn get_guestos_update_img_url() -> Result<Url> {
 /// Pull the hash of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
+}
+
+pub fn get_guestos_initial_launch_measurements() -> Result<Option<GuestLaunchMeasurements>> {
+    read_guest_launch_measurements("ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE")
 }
 
 /// Pull the version of the initial SetupOS image from the environment.
@@ -1270,6 +1279,17 @@ pub fn get_boundary_node_img_url() -> Result<Url> {
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+}
+
+fn read_guest_launch_measurements(v: &str) -> Result<Option<GuestLaunchMeasurements>> {
+    // The launch measurements are not always set.
+    // TODO(NODE-1652): Remove this check once the environment variable is always set.
+    if std::env::var(v).is_ok() {
+        serde_json::from_str(&read_dependency_from_env_to_string(v)?)
+            .context("Could not deserialize guest launch measurements")
+    } else {
+        Ok(None)
+    }
 }
 
 pub trait HasGroupSetup {

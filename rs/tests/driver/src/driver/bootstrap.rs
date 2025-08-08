@@ -1,3 +1,4 @@
+use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
@@ -177,9 +178,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
         get_guestos_initial_update_img_sha256()?,
         get_guestos_initial_update_img_url()?,
+        get_guestos_initial_launch_measurements()?,
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -194,6 +196,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
+        ic_os_launch_measurements,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
