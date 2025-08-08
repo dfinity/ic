@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -14,10 +16,12 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::HasVectorTargets,
     },
+    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     retry_with_msg,
-    util::block_on,
+    util::{block_on, runtime_from_url},
 };
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
+use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use reqwest::Client;
 
 use slog::info;
@@ -176,7 +180,7 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     // Wait for all four nodes to register by repeatedly waiting for registry updates
     // and checking if we have 4 unassigned nodes
-    retry_with_msg!(
+    let new_topology = retry_with_msg!(
         "Waiting for all four nodes to register and appear as unassigned nodes",
         logger.clone(),
         NODE_REGISTRATION_TIMEOUT,
@@ -192,8 +196,8 @@ pub fn nns_recovery_test(env: TestEnv) {
 
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
             if num_unassigned_nodes == 4 {
-                info!(logger, "SUCCESS: All four nodes have registered");
-                Ok(())
+                info!(logger, "Success: All four nodes have registered");
+                Ok(new_topology)
             } else {
                 bail!(
                     "Expected 4 unassigned nodes, but found {}",
@@ -203,6 +207,66 @@ pub fn nns_recovery_test(env: TestEnv) {
         }
     )
     .unwrap();
+
+    info!(logger, "Adding all four nodes to the NNS subnet...");
+    let nns_subnet = new_topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let nodes_to_add = new_topology.unassigned_nodes().collect::<Vec<_>>();
+    let node_ids: Vec<_> = nodes_to_add.iter().map(|n| n.node_id).collect();
+
+    let proposal_payload = AddNodesToSubnetPayload {
+        subnet_id: nns_subnet.subnet_id.get(),
+        node_ids,
+    };
+
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+
+    let proposal_id = block_on(submit_external_proposal_with_test_id(
+        &governance,
+        NnsFunction::AddNodeToSubnet,
+        proposal_payload,
+    ));
+
+    info!(
+        logger,
+        "Executing the proposal to add all four nodes to the NNS subnet"
+    );
+    block_on(vote_execute_proposal_assert_executed(
+        &governance,
+        proposal_id,
+    ));
+
+    // Wait for the nodes to be assigned to the subnet
+    info!(logger, "Waiting for nodes to be assigned to the subnet...");
+    let final_topology = block_on(
+        new_topology.block_for_newer_registry_version_within_duration(
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+        ),
+    )
+    .unwrap();
+
+    // Verify that all nodes are now assigned to the subnet
+    let num_unassigned_nodes = final_topology.unassigned_nodes().count();
+    assert_eq!(
+        num_unassigned_nodes, 0,
+        "All nodes should be assigned to the NNS subnet, but found {} unassigned nodes",
+        num_unassigned_nodes
+    );
+
+    let nns_subnet_final = final_topology.root_subnet();
+    let num_nodes_in_subnet = nns_subnet_final.nodes().count();
+    assert_eq!(
+        num_nodes_in_subnet, 5,
+        "NNS subnet should have 5 nodes (1 original + 4 new), but found {} nodes",
+        num_nodes_in_subnet
+    );
+
+    info!(
+        logger,
+        "Success: All four nodes have been added to the NNS subnet"
+    );
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
