@@ -358,9 +358,8 @@ pub fn lookup_lower_bound<'a>(
     prefix: &[&[u8]],
     label: &[u8],
 ) -> LookupLowerBoundStatus<'a> {
-    let tref = match lookup_path(t, prefix) {
-        Some(tref) => tref,
-        None => return LookupLowerBoundStatus::MissingPrefix,
+    let Some(tref) = lookup_path(t, prefix) else {
+        return LookupLowerBoundStatus::MissingPrefix;
     };
     match tref {
         LabeledTree::Leaf(_) => LookupLowerBoundStatus::MissingPrefix,
