@@ -210,6 +210,14 @@ impl IngressValidator {
             })?;
         }
 
+        // Load shed the request if the ingress channel is full.
+        if ingress_tx.capacity() == 0 {
+            Err(HttpError {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "Service is overloaded, try again later.".to_string(),
+            })?;
+        }
+
         let msg: SignedIngress = request.try_into().map_err(|e| HttpError {
             status: StatusCode::BAD_REQUEST,
             message: format!("Could not parse body as call message: {}", e),
