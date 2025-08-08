@@ -412,3 +412,52 @@ fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Ca
         );
     });
 }
+
+/// Test that the call endpoints load shed requests when the ingress channel is full.
+#[rstest]
+#[case::v2_endpoint(Call::V2)]
+#[case::v3_endpoint(Call::V3)]
+fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: Call) {
+    let rt = Runtime::new().unwrap();
+
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let capacity = 5;
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_ingress_channel_capacity(capacity)
+        .run();
+
+    // Mock ingress filter
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()));
+        }
+    });
+
+    rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+        for _ in 0..capacity {
+            let message = Default::default();
+            let call_response = endpoint.call(addr, message).await;
+            assert_eq!(
+                call_response.status(),
+                StatusCode::ACCEPTED,
+                "{:?}",
+                call_response.text().await.unwrap()
+            );
+        }
+        let message = Default::default();
+        let call_response = endpoint.call(addr, message).await;
+        assert_eq!(
+            call_response.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "{:?}",
+            call_response.text().await.unwrap()
+        );
+    });
+}

@@ -384,6 +384,7 @@ pub struct HttpEndpointBuilder {
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_channel_capacity: usize,
 }
 
 impl HttpEndpointBuilder {
@@ -399,6 +400,7 @@ impl HttpEndpointBuilder {
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
+            ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
         }
     }
 
@@ -451,6 +453,11 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_ingress_channel_capacity(mut self, capacity: usize) -> Self {
+        self.ingress_channel_capacity = capacity;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
 
@@ -471,7 +478,7 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        let (ingress_tx, ingress_rx) = channel(MAX_P2P_IO_CHANNEL_SIZE);
+        let (ingress_tx, ingress_rx) = channel(self.ingress_channel_capacity);
 
         let log = no_op_logger();
 
