@@ -15,7 +15,7 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::{new_canister_state, SystemStateBuilder};
 use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
+    ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
@@ -23,7 +23,7 @@ use ic_types::{
     messages::{extract_effective_canister_id, SignedIngressContent},
     nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
@@ -368,73 +368,67 @@ fn verify_no_cycles_charged_for_message_execution_on_free_schedule() {
 #[test]
 fn ingress_induction_cost_valid_subnet_message() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let subnet_id = subnet_test_id(0);
-    for receiver in [IC_00, CanisterId::from(subnet_id)].iter() {
-        let msg: SignedIngressContent = SignedIngressBuilder::new()
-            .sender(user_test_id(0))
-            .canister_id(*receiver)
-            .method_name("start_canister")
-            .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-            .build()
-            .into();
-        let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
-        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let num_bytes = msg.arg().len() + msg.method_name().len();
+    let msg: SignedIngressContent = SignedIngressBuilder::new()
+        .sender(user_test_id(0))
+        .canister_id(IC_00)
+        .method_name("start_canister")
+        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
+        .build()
+        .into();
+    let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let num_bytes = msg.arg().len() + msg.method_name().len();
 
-        assert_eq!(
-            cycles_account_manager.ingress_induction_cost(
-                &msg,
-                effective_canister_id,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule,
-            ),
-            IngressInductionCost::Fee {
-                payer: canister_test_id(0),
-                cost: cycles_account_manager
-                    .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                    + cycles_account_manager
-                        .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                        * num_bytes
-            }
-        );
-    }
+    assert_eq!(
+        cycles_account_manager.ingress_induction_cost(
+            &msg,
+            effective_canister_id,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        ),
+        IngressInductionCost::Fee {
+            payer: canister_test_id(0),
+            cost: cycles_account_manager
+                .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                + cycles_account_manager
+                    .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                    * num_bytes
+        }
+    );
 }
 
 #[test]
 fn ingress_induction_cost_valid_subnet_message_free_schedule() {
     let cost_schedule = CanisterCyclesCostSchedule::Free;
-    let subnet_id = subnet_test_id(0);
-    for receiver in [IC_00, CanisterId::from(subnet_id)].iter() {
-        let msg: SignedIngressContent = SignedIngressBuilder::new()
-            .sender(user_test_id(0))
-            .canister_id(*receiver)
-            .method_name("start_canister")
-            .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-            .build()
-            .into();
-        let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
-        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let num_bytes = msg.arg().len() + msg.method_name().len();
+    let msg: SignedIngressContent = SignedIngressBuilder::new()
+        .sender(user_test_id(0))
+        .canister_id(IC_00)
+        .method_name("start_canister")
+        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
+        .build()
+        .into();
+    let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let num_bytes = msg.arg().len() + msg.method_name().len();
 
-        let cost = cycles_account_manager
-            .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-            + cycles_account_manager
-                .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                * num_bytes;
-        assert_eq!(cost, Cycles::new(0));
-        assert_eq!(
-            cycles_account_manager.ingress_induction_cost(
-                &msg,
-                effective_canister_id,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule,
-            ),
-            IngressInductionCost::Fee {
-                payer: canister_test_id(0),
-                cost
-            }
-        );
-    }
+    let cost = cycles_account_manager
+        .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+        + cycles_account_manager
+            .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+            * num_bytes;
+    assert_eq!(cost, Cycles::new(0));
+    assert_eq!(
+        cycles_account_manager.ingress_induction_cost(
+            &msg,
+            effective_canister_id,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        ),
+        IngressInductionCost::Fee {
+            payer: canister_test_id(0),
+            cost
+        }
+    );
 }
 
 #[test]

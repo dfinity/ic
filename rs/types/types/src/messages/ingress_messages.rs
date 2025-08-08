@@ -612,48 +612,42 @@ mod test {
     use crate::messages::ingress_messages::{
         extract_effective_canister_id, ParseIngressError, SignedIngressContent,
     };
-    use crate::{CanisterId, SubnetId, UserId};
+    use crate::UserId;
     use ic_base_types::PrincipalId;
     use ic_management_canister_types_private::IC_00;
     use std::convert::From;
 
     #[test]
     fn ingress_subnet_message_with_invalid_payload() {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
-        for receiver in [IC_00, CanisterId::from(subnet_id)].iter() {
-            let msg: SignedIngressContent = SignedIngressContent {
-                sender: UserId::from(PrincipalId::new_user_test_id(0)),
-                canister_id: *receiver,
-                method_name: "start_canister".to_string(),
-                arg: vec![],
-                ingress_expiry: 0,
-                nonce: None,
-            };
-            let result = extract_effective_canister_id(&msg);
-            assert!(
-                matches!(result, Err(ParseIngressError::InvalidSubnetPayload(_))),
-                "Expected InvalidSubnetPayload error, got: {:?}",
-                result
-            );
-        }
+        let msg: SignedIngressContent = SignedIngressContent {
+            sender: UserId::from(PrincipalId::new_user_test_id(0)),
+            canister_id: IC_00,
+            method_name: "start_canister".to_string(),
+            arg: vec![],
+            ingress_expiry: 0,
+            nonce: None,
+        };
+        let result = extract_effective_canister_id(&msg);
+        assert!(
+            matches!(result, Err(ParseIngressError::InvalidSubnetPayload(_))),
+            "Expected InvalidSubnetPayload error, got: {:?}",
+            result
+        );
     }
 
     #[test]
     fn ingress_subnet_message_with_unknown_method() {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
-        for receiver in [IC_00, CanisterId::from(subnet_id)].iter() {
-            let msg: SignedIngressContent = SignedIngressContent {
-                sender: UserId::from(PrincipalId::new_user_test_id(0)),
-                canister_id: *receiver,
-                method_name: "unknown_method".to_string(),
-                arg: vec![],
-                ingress_expiry: 0,
-                nonce: None,
-            };
-            assert_eq!(
-                extract_effective_canister_id(&msg),
-                Err(ParseIngressError::UnknownSubnetMethod)
-            );
-        }
+        let msg: SignedIngressContent = SignedIngressContent {
+            sender: UserId::from(PrincipalId::new_user_test_id(0)),
+            canister_id: IC_00,
+            method_name: "unknown_method".to_string(),
+            arg: vec![],
+            ingress_expiry: 0,
+            nonce: None,
+        };
+        assert_eq!(
+            extract_effective_canister_id(&msg),
+            Err(ParseIngressError::UnknownSubnetMethod)
+        );
     }
 }

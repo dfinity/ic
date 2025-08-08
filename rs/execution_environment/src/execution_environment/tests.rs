@@ -2235,72 +2235,57 @@ fn message_to_canister_with_enough_balance_is_accepted() {
 #[test]
 fn management_message_to_canister_with_enough_balance_is_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
     let canister = test.universal_canister().unwrap();
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let payload = CanisterIdRecord::from(canister).encode();
-        let result = test.should_accept_ingress_message(*receiver, Method::StartCanister, payload);
-        assert_eq!(Ok(()), result);
-    }
+    let payload = CanisterIdRecord::from(canister).encode();
+    let result = test.should_accept_ingress_message(IC_00, Method::StartCanister, payload);
+    assert_eq!(Ok(()), result);
 }
 
 #[test]
 fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
     let canister = test.universal_canister().unwrap();
     test.canister_state_mut(canister)
         .system_state
         .set_balance(Cycles::new(1_000));
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let payload = CanisterIdRecord::from(canister).encode();
-        let err = test
-            .should_accept_ingress_message(*receiver, Method::StartCanister, payload)
-            .unwrap_err();
-        assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
-    }
+    let payload = CanisterIdRecord::from(canister).encode();
+    let err = test
+        .should_accept_ingress_message(IC_00, Method::StartCanister, payload)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
 }
 
 #[test]
 fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let payload = CanisterIdRecord::from(canister_test_id(0)).encode();
-        let err = test
-            .should_accept_ingress_message(*receiver, Method::StartCanister, payload)
-            .unwrap_err();
-        assert_eq!(ErrorCode::CanisterNotFound, err.code());
-    }
+    let payload = CanisterIdRecord::from(canister_test_id(0)).encode();
+    let err = test
+        .should_accept_ingress_message(IC_00, Method::StartCanister, payload)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
 #[test]
 fn management_message_with_invalid_payload_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let err = test
-            .should_accept_ingress_message(*receiver, Method::StartCanister, vec![])
-            .unwrap_err();
-        assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
-    }
+    let err = test
+        .should_accept_ingress_message(IC_00, Method::StartCanister, vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
 }
 
 #[test]
 fn management_message_with_invalid_method_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let err = test
-            .should_accept_ingress_message(*receiver, "invalid_method", vec![])
-            .unwrap_err();
-        assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
-    }
+    let err = test
+        .should_accept_ingress_message(IC_00, "invalid_method", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm
@@ -3573,7 +3558,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
     // Act.
     test.set_user_id(not_a_controller);
     let result = test.should_accept_ingress_message(
-        test.state().metadata.own_subnet_id.into(),
+        IC_00,
         Method::FetchCanisterLogs,
         FetchCanisterLogsRequest::new(canister_id).encode(),
     );

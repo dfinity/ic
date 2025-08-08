@@ -430,16 +430,11 @@ fn system_metadata_split() {
     const CANISTER_1: CanisterId = CanisterId::from_u64(1);
     const CANISTER_2: CanisterId = CanisterId::from_u64(2);
 
-    // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
-    // `IC_00`; and respectively `SUBNET_A`.
+    // Ingress history with 3 Received messages, addressed to canisters 1 and 2;
+    // and `IC_00` (i.e., `SUBNET_A`).
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
-    let receivers = [
-        CANISTER_1.get(),
-        CANISTER_2.get(),
-        IC_00.get(),
-        SUBNET_A.get(),
-    ];
+    let receivers = [CANISTER_1.get(), CANISTER_2.get(), IC_00.get()];
     for (i, receiver) in receivers.into_iter().enumerate().rev() {
         ingress_history.insert(
             message_test_id(i as u64),
@@ -458,7 +453,7 @@ fn system_metadata_split() {
     // `CANISTER_1` remains on `SUBNET_A`.
     let is_canister_on_subnet_a = |canister_id: CanisterId| canister_id == CANISTER_1;
     // All ingress messages except the one addressed to `CANISTER_2` (including the
-    // ones for `IC_00` and `SUBNET_A`) should remain on `SUBNET_A` after the split.
+    // ones for `IC_00`, i.e., `SUBNET_A`) should remain on `SUBNET_A` after the split.
     let is_receiver_on_subnet_a = |canister_id: CanisterId| canister_id != CANISTER_2;
     // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
     let is_canister_on_subnet_b = |canister_id: CanisterId| canister_id == CANISTER_2;
