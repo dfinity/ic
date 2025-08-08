@@ -986,7 +986,6 @@ pub(crate) async fn get_sns_token_symbol(
 }
 
 /// Helper function to create test allowed extensions map
-#[cfg(any(test, feature = "test"))]
 fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
     // Using a predictable test hash
     let test_hash: [u8; 32] = [
