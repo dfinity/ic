@@ -9077,12 +9077,12 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.2.0"
 dependencies = [
- "candid",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
  "hex-literal",
  "hkdf",
+ "ic-cdk 0.18.0",
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
