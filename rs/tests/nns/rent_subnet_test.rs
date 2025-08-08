@@ -21,15 +21,15 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::{Principal};
-use canister_test::{RemoteTestRuntime, Runtime, Canister};
+use canister_test::{Runtime, Canister};
 use dfn_candid::candid_one;
 use ic_agent::identity::BasicIdentity;
 use ic_base_types::{CanisterId, SubnetId, PrincipalId};
-use ic_canister_client::{Agent, Ed25519KeyPair, Sender};
+use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID,
+    REGISTRY_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID, LEDGER_CANISTER_ID,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -41,9 +41,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            self,
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, TopologySnapshot,
-            IcNodeSnapshot, SubnetSnapshot, HasRegistryVersion,
+            SubnetSnapshot, HasRegistryVersion, find_subnet_that_hosts_canister_id, new_subnet_runtime,
         },
     },
     ledger::{
@@ -59,7 +58,7 @@ use ic_system_test_driver::{
         assert_create_agent, block_on, UniversalCanister,
     },
 };
-use ic_types::{Height, RegistryVersion};
+use ic_types::RegistryVersion;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -74,8 +73,6 @@ use std::{
 
 const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 100; // DO NOT MERGE
 const SUBNET_RENTAL_PAYMENT_AMOUNT_ICP: u64 = 148_000; // DO NOT MERGE
-
-const DKG_INTERVAL_LENGTH: u64 = 29; // DO NOT MERGE - Get rid of this?
 
 lazy_static! {
     // This is the principal that will be able to create canisters in the
@@ -120,7 +117,6 @@ pub fn setup(env: TestEnv) {
             SubnetType::System,
             1, // Node count.
         )
-        .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
     );
 
     ic
@@ -154,7 +150,7 @@ pub fn test(env: TestEnv) {
 
 
     block_on(async move {
-        let runtime = new_node_runtime(&an_nns_subnet_node);
+        let runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
 
         let registry_canister = RegistryCanister::new_with_query_timeout(
             vec![an_nns_subnet_node.get_public_url()],
@@ -395,12 +391,7 @@ async fn assert_canister_belongs_to_subnet(
     expected_subnet_id: SubnetId,
 ) {
     // Prepare to call the Registry canister.
-    let an_nns_subnet_node = topology_snapshot
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    let runtime = new_node_runtime(&an_nns_subnet_node);
+    let runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
 
     // Call Registry's get_subnet_for_canister method.
     let get_subnet_for_canister_result: Result<SubnetForCanister, String> =
@@ -432,11 +423,7 @@ async fn assert_canister_belongs_to_subnet(
 
 async fn get_cycles_balance(canister_id: CanisterId, subnet: &SubnetSnapshot) -> u128 {
     // Prepare to call the management canister...
-    let node = subnet
-        .nodes()
-        .next()
-        .unwrap();
-    let runtime = new_node_runtime(&node);
+    let runtime = new_subnet_runtime(&subnet);
     let management_canister = Canister::new(
         &runtime,
         CanisterId::unchecked_from_principal(PrincipalId::from_str("aaaaa-aa").unwrap()),
@@ -496,18 +483,6 @@ fn install_nns_canisters(env: &TestEnv) {
     info!(&env.logger(), "NNS canisters installed");
 }
 
-fn new_node_runtime(node: &IcNodeSnapshot) -> Runtime {
-    let agent = Agent::new(
-        node.get_public_url(),
-        Sender::from_principal_id(PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-    );
-
-    Runtime::Remote(RemoteTestRuntime {
-        agent,
-        effective_canister_id: PrincipalId::from(REGISTRY_CANISTER_ID),
-    })
-}
-
 fn create_and_install_mock_exchange_rate_canister(topology_snapshot: TopologySnapshot) {
     let exchange_rate_canister_subnet = find_subnet_that_hosts_canister_id(
         &topology_snapshot,
@@ -518,43 +493,10 @@ fn create_and_install_mock_exchange_rate_canister(topology_snapshot: TopologySna
         "{}", exchange_rate_canister_subnet.subnet_id,
     );
 
-    let exchange_rate_canister_subnet_node = exchange_rate_canister_subnet.nodes().next().unwrap();
-    block_on(test_env_api::create_and_install_mock_exchange_rate_canister(
-        &exchange_rate_canister_subnet_node,
+    let runtime = new_subnet_runtime(&exchange_rate_canister_subnet);
+
+    block_on(ic_nns_test_utils::itest_helpers::create_and_install_mock_exchange_rate_canister(
+        &runtime,
         PRICE_OF_ICP_IN_XDR_CENTS,
     ));
-}
-
-// DO NOT MERGE - move this to lib?
-/// Panics if not found.
-fn find_subnet_that_hosts_canister_id(topology_snapshot: &TopologySnapshot, canister_id: CanisterId) -> SubnetSnapshot {
-    // Scan for subnet
-    let mut subnets = topology_snapshot
-        .subnets()
-        .filter(|subnet| {
-            subnet.subnet_canister_ranges()
-                .into_iter()
-                .any(|canister_id_range| canister_id_range.contains(&canister_id))
-        })
-        .collect::<Vec<_>>();
-
-    // Only one subnet.
-    assert_eq!(
-        subnets.len(), 1,
-        "{:#?}\n\n{:#?}",
-        subnets
-            .into_iter()
-            .map(|subnet| subnet.subnet_id)
-            .collect::<Vec<_>>(),
-        topology_snapshot
-            .subnets()
-            .into_iter()
-            .map(|subnet| (
-                subnet.subnet_id,
-                subnet.subnet_canister_ranges(),
-            ))
-            .collect::<Vec<_>>(),
-    );
-
-    subnets.pop().unwrap()
 }

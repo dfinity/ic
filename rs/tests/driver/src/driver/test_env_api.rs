@@ -155,7 +155,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::{export::Principal, Agent, AgentError};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
@@ -164,7 +164,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::{self, NnsCanisters}};
+use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
@@ -738,6 +738,42 @@ impl TopologySnapshot {
     }
 }
 
+/// Panics if not found.
+pub fn find_subnet_that_hosts_canister_id(
+    topology_snapshot: &TopologySnapshot,
+    canister_id: CanisterId,
+) -> SubnetSnapshot {
+    // Scan for subnet
+    let mut subnets = topology_snapshot
+        .subnets()
+        .filter(|subnet| {
+            subnet.subnet_canister_ranges()
+                .into_iter()
+                .any(|canister_id_range| canister_id_range.contains(&canister_id))
+        })
+        .collect::<Vec<_>>();
+
+    // Only one subnet.
+    assert_eq!(
+        subnets.len(), 1,
+        "{:#?}\n\n{:#?}",
+        subnets
+            .into_iter()
+            .map(|subnet| subnet.subnet_id)
+            .collect::<Vec<_>>(),
+        topology_snapshot
+            .subnets()
+            .into_iter()
+            .map(|subnet| (
+                subnet.subnet_id,
+                subnet.subnet_canister_ranges(),
+            ))
+            .collect::<Vec<_>>(),
+    );
+
+    subnets.pop().unwrap()
+}
+
 #[derive(Clone)]
 pub struct SubnetSnapshot {
     pub subnet_id: SubnetId,
@@ -769,6 +805,23 @@ impl SubnetSnapshot {
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
+}
+
+pub fn new_subnet_runtime(subnet: &SubnetSnapshot) -> Runtime {
+    let node = subnet
+        .nodes()
+        .next()
+        .unwrap();
+
+    let agent = InternalAgent::new(
+        node.get_public_url(),
+        Sender::from_principal_id(PrincipalId::from(GOVERNANCE_CANISTER_ID)),
+    );
+
+    Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: PrincipalId::from(REGISTRY_CANISTER_ID),
+    })
 }
 
 #[derive(Clone)]
@@ -1884,19 +1937,6 @@ impl NnsInstallationBuilder {
         });
         Ok(())
     }
-}
-
-pub async fn create_and_install_mock_exchange_rate_canister(node: &IcNodeSnapshot, price_of_icp_in_xdr_cents: u64) {  // DO NOT MERGE - get rid of this
-    let agent = InternalAgent::new(
-        node.get_public_url(),
-        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
-    );
-    let runtime = Runtime::Remote(RemoteTestRuntime {
-        agent,
-        effective_canister_id: node.effective_canister_id(),
-    });
-
-    itest_helpers::create_and_install_mock_exchange_rate_canister(&runtime, price_of_icp_in_xdr_cents).await;
 }
 
 /// Set environment variable `env_name` to `file_path`
