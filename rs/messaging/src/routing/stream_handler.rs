@@ -1148,7 +1148,7 @@ fn generate_reject_response(
     request: &Request,
     reject_code: RejectCode,
     message: String,
-) -> Response {
+) -> ResponseOrResponse {
     Response {
         originator: request.sender,
         respondent: request.receiver,
@@ -1161,6 +1161,7 @@ fn generate_reject_response(
         )),
         deadline: request.deadline,
     }
+    .into()
 }
 
 /// Ensures that the given signals are valid (strictly increasing, before
