@@ -267,7 +267,7 @@ fn upgrade_to(
             indicating that the orchestrator has gracefully shut down the tasks",
             subnet_node.get_ip_addr(),
         );
-        block_on(assert_registry_replicator_stopped(subnet_node.clone()));
+        block_on(assert_orchestrator_stopped_gracefully(subnet_node.clone()));
         info!(logger, "The orchestrator shut down the tasks gracefully");
     }
 
@@ -304,7 +304,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     info!(logger, "Node started: {}", app_node.get_ip_addr());
 }
 
-async fn assert_registry_replicator_stopped(node: IcNodeSnapshot) {
+async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
     let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
