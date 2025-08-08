@@ -304,7 +304,7 @@ pub async fn bless_public_replica_version(
         target_version,
         logger,
         &sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.clone()],
     )
     .await;
