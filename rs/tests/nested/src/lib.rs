@@ -25,21 +25,25 @@ use slog::info;
 mod util;
 use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
-    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config, setup_nested_vm,
-    simple_setup_nested_vm, start_nested_vm, update_nodes_hostos_version, update_unassigned_nodes,
-    wait_for_expected_guest_version, wait_for_guest_version,
+    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
+    setup_nested_vm_group, simple_setup_nested_vm_group, start_nested_vm_group,
+    update_nodes_hostos_version, update_unassigned_nodes, wait_for_expected_guest_version,
+    wait_for_guest_version,
 };
 
 use anyhow::bail;
 
 const HOST_VM_NAME: &str = "host-1";
 
+fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
+    (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
+}
+
 const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
-/// Prepare the environment for nested tests.
-/// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv) {
+/// Setup the basic IC infrastructure (testnet, NNS, gateway)
+fn setup_ic_infrastructure(env: &TestEnv) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -50,23 +54,21 @@ pub fn config(env: TestEnv) {
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
-        .setup_and_start(&env)
+        .setup_and_start(env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-        .start(&env)
+        .start(env)
         .expect("failed to setup ic-gateway");
+}
 
-    setup_nested_vm(env.clone(), HOST_VM_NAME);
-
-    let vm = env.get_nested_vm(HOST_VM_NAME).unwrap_or_else(|e| {
-        panic!(
-            "Expected nested vm {HOST_VM_NAME} to exist, but got error: {:?}",
-            e
-        )
-    });
+/// Setup vector targets for a single VM
+fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
+    let vm = env
+        .get_nested_vm(vm_name)
+        .unwrap_or_else(|e| panic!("Expected nested vm {vm_name} to exist, but got error: {e:?}"));
 
     let network = vm.get_nested_network().unwrap();
 
@@ -75,7 +77,7 @@ pub fn config(env: TestEnv) {
         ("host_node_exporter", network.host_ip),
     ] {
         env.add_custom_vector_target(
-            format!("{HOST_VM_NAME}-{job}"),
+            format!("{vm_name}-{job}"),
             ip.into(),
             Some(
                 [("job", job)]
@@ -87,10 +89,24 @@ pub fn config(env: TestEnv) {
         .unwrap();
     }
 }
+
+/// Prepare the environment for nested tests.
+/// SetupOS -> HostOS -> GuestOS (x num_hosts)
+pub fn config(env: TestEnv, num_hosts: usize) {
+    setup_ic_infrastructure(&env);
+    let host_vm_names = get_host_vm_names(num_hosts);
+    let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
+    setup_nested_vm_group(env.clone(), &host_vm_names_refs);
+
+    for vm_name in &host_vm_names {
+        setup_vector_targets_for_vm(&env, vm_name);
+    }
+}
+
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
 pub fn simple_config(env: TestEnv) {
-    simple_setup_nested_vm(env.clone(), HOST_VM_NAME);
+    simple_setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -108,7 +124,7 @@ pub fn registration(env: TestEnv) {
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
 
     // Assert that the GuestOS was started with direct kernel boot.
     let guest_kernel_cmdline = env
@@ -139,6 +155,56 @@ pub fn registration(env: TestEnv) {
     assert_eq!(num_unassigned_nodes, 1);
 }
 
+/// Test that all four VMs can register with the network successfully.
+/// This test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
+pub fn nns_recovery_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let initial_topology = block_on(
+        env.topology_snapshot()
+            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
+    )
+    .unwrap();
+
+    // Check that there are initially no unassigned nodes.
+    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
+    assert_eq!(num_unassigned_nodes, 0);
+
+    start_nested_vm_group(env.clone());
+
+    info!(logger, "Waiting for all four nodes to join ...");
+
+    // Wait for all four nodes to register by repeatedly waiting for registry updates
+    // and checking if we have 4 unassigned nodes
+    retry_with_msg!(
+        "Waiting for all four nodes to register and appear as unassigned nodes",
+        logger.clone(),
+        NODE_REGISTRATION_TIMEOUT,
+        NODE_REGISTRATION_BACKOFF,
+        || {
+            // Wait for a newer registry version to be available
+            let new_topology = block_on(
+                initial_topology.block_for_newer_registry_version_within_duration(
+                    Duration::from_secs(60), // Shorter timeout for each individual check
+                    Duration::from_secs(2),
+                ),
+            )?;
+
+            let num_unassigned_nodes = new_topology.unassigned_nodes().count();
+            if num_unassigned_nodes == 4 {
+                info!(logger, "SUCCESS: All four nodes have registered");
+                Ok(())
+            } else {
+                bail!(
+                    "Expected 4 unassigned nodes, but found {}",
+                    num_unassigned_nodes
+                )
+            }
+        }
+    )
+    .unwrap();
+}
+
 /// Upgrade each HostOS VM to the target version, and verify that each is
 /// healthy before and after the upgrade.
 pub fn upgrade_hostos(env: TestEnv) {
@@ -154,7 +220,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     let update_image_sha256 = get_hostos_update_img_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     let new_topology = block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
@@ -260,7 +326,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
 
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -379,7 +445,7 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     // start the nested VM and wait for it to join the network
     let initial_topology = env.topology_snapshot();
-    start_nested_vm(env.clone());
+    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
