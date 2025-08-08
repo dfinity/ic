@@ -1148,7 +1148,7 @@ fn generate_reject_response(
     request: &Request,
     reject_code: RejectCode,
     message: String,
-) -> ResponseOrResponse {
+) -> RequestOrResponse {
     Response {
         originator: request.sender,
         respondent: request.receiver,
