@@ -2503,33 +2503,44 @@ fn labeled_tree_lookup_lower_bound() {
 
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"b"[..]),
-        Some((&Label::from("b"), &b_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("b"), &b_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"c"[..]),
-        Some((&Label::from("b"), &b_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("b"), &b_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"a"[..]),
-        None
+        LookupLowerBoundStatus::MissingLabel
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"d"[..]),
-        Some((&Label::from("c"), &c_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("c"), &c_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"c"[..]),
-        Some((&Label::from("c"), &c_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("c"), &c_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"b"[..]),
-        Some((&Label::from("a"), &a_subtree))
+        LookupLowerBoundStatus::Found(&Label::from("a"), &a_subtree)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"a"[..]),
-        Some((&Label::from("a"), &a_subtree))
+        LookupLowerBoundStatus::Found(&Label::from("a"), &a_subtree)
     );
-    assert_eq!(lookup_lower_bound(&t, &[&b"sig"[..]], &b"0"[..]), None);
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..]], &b"0"[..]),
+        LookupLowerBoundStatus::MissingLabel
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"missing"[..]], &b"0"[..]),
+        LookupLowerBoundStatus::MissingPrefix
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"c"[..]], &b"0"[..]),
+        LookupLowerBoundStatus::MissingPrefix
+    );
 }
 
 #[test]

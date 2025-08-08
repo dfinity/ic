@@ -340,17 +340,34 @@ pub fn lookup_path<'a>(
     Some(tref)
 }
 
+/// Result type for `lookup_lower_bound`.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum LookupLowerBoundStatus<'a> {
+    /// The actual key found, and its subtree.
+    Found(&'a Label, &'a LabeledTree<Vec<u8>>),
+    /// `prefix` is not a valid path in the tree, or it does not contain futher labels below.
+    MissingPrefix,
+    /// There are either no labels at `prefix` or they are all larger than `label`.
+    MissingLabel,
+}
+
 /// Descends into the subtree of `t` following the given `prefix`, and then descends one more step into the largest label smaller than `label`.
 /// Returns a pair of references (label, subtree), where `label` is the actual last label traversed, and `subtree` is the subtree found under the label.
 pub fn lookup_lower_bound<'a>(
     t: &'a LabeledTree<Vec<u8>>,
     prefix: &[&[u8]],
     label: &[u8],
-) -> Option<(&'a Label, &'a LabeledTree<Vec<u8>>)> {
-    let tref = lookup_path(t, prefix)?;
+) -> LookupLowerBoundStatus<'a> {
+    let tref = match lookup_path(t, prefix) {
+        Some(tref) => tref,
+        None => return LookupLowerBoundStatus::MissingPrefix,
+    };
     match tref {
-        LabeledTree::Leaf(_) => None,
-        LabeledTree::SubTree(children) => children.lower_bound(&Label::from(label)),
+        LabeledTree::Leaf(_) => LookupLowerBoundStatus::MissingPrefix,
+        LabeledTree::SubTree(children) => match children.lower_bound(&Label::from(label)) {
+            Some((k, v)) => LookupLowerBoundStatus::Found(k, v),
+            None => LookupLowerBoundStatus::MissingLabel,
+        },
     }
 }
 
