@@ -23,7 +23,9 @@ struct Setup {
 impl Setup {
     fn new(archive_memory_size: u64) -> Setup {
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
-        let archive_wasm = std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap()).expect("Could not read archive wasm");
+        let archive_wasm =
+            std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                .expect("Could not read archive wasm");
         let canister_id = CanisterId::from_u64(100);
         let created_canister_id = pocket_ic
             .create_canister_with_id(None, None, Principal::from(canister_id))

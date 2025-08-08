@@ -3,7 +3,6 @@ use candid::Principal;
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_runner::start_rosetta;
 use ic_icp_rosetta_runner::RosettaOptions;
-
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_rosetta_test_utils::path_from_env;
 use icp_ledger::LedgerCanisterInitPayload;
@@ -18,7 +17,9 @@ fn smoke_test() {
     let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
     let endpoint = pocket_ic.make_live(None);
 
-    let ledger_wasm_bytes = std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read ledger wasm");
+    let ledger_wasm_bytes =
+        std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+            .expect("Could not read ledger wasm");
     let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
     let ledger_canister_id = pocket_ic
         .create_canister_with_id(None, None, ledger_canister_id)

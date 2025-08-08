@@ -245,7 +245,8 @@ impl RosettaTestingEnvironmentBuilder {
             }))
             .build()
             .unwrap();
-        let ledger_wasm_bytes = std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).expect("Could not read ledger wasm");
+        let ledger_wasm_bytes = std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
+            .expect("Could not read ledger wasm");
         pocket_ic
             .install_canister(
                 canister_id,
