@@ -1,1 +1,0 @@
-vda10-crypt /dev/vda10  /boot/config/store.keyfile  luks,discard
