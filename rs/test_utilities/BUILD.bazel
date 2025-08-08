@@ -41,6 +41,7 @@ rust_test(
     crate = ":test_utilities",
     deps = [
         # Keep sorted.
+        "//rs/artifact_pool",
         "//rs/test_utilities/logger",
         "@crate_index//:rusty-fork",
         "@crate_index//:wasmprinter",

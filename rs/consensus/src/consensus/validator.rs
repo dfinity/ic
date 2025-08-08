@@ -1916,7 +1916,7 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
         fake::*,
@@ -1927,6 +1927,7 @@ pub mod test {
         },
         matches_pattern,
     };
+    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{

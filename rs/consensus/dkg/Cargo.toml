@@ -36,6 +36,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
+ic-test-utilities-crypto = { path = "../../test_utilities/crypto" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }

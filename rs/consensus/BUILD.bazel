@@ -187,6 +187,7 @@ rust_ic_bench(
         "//rs/state_manager",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
+        "//rs/test_utilities/crypto",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",

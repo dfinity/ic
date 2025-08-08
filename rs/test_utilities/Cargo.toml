@@ -32,6 +32,7 @@ tempfile = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
+ic-artifact-pool = { path = "../artifact_pool" }
 ic-test-utilities-logger = { path = "./logger" }
 rusty-fork = "0.3.0"
 wasmprinter = { workspace = true }
