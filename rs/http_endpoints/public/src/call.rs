@@ -34,7 +34,7 @@ use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{error::TrySendError, Sender};
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
@@ -47,7 +47,7 @@ pub struct IngressValidatorBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidatorBuilder {
@@ -59,7 +59,7 @@ impl IngressValidatorBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+        ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
             log,
@@ -176,7 +176,7 @@ pub struct IngressValidator {
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidator {
@@ -205,7 +205,15 @@ impl IngressValidator {
         let ingress_pool_is_full = ingress_throttler.read().unwrap().exceeds_threshold();
         if ingress_pool_is_full {
             Err(HttpError {
-                status: StatusCode::TOO_MANY_REQUESTS,
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "Service is overloaded, try again later.".to_string(),
+            })?;
+        }
+
+        // Load shed the request if the ingress channel is full.
+        if ingress_tx.capacity() == 0 {
+            Err(HttpError {
+                status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "Service is overloaded, try again later.".to_string(),
             })?;
         }
@@ -290,7 +298,7 @@ impl IngressValidator {
 }
 
 pub struct IngressMessageSubmitter {
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     node_id: NodeId,
     message: SignedIngress,
 }
@@ -311,18 +319,19 @@ impl IngressMessageSubmitter {
         } = self;
 
         // Submission will fail if P2P is not running, meaning there is
-        // no receiver for the ingress message.
-        let send_ingress_to_p2p_failed = ingress_tx
-            .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
-            .is_err();
-
-        if send_ingress_to_p2p_failed {
-            return Err(HttpError {
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-                message: "P2P is not running on this node.".to_string(),
-            });
-        }
-        Ok(())
+        // no receiver for the ingress message, or if the channel is full.
+        ingress_tx
+            .try_send(UnvalidatedArtifactMutation::Insert((message, node_id)))
+            .map_err(|err| match err {
+                TrySendError::Full(_) => HttpError {
+                    status: StatusCode::SERVICE_UNAVAILABLE,
+                    message: "Service is overloaded, try again later.".to_string(),
+                },
+                TrySendError::Closed(_) => HttpError {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "P2P is not running on this node.".to_string(),
+                },
+            })
     }
 }
 

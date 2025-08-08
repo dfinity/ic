@@ -8,6 +8,7 @@ use crate::{
 use axum::Router;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
@@ -28,17 +29,13 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-/// Same order of magnitude as the number of active artifacts.
-/// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.
-/// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
-const MAX_IO_CHANNEL_SIZE: usize = 100_000;
-
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
 pub type AbortableBroadcastReceiver<T> = Receiver<UnvalidatedArtifactMutation<T>>;
 
 pub struct AbortableBroadcastChannel<T: IdentifiableArtifact> {
     pub outbound_tx: AbortableBroadcastSender<T>,
     pub inbound_rx: AbortableBroadcastReceiver<T>,
+    pub inbound_tx: Sender<UnvalidatedArtifactMutation<T>>,
 }
 
 pub struct AbortableBroadcastChannelBuilder {
@@ -71,8 +68,8 @@ impl AbortableBroadcastChannelBuilder {
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) -> AbortableBroadcastChannel<Artifact> {
-        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
-        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
 
         assert!(uri_prefix::<WireArtifact>()
             .chars()
@@ -83,6 +80,7 @@ impl AbortableBroadcastChannelBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
+        let inbound_tx_clone = inbound_tx.clone();
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
@@ -90,7 +88,7 @@ impl AbortableBroadcastChannelBuilder {
                 rt_handle,
                 outbound_rx,
                 adverts_from_peers_rx,
-                inbound_tx,
+                inbound_tx_clone,
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
@@ -110,6 +108,7 @@ impl AbortableBroadcastChannelBuilder {
         AbortableBroadcastChannel {
             outbound_tx,
             inbound_rx,
+            inbound_tx,
         }
     }
 

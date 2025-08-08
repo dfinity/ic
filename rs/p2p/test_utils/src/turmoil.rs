@@ -22,15 +22,14 @@ use ic_artifact_manager::create_artifact_handler;
 use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
-    p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
+    p2p::artifact_manager::JoinGuard, p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion};
 use quinn::{self, udp::EcnCodepoint, AsyncUdpSocket, UdpPoller};
 use tokio::{
     select,
@@ -381,14 +380,10 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let AbortableBroadcastChannel {
-                    outbound_tx,
-                    inbound_rx,
-                } = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
+                let channel = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
-                    outbound_tx,
-                    inbound_rx,
+                    channel,
                     consensus.clone(),
                     consensus.clone().read().unwrap().clone(),
                 );
@@ -441,15 +436,10 @@ pub fn waiter_fut(
 
 #[allow(clippy::type_complexity)]
 pub fn start_test_processor(
-    outbound_tx: mpsc::Sender<ArtifactTransmit<U64Artifact>>,
-    inbound_rx: mpsc::Receiver<UnvalidatedArtifactMutation<U64Artifact>>,
+    channel: AbortableBroadcastChannel<U64Artifact>,
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> Box<dyn JoinGuard> {
-    let channel = AbortableBroadcastChannel {
-        outbound_tx,
-        inbound_rx,
-    };
     create_artifact_handler(
         channel,
         change_set_producer,

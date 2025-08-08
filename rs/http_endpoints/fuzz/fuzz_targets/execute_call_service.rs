@@ -10,6 +10,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
@@ -188,8 +189,7 @@ fn new_call_service(
     let ingress_pool_throttler = MockIngressPoolThrottler::new(throttler_rx);
 
     let ingress_throttler = Arc::new(RwLock::new(ingress_pool_throttler));
-    #[allow(clippy::disallowed_methods)]
-    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
