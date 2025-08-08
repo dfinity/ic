@@ -634,10 +634,10 @@ impl MixedHashTree {
 
             match (tree, paths) {
                 // Pruned and empty subtrees are always kept.
-                (tree @ MixedHashTree::Empty, _) => Ok(tree.clone()),
-                (tree @ MixedHashTree::Pruned(_), _) => Ok(tree.clone()),
+                (MixedHashTree::Empty, _) => Ok(tree.clone()),
+                (MixedHashTree::Pruned(_), _) => Ok(tree.clone()),
                 // Path ends in an inner node so we simply keep the entire subtree.
-                (tree, LabeledTree::Leaf(_)) => Ok(tree.clone()),
+                (_, LabeledTree::Leaf(_)) => Ok(tree.clone()),
                 // On a fork, filter both sides.
                 (MixedHashTree::Fork(b), paths) => {
                     let l = filtered_inner(&b.0, paths, depth + 1)?;
@@ -655,7 +655,7 @@ impl MixedHashTree {
                 }
                 // On a label, check if it is in `path`.
                 (
-                    tree @ MixedHashTree::Labeled(label, mixed_hash_tree),
+                    MixedHashTree::Labeled(label, mixed_hash_tree),
                     LabeledTree::SubTree(flat_map),
                 ) => match flat_map.get(label) {
                     Some(subtree) => {

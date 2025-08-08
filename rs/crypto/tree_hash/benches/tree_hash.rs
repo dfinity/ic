@@ -37,6 +37,17 @@ fn new_request_status_tree(num_subtrees: usize) -> LabeledTree<Vec<u8>> {
     })
 }
 
+fn new_request_status_filtered_tree(num_subtrees: usize) -> LabeledTree<()> {
+    let entries: Vec<_> = (0..num_subtrees)
+        .step_by(2) // every other label compared to `new_request_status_tree`
+        .map(|i| (Label::from(message_test_id(1 + 6 * i as u64)), Leaf(())))
+        .collect();
+
+    SubTree(flatmap! {
+        Label::from("request_status") => SubTree(FlatMap::from_key_values(entries))
+    })
+}
+
 pub fn criterion_benchmark(c: &mut Criterion) {
     for num_subtrees in [100, 1_000, 10_000] {
         let labeled_tree = new_request_status_tree(num_subtrees);
@@ -49,6 +60,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let witness = witness_generator
             .witness(&labeled_tree)
             .expect("failed to create Witness");
+        let filter_paths = new_request_status_filtered_tree(num_subtrees);
 
         {
             let mut g: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
@@ -245,6 +257,23 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         &labeled_tree,
                         &witness,
                     ))
+                });
+            });
+
+            g.finish();
+        }
+
+        {
+            let mut g: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+                c.benchmark_group("filtered");
+
+            g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
+                b.iter(|| {
+                    black_box(
+                        mixed_hash_tree
+                            .filtered(&filter_paths)
+                            .expect("failed to filter"),
+                    )
                 });
             });
 
