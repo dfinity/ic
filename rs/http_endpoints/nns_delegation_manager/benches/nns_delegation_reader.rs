@@ -17,35 +17,25 @@ use rand::thread_rng;
 fn read_flat_delegation_bench(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("read_flat_delegation");
 
-    let delegation = create_fake_delegation(&vec![(CanisterId::from(1), CanisterId::from(10))]);
-    let (_tx, rx) = tokio::sync::watch::channel(Some(delegation));
-    let reader = NNSDelegationReader::new(rx);
+    let mut bench_function = |canister_id_ranges_count| {
+        let canister_id_ranges = (0..canister_id_ranges_count)
+            .map(|i| (CanisterId::from(2 * i), CanisterId::from(2 * i + 1)))
+            .collect();
+        let delegation = create_fake_delegation(&canister_id_ranges);
+        let (_tx, rx) = tokio::sync::watch::channel(Some(delegation));
+        let reader = NNSDelegationReader::new(rx);
 
-    group.bench_function("1_range", |b| {
-        b.iter(|| black_box(reader.get_delegation_with_flat_canister_ranges()));
-    });
+        group.bench_function(
+            format!("{canister_id_ranges_count}_canister_id_ranges"),
+            |bencher| {
+                bencher.iter(|| black_box(reader.get_delegation_with_flat_canister_ranges()));
+            },
+        );
+    };
 
-    let ranges = (0..1_000)
-        .map(|i| (CanisterId::from(2 * i), CanisterId::from(2 * i + 1)))
-        .collect();
-    let delegation = create_fake_delegation(&ranges);
-    let (_tx, rx) = tokio::sync::watch::channel(Some(delegation));
-    let reader = NNSDelegationReader::new(rx);
-
-    group.bench_function("1000_ranges", |b| {
-        b.iter(|| black_box(reader.get_delegation_with_flat_canister_ranges()));
-    });
-
-    let ranges = (0..10_000)
-        .map(|i| (CanisterId::from(2 * i), CanisterId::from(2 * i + 1)))
-        .collect();
-    let delegation = create_fake_delegation(&ranges);
-    let (_tx, rx) = tokio::sync::watch::channel(Some(delegation));
-    let reader = NNSDelegationReader::new(rx);
-
-    group.bench_function("10000_ranges", |b| {
-        b.iter(|| black_box(reader.get_delegation_with_flat_canister_ranges()));
-    });
+    bench_function(1);
+    bench_function(1_000);
+    bench_function(100_000);
 }
 
 fn create_fake_delegation(
