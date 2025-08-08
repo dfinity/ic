@@ -90,7 +90,7 @@ impl Step for RetireElectedVersions {
             None,
             None,
             vec![],
-            GuestLaunchMeasurements::default(),
+            None,
             versions_to_unelect,
         ));
 

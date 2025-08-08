@@ -229,7 +229,7 @@ async fn bless_replica_version_with_sha(
     target_version: &str,
     logger: &Logger,
     sha256: &String,
-    guest_launch_measurements: GuestLaunchMeasurements,
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
     upgrade_url: Vec<String>,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -274,7 +274,7 @@ pub async fn bless_replica_version(
     target_version: &str,
     logger: &Logger,
     sha256: &String,
-    guest_launch_measurements: GuestLaunchMeasurements,
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
     upgrade_url: Vec<String>,
 ) {
     bless_replica_version_with_sha(
@@ -340,7 +340,7 @@ pub async fn bless_replica_version_with_urls(
         Some(replica_version),
         Some(sha256),
         release_package_urls,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![],
     )
     .await;

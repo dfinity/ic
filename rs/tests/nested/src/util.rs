@@ -83,7 +83,7 @@ pub(crate) async fn elect_guestos_version(
         Some(target_version),
         Some(sha256),
         upgrade_urls,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![],
     )
     .await;

@@ -196,7 +196,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
-        Some(ic_os_launch_measurements),
+        ic_os_launch_measurements,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,

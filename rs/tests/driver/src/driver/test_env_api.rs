@@ -1190,7 +1190,7 @@ pub fn get_guestos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
-pub fn get_guestos_launch_measurements() -> Result<GuestLaunchMeasurements> {
+pub fn get_guestos_launch_measurements() -> Result<Option<GuestLaunchMeasurements>> {
     read_guest_launch_measurements("ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE")
 }
 
@@ -1227,7 +1227,7 @@ pub fn get_guestos_update_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
-pub fn get_guestos_initial_launch_measurements() -> Result<GuestLaunchMeasurements> {
+pub fn get_guestos_initial_launch_measurements() -> Result<Option<GuestLaunchMeasurements>> {
     read_guest_launch_measurements("ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE")
 }
 
@@ -1281,14 +1281,14 @@ pub fn get_boundary_node_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
 }
 
-fn read_guest_launch_measurements(v: &str) -> Result<GuestLaunchMeasurements> {
+fn read_guest_launch_measurements(v: &str) -> Result<Option<GuestLaunchMeasurements>> {
     // The launch measurements are not always set.
     // TODO(NODE-1652): Remove this check once the environment variable is always set.
     if std::env::var(v).is_ok() {
         serde_json::from_str(&read_dependency_from_env_to_string(v)?)
             .context("Could not deserialize guest launch measurements")
     } else {
-        Ok(GuestLaunchMeasurements::default())
+        Ok(None)
     }
 }
 
