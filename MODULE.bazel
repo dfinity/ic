@@ -410,11 +410,6 @@ stack_snapshot.package(
     },
 )
 
-# Kubernetes helper
-
-kubeconfig_ext = use_extension("//rs/tests:kubeconfig_extension.bzl", "kubeconfig_extension")
-use_repo(kubeconfig_ext, "kubeconfig")
-
 # Single files & archives that are not bazel modules
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
