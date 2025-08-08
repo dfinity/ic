@@ -17,6 +17,7 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
+use ic_types::ReplicaVersion;
 use itertools::Itertools;
 use slog::{info, Logger};
 use tokio::runtime::Handle;
@@ -26,7 +27,7 @@ use super::Step;
 #[derive(Clone)]
 pub struct UpdateSubnetType {
     pub subnet_type: Option<SubnetType>,
-    pub version: String,
+    pub version: ReplicaVersion,
 }
 
 impl Step for UpdateSubnetType {
@@ -45,7 +46,7 @@ impl Step for UpdateSubnetType {
                 .filter(|subnet| subnet.raw_subnet_record().subnet_type().eq(&subnet_type))
             {
                 let raw_record = subnet_snaphost.raw_subnet_record();
-                if raw_record.replica_version_id.eq(&self.version) {
+                if raw_record.replica_version_id == self.version.as_ref() {
                     info!(
                         logger,
                         "Subnet `{}` is already on version `{}`",
@@ -63,7 +64,7 @@ impl Step for UpdateSubnetType {
 
                 rt.block_on(deploy_guestos_to_all_subnet_nodes(
                     &nns_node,
-                    &ic_types::ReplicaVersion::try_from(self.version.clone())?,
+                    &self.version,
                     subnet_snaphost.subnet_id,
                 ));
                 let new_topology =
@@ -83,7 +84,7 @@ impl Step for UpdateSubnetType {
                         subnet_snaphost.subnet_id
                     ))?;
 
-                if !current_subnet.replica_version_id.eq(&self.version) {
+                if current_subnet.replica_version_id != self.version.as_ref() {
                     return Err(anyhow::anyhow!(
                         "Subnet `{}` is not at the correct version after upgrade",
                         subnet_snaphost.subnet_id
@@ -125,7 +126,7 @@ impl Step for UpdateSubnetType {
                 &governance_canister,
                 proposal_sender,
                 test_neuron_id,
-                self.version.clone(),
+                &self.version,
             ));
             rt.block_on(vote_execute_proposal_assert_executed(
                 &governance_canister,
@@ -141,7 +142,7 @@ impl Step for UpdateSubnetType {
 
 #[derive(Clone)]
 pub struct UpdateApiBoundaryNodes {
-    pub version: String,
+    pub version: ReplicaVersion,
 }
 
 impl Step for UpdateApiBoundaryNodes {
@@ -164,9 +165,8 @@ impl Step for UpdateApiBoundaryNodes {
         }
 
         // check whether the current version of the API BNs is already the one they should be upgraded to
-        let current_version = get_guestos_img_version()
-            .expect("Should be able to read API boundary nodes version")
-            .to_string();
+        let current_version =
+            get_guestos_img_version().expect("Should be able to read API boundary nodes version");
         if current_version.eq(&self.version) {
             info!(
                 logger,
@@ -194,7 +194,7 @@ impl Step for UpdateApiBoundaryNodes {
             proposal_sender,
             test_neuron_id,
             node_ids,
-            self.version.clone(),
+            &self.version,
         ));
 
         info!(logger, "Vote on the proposal");
@@ -216,7 +216,7 @@ impl Step for UpdateApiBoundaryNodes {
 async fn assert_version_on_all_nodes(
     nodes: Vec<IcNodeSnapshot>,
     logger: Logger,
-    version: String,
+    version: ReplicaVersion,
     rt: Handle,
 ) -> anyhow::Result<()> {
     let threads = nodes.into_iter().map(|node| {
