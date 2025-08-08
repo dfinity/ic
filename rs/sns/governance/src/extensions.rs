@@ -556,12 +556,12 @@ fn validate_extension_wasm_with_allowed(
     allowed_extensions: &BTreeMap<[u8; 32], ExtensionSpec>,
 ) -> Result<ExtensionSpec, String> {
     // Should never fail, b/c we validate the length before calling this.
-    let hash_array: [u8; 32] = wasm_module_hash
-        .try_into()
-        .map_err(|_| format!(
+    let hash_array: [u8; 32] = wasm_module_hash.try_into().map_err(|_| {
+        format!(
             "Invalid wasm module hash length: expected 32 bytes, got {}",
             wasm_module_hash.len()
-        ))?;
+        )
+    })?;
 
     if let Some(spec) = allowed_extensions.get(&hash_array) {
         // Validate the spec to ensure no conflicting method names.
@@ -1206,8 +1206,7 @@ mod tests {
         };
 
         let result = validate_deposit_operation(missing_sns_arg).unwrap_err();
-        assert!(result
-            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+        assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test missing ICP amount
         let missing_icp_arg = ExtensionOperationArg {
@@ -1223,8 +1222,7 @@ mod tests {
         };
 
         let result = validate_deposit_operation(missing_icp_arg).unwrap_err();
-        assert!(result
-            .contains("treasury_allocation_icp_e8s must be a Nat value"));
+        assert!(result.contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Test wrong type for SNS amount
         let wrong_type_arg = ExtensionOperationArg {
@@ -1243,14 +1241,12 @@ mod tests {
         };
 
         let result = validate_deposit_operation(wrong_type_arg).unwrap_err();
-        assert!(result
-            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+        assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test no arguments provided
         let no_args = ExtensionOperationArg { value: None };
         let result = validate_deposit_operation(no_args).unwrap_err();
-        assert!(result
-            .contains("Deposit operation arguments must be provided"));
+        assert!(result.contains("Deposit operation arguments must be provided"));
 
         // Test not a map
         let not_map_arg = ExtensionOperationArg {
@@ -1260,8 +1256,7 @@ mod tests {
         };
 
         let result = validate_deposit_operation(not_map_arg).unwrap_err();
-        assert!(result
-            .contains("Deposit operation arguments must be a PreciseMap"));
+        assert!(result.contains("Deposit operation arguments must be a PreciseMap"));
     }
 
     #[test]
@@ -1286,8 +1281,7 @@ mod tests {
         };
 
         let result = validate_withdraw_operation(minimal_arg).unwrap_err();
-        assert!(result
-            .contains("Withdraw operation does not accept arguments at this time"));
+        assert!(result.contains("Withdraw operation does not accept arguments at this time"));
     }
 
     #[test]
@@ -1363,7 +1357,6 @@ mod tests {
         };
 
         let result = spec.validate();
-        assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
             "ExtensionSpec can only have one extension type at a time"
