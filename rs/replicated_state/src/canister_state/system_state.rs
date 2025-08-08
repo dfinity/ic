@@ -10,6 +10,7 @@ use super::queues::{can_push, CanisterInput};
 pub use super::queues::{memory_usage_of_request, CanisterOutputQueuesIterator};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
+use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
     CanisterQueues, CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType,
     PageMap, StateError,
@@ -28,7 +29,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
     Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-    StopCanisterContext, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, NO_DEADLINE,
+    StopCanisterContext, NO_DEADLINE,
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
@@ -1177,11 +1178,6 @@ impl SystemState {
         }
     }
 
-    /// Produces a reject response and pushes it into the output queue if `message` is a `Request`;
-    /// updates the ingress status if `message` is an `Ingress`;
-    /// returns `message` if it is a `Response`.
-    fn reject_message(message: &CanisterMessage) -> Option<Arc<Response>> {}
-
     /// Tries to transition a `Stopping` canister into the `Stopped` state. No-op if
     /// the canister is `Running` or already `Stopped`.
     ///
@@ -1194,10 +1190,10 @@ impl SystemState {
         &mut self,
         is_expired: impl Fn(&StopCanisterContext) -> bool,
     ) -> (bool, Vec<CanisterMessage>, Vec<StopCanisterContext>) {
-        let stop_contexts = match self.status {
+        match self.status {
             // Canister is not stopping so we can skip it.
             CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
-                return (false, Vec::new(), Vec::new());
+                (false, Vec::new(), Vec::new())
             }
 
             // Canister is ready to stop.
@@ -1212,8 +1208,11 @@ impl SystemState {
                 // Transition the canister to "stopped".
                 self.status = CanisterStatus::Stopped;
 
+                // Collect residual messages in the task queue and input queues.
+                let residual_messages = self.drain_task_and_input_queues();
+
                 // Reply to all pending stop_canister requests.
-                stop_contexts
+                (true, residual_messages, stop_contexts)
             }
 
             // Canister is stopping, but not yet ready to stop.
@@ -1231,13 +1230,17 @@ impl SystemState {
                         true
                     }
                 });
-                return (false, Vec::new(), expired_stop_contexts);
+                (false, Vec::new(), expired_stop_contexts)
             }
-        };
+        }
+    }
 
-        let mut unexpected_responses = Vec::new();
+    /// Checks for an aborted execution to collect the contained message;
+    /// drains all input queues and returns the residual messages.
+    fn drain_task_and_input_queues(&mut self) -> Vec<CanisterMessage> {
+        let mut residual_messages = Vec::new();
 
-        // Check for an aborted execution.
+        // Look for an aborted exection.
         match self.task_queue.pop_front() {
             None => {}
 
@@ -1254,7 +1257,7 @@ impl SystemState {
             // This case would indicate a serious problem; a paused execution for a request
             // should not exist on a stopping canister; a paused execution of a response
             // would indicate a missing callback in the call context manager.
-            Some(paused @ ExecutionTask::PausedExecution { .. }) => {
+            paused @ Some(ExecutionTask::PausedExecution { .. }) => {
                 debug_assert!(
                     false,
                     "found paused execution in canister ready to stop: {:?}",
@@ -1265,9 +1268,12 @@ impl SystemState {
             // An aborted execution can exist; the cycles can be dumped since it won't get executed.
             Some(ExecutionTask::AbortedExecution { input, .. }) => match input {
                 CanisterMessageOrTask::Message(message) => {
-                    messages_to_reject.push(message);
+                    residual_messages.push(message);
                 }
-                CanisterMessageOrTask::Task(_) => {}
+                CanisterMessageOrTask::Task(_) => {
+                    // This is a heartbeat, global timer or low wasm memory hook;
+                    // can be dropped silently.
+                }
             },
 
             // Paused or aborted install codes can exist; just enqueue them again.
@@ -1279,10 +1285,10 @@ impl SystemState {
 
         // Drain input queues.
         while let Some(message) = self.pop_input() {
-            messages_to_reject.push(message);
+            residual_messages.push(message);
         }
 
-        (true, messages_to_reject, stop_contexts)
+        residual_messages
     }
 
     /// Tests whether the system state is ready to transition to `Stopped`.
@@ -1982,6 +1988,27 @@ fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallCont
         } => Some(call_context_manager),
 
         CanisterStatus::Stopped => None,
+    }
+}
+
+/// Generates a reject `Response` for a `Request` message with the provided
+/// `RejectCode` and error message.
+pub fn generate_reject_response(
+    request: &Request,
+    reject_code: RejectCode,
+    message: String,
+) -> Response {
+    Response {
+        originator: request.sender,
+        respondent: request.receiver,
+        originator_reply_callback: request.sender_reply_callback,
+        refund: request.payment,
+        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+            reject_code,
+            message,
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        )),
+        deadline: request.deadline,
     }
 }
 
