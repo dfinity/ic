@@ -89,7 +89,6 @@ function make_var_cryptsetup() {
     echo "RemainAfterExit=yes"
     echo "TimeoutSec=0"
     echo "KeyringMode=shared"
-    echo "OOMScoreAdjust=500"
     echo "ExecStart=/opt/ic/bin/setup-var-encryption.sh /dev/${DEVICE} /dev/${ALT_DEVICE}"
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
 }

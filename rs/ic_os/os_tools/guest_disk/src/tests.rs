@@ -25,7 +25,7 @@ struct TestFixture<'a> {
     device: TempDevice,
     previous_key_path: PathBuf,
     generated_key_path: PathBuf,
-    sev_key_deriver: SevKeyDeriver,
+    sev_derived_key: [u8; 32],
     guestos_config: GuestOSConfig,
     _temp_dir: TempDir,
     _guard: parking_lot::MutexGuard<'a, ()>,
@@ -46,7 +46,7 @@ impl<'a> TestFixture<'a> {
             device,
             previous_key_path,
             generated_key_path,
-            sev_key_deriver: mock_sev_key_deriver([42; 32]),
+            sev_derived_key: [42; 32],
             guestos_config,
             _temp_dir: temp_dir,
             _guard: guard,
@@ -80,11 +80,20 @@ impl<'a> TestFixture<'a> {
         }
     }
 
+    fn get_mock_sev_key_deriver(&self) -> SevKeyDeriver {
+        let mut mock_sev_firmware = MockSevGuestFirmware::new();
+        let derived_key = self.sev_derived_key;
+        mock_sev_firmware
+            .expect_get_derived_key()
+            .returning(move |_, _| Ok(derived_key));
+        SevKeyDeriver::new_for_test(Box::new(mock_sev_firmware))
+    }
+
     fn run(&mut self, args: Args) -> Result<()> {
         run(
             args,
             &self.guestos_config,
-            Some(&mut self.sev_key_deriver),
+            || Ok(self.get_mock_sev_key_deriver()),
             &self.previous_key_path,
             &self.generated_key_path,
         )
@@ -143,15 +152,6 @@ fn cleanup() {
     for partition in [Partition::Store, Partition::Var] {
         deactive_crypt_device_with_check(crypt_name(partition));
     }
-}
-
-fn mock_sev_key_deriver(seed: [u8; 32]) -> SevKeyDeriver {
-    let mut mock_guest_firmware = MockSevGuestFirmware::new();
-    mock_guest_firmware
-        .expect_get_derived_key()
-        .returning(move |_, _| Ok(seed));
-
-    SevKeyDeriver::new_for_test(Box::new(mock_guest_firmware))
 }
 
 #[test]
@@ -297,7 +297,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         .expect("previous key should unlock the store partition");
 
     let sev_key = fixture
-        .sev_key_deriver
+        .get_mock_sev_key_deriver()
         .derive_key(Key::DiskEncryptionKey {
             device_path: &fixture.device.path().unwrap(),
         })
@@ -321,7 +321,7 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
     format_crypt_device(
         &fixture.device.path().unwrap(),
         fixture
-            .sev_key_deriver
+            .get_mock_sev_key_deriver()
             .derive_key(Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
             })
@@ -363,7 +363,7 @@ fn test_open_store_multiple_times_with_different_keys() {
     fs::write(
         &fixture.previous_key_path,
         fixture
-            .sev_key_deriver
+            .get_mock_sev_key_deriver()
             .derive_key(Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
             })
@@ -376,7 +376,7 @@ fn test_open_store_multiple_times_with_different_keys() {
         fs::write(
             &fixture.previous_key_path,
             fixture
-                .sev_key_deriver
+                .get_mock_sev_key_deriver()
                 .derive_key(Key::DiskEncryptionKey {
                     device_path: &fixture.device.path().unwrap(),
                 })
@@ -385,7 +385,7 @@ fn test_open_store_multiple_times_with_different_keys() {
         .unwrap();
 
         // After an upgrade, the firmware derives a new key.
-        fixture.sev_key_deriver = mock_sev_key_deriver([i; 32]);
+        fixture.sev_derived_key = [i; 32];
 
         fixture
             .open(Partition::Store)

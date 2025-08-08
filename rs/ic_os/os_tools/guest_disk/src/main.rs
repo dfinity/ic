@@ -57,16 +57,10 @@ fn main() -> Result<()> {
     let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
         .context("Failed to read GuestOS config")?;
 
-    let mut sev_key_deriver = guestos_config
-        .icos_settings
-        .enable_trusted_execution_environment
-        .then(SevKeyDeriver::new)
-        .transpose()?;
-
     run(
         args,
         &guestos_config,
-        sev_key_deriver.as_mut(),
+        SevKeyDeriver::new,
         Path::new(PREVIOUS_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
     )
@@ -77,7 +71,7 @@ fn main() -> Result<()> {
 fn run(
     args: Args,
     guestos_config: &GuestOSConfig,
-    sev_key_deriver: Option<&mut SevKeyDeriver>,
+    sev_key_deriver_factory: impl Fn() -> Result<SevKeyDeriver>,
     previous_key_path: &Path,
     generated_key_path: &Path,
 ) -> Result<()> {
@@ -88,8 +82,7 @@ fn run(
         .enable_trusted_execution_environment
     {
         Box::new(SevDiskEncryption {
-            sev_key_deriver: sev_key_deriver
-                .context("SevKeyDeriver was None, but TEE is enabled")?,
+            sev_key_deriver: sev_key_deriver_factory().context("Failed to create SevKeyDeriver")?,
             guest_vm_type: guestos_config.guest_vm_type,
             previous_key_path,
         })
