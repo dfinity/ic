@@ -6,6 +6,7 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
+use ic_types::ReplicaVersion;
 use slog::info;
 use tokio::runtime::Handle;
 
@@ -13,7 +14,7 @@ use super::Step;
 
 #[derive(Clone)]
 pub struct EnsureElectedVersion {
-    pub version: String,
+    pub version: ReplicaVersion,
 }
 
 impl Step for EnsureElectedVersion {
@@ -23,7 +24,7 @@ impl Step for EnsureElectedVersion {
         rt: Handle,
     ) -> anyhow::Result<()> {
         let elected_versions = env.topology_snapshot().elected_replica_versions()?;
-        if elected_versions.contains(&self.version) {
+        if elected_versions.iter().any(|v| v == self.version.as_ref()) {
             info!(env.logger(), "Version `{}` already blessed", self.version);
             return Ok(());
         }
@@ -58,7 +59,7 @@ impl Step for EnsureElectedVersion {
 
         let elected_versions = new_snapshot.elected_replica_versions()?;
 
-        match elected_versions.contains(&self.version) {
+        match elected_versions.iter().any(|v| v == self.version.as_ref()) {
             true => Ok(()),
             false => Err(anyhow::anyhow!("Blessed version not found in the registry")),
         }
