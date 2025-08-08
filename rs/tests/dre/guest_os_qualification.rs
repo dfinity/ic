@@ -29,7 +29,7 @@ pub fn main() -> anyhow::Result<()> {
     };
     let new_version = std::env::var("NEW_VERSION")
         .ok()
-        .map(|v| ReplicaVersion::try_from(v))
+        .map(ReplicaVersion::try_from)
         .transpose()?;
 
     let config = IcConfig {
