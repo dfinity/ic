@@ -18,6 +18,7 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog::{error, info, o, Logger};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
@@ -51,7 +52,7 @@ pub struct BackupManager {
 }
 
 impl BackupManager {
-    pub async fn new(log: Logger, args: BackupArgs) -> Self {
+    pub async fn new(log: Logger, args: BackupArgs, cancellation_token: CancellationToken) -> Self {
         let config = Config::load_config(args.config_file).expect("Config file can't be loaded");
         // verification that all is initialized with the init command
         if config.subnets.is_empty() {
@@ -87,7 +88,7 @@ impl BackupManager {
 
         info!(log, "Starting the registry replicator");
         let registry_replicator_future = registry_replicator
-            .start_polling(nns_urls, Some(nns_public_key))
+            .start_polling(nns_urls, Some(nns_public_key), cancellation_token)
             .await
             .expect("Failed to start registry replicator");
 
