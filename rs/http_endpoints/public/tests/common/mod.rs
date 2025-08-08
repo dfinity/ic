@@ -20,6 +20,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_pprof::{Pprof, PprofCollector};
@@ -65,7 +66,7 @@ use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
-        mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
+        mpsc::{channel, Receiver, Sender},
         watch,
     },
 };
@@ -366,7 +367,7 @@ mock! {
 
 pub struct HttpEndpointHandles {
     pub ingress_filter: IngressFilterHandle,
-    pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    pub ingress_rx: Receiver<UnvalidatedArtifactMutation<SignedIngress>>,
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
@@ -383,6 +384,7 @@ pub struct HttpEndpointBuilder {
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_channel_capacity: usize,
 }
 
 impl HttpEndpointBuilder {
@@ -398,6 +400,7 @@ impl HttpEndpointBuilder {
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
+            ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
         }
     }
 
@@ -450,6 +453,11 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_ingress_channel_capacity(mut self, capacity: usize) -> Self {
+        self.ingress_channel_capacity = capacity;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
 
@@ -470,8 +478,7 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        #[allow(clippy::disallowed_methods)]
-        let (ingress_tx, ingress_rx) = unbounded_channel();
+        let (ingress_tx, ingress_rx) = channel(self.ingress_channel_capacity);
 
         let log = no_op_logger();
 

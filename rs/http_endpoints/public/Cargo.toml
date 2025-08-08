@@ -32,6 +32,7 @@ ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-pprof = { path = "../../monitoring/pprof" }
@@ -71,6 +72,7 @@ ic-http-endpoints-test-agent = { path = "../test_agent" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
+ic-limits = { path = "../../limits" }
 ic-protobuf = { path = "../../protobuf" }
 ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
 ic-registry-keys = { path = "../../registry/keys" }
