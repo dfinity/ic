@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
+use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaMatchedPreSignature, PreSignatureStash, SchnorrMatchedPreSignature,
     SignWithThresholdContext, ThresholdArguments,
@@ -18,6 +19,9 @@ use rand::RngCore;
 
 use super::SchedulerMetrics;
 
+pub(crate) const THRESHOLD_SIGNATURE_SCHEME_MISMATCH: &str =
+    "scheduler_threshold_signature_scheme_mismatch";
+
 /// Update [`SignatureRequestContext`]s by assigning randomness and matching pre-signatures.
 pub(crate) fn update_signature_request_contexts(
     current_round: ExecutionRound,
@@ -28,6 +32,7 @@ pub(crate) fn update_signature_request_contexts(
     registry_settings: &RegistryExecutionSettings,
     metrics: &SchedulerMetrics,
     config: &SchedulerConfig,
+    logger: &ReplicaLogger,
 ) {
     let _timer = metrics
         .round_update_signature_request_contexts_duration
@@ -79,12 +84,19 @@ pub(crate) fn update_signature_request_contexts(
             pre_signature_stashes,
             &mut contexts,
             Height::from(current_round.get()),
+            metrics,
+            logger,
         );
     } else {
         // Clear the pre-signature stash in case of a downgrade.
         pre_signature_stashes.clear();
 
         for (key_id, delivered) in delivered_pre_signatures {
+            metrics
+                .delivered_pre_signatures
+                .with_label_values(&[&key_id.to_string()])
+                .observe(delivered.pre_signatures.len() as f64);
+
             // Match up to the maximum number of contexts per key ID to delivered pre-signatures.
             let max_ongoing_signatures = registry_settings
                 .chain_key_settings
@@ -98,6 +110,8 @@ pub(crate) fn update_signature_request_contexts(
                 &mut contexts,
                 max_ongoing_signatures,
                 Height::from(current_round.get()),
+                metrics,
+                logger,
             );
         }
     }
@@ -111,6 +125,8 @@ fn match_delivered_pre_signatures_by_key_id(
     contexts: &mut [&mut SignWithThresholdContext],
     max_ongoing_signatures: usize,
     height: Height,
+    metrics: &SchedulerMetrics,
+    logger: &ReplicaLogger,
 ) {
     // Remove and count already matched pre-signatures.
     let mut matched = 0;
@@ -134,14 +150,17 @@ fn match_delivered_pre_signatures_by_key_id(
         let Some((pre_sig_id, pre_signature)) = pre_sigs.pre_signatures.pop_first() else {
             break;
         };
-        match_context_with_pre_signature(
+        if match_context_with_pre_signature(
             context,
             pre_sig_id,
             pre_signature,
             Arc::new(pre_sigs.key_transcript.clone()),
             height,
-        );
-        matched += 1;
+            metrics,
+            logger,
+        ) {
+            matched += 1;
+        }
     }
 }
 
@@ -150,6 +169,8 @@ fn match_contexts_with_stashed_pre_signatures(
     stashes: &mut BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
     contexts: &mut [&mut SignWithThresholdContext],
     height: Height,
+    metrics: &SchedulerMetrics,
+    logger: &ReplicaLogger,
 ) {
     for context in contexts.iter_mut() {
         if !context.requires_pre_signature() {
@@ -173,6 +194,8 @@ fn match_contexts_with_stashed_pre_signatures(
             pre_signature,
             Arc::clone(&stash.key_transcript),
             height,
+            metrics,
+            logger,
         );
     }
 }
@@ -183,7 +206,9 @@ fn match_context_with_pre_signature(
     pre_signature: PreSignature,
     key_transcript: Arc<IDkgTranscript>,
     height: Height,
-) {
+    metrics: &SchedulerMetrics,
+    logger: &ReplicaLogger,
+) -> bool {
     match (&mut context.args, pre_signature) {
         (ThresholdArguments::Ecdsa(args), PreSignature::Ecdsa(pre_signature)) => {
             args.pre_signature = Some(EcdsaMatchedPreSignature {
@@ -201,12 +226,24 @@ fn match_context_with_pre_signature(
                 key_transcript,
             })
         }
-        _ => {
-            debug_unreachable!("Attempted to pair signature request context with pre-signature of different scheme.");
-            return;
+        (_, pre_signature) => {
+            let message = format!(
+                "Attempted to pair signature request context for key {:?}, with pre-signature {:?} of different scheme.",
+                context.key_id(),
+                pre_signature
+            );
+            error!(
+                every_n_seconds => 5,
+                logger,
+                "{}: {}", THRESHOLD_SIGNATURE_SCHEME_MISMATCH, message
+            );
+            metrics.threshold_signature_scheme_mismatch.inc();
+            debug_unreachable!(message);
+            return false;
         }
     }
     let _ = context.matched_pre_signature.insert((pre_sig_id, height));
+    true
 }
 
 #[cfg(test)]
@@ -215,6 +252,7 @@ mod tests {
 
     use super::*;
     use ic_config::subnet_config::SchedulerConfig;
+    use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
@@ -359,6 +397,8 @@ mod tests {
             &mut context_vec,
             max_ongoing_signatures,
             height,
+            &SchedulerMetrics::new(&MetricsRegistry::new()),
+            &no_op_logger(),
         );
 
         // All contexts up until the cut-off point should have been matched at the given height,
@@ -539,6 +579,8 @@ mod tests {
             &mut context_vec,
             5,
             Height::from(3),
+            &SchedulerMetrics::new(&MetricsRegistry::new()),
+            &no_op_logger(),
         );
 
         // The first context should still be matched at the height of the previous round (height 2).
@@ -579,6 +621,7 @@ mod tests {
                 store_pre_signatures_in_state,
                 ..SchedulerConfig::application_subnet()
             },
+            &no_op_logger(),
         )
     }
 
@@ -698,7 +741,7 @@ mod tests {
         pre_signature_stashes.insert(key_id2.clone(), setup_pre_signature_stash(&key_id2, []));
 
         let mut contexts = [
-            // Once context requesting key_id3 (no stash).
+            // One context requesting key_id3 (no stash).
             &mut fake_context(1, &key_id3, None).1,
             // Three context requesting key_id1, one of which is already matched.
             &mut fake_context(2, &key_id1, Some((3, Height::from(1)))).1,
@@ -712,6 +755,8 @@ mod tests {
             &mut pre_signature_stashes,
             &mut contexts,
             Height::from(10),
+            &SchedulerMetrics::new(&MetricsRegistry::new()),
+            &no_op_logger(),
         );
 
         // The 1st context should remain unmatched, as it requested a key ID with no pre-signatures.

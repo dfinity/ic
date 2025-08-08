@@ -1539,6 +1539,7 @@ impl Scheduler for SchedulerImpl {
                 registry_settings,
                 self.metrics.as_ref(),
                 &self.config,
+                &round_log,
             );
         }
 
