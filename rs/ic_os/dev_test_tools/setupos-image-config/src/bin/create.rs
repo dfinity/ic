@@ -76,10 +76,7 @@ async fn main() -> Result<(), Error> {
                 .deployment_environment
                 .unwrap_or(DeploymentEnvironment::Mainnet),
         },
-        logging: Logging {
-            elasticsearch_hosts: cli.deployment.elasticsearch_hosts,
-            elasticsearch_tags: cli.deployment.elasticsearch_tags,
-        },
+        logging: Logging {},
         nns: Nns {
             urls: cli.deployment.nns_urls.into_iter().collect(),
         },

@@ -62,7 +62,7 @@ if exe == null {
 
 allow = true
 # Filter noisy logs, still present in `debug.log`
-for_each(["/usr/local/bin/filebeat"]) -> |_, k| {
+for_each([""]) -> |_, k| {
     if exe == k {
         allow = false
     }

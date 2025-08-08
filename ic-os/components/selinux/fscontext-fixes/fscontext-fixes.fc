@@ -6,6 +6,5 @@
 /bin	-l	system_u:object_r:bin_t:s0
 /sbin	-l	system_u:object_r:bin_t:s0
 /root	-d	system_u:object_r:user_home_dir_t:s0
-/home/filebeat	-d	system_u:object_r:user_home_dir_t:s0
 /home/node_exporter	-d	system_u:object_r:user_home_dir_t:s0
 /home	-d	system_u:object_r:home_root_t:s0

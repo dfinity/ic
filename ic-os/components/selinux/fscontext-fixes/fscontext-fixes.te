@@ -18,6 +18,6 @@ require {
 
 allow syslogd_t syslogd_var_run_t : sock_file { create };
 
-# Note: the home dir setup for filebeat and node_exporter can NOT stay that way --
-# they need to move to /var as service home directories because /home will not be
+# Note: the home dir setup for node_exporter can NOT stay that way --
+# it needs to move to /var as service home directories because /home will not be
 # writable.
