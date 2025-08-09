@@ -1437,6 +1437,7 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
+    let token_name = icrc1_name();
     let decimals = icrc1_decimals();
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -1444,6 +1445,7 @@ fn icrc21_canister_call_consent_message(
         caller_principal,
         ledger_fee,
         token_symbol,
+        token_name,
         decimals,
     )
 }
