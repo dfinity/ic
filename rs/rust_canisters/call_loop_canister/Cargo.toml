@@ -11,5 +11,4 @@ path = "src/main.rs"
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
-ic-principal = { workspace = true }
+ic_principal = { workspace = true }

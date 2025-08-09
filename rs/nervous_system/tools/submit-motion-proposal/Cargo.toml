@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [[bin]]
 name = "submit-motion-proposal"
+path = "src/main.rs"
 
 [dependencies]
 # Remeber: Sort alphabetically. Follow existing groups.
