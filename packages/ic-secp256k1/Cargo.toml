@@ -13,6 +13,8 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+candid = { workspace = true }
+hex-literal = "0.4"
 hmac = "0.12"
 k256 = { workspace = true }
 lazy_static = { workspace = true }
@@ -28,6 +30,5 @@ zeroize = { workspace = true }
 bip32 = "0.5"
 bitcoin = { version = "0.28.2" }
 hex = { workspace = true }
-hex-literal = "0.4"
 secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }
 wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }
