@@ -399,7 +399,7 @@ impl CanisterSnapshot {
 
         Ok(CanisterSnapshot {
             canister_id,
-            source: SnapshotSource::TakenFromCanister,
+            source: SnapshotSource::taken_from_canister(),
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version,
             certified_data: canister.system_state.certified_data.clone(),
@@ -435,7 +435,7 @@ impl CanisterSnapshot {
         let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
         Self {
             canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
-            source: SnapshotSource::MetadataUpload,
+            source: SnapshotSource::metadata_upload(),
             taken_at_timestamp,
             canister_version,
             size: metadata.snapshot_size_bytes(),
@@ -727,7 +727,7 @@ mod tests {
         };
         let snapshot = CanisterSnapshot::new(
             canister_id,
-            SnapshotSource::TakenFromCanister,
+            SnapshotSource::taken_from_canister(),
             UNIX_EPOCH,
             0,
             vec![],

@@ -39,35 +39,9 @@ pub struct CanisterSnapshotBits {
         tag = "13"
     )]
     pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
-    #[prost(enumeration = "SnapshotSource", tag = "14")]
+    #[prost(
+        enumeration = "super::super::canister_state_bits::v1::SnapshotSource",
+        tag = "14"
+    )]
     pub source: i32,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum SnapshotSource {
-    Unspecified = 0,
-    TakenFromCanister = 1,
-    UploadedManually = 2,
-}
-impl SnapshotSource {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "SNAPSHOT_SOURCE_UNSPECIFIED",
-            Self::TakenFromCanister => "SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER",
-            Self::UploadedManually => "SNAPSHOT_SOURCE_UPLOADED_MANUALLY",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "SNAPSHOT_SOURCE_UNSPECIFIED" => Some(Self::Unspecified),
-            "SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER" => Some(Self::TakenFromCanister),
-            "SNAPSHOT_SOURCE_UPLOADED_MANUALLY" => Some(Self::UploadedManually),
-            _ => None,
-        }
-    }
 }
