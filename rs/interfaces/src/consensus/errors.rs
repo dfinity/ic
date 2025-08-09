@@ -1,21 +1,9 @@
 use ic_types::consensus::idkg::{
-    common::TranscriptOperationError,
-    ecdsa::{PreSignatureQuadrupleError, ThresholdEcdsaSigInputsError},
-    schnorr::{PreSignatureTranscriptError, ThresholdSchnorrSigInputsError},
-    TranscriptParamsError,
+    common::TranscriptOperationError, ecdsa::PreSignatureQuadrupleError,
+    schnorr::PreSignatureTranscriptError, TranscriptParamsError,
 };
 
 use crate::crypto::ErrorReproducibility;
-
-impl ErrorReproducibility for ThresholdEcdsaSigInputsError {
-    fn is_reproducible(&self) -> bool {
-        match self {
-            ThresholdEcdsaSigInputsError::PreSignatureQuadruple(err) => err.is_reproducible(),
-            ThresholdEcdsaSigInputsError::KeyTranscript(_) => true,
-            ThresholdEcdsaSigInputsError::Failed(err) => err.is_reproducible(),
-        }
-    }
-}
 
 impl ErrorReproducibility for PreSignatureQuadrupleError {
     fn is_reproducible(&self) -> bool {
@@ -25,16 +13,6 @@ impl ErrorReproducibility for PreSignatureQuadrupleError {
             PreSignatureQuadrupleError::KappaTimesLambda(_) => true,
             PreSignatureQuadrupleError::KeyTimesLambda(_) => true,
             PreSignatureQuadrupleError::Failed(err) => err.is_reproducible(),
-        }
-    }
-}
-
-impl ErrorReproducibility for ThresholdSchnorrSigInputsError {
-    fn is_reproducible(&self) -> bool {
-        match self {
-            ThresholdSchnorrSigInputsError::PreSignatureTranscript(err) => err.is_reproducible(),
-            ThresholdSchnorrSigInputsError::KeyTranscript(_) => true,
-            ThresholdSchnorrSigInputsError::Failed(err) => err.is_reproducible(),
         }
     }
 }
