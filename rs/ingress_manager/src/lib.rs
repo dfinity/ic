@@ -24,6 +24,7 @@ use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvid
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
+use ic_types::NodeId;
 use ic_types::{
     artifact::IngressMessageId,
     consensus::BlockPayload,
@@ -128,6 +129,7 @@ impl IngressManager {
         ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
         metrics_registry: MetricsRegistry,
         subnet_id: SubnetId,
+        node_id: NodeId,
         log: ReplicaLogger,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
@@ -160,7 +162,7 @@ impl IngressManager {
             ingress_pool,
             registry_client,
             request_validator,
-            metrics: IngressManagerMetrics::new(&metrics_registry),
+            metrics: IngressManagerMetrics::new(&metrics_registry, node_id),
             subnet_id,
             log,
             last_purge_time: RwLock::new(UNIX_EPOCH),
@@ -326,6 +328,7 @@ pub(crate) mod tests {
                         ingress_signature_crypto,
                         metrics_registry,
                         subnet_id,
+                        node_test_id(0),
                         log,
                         Arc::new(state_manager),
                         cycles_account_manager,
