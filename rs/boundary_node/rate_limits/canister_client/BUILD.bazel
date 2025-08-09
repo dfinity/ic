@@ -1,30 +1,26 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/boundary_node/rate_limits/api:rate_limits_api",
-    "@crate_index//:anyhow",
-    "@crate_index//:candid",
-    "@crate_index//:ic-agent",
-    "@crate_index//:k256",
-    "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_yaml",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing",
-    "@crate_index//:uuid",
-]
-
 rust_binary(
     name = "rate-limiting-canister-client",
     srcs = ["src/main.rs"],
-    proc_macro_deps = [],
     version = "0.1.0",
     visibility = ["//rs:release-pkg"],
-    deps = DEPENDENCIES + [
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
         "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client-lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:clap",
+        "@crate_index//:ic-agent",
+        "@crate_index//:k256",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_yaml",
+        "@crate_index//:tokio",
+        "@crate_index//:tracing",
         "@crate_index//:tracing-subscriber",
+        "@crate_index//:uuid",
     ],
 )
 
@@ -32,7 +28,19 @@ rust_library(
     name = "rate-limiting-canister-client-lib",
     srcs = ["src/lib.rs"],
     crate_name = "rate_limiting_canister_client",
-    proc_macro_deps = [],
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:k256",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_yaml",
+        "@crate_index//:tokio",
+        "@crate_index//:tracing",
+        "@crate_index//:uuid",
+    ],
 )
