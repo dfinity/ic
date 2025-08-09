@@ -51,6 +51,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/root_of_trust",
     "//rs/crypto/test_utils/tls",
     "//rs/test_utilities",
+    "//rs/test_utilities/crypto",
     "//rs/test_utilities/types",
     "//rs/validator",
     "@crate_index//:hex",
