@@ -59,16 +59,22 @@ function process_bootstrap() {
         cp -rL -T "${TMPDIR}/ic_registry_local_store" "${STATE_ROOT}/data/ic_registry_local_store"
     fi
 
-    if [ -e "${TMPDIR}/nns_public_key.pem" ]; then
-        echo "Setting up initial nns_public_key.pem"
-        cp -rL -T "${TMPDIR}/nns_public_key.pem" "${STATE_ROOT}/data/nns_public_key.pem"
-        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
-    fi
-
     if [ -e "${TMPDIR}/node_operator_private_key.pem" ]; then
         echo "Setting up initial node_operator_private_key.pem"
         cp -rL -T "${TMPDIR}/node_operator_private_key.pem" "${STATE_ROOT}/data/node_operator_private_key.pem"
         chmod 400 "${STATE_ROOT}/data/node_operator_private_key.pem"
+    fi
+
+    VARIANT_TYPE=$(/opt/ic/bin/config check-variant-type)
+    NNS_KEY_DEST="${STATE_ROOT}/data/nns_public_key.pem"
+    if [ "${VARIANT_TYPE}" = "dev" ] && [ -e "${TMPDIR}/nns_public_key_override.pem" ]; then
+        echo "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
+        cp -rL -T "${TMPDIR}/nns_public_key_override.pem" "${NNS_KEY_DEST}"
+        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
+    elif [ "${VARIANT_TYPE}" = "prod" ] && [ -e "/opt/ic/share/nns_public_key.pem" ]; then
+        echo "Copying nns_public_key.pem from /opt/ic/share/nns_public_key.pem"
+        cp -rL -T "/opt/ic/share/nns_public_key.pem" "${NNS_KEY_DEST}"
+        chmod 444 "${STATE_ROOT}/data/nns_public_key.pem"
     fi
 
     for DIR in accounts_ssh_authorized_keys; do

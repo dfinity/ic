@@ -36,6 +36,11 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
+    /// Checks if the tool is config_dev or config.
+    /// Note: This command should generally be avoided.
+    /// Instead of relying on this command, consider porting the relevant bash logic to Rust
+    /// and integrating it directly with the config tool.
+    CheckVariantType,
 }
 
 #[derive(Parser)]
@@ -81,8 +86,6 @@ pub struct GenerateTestnetConfigClapArgs {
     pub elasticsearch_tags: Option<String>,
     #[arg(long)]
     pub enable_trusted_execution_environment: Option<bool>,
-    #[arg(long)]
-    pub use_nns_public_key: Option<bool>,
     #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
     #[arg(long)]
@@ -197,7 +200,7 @@ pub fn main() -> Result<()> {
                     elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
                     elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
                 },
-                use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
+                use_nns_public_key: false,
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),
@@ -283,7 +286,6 @@ pub fn main() -> Result<()> {
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
                 elasticsearch_tags: clap_args.elasticsearch_tags,
-                use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
                 enable_trusted_execution_environment: clap_args
                     .enable_trusted_execution_environment,
@@ -307,6 +309,17 @@ pub fn main() -> Result<()> {
                 &clap_args.guestos_config_json_path,
                 &generate_testnet_config(args)?,
             )
+        }
+        Some(Commands::CheckVariantType) => {
+            let is_dev_feature = cfg!(feature = "dev");
+
+            if is_dev_feature {
+                print!("dev");
+            } else {
+                print!("prod");
+            }
+
+            Ok(())
         }
         None => {
             println!("No command provided. Use --help for usage information.");
