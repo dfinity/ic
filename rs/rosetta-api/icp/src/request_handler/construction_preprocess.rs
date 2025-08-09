@@ -7,8 +7,8 @@ use crate::models::{
 use crate::request::Request;
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
-    RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
+    NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
     StakeMaturity, StartDissolve, StopDissolve,
 };
 use icp_ledger::Operation;
@@ -72,6 +72,7 @@ fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier
         | Request::StartDissolve(StartDissolve { account, .. })
         | Request::StopDissolve(StopDissolve { account, .. })
         | Request::Disburse(Disburse { account, .. })
+        | Request::DisburseMaturity(DisburseMaturity { account, .. })
         | Request::AddHotKey(AddHotKey { account, .. })
         | Request::RemoveHotKey(RemoveHotKey { account, .. })
         | Request::Spawn(Spawn { account, .. })

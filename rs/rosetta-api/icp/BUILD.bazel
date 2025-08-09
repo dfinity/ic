@@ -13,6 +13,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -67,7 +68,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
     "//rs/ledger_suite/icp/test_utils",
     "//rs/ledger_suite/icrc1",

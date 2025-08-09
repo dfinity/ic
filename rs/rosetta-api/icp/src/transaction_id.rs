@@ -66,7 +66,8 @@ impl TransactionIdentifier {
             | RequestType::NeuronInfo { .. }
             | RequestType::ListNeurons { .. }
             | RequestType::RefreshVotingPower { .. }
-            | RequestType::Follow { .. } => {
+            | RequestType::Follow { .. }
+            | RequestType::DisburseMaturity { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier::from(
                     NEURON_MANAGEMENT_PSEUDO_HASH.to_string(),

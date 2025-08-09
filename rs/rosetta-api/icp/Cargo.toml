@@ -32,6 +32,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -70,7 +71,6 @@ ic-ledger-test-utils = { path = "../../ledger_suite/icp/test_utils" }
 ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
 tempfile = { workspace = true }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
