@@ -25,6 +25,7 @@ system_test_nns(
 system_test_nns(
     name = "api_bn_update_workload_test",
     tags = [
+        "experimental_system_test_colocation",
         "long_test",
     ],
     test_timeout = "long",
