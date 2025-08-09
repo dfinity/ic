@@ -2840,7 +2840,7 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
-    use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
+    use ic_management_canister_types::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{
         CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
     };
