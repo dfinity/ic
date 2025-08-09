@@ -680,7 +680,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             ingress_history_writer,
             cycles_account_manager,
             metrics_registry,
-            subnet_id,
             log.clone(),
         ));
         let demux = Box::new(routing::demux::DemuxImpl::new(

@@ -23,7 +23,7 @@ use ic_types::{
         SignedIngressContent,
     },
     time::expiry_time_from_now,
-    SubnetId, Time,
+    Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
@@ -113,7 +113,6 @@ pub(crate) struct ValidSetRuleImpl<
     ingress_history_writer: Arc<IngressHistoryWriter_>,
     ingress_history_max_messages: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    own_subnet_id: SubnetId,
     metrics: VsrMetrics,
     log: ReplicaLogger,
 }
@@ -125,14 +124,12 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         ingress_history_writer: Arc<IngressHistoryWriter_>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         metrics_registry: &MetricsRegistry,
-        own_subnet_id: SubnetId,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             ingress_history_writer,
             ingress_history_max_messages: INGRESS_HISTORY_MAX_MESSAGES,
             metrics: VsrMetrics::new(metrics_registry),
-            own_subnet_id,
             cycles_account_manager,
             log,
         }
@@ -251,23 +248,22 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
             });
         }
 
-        let effective_canister_id =
-            match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
-                Ok(effective_canister_id) => effective_canister_id,
-                Err(ParseIngressError::UnknownSubnetMethod) => {
-                    return Err(IngressInductionError::CanisterMethodNotFound(
-                        msg.method_name().to_string(),
-                    ))
-                }
-                Err(ParseIngressError::SubnetMethodNotAllowed) => {
-                    return Err(IngressInductionError::SubnetMethodNotAllowed(
-                        msg.method_name().to_string(),
-                    ))
-                }
-                Err(ParseIngressError::InvalidSubnetPayload(_)) => {
-                    return Err(IngressInductionError::InvalidManagementPayload)
-                }
-            };
+        let effective_canister_id = match extract_effective_canister_id(&msg) {
+            Ok(effective_canister_id) => effective_canister_id,
+            Err(ParseIngressError::UnknownSubnetMethod) => {
+                return Err(IngressInductionError::CanisterMethodNotFound(
+                    msg.method_name().to_string(),
+                ))
+            }
+            Err(ParseIngressError::SubnetMethodNotAllowed) => {
+                return Err(IngressInductionError::SubnetMethodNotAllowed(
+                    msg.method_name().to_string(),
+                ))
+            }
+            Err(ParseIngressError::InvalidSubnetPayload(_)) => {
+                return Err(IngressInductionError::InvalidManagementPayload)
+            }
+        };
 
         // Compute the cost of induction.
         let induction_cost = self.cycles_account_manager.ingress_induction_cost(
@@ -281,7 +277,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         match induction_cost {
             IngressInductionCost::Free => {
                 // Only subnet methods can be free. These are enqueued directly.
-                assert!(ingress.is_addressed_to_subnet(self.own_subnet_id));
+                assert!(ingress.is_addressed_to_subnet());
                 state.push_ingress(ingress)
             }
 
@@ -311,7 +307,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                 }
 
                 // Ensure the canister is running if the message isn't to a subnet.
-                if !ingress.is_addressed_to_subnet(self.own_subnet_id) {
+                if !ingress.is_addressed_to_subnet() {
                     match canister.status() {
                         CanisterStatusType::Running => {}
                         CanisterStatusType::Stopping => {

@@ -961,7 +961,7 @@ impl ReplicatedState {
     /// Pushes an ingress message into the induction pool (canister or subnet
     /// ingress queue).
     pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), IngressInductionError> {
-        if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
+        if msg.is_addressed_to_subnet() {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;

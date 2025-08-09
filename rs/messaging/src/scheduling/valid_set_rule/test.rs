@@ -134,7 +134,6 @@ fn induct_message_with_successful_history_update() {
             ingress_history_writer,
             cycles_account_manager,
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -194,7 +193,6 @@ fn induct_message_fails_for_stopping_canister() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -252,7 +250,6 @@ fn induct_message_fails_for_stopped_canister() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -294,7 +291,6 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -349,7 +345,6 @@ fn update_history_if_induction_failed() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -420,7 +415,6 @@ fn dont_induct_duplicate_messages() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -510,7 +504,6 @@ fn canister_on_application_subnet_charges_for_ingress() {
         ingress_history_writer,
         cycles_account_manager,
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -557,7 +550,6 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
         ingress_history_writer,
         cycles_account_manager,
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -592,7 +584,6 @@ fn ingress_to_stopping_canister_is_rejected() {
         ingress_history_writer,
         Arc::new(CyclesAccountManagerBuilder::new().build()),
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -626,7 +617,6 @@ fn ingress_to_stopped_canister_is_rejected() {
         ingress_history_writer,
         Arc::new(CyclesAccountManagerBuilder::new().build()),
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -666,7 +656,6 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             Arc::new(ingress_history_writer),
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -716,7 +705,6 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
                     .build(),
             ),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -752,7 +740,6 @@ fn management_message_with_unknown_method_is_not_inducted() {
                 .build(),
         ),
         &metrics_registry,
-        subnet_id,
         no_op_logger(),
     );
 
@@ -783,7 +770,6 @@ fn management_message_with_invalid_payload_is_not_inducted() {
                 .build(),
         ),
         &metrics_registry,
-        subnet_id,
         no_op_logger(),
     );
 
@@ -813,7 +799,6 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
                 .build(),
         ),
         &metrics_registry,
-        subnet_id,
         no_op_logger(),
     );
 
@@ -908,7 +893,6 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
             ingress_history_writer,
             cycles_account_manager,
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
         valid_set_rule.ingress_history_max_messages = 3;
