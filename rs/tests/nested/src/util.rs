@@ -338,7 +338,7 @@ pub async fn wait_for_guest_version(
         || async {
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
-                .expect("Unable to check GuestOS version");
+                .context("Unable to check GuestOS version")?;
             info!(
                 logger,
                 "SUCCESS: Guest reported version '{}'", current_version
@@ -370,7 +370,7 @@ pub async fn wait_for_expected_guest_version(
         || async {
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
-                .expect("Unable to check GuestOS version");
+                .context("Unable to check GuestOS version")?;
             if &current_version != expected_version {
                 bail!("FAIL: Guest is still on version '{}'", current_version)
             }

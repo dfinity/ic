@@ -210,9 +210,9 @@ pub fn nns_recovery_test(env: TestEnv) {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    let target_version_str = get_hostos_update_img_version().unwrap();
-    let target_version = HostosVersion::try_from(target_version_str.to_string())
-        .expect("Invalid target hostos version");
+    let target_version = get_hostos_update_img_version().unwrap();
+    let target_version =
+        HostosVersion::try_from(target_version.to_string()).expect("Invalid target hostos version");
 
     let update_image_url =
         get_hostos_update_img_url().expect("Invalid target hostos update image URL");
