@@ -11,6 +11,7 @@ use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveErro
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
@@ -25,13 +26,10 @@ use ic_types::{
 use std::time::Instant;
 use tokio::{
     runtime::Handle,
-    sync::{
-        mpsc::{
-            channel,
-            error::{TryRecvError, TrySendError},
-            Receiver, Sender,
-        },
-        watch,
+    sync::mpsc::{
+        channel,
+        error::{TryRecvError, TrySendError},
+        Receiver, Sender,
     },
 };
 use tonic::{transport::Channel, Code};
@@ -64,7 +62,7 @@ pub struct CanisterHttpAdapterClientImpl {
     query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     log: ReplicaLogger,
 }
 
@@ -76,7 +74,7 @@ impl CanisterHttpAdapterClientImpl {
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
         log: ReplicaLogger,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
@@ -89,7 +87,7 @@ impl CanisterHttpAdapterClientImpl {
             query_service,
             metrics,
             subnet_type,
-            delegation_from_nns,
+            nns_delegation_reader,
             log,
         }
     }
@@ -126,7 +124,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
-        let delegation_from_nns = self.delegation_from_nns.borrow().clone();
+        let delegation_from_nns = self
+            .nns_delegation_reader
+            .get_delegation_with_flat_canister_ranges();
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -420,6 +420,7 @@ mod tests {
     };
     use std::convert::TryFrom;
     use std::time::Duration;
+    use tokio::sync::watch;
     use tonic::{
         transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
@@ -627,7 +628,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 
@@ -683,7 +684,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 
@@ -747,7 +748,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 
@@ -809,7 +810,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 
@@ -898,7 +899,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 
@@ -974,7 +975,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 
@@ -1032,7 +1033,7 @@ mod tests {
             2,
             MetricsRegistry::default(),
             SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx),
             no_op_logger(),
         );
 

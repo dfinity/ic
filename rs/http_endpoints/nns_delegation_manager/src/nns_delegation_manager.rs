@@ -37,7 +37,7 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::metrics::DelegationManagerMetrics;
+use crate::{metrics::DelegationManagerMetrics, NNSDelegationReader};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -76,10 +76,7 @@ pub fn start_nns_delegation_manager(
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     cancellation_token: CancellationToken,
-) -> (
-    JoinHandle<()>,
-    watch::Receiver<Option<CertificateDelegation>>,
-) {
+) -> (JoinHandle<()>, NNSDelegationReader) {
     let manager = DelegationManager {
         config,
         log,
@@ -100,7 +97,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, rx)
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 struct DelegationManager {
@@ -255,6 +252,7 @@ async fn try_fetch_delegation_from_nns(
         }
     };
 
+    // TODO(CON-1487): request the /canister_ranges/{subnet_id} subtree as well
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
             read_state: HttpReadState {
@@ -834,9 +832,9 @@ mod tests {
             CancellationToken::new(),
         );
 
-        rx.changed().await.unwrap();
+        rx.receiver.changed().await.unwrap();
 
-        assert!(rx.borrow().is_none());
+        assert!(rx.get_delegation_with_flat_canister_ranges().is_none());
     }
 
     #[tokio::test]
@@ -860,11 +858,10 @@ mod tests {
             CancellationToken::new(),
         );
 
-        rx.changed().await.unwrap();
+        rx.receiver.changed().await.unwrap();
 
         let delegation = rx
-            .borrow()
-            .clone()
+            .get_delegation_with_flat_canister_ranges()
             .expect("Should return some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
             .expect("Should return a certificate which can be deserialized");
@@ -899,12 +896,14 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        rx.changed().await.unwrap();
+        rx.receiver.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has elapsed.
-        assert!(timeout(DELEGATION_UPDATE_INTERVAL / 2, rx.changed())
-            .await
-            .is_err());
+        assert!(
+            timeout(DELEGATION_UPDATE_INTERVAL / 2, rx.receiver.changed())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -929,10 +928,10 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        rx.changed().await.unwrap();
+        rx.receiver.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has passed.
-        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.changed())
+        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.receiver.changed())
             .await
             .is_ok());
     }
@@ -960,7 +959,7 @@ mod tests {
         );
 
         // The initial *valid* delegation should be fetched immediately.
-        assert!(rx.changed().await.is_ok());
+        assert!(rx.receiver.changed().await.is_ok());
 
         // Mock an *invalid* certificate delegation.
         *override_nns_delegation.write().unwrap() = Some(CertificateDelegation {
@@ -970,14 +969,14 @@ mod tests {
 
         // Since the returned certificate is invalid, we don't expect the manager to return
         // any new certification.
-        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.changed())
+        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.receiver.changed())
             .await
             .is_err());
 
         *override_nns_delegation.write().unwrap() = None;
         // The mocked NNS node should now return a valid certification, so we expect that
         // the manager will fetch and send it to all receivers.
-        assert!(rx.changed().await.is_ok());
+        assert!(rx.receiver.changed().await.is_ok());
     }
 
     #[tokio::test]
