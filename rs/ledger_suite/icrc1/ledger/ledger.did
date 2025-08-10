@@ -83,6 +83,11 @@ type TransferResult = variant {
     Err : TransferError;
 };
 
+type MintByBatchesResult = variant {
+    Ok : vec BlockIndex;
+    Err : TransferError;
+};
+
 // The value returned from the [icrc1_metadata] endpoint.
 type MetadataValue = variant {
     Nat : nat;
@@ -538,6 +543,7 @@ service : (ledger_arg : LedgerArg) -> {
     icrc1_minting_account : () -> (opt Account) query;
     icrc1_balance_of : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
+    icrc1_mint_by_batches : (vec TransferArg) -> (MintByBatchesResult);
     icrc1_supported_standards : () -> (vec StandardRecord) query;
 
     icrc2_approve : (ApproveArgs) -> (ApproveResult);

@@ -1,0 +1,17 @@
+{
+  "canisters": {
+    "icrc1": {
+      "candid": "rs/ledger_suite/icrc1/ledger/ledger.did",
+      "package": "ic-icrc1-ledger",
+      "type": "rust"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

@@ -825,10 +825,10 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                     "Total number of archives.",
                 )?;
             }
-            Err(err) => Err(std::io::Error::other(format!(
-                "Failed to read number of archives: {}",
-                err
-            )))?,
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read number of archives: {}", err),
+            ))?,
         }
         if is_ready() {
             w.encode_gauge(
@@ -1128,6 +1128,51 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
         err
     })
 }
+
+#[update]
+#[candid_method(update)]
+async fn icrc1_mint_by_batches(
+    args: Vec<TransferArg>,
+) -> Result<Vec<Nat>, TransferError> {
+    panic_if_not_ready();
+
+    let minter_account = Access::with_ledger(|l| *l.minting_account());
+    if ic_cdk::api::caller() != minter_account.owner {
+        ic_cdk::trap("Only the minting account can call icrc1_mint_by_batches");
+    }
+
+    let mut block_indices = Vec::with_capacity(args.len());
+
+    for arg in args.into_iter() {
+        let from_account = minter_account;
+
+        let idx = execute_transfer_not_async(
+            from_account,
+            arg.to,
+            None,
+            arg.fee,
+            arg.amount,
+            arg.memo,
+            arg.created_at_time,
+        )
+        .map_err(convert_transfer_error)
+        .map_err(|err| {
+            let err: TransferError = match err.try_into() {
+                Ok(err) => err,
+                Err(err) => ic_cdk::trap(&err),
+            };
+            err
+        })?;
+
+        block_indices.push(Nat::from(idx));
+    }
+
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+
+    Ok(block_indices)
+}
+
 
 #[update]
 #[candid_method(update)]
