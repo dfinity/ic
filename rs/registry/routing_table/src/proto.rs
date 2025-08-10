@@ -63,7 +63,7 @@ impl From<RoutingTable> for pb::RoutingTable {
 impl From<&RoutingTable> for pb::RoutingTable {
     fn from(src: &RoutingTable) -> Self {
         let entries = src
-            .0
+            .ranges
             .iter()
             .map(|(range, subnet_id)| pb::routing_table::Entry {
                 range: Some(pb::CanisterIdRange::from(*range)),
