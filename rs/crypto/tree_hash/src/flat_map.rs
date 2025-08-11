@@ -118,7 +118,7 @@ impl<K: Ord, V> FlatMap<K, V> {
 
     /// Returns references to the key/value pair with the largest key that is at most `key`.
     ///
-    /// Complexity(O(log(N)))
+    /// Complexity: O(log(N))
     pub fn lower_bound(&self, key: &K) -> Option<(&K, &V)> {
         match self.keys.binary_search(key) {
             Ok(idx) => Some((&self.keys[idx], &self.values[idx])),
