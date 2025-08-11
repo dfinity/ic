@@ -378,6 +378,7 @@ pub struct ExecutionStateSnapshotImpl<T> {
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
+/// Immutable CanisterSnapshot
 pub type CanisterSnapshot = CanisterSnapshotImpl<()>;
 
 /// Snapshots created via metadata upload are incomplete, as they have no binary data.
@@ -385,6 +386,7 @@ pub type CanisterSnapshot = CanisterSnapshotImpl<()>;
 /// Once the data upload is finished, a call to `load_snapshot` validates and transforms a
 /// `PartialCanisterSnapshot` into a regular, immutable `CanisterSnapshot`.
 pub type PartialCanisterSnapshot = CanisterSnapshotImpl<Mutable>;
+
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterSnapshotImpl<T> {

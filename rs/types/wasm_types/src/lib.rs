@@ -55,9 +55,17 @@ pub enum ModuleLoadingStatus {
     FileNotLoaded,
 }
 
+/// Marker type for `CanisterModuleImpl` and `CanisterSnapshotImpl`
+/// which have default (immutable) versions and, if parametrized with
+/// this type, mutable versions.  
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Mutable;
+
+/// Normal `CanisterModule`s are immutable.
 pub type CanisterModule = CanisterModuleImpl<()>;
+
+/// `CanisterModule`s which can still be manipulated via snapshot data
+/// upload are mutable.
 pub type MutableCanisterModule = CanisterModuleImpl<Mutable>;
 
 /// Canister module stored by the replica.
