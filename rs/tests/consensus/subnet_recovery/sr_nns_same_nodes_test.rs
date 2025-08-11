@@ -35,10 +35,9 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::Height;
 use slog::info;
 use std::cmp;
-use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -60,12 +59,11 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
 
-    let ic_version = env.get_initial_replica_version().unwrap();
+    let ic_version = get_guestos_img_version().unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
 
     // identifies the version of the replica after the recovery
-    let working_version =
-        ReplicaVersion::try_from(format!("{}-test", ic_version.as_ref())).unwrap();
+    let working_version = get_guestos_update_img_version().unwrap();
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     info!(
         logger,
@@ -126,8 +124,8 @@ pub fn test(env: TestEnv) {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
         replay_until_height: None, // We will set this after breaking the subnet, see below
-        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
+        upgrade_image_url: get_guestos_update_img_url().ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         next_step: None,

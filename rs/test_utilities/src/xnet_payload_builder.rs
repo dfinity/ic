@@ -36,10 +36,8 @@ impl XNetPayloadBuilder for FakeXNetPayloadBuilder {
         let mut size_bytes = 0.into();
         for (index, stream_slices) in streams.iter().enumerate() {
             let stream_size: usize = stream_slices
-                .iter()
-                .map(|(_, stream_slice)| {
-                    stream_slice.payload.len() + stream_slice.merkle_proof.len()
-                })
+                .values()
+                .map(|stream_slice| stream_slice.payload.len() + stream_slice.merkle_proof.len())
                 .sum();
 
             if NumBytes::from(stream_size as u64) < byte_limit {

@@ -71,6 +71,7 @@ pub fn get_subnet_holding_chain_keys(
             .collect(),
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
+        max_parallel_pre_signature_transcripts_in_creation: None,
     }));
 
     subnet_record

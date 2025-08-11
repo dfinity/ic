@@ -167,6 +167,7 @@ pub(crate) fn execute_upgrade(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -368,6 +369,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -492,6 +494,7 @@ fn upgrade_stage_4a_call_post_upgrade(
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {

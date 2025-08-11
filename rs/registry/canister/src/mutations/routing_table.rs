@@ -1,8 +1,13 @@
-use crate::mutations::node_management::common::{
-    get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+use crate::{
+    common::LOG_PREFIX,
+    flags::is_routing_table_single_entry_obsolete,
+    mutations::node_management::common::{
+        get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+    },
+    pb::v1::SubnetForCanister,
+    registry::Registry,
+    storage::with_chunks,
 };
-use crate::storage::with_chunks;
-use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
@@ -220,12 +225,13 @@ pub(crate) fn routing_table_into_registry_mutation(
 ) -> Vec<RegistryMutation> {
     let mut mutations = mutations_for_canister_ranges(registry, &routing_table);
 
-    let new_routing_table = pb::RoutingTable::from(routing_table);
-    mutations.push(upsert(
-        make_routing_table_record_key().as_bytes(),
-        new_routing_table.encode_to_vec(),
-    ));
-
+    if !is_routing_table_single_entry_obsolete() {
+        let new_routing_table = pb::RoutingTable::from(routing_table);
+        mutations.push(upsert(
+            make_routing_table_record_key().as_bytes(),
+            new_routing_table.encode_to_vec(),
+        ));
+    }
     mutations
 }
 
@@ -971,3 +977,7 @@ mod tests {
         compare_rt_mutations(expected, mutations);
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+#[path = "routing_table_benches.rs"]
+mod benches;

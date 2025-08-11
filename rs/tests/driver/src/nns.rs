@@ -32,6 +32,7 @@ use ic_nns_test_utils::governance::{
     submit_external_update_proposal_allowing_error, wait_for_final_state,
 };
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_keys::make_subnet_list_record_key;
@@ -486,10 +487,11 @@ pub async fn submit_update_elected_replica_versions_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: Option<ReplicaVersion>,
+    version: Option<&ReplicaVersion>,
     sha256: Option<String>,
     upgrade_urls: Vec<String>,
-    versions_to_unelect: Vec<String>,
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
+    versions_to_unelect: Vec<ReplicaVersion>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -497,11 +499,11 @@ pub async fn submit_update_elected_replica_versions_proposal(
         neuron_id,
         NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: version.clone().map(String::from),
+            replica_version_to_elect: version.map(String::from),
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
-            replica_versions_to_unelect: versions_to_unelect.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            replica_versions_to_unelect: versions_to_unelect.iter().map(String::from).collect(),
+            guest_launch_measurements,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
             (Some(v), Some(sha), _) => format!(
@@ -579,6 +581,7 @@ pub async fn submit_create_application_subnet_proposal(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
@@ -601,7 +604,7 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
-        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+        canister_cycles_cost_schedule: cost_schedule,
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
@@ -653,7 +656,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: String,
+    version: &ReplicaVersion,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -661,9 +664,9 @@ pub async fn submit_update_unassigned_node_version_proposal(
         neuron_id,
         NnsFunction::DeployGuestosToAllUnassignedNodes,
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: version.clone(),
+            elected_replica_version: version.to_string(),
         },
-        format!("Update unassigned nodes version to: {}", version.clone()),
+        format!("Update unassigned nodes version to: {}", version),
         "".to_string(),
     )
     .await
@@ -772,7 +775,7 @@ pub async fn submit_update_api_boundary_node_version_proposal(
     sender: Sender,
     neuron_id: NeuronId,
     node_ids: Vec<NodeId>,
-    version: String,
+    version: &ReplicaVersion,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -781,7 +784,7 @@ pub async fn submit_update_api_boundary_node_version_proposal(
         NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
         UpdateApiBoundaryNodesVersionPayload {
             node_ids: node_ids.clone(),
-            version: version.clone(),
+            version: version.to_string(),
         },
         format!(
             "Update API boundary nodes ({}) to version {}",

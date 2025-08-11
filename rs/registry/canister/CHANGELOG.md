@@ -11,6 +11,22 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-18: Proposal 137500
+
+https://dashboard.internetcomputer.org/proposal/137500
+
+Back fill some node records with reward type.
+
+
+# 2025-07-11: Proposal 137347
+
+http://dashboard.internetcomputer.org/proposal/137347
+
+## Changed
+
+* `create_subnet` now returns the new subnet's ID.
+
+
 # 2025-07-06: Proposal 137254
 
 http://dashboard.internetcomputer.org/proposal/137254

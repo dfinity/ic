@@ -3,10 +3,12 @@ name = "sns-treasury-manager"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+license = "Apache-2.0"
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
+derivative = { version = "2.2" }
 serde = { workspace = true }

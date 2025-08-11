@@ -89,16 +89,16 @@ type TestnetConfig struct {
 
 // Testnet config summary published to json file.
 type Summary struct {
-	FarmGroup       interface{}   `json:"farm"`
-	KibanaUrl       interface{}   `json:"kibana_url"`
-	IcTopology      interface{}   `json:"ic_topology"`
-	VmConsoleLinks  []interface{} `json:"vm_console_links"`
-	IcGatewayARecords   interface{}   `json:"ic_gateway_a_records"`
-	IcGatewayAAAARecords   interface{}   `json:"ic_gateway_aaaa_records"`
-	PrometheusVm    interface{}   `json:"prometheus"`
-	GrafanaLink     interface{}   `json:"grafana"`
-	IcProgressClock interface{}   `json:"progress_clock"`
-	FarmVMs         []interface{} `json:"farm_vms"`
+	FarmGroup            interface{}   `json:"farm"`
+	KibanaUrl            interface{}   `json:"kibana_url"`
+	IcTopology           interface{}   `json:"ic_topology"`
+	VmConsoleLinks       []interface{} `json:"vm_console_links"`
+	IcGatewayARecords    interface{}   `json:"ic_gateway_a_records"`
+	IcGatewayAAAARecords interface{}   `json:"ic_gateway_aaaa_records"`
+	PrometheusVm         interface{}   `json:"prometheus"`
+	GrafanaLink          interface{}   `json:"grafana"`
+	IcProgressClock      interface{}   `json:"progress_clock"`
+	FarmVMs              []interface{} `json:"farm_vms"`
 }
 
 func (summary *Summary) add_event(event *TestDriverEvent) {
@@ -107,7 +107,7 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 	} else if event.EventName == VM_CONSOLE_LINK_CREATED_EVENT {
 		summary.VmConsoleLinks = append(summary.VmConsoleLinks, event.Body)
 	} else if event.EventName == IC_GATEWAY_A_RECORDS_CREATED_EVENT {
-		summary.IcGatewayARecords = event.Body	
+		summary.IcGatewayARecords = event.Body
 	} else if event.EventName == IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT {
 		summary.IcGatewayAAAARecords = event.Body
 	} else if event.EventName == PROMETHEUS_VM_CREATED_EVENT {

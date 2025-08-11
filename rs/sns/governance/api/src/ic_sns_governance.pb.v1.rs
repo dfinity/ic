@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
-
+use ic_base_types::PrincipalId;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 pub mod topics;
 
@@ -8,7 +8,7 @@ pub mod topics;
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct NeuronPermission {
     /// The principal that has the permissions.
-    pub principal: Option<::ic_base_types::PrincipalId>,
+    pub principal: Option<PrincipalId>,
     /// The list of permissions that this principal has.
     pub permission_type: Vec<i32>,
 }
@@ -278,14 +278,14 @@ pub mod nervous_system_function {
     )]
     pub struct GenericNervousSystemFunction {
         /// The id of the target canister that will be called to execute the proposal.
-        pub target_canister_id: Option<::ic_base_types::PrincipalId>,
+        pub target_canister_id: Option<PrincipalId>,
         /// The name of the method that will be called to execute the proposal.
         /// The signature of the method must be equivalent to the following:
         /// <method_name>(proposal_data: ProposalData) -> Result<(), String>.
         pub target_method_name: Option<String>,
         /// The id of the canister that will be called to validate the proposal before
         /// it is put up for a vote.
-        pub validator_canister_id: Option<::ic_base_types::PrincipalId>,
+        pub validator_canister_id: Option<PrincipalId>,
         /// The name of the method that will be called to validate the proposal
         /// before it is put up for a vote.
         /// The signature of the method must be equivalent to the following:
@@ -344,7 +344,7 @@ pub struct ChunkedCanisterWasm {
     pub wasm_module_hash: ::prost::alloc::vec::Vec<u8>,
     /// Obligatory; indicates which canister stores the WASM chunks.
     #[prost(message, optional, tag = "2")]
-    pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    pub store_canister_id: Option<PrincipalId>,
     /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
     /// one chunk.
     #[prost(bytes = "vec", repeated, tag = "3")]
@@ -356,7 +356,7 @@ pub struct ChunkedCanisterWasm {
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct UpgradeSnsControlledCanister {
     /// The id of the canister that is upgraded.
-    pub canister_id: Option<::ic_base_types::PrincipalId>,
+    pub canister_id: Option<PrincipalId>,
     /// The new wasm module that the canister is upgraded to.
     #[serde(with = "serde_bytes")]
     pub new_canister_wasm: Vec<u8>,
@@ -369,7 +369,7 @@ pub struct UpgradeSnsControlledCanister {
     pub mode: Option<i32>,
     /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
     /// an empty, and this field should be set instead.
-    pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
+    pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -381,7 +381,7 @@ pub struct TransferSnsTreasuryFunds {
     /// An optional memo to use for the transfer.
     pub memo: Option<u64>,
     /// The principal to transfer the funds to.
-    pub to_principal: Option<::ic_base_types::PrincipalId>,
+    pub to_principal: Option<PrincipalId>,
     /// An (optional) Subaccount of the principal to transfer the funds to.
     pub to_subaccount: Option<Subaccount>,
 }
@@ -448,7 +448,7 @@ pub struct MintSnsTokens {
     /// An optional memo to use for the transfer.
     pub memo: Option<u64>,
     /// The principal to transfer the funds to.
-    pub to_principal: Option<::ic_base_types::PrincipalId>,
+    pub to_principal: Option<PrincipalId>,
     /// An (optional) Subaccount of the principal to transfer the funds to.
     pub to_subaccount: Option<Subaccount>,
 }
@@ -478,7 +478,7 @@ pub struct RegisterDappCanisters {
     /// making this proposal. Any controllers besides the root canister will be
     /// removed when the proposal is executed.
     /// At least one canister ID is required.
-    pub canister_ids: Vec<::ic_base_types::PrincipalId>,
+    pub canister_ids: Vec<PrincipalId>,
 }
 
 #[derive(
@@ -510,19 +510,33 @@ pub struct RegisterExtension {
 
     pub extension_init: Option<ExtensionInit>,
 }
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct ExtensionOperationArg {
+    pub value: Option<PreciseValue>,
+}
+#[derive(
+    candid::CandidType, Debug, candid::Deserialize, comparable::Comparable, Clone, PartialEq,
+)]
+pub struct ExecuteExtensionOperation {
+    pub extension_canister_id: Option<PrincipalId>,
+    pub operation_name: Option<String>,
+    pub operation_arg: Option<ExtensionOperationArg>,
+}
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct DeregisterDappCanisters {
     /// The canister IDs to be deregistered (i.e. removed from the management of the SNS).
-    pub canister_ids: Vec<::ic_base_types::PrincipalId>,
+    pub canister_ids: Vec<PrincipalId>,
     /// The new controllers for the deregistered canisters.
-    pub new_controllers: Vec<::ic_base_types::PrincipalId>,
+    pub new_controllers: Vec<PrincipalId>,
 }
 /// A proposal to manage the settings of one or more dapp canisters.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct ManageDappCanisterSettings {
     /// The canister IDs of the dapp canisters to be modified.
-    pub canister_ids: Vec<::ic_base_types::PrincipalId>,
+    pub canister_ids: Vec<PrincipalId>,
     /// Below are fields under CanisterSettings defined at
     /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
     pub compute_allocation: Option<u64>,
@@ -682,6 +696,10 @@ pub mod proposal {
         ///
         /// Id = 17.
         RegisterExtension(super::RegisterExtension),
+        /// Execute an SNS extension's operation.
+        ///
+        /// Id = 18.
+        ExecuteExtensionOperation(super::ExecuteExtensionOperation),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1381,9 +1399,9 @@ pub struct Governance {
     pub genesis_timestamp_seconds: u64,
     pub metrics: Option<governance::GovernanceCachedMetrics>,
     /// The canister ID of the ledger canister.
-    pub ledger_canister_id: Option<::ic_base_types::PrincipalId>,
+    pub ledger_canister_id: Option<PrincipalId>,
     /// The canister ID of the root canister.
-    pub root_canister_id: Option<::ic_base_types::PrincipalId>,
+    pub root_canister_id: Option<PrincipalId>,
     /// ID to NervousSystemFunction (which has an id field).
     pub id_to_nervous_system_functions: BTreeMap<u64, NervousSystemFunction>,
     pub mode: i32,
@@ -1391,7 +1409,7 @@ pub struct Governance {
     ///
     /// When this is unpopulated, mode should be Normal, and when this is
     /// populated, mode should be PreInitializationSwap.
-    pub swap_canister_id: Option<::ic_base_types::PrincipalId>,
+    pub swap_canister_id: Option<PrincipalId>,
     pub sns_metadata: Option<governance::SnsMetadata>,
     /// The initialization parameters used to spawn an SNS
     pub sns_initialization_parameters: String,
@@ -1693,7 +1711,7 @@ pub struct GetMetricsRequest {
 pub struct TreasuryMetrics {
     pub treasury: i32,
     pub name: Option<String>,
-    pub ledger_canister_id: Option<::ic_base_types::PrincipalId>,
+    pub ledger_canister_id: Option<PrincipalId>,
     pub account: Option<Account>,
     pub amount_e8s: Option<u64>,
     pub original_amount_e8s: Option<u64>,
@@ -1975,6 +1993,8 @@ pub mod manage_neuron {
     }
     /// Nested message and enum types in `ClaimOrRefresh`.
     pub mod claim_or_refresh {
+        use super::*;
+
         /// (see MemoAndController below)
         #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
         pub struct MemoAndController {
@@ -1982,7 +2002,7 @@ pub mod manage_neuron {
             /// (where the tokens were staked to).
             pub memo: u64,
             /// The principal for which the neuron should be claimed.
-            pub controller: Option<::ic_base_types::PrincipalId>,
+            pub controller: Option<PrincipalId>,
         }
         #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
         pub enum By {
@@ -2008,7 +2028,7 @@ pub mod manage_neuron {
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct AddNeuronPermissions {
         /// The PrincipalId that the permissions will be granted to.
-        pub principal_id: Option<::ic_base_types::PrincipalId>,
+        pub principal_id: Option<PrincipalId>,
         /// The set of permissions that will be granted to the PrincipalId.
         pub permissions_to_add: Option<super::NeuronPermissionList>,
     }
@@ -2019,7 +2039,7 @@ pub mod manage_neuron {
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct RemoveNeuronPermissions {
         /// The PrincipalId that the permissions will be revoked from.
-        pub principal_id: Option<::ic_base_types::PrincipalId>,
+        pub principal_id: Option<PrincipalId>,
         /// The set of permissions that will be revoked from the PrincipalId.
         pub permissions_to_remove: Option<super::NeuronPermissionList>,
     }
@@ -2255,7 +2275,7 @@ pub struct ListNeurons {
     /// A principal ID, specifying that only neurons for which this principal has
     /// any permissions should be included in the list.
     /// If this is not specified, no restriction is applied.
-    pub of_principal: Option<::ic_base_types::PrincipalId>,
+    pub of_principal: Option<PrincipalId>,
 }
 /// A response to the ListNeurons command.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -2294,12 +2314,14 @@ pub struct ClaimSwapNeuronsRequest {
 }
 /// Nested message and enum types in `ClaimSwapNeuronsRequest`.
 pub mod claim_swap_neurons_request {
+    use super::*;
+
     /// Replacement for NeuronParameters. Contains the information needed to set up
     /// a neuron for a swap participant.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct NeuronRecipe {
         /// The principal that should be the controller of the SNS neuron
-        pub controller: Option<::ic_base_types::PrincipalId>,
+        pub controller: Option<PrincipalId>,
         /// The ID of the SNS neuron
         pub neuron_id: Option<super::NeuronId>,
         /// The SNS neuron's stake in e8s (10E-8 of a token)
@@ -2312,13 +2334,15 @@ pub mod claim_swap_neurons_request {
     }
     /// Nested message and enum types in `NeuronRecipe`.
     pub mod neuron_recipe {
+        use super::*;
+
         /// The info that for a participant in the Neurons' Fund
         #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
         pub struct NeuronsFund {
             /// The neuron ID of the NNS neuron that participated in the Neurons' Fund.
             pub nns_neuron_id: Option<u64>,
             /// The controller of the NNS neuron that participated in the Neurons' Fund.
-            pub nns_neuron_controller: Option<::ic_base_types::PrincipalId>,
+            pub nns_neuron_controller: Option<PrincipalId>,
             /// The hotkeys of the NNS neuron that participated in the Neurons' Fund.
             pub nns_neuron_hotkeys: Option<::ic_nervous_system_proto::pb::v1::Principals>,
         }
@@ -2560,7 +2584,7 @@ pub struct Subaccount {
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct Account {
     /// The owner of the account.
-    pub owner: Option<::ic_base_types::PrincipalId>,
+    pub owner: Option<PrincipalId>,
     /// The subaccount of the account. If not set then the default
     /// subaccount (all bytes set to 0) is used.
     pub subaccount: Option<Subaccount>,

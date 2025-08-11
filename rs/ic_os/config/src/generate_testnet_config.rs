@@ -248,6 +248,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         guestos_settings,
         guest_vm_type: GuestVMType::Default,
         upgrade_config: GuestOSUpgradeConfig::default(),
+        trusted_execution_environment_config: None,
     };
 
     Ok(guestos_config)

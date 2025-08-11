@@ -511,6 +511,7 @@ impl IngressManager {
             msg,
             effective_canister_id,
             subnet_size,
+            state.metadata.cost_schedule,
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -526,6 +527,7 @@ impl IngressManager {
                         canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
+                        state.metadata.cost_schedule,
                         false, // error here is not returned back to the user => no need to reveal top up balance
                     ) {
                         return Err(ValidationError::InvalidArtifact(
@@ -686,7 +688,7 @@ mod tests {
     };
     use ic_types::{
         artifact::IngressMessageId,
-        batch::IngressPayload,
+        batch::{CanisterCyclesCostSchedule, IngressPayload},
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
@@ -1511,6 +1513,7 @@ mod tests {
                                         m1.content(),
                                         None,
                                         SMALL_APP_SUBNET_MAX_SIZE,
+                                        CanisterCyclesCostSchedule::Normal,
                                     )
                                     .cost(),
                             )

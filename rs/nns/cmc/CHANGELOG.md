@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-07-25: Proposal 137583
+
+http://dashboard.internetcomputer.org/proposal/137583
+
+## Changed
+
+* Cycles Minting Limit is not enforced for the Subnet Rental Canister when it is topping up itself.
+  This is necessary for the canister to mint large amounts of cycles to pay for the subnet rentals.
+
+
 # 2025-05-31: Proposal 136797
 
 http://dashboard.internetcomputer.org/proposal/136797

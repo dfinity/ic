@@ -8,6 +8,17 @@ type CanisterCallError = record {
   description : text;
 };
 
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
+};
+
 type QueryStats = record {
   num_calls_total : opt nat;
   num_instructions_total : opt nat;
@@ -18,6 +29,7 @@ type QueryStats = record {
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
   memory_size : nat;
+  memory_metrics : opt MemoryMetrics;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;

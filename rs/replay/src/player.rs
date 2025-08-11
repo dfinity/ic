@@ -77,7 +77,7 @@ use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     convert::Infallible,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -781,9 +781,7 @@ impl Player {
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            chain_key_subnet_public_keys: BTreeMap::new(),
-            idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: BTreeMap::new(),
+            chain_key_data: Default::default(),
             registry_version,
             time,
             consensus_responses: Vec::new(),
