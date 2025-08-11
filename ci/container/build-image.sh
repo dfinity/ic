@@ -16,6 +16,7 @@ while test $# -gt 0; do
             exit 0
         ;;
         *)
+            echo "unknown argument: $1" >&2
             usage >&2
             exit 1
         ;;
