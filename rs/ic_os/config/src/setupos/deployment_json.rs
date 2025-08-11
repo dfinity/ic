@@ -25,7 +25,7 @@ pub struct Deployment {
     pub mgmt_mac: Option<String>,
 }
 
-// Leftover from push-based logging. Has to stay here for backward compatibility.
+// NODE-1681: Leftover from push-based logging. Remove in NODE-1681
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Logging {}
 
