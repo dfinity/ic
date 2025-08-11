@@ -4,7 +4,6 @@
 
 /// Format and then print the formatted message
 #[cfg(target_family = "wasm")]
-#[macro_export]
 macro_rules! println {
     ($fmt:expr) => ($debug_print(format!($fmt)));
     ($fmt:expr, $($arg:tt)*) => ($debug_print(format!($fmt, $($arg)*)));
@@ -12,7 +11,6 @@ macro_rules! println {
 
 /// Format and then print the formatted message
 #[cfg(not(target_family = "wasm"))]
-#[macro_export]
 macro_rules! println {
     ($fmt:expr) => (std::println!($fmt));
     ($fmt:expr, $($arg:tt)*) => (std::println!($fmt, $($arg)*));

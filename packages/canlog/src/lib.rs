@@ -227,7 +227,7 @@ impl<Priority: LogPriorityLevels + GetLogFilter> Sink for PrintProxySink<Priorit
             entry.message,
         );
         if Priority::get_log_filter().is_match(&message) {
-            crate::ic_cdk::println!("{}", message);
+            ic_cdk::println!("{}", message);
             self.1.append(entry)
         }
     }
