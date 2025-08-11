@@ -115,7 +115,7 @@ fn test_cycles_ledger() {
     pic.add_cycles(canister_id, init_cycles);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
-    let check_balance = |expected: u128| {
+    let check_balance = |expected_ledger_balance: u128, expected_index_balance: u128| {
         // Check balance via cycles ledger.
         let icrc1_balance_args = Icrc1BalanceArgs {
             owner: test_identity,
@@ -129,7 +129,7 @@ fn test_cycles_ledger() {
         )
         .unwrap()
         .0;
-        assert_eq!(balance, expected);
+        assert_eq!(balance, expected_ledger_balance);
 
         // The cycles ledger index only syncs with the cycles ledger once per second.
         pic.advance_time(Duration::from_secs(1));
@@ -145,7 +145,7 @@ fn test_cycles_ledger() {
         )
         .unwrap()
         .0;
-        assert_eq!(balance, expected);
+        assert_eq!(balance, expected_index_balance);
     };
     let check_cycles = |expected: u128| {
         let actual = pic.cycle_balance(canister_id);
@@ -158,7 +158,7 @@ fn test_cycles_ledger() {
         );
     };
 
-    check_balance(0);
+    check_balance(0, 0);
     check_cycles(init_cycles);
 
     // Deposit cycles to the cycles ledger.
@@ -172,7 +172,7 @@ fn test_cycles_ledger() {
     )
     .unwrap();
 
-    check_balance(cycles - CYCLES_LEDGER_FEE);
+    check_balance(cycles - CYCLES_LEDGER_FEE, cycles - CYCLES_LEDGER_FEE);
     check_cycles(init_cycles - cycles);
 
     // Withdraw cycles from the cycles ledger.
@@ -194,7 +194,7 @@ fn test_cycles_ledger() {
     .0
     .unwrap();
 
-    check_balance(0);
+    check_balance(0, CYCLES_LEDGER_FEE);
     check_cycles(init_cycles);
 }
 
