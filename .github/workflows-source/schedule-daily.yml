@@ -14,7 +14,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+    image: ghcr.io/dfinity/ic-build@sha256:87ab972773465045861da119dce654a906fedc2072f5bc75893f6df735bb20d2
 
   backup-pod-access: &backup-pod-access
     run: |
