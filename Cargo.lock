@@ -18222,6 +18222,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orchestrator"
 version = "0.9.0"
 dependencies = [
+ "async-stream",
  "async-trait",
  "backoff",
  "candid",
@@ -18246,6 +18247,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
  "ic-dashboard",
  "ic-ed25519",
  "ic-http-endpoints-async-utils",
@@ -18283,6 +18285,8 @@ dependencies = [
  "prometheus 0.13.4",
  "prost 0.13.4",
  "rand 0.8.5",
+ "rcgen",
+ "rustls 0.23.27",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -18292,6 +18296,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
+ "tokio-rustls 0.26.1",
  "tokio-util",
  "url",
 ]
