@@ -17,6 +17,10 @@ pub fn empty_zero_registry_record(key: &str) -> RegistryRecord {
         key: key.to_string(),
         version: ZERO_REGISTRY_VERSION,
         value: None,
+        timestamp_nanoseconds: std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64,
     }
 }
 
@@ -110,6 +114,10 @@ pub struct RegistryVersionedRecord<T> {
     /// The value of this record. `None` means the value was deleted at
     /// `version`.
     pub value: Option<T>,
+
+    /// Timestamp of this record. `0` means that this record has missing
+    /// timestamp data.
+    pub timestamp_nanoseconds: u64,
 }
 
 impl<T> RegistryVersionedRecord<T> {
@@ -118,6 +126,7 @@ impl<T> RegistryVersionedRecord<T> {
             key: self.key,
             version: self.version,
             value: self.value.map(f),
+            timestamp_nanoseconds: self.timestamp_nanoseconds,
         }
     }
 }

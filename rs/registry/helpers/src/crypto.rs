@@ -142,6 +142,7 @@ impl<T: RegistryClient + ?Sized> CryptoRegistry for T {
             key: record.key,
             version,
             value,
+            timestamp_nanoseconds: record.timestamp_nanoseconds,
         })
     }
 }

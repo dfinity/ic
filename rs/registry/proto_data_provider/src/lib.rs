@@ -2,11 +2,14 @@ use bytes::{Buf, BufMut};
 use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, RegistryValue};
 use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
 use ic_registry_transport::pb::v1::registry_mutation::Type;
-use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation, RegistryMutation,
+};
 use ic_registry_transport::upsert;
 use ic_sys::fs::write_atomically;
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
 use std::collections::HashMap;
+use std::time::SystemTime;
 use std::{
     io::Write,
     path::Path,
@@ -53,6 +56,7 @@ impl ProtoRegistryDataProvider {
         assert!(version.get() > 0);
         let mut records = self.records.write().unwrap();
 
+        let ts = Self::get_timestamp_nanos();
         let search_key = &(&version.get(), key);
         match records.binary_search_by_key(search_key, |r| (&r.version, &r.key)) {
             Ok(_) => Err(ProtoRegistryDataProviderError::KeyAlreadyExists {
@@ -69,6 +73,7 @@ impl ProtoRegistryDataProvider {
                             .expect("can't fail, encoding is infallible");
                         buf
                     }),
+                    timestamp_nanoseconds: ts,
                 };
                 records.insert(idx, record);
                 Ok(())
@@ -84,6 +89,7 @@ impl ProtoRegistryDataProvider {
         let mut records = self.records.write().unwrap();
         let version = INITIAL_REGISTRY_VERSION;
 
+        let ts = Self::get_timestamp_nanos();
         for mutation in mutations {
             let key = std::str::from_utf8(&mutation.key)
                 .expect("Expected registry key to be utf8-encoded");
@@ -102,6 +108,7 @@ impl ProtoRegistryDataProvider {
                         key: key.to_string(),
                         version: version.get(),
                         value: Some(mutation.value),
+                        timestamp_nanoseconds: ts,
                     };
                     records.insert(idx, record);
                 }
@@ -155,6 +162,13 @@ impl ProtoRegistryDataProvider {
         .expect("Could not write to path.");
     }
 
+    fn get_timestamp_nanos() -> u64 {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
+    }
+
     /// Useful to sync from other mutations
     pub fn apply_mutations_as_version(
         &self,
@@ -173,6 +187,7 @@ impl ProtoRegistryDataProvider {
             } as i32;
         }
 
+        let ts = Self::get_timestamp_nanos();
         for mutation in mutations {
             let key = std::str::from_utf8(&mutation.key)
                 .expect("Expected registry key to be utf8-encoded");
@@ -188,6 +203,7 @@ impl ProtoRegistryDataProvider {
                         key: key.to_string(),
                         version: version.get(),
                         value: Some(mutation.value),
+                        timestamp_nanoseconds: ts,
                     };
                     records.insert(idx, record);
                 }
@@ -196,20 +212,25 @@ impl ProtoRegistryDataProvider {
     }
 
     /// Useful to sync a new registry test instance with records from a fake data provider.
-    pub fn export_versions_as_atomic_mutation_requests(&self) -> Vec<RegistryAtomicMutateRequest> {
+    pub fn export_versions_as_atomic_mutation_requests(
+        &self,
+    ) -> Vec<HighCapacityRegistryAtomicMutateRequest> {
         let mut records = self.records.read().unwrap().clone();
         records.sort_by(|a, b| Ord::cmp(&a.version, &b.version));
-        let mut mutations_by_version: HashMap<u64, Vec<RegistryMutation>> = HashMap::new();
+        let mut mutations_by_version: HashMap<(u64, u64), Vec<HighCapacityRegistryMutation>> =
+            HashMap::new();
 
         for record in records {
             let version = record.version;
-            let mutation = upsert(record.key, record.value.or_else(|| Some(vec![])).unwrap());
+            let ts = record.timestamp_nanoseconds;
+            let mutation =
+                upsert(record.key, record.value.or_else(|| Some(vec![])).unwrap()).into();
 
-            if let Some(mutations_vec) = mutations_by_version.get_mut(&version) {
+            if let Some(mutations_vec) = mutations_by_version.get_mut(&(version, ts)) {
                 mutations_vec.push(mutation);
             } else {
                 let mutations = vec![mutation];
-                mutations_by_version.insert(version, mutations);
+                mutations_by_version.insert((version, ts), mutations);
             }
         }
 
@@ -219,10 +240,13 @@ impl ProtoRegistryDataProvider {
 
         mutations_by_version
             .iter()
-            .map(|(_, mutations)| RegistryAtomicMutateRequest {
-                mutations: mutations.to_vec(),
-                preconditions: vec![],
-            })
+            .map(
+                |((_, ts), mutations)| HighCapacityRegistryAtomicMutateRequest {
+                    mutations: mutations.to_vec(),
+                    preconditions: vec![],
+                    timestamp_nanoseconds: *ts,
+                },
+            )
             .collect()
     }
 
@@ -258,6 +282,7 @@ impl RegistryDataProvider for ProtoRegistryDataProvider {
                 key: r.key.clone(),
                 version: RegistryVersion::new(r.version),
                 value: r.value.to_owned(),
+                timestamp_nanoseconds: r.timestamp_nanoseconds,
             })
             .collect();
 
