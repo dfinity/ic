@@ -996,13 +996,7 @@ fn can_reject_module_with_duplicate_custom_sections() {
 
             // Rejects the module because of duplicate custom section names.
             assert_eq!(
-                validate_wasm_binary(
-                    &wasm,
-                    &EmbeddersConfig {
-                        max_custom_sections: 5,
-                        ..Default::default()
-                    }
-                ),
+                validate_wasm_binary(&wasm, &EmbeddersConfig::default(),),
                 Err(WasmValidationError::InvalidCustomSection(
                     "Invalid custom section: name custom1 already exists".to_string()
                 ))
