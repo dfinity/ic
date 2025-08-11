@@ -14,12 +14,12 @@ while test $# -gt 0; do
         -h | --help)
             usage >&2
             exit 0
-        ;;
+            ;;
         *)
             echo "unknown argument: $1" >&2
             usage >&2
             exit 1
-        ;;
+            ;;
 
     esac
 done
