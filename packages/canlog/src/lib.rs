@@ -48,10 +48,10 @@
 #![forbid(missing_docs)]
 
 extern crate self as canlog;
+mod ic_cdk;
 #[cfg(test)]
 mod tests;
 mod types;
-mod ic_cdk;
 
 pub use crate::types::{LogFilter, RegexString, RegexSubstitution, Sort};
 
