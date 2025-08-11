@@ -354,6 +354,8 @@ fn lookup_metadata(
     lookup_value(&cert, path).map(|s| s.to_vec())
 }
 
+// The following system test is included here because it requires ability to craft an invalid custom section name
+// using `wasm_with_custom_sections`.
 fn test_non_utf8_metadata(env: TestEnv) {
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
