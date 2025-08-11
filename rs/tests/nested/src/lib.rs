@@ -372,11 +372,13 @@ pub fn nns_recovery_test(env: TestEnv) {
             node.get_ip_addr()
         );
 
-        let output = node.block_on_bash_script(ssh_command).expect(&format!(
-            "SSH command failed on node {} ({:?})",
-            i + 1,
-            node.get_ip_addr()
-        ));
+        let output = node.block_on_bash_script(ssh_command).unwrap_or_else(|_| {
+            panic!(
+                "SSH command failed on node {} ({:?})",
+                i + 1,
+                node.get_ip_addr()
+            )
+        });
         info!(
             logger,
             "SSH command executed successfully on node {}: {}",
