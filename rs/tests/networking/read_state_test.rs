@@ -43,7 +43,7 @@ use std::panic;
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{Encode, Principal};
-use canister_test::{Canister, Wasm};
+use canister_test::{Canister, CanisterInstallMode, Wasm};
 use ic_agent::agent::CallResponse;
 use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
@@ -374,8 +374,13 @@ fn test_non_utf8_metadata(env: TestEnv) {
     let wasm = wasm_with_custom_sections(vec![custom_section]);
 
     // Installing the wasm fails
-    let err =
-        block_on(wasm.install_with_retries_onto_canister(&mut canister, None, None)).unwrap_err();
+    let err = block_on(wasm.install_onto_canister(
+        &mut canister,
+        CanisterInstallMode::Install,
+        None,
+        None,
+    ))
+    .unwrap_err();
     assert!(err.contains("Canister's Wasm module is not valid"));
 }
 
