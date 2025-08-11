@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, can_store_msg, cert_state_makes_progress_with_retries,
+    can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message_with_retries,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -268,7 +268,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Success: All four nodes have been added to the NNS subnet"
     );
 
-    // QUESTIONS FOR PIERUGO: Do we need/want to remove the non-nested NNS node? If we keep it, can we then just have three nested nodes?
+    // QUESTION FOR PIERUGO: Do we need/want to remove the non-nested NNS node? If we keep it, can we then just have three nested nodes?
     info!(
         logger,
         "Removing original node {:?} from the NNS subnet", original_node_id
@@ -380,39 +380,37 @@ pub fn nns_recovery_test(env: TestEnv) {
     );
     let new_test_msg = "subnet broken test message";
 
-    // Try to store a message - this should fail if the subnet is broken
-    let can_store = can_store_msg(
-        &logger,
-        &nns_node.get_public_url(),
-        test_can_id,
-        new_test_msg,
-    );
-
-    if !can_store {
-        info!(
-            logger,
     // Try to store a message - this should fail if the subnet is broken.
     // Use cannot_store_msg which retries for up to 300s with backoff.
-    let cannot_store = cannot_store_msg(
-        logger.clone(),
-        info!(logger, "Verifying that read operations still work...");
-        let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
+    assert!(
+        cannot_store_msg(
+            logger.clone(),
+            &nns_node.get_public_url(),
+            test_can_id,
+            new_test_msg
+        ),
+        "Subnet is still functional after breaking attempt - storing messages still succeeds on {}",
+        node_url
+    );
 
-        if can_read {
-            info!(
-                logger,
-                "SUCCESS: Read operations still work as expected in broken subnet"
-            );
-        } else {
-            // help: questions for consensus: should this be a warning or an error? In the recovery tests I looked at, we expect the read to succeed after breaking the subnet?
-            info!(
-                logger,
-                "WARNING: Read operations also failed - this might indicate a different issue"
-            );
-        }
+    info!(
+        logger,
+        "SUCCESS: Subnet is broken - cannot store new messages"
+    );
+
+    info!(logger, "Verifying that read operations still work...");
+    let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
+
+    if can_read {
+        info!(
+            logger,
+            "SUCCESS: Read operations still work as expected in broken subnet"
+        );
     } else {
-        panic!(
-            "FAILURE: Subnet is still functional after breaking attempt - the breaking mechanism did not work as expected"
+        // QUESTION FOR PIERUGO: should this be a warning or an error? In the recovery tests I looked at, we expect the read to succeed after breaking the subnet? But when I run this test, the read fails.
+        info!(
+            logger,
+            "WARNING: Read operations also failed - this might indicate a different issue"
         );
     }
 
