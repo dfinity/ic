@@ -51,6 +51,7 @@ extern crate self as canlog;
 #[cfg(test)]
 mod tests;
 mod types;
+mod ic_cdk;
 
 pub use crate::types::{LogFilter, RegexString, RegexSubstitution, Sort};
 
@@ -226,7 +227,7 @@ impl<Priority: LogPriorityLevels + GetLogFilter> Sink for PrintProxySink<Priorit
             entry.message,
         );
         if Priority::get_log_filter().is_match(&message) {
-            ic_cdk::println!("{}", message);
+            crate::ic_cdk::println!("{}", message);
             self.1.append(entry)
         }
     }
