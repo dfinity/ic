@@ -4200,28 +4200,28 @@ impl Governance {
             })
             .collect::<BTreeSet<_>>();
 
-        // First, validate the requested followee modifications in isolation.
+        // First, validate the requested followee modifications - in isolation and then in
+        // composition with the neuron's old followees.
 
         // TODO[NNS1-3708]: Avoid cloning the neuron commands.
         let set_following = ValidatedSetFollowing::try_from(set_following.clone())
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+        let old_topic_followees = neuron.topic_followees.clone();
+        let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
-        // Second, validate the requested followee modifications in composition with the neuron's
-        // old followees. If all validation steps succeed, save the new followees.
-        {
-            let old_topic_followees = neuron.topic_followees.clone();
-
-            let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
-                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
-
-            neuron.topic_followees.replace(new_topic_followees);
-        }
-
-        // Third, update the followee index for this neuron.
+        // Second, remove the neuron from the follower index, which needs to be done before
+        // replacing the topic followees. Note that mutations begin here, so there should not be any
+        // exit points beyond this point.
         remove_neuron_from_follower_index(&mut self.topic_follower_index, neuron);
+
+        // Third, save the new followees.
+        neuron.topic_followees.replace(new_topic_followees);
+
+        // Fourth, update the followee index for this neuron.
         add_neuron_to_follower_index(&mut self.topic_follower_index, neuron);
 
-        // Fourth, remove any legacy following (based on individual proposal types under the topics
+        // Fifth, remove any legacy following (based on individual proposal types under the topics
         // that were modified by this command).
         for topic in &mentioned_topics {
             let native_functions = topic.native_functions();
