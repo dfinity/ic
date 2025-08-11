@@ -1695,6 +1695,7 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = caller();
     let ledger_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
     let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+    let token_name = LEDGER.read().unwrap().token_name.clone();
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -1702,6 +1703,7 @@ fn icrc21_canister_call_consent_message(
         caller_principal,
         ledger_fee,
         token_symbol,
+        token_name,
         decimals,
     )
 }
