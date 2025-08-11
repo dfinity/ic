@@ -20,7 +20,7 @@ use std::{
 use ic_base_types::{RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
@@ -126,10 +126,6 @@ impl PeerManager {
                         self.log,
                         "Got transport infos but is empty. version {}", version
                     );
-                    self.metrics
-                        .topology_watcher_errors
-                        .with_label_values(&["empty_list_of_node_records"])
-                        .inc();
                     Vec::new()
                 }
                 Err(e) => {
@@ -137,10 +133,6 @@ impl PeerManager {
                         self.log,
                         "failed to get node record from registry at version {} : {}", version, e
                     );
-                    self.metrics
-                        .topology_watcher_errors
-                        .with_label_values(&["error_getting_node_records"])
-                        .inc();
                     Vec::new()
                 }
             };
@@ -153,10 +145,6 @@ impl PeerManager {
                             // with the highest registry version.
                             subnet_nodes.insert(peer_id, SocketAddr::new(ip_addr, 4100));
                         } else {
-                            self.metrics
-                                .topology_watcher_errors
-                                .with_label_values(&["error_parsing_ip_address"])
-                                .inc();
                             warn!(
                                 self.log,
                                 "Failed to get parse Ip addr {} for peer {} at registry version {}",
@@ -167,10 +155,6 @@ impl PeerManager {
                         }
                     }
                     None => {
-                        self.metrics
-                            .topology_watcher_errors
-                            .with_label_values(&["http_field_missing"])
-                            .inc();
                         warn!(
                             self.log,
                             "Failed to get flow endpoint for peer {} at registry version {}",
@@ -180,6 +164,14 @@ impl PeerManager {
                     }
                 }
             }
+        }
+
+        if subnet_nodes.is_empty() {
+            error!(self.log, "Failed to get a list of peers from registry");
+            self.metrics
+                .topology_watcher_errors
+                .with_label_values(&["empty_peer_list"])
+                .inc();
         }
 
         SubnetTopology::new(

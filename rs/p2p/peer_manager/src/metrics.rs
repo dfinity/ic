@@ -6,6 +6,7 @@ pub(crate) struct PeerManagerMetrics {
     pub(crate) topology_updates: IntCounter,
     pub(crate) topology_watcher_update_duration: Histogram,
     pub(crate) topology_update_duration: Histogram,
+    // An alert will be triggered if this is incremented.
     pub(crate) topology_watcher_errors: IntCounterVec,
 }
 
