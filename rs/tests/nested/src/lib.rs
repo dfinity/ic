@@ -221,8 +221,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     // Store the original node ID before adding new nodes
     let original_node_id = nns_subnet.nodes().next().unwrap().node_id;
 
-    let nodes_to_add = new_topology.unassigned_nodes().collect::<Vec<_>>();
-    let node_ids: Vec<_> = nodes_to_add.iter().map(|n| n.node_id).collect();
+    let node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
 
     let proposal_payload = AddNodesToSubnetPayload {
         subnet_id: nns_subnet.subnet_id.get(),
@@ -256,13 +255,6 @@ pub fn nns_recovery_test(env: TestEnv) {
     )
     .unwrap();
 
-    let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-    assert_eq!(
-        num_unassigned_nodes, 0,
-        "All nodes should be assigned to the NNS subnet, but found {} unassigned nodes",
-        num_unassigned_nodes
-    );
-
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
@@ -276,6 +268,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Success: All four nodes have been added to the NNS subnet"
     );
 
+    // QUESTIONS FOR PIERUGO: Do we need/want to remove the non-nested NNS node? If we keep it, can we then just have three nested nodes?
     info!(
         logger,
         "Removing original node {:?} from the NNS subnet", original_node_id
@@ -321,9 +314,8 @@ pub fn nns_recovery_test(env: TestEnv) {
     for node in &nns_nodes {
         node.await_status_is_healthy().unwrap();
     }
-    info!(logger, "NNS subnet is healthy");
 
-    info!(logger, "Storing a message to verify the subnet is working");
+    info!(logger, "Waiting for NNS subnet to make progress...");
     let progress_node = nns_nodes.first().unwrap();
     cert_state_makes_progress_with_retries(
         &progress_node.get_public_url(),
@@ -333,12 +325,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         Duration::from_secs(10),
     );
 
-    info!(
-        logger,
-        "Breaking the NNS subnet by breaking the replica on all 4 nested nodes..."
-    );
-
-    // First, store a message to verify the subnet is working
+    info!(logger, "Storing a message to verify the subnet is working");
     let nns_node = nns_nodes.first().unwrap();
     let test_msg = "subnet breaking test message";
     let test_can_id = store_message_with_retries(
@@ -360,6 +347,11 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Subnet is healthy - message stored and read successfully"
     );
 
+    info!(
+        logger,
+        "Breaking the NNS subnet by breaking the replica on all 4 nested nodes..."
+    );
+
     // SSH into all guestOS nodes and break the replica
     let ssh_command =
         "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
@@ -372,19 +364,13 @@ pub fn nns_recovery_test(env: TestEnv) {
             node.get_ip_addr()
         );
 
-        let output = node.block_on_bash_script(ssh_command).unwrap_or_else(|_| {
+        node.block_on_bash_script(ssh_command).unwrap_or_else(|_| {
             panic!(
                 "SSH command failed on node {} ({:?})",
                 i + 1,
                 node.get_ip_addr()
             )
         });
-        info!(
-            logger,
-            "SSH command executed successfully on node {}: {}",
-            i + 1,
-            output
-        );
     }
 
     // Test if the subnet is broken by trying to store a new message
@@ -405,9 +391,10 @@ pub fn nns_recovery_test(env: TestEnv) {
     if !can_store {
         info!(
             logger,
-            "SUCCESS: Subnet is broken - cannot store new messages"
-        );
-
+    // Try to store a message - this should fail if the subnet is broken.
+    // Use cannot_store_msg which retries for up to 300s with backoff.
+    let cannot_store = cannot_store_msg(
+        logger.clone(),
         info!(logger, "Verifying that read operations still work...");
         let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
 
