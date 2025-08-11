@@ -323,7 +323,7 @@ fn test_absent_request(env: TestEnv) {
     }
 }
 
-// The paths `/` (root), `/<>` (empty label), and `/foo` are invalid.
+// The paths `/` (root), `/<>` (empty label), and `/<foo>` are invalid.
 fn test_invalid_path_rejected(env: TestEnv) {
     for invalid_path in [vec![], vec!["".into()], vec!["foo".into()]] {
         let cert = read_state(&env, vec![invalid_path]);
