@@ -836,6 +836,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "libc": crate.spec(
                 version = "^0.2.158",
             ),
+            "libcryptsetup-rs": crate.spec(
+                version = "^0.13.2",
+                features = [
+                    "mutex",
+                ],
+            ),
             "libflate": crate.spec(
                 version = "^2.1.0",
             ),

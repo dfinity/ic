@@ -99,7 +99,6 @@ fn subnet_splitting_test(env: TestEnv) {
     let logger = env.logger();
 
     let initial_replica_version = get_guestos_img_version().expect("Failed to get master version");
-    let initial_replica_version = ReplicaVersion::try_from(initial_replica_version).unwrap();
 
     let (source_subnet, destination_subnet) = get_subnets(&env);
 
@@ -333,7 +332,7 @@ fn verify_common(
     info!(logger, "Verifying that the subnet is healthy");
     assert_subnet_is_healthy(
         &nodes,
-        replica_version.into(),
+        replica_version,
         canister_id,
         canister_message,
         logger,
