@@ -830,7 +830,7 @@ icTests my_sub other_sub conf =
                                                                                             "arg" =: GBlob (run reply)
                                                                                           ]
                                                                                   let path = "/api/v2/canister/" ++ filter (/= '-') (textual cid1) ++ "/call"
-                                                                                  addNonceExpiryEnv req >>= postCBOR path >>= code4xx,
+                                                                                  addNonceExpiryEnv req >>= postCBOR path >>= code4xx
                                                                               ],
                                                                             testGroup
                                                                               "inter-canister calls"
@@ -1505,7 +1505,7 @@ icTests my_sub other_sub conf =
                                                                                               cid <- create ecid
                                                                                               ic_install' ic00 (enum #install) cid mod "" >>= isReject [5],
                                                                                             simpleTestCase "invalid utf8 in read_state" ecid $ \cid -> do
-                                                                                              getStateCert' defaultUser cid [["canister", cid, "metadata", "\xe2\x28\xa1"]] >>= isErr4xx,
+                                                                                              getStateCert' defaultUser cid [["canister", cid, "metadata", "\xe2\x28\xa1"]] >>= isErr4xx
                                                                                           ]
                                                                                   ],
                                                                             testGroup

@@ -361,18 +361,18 @@ fn test_metadata_path(env: TestEnv) {
         block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
     let canister_id = canister.canister_id();
 
-    let non_ascii_vec_1 = b"\xe2\x28\xa1".to_vec();
-    let non_ascii_str_1 = String::from_utf8(non_ascii_vec_1.clone()).unwrap();
-    assert!(!non_ascii_str_1.is_ascii());
-    let non_ascii_vec_2 = "☃️".as_bytes().to_vec();
-    let non_ascii_str_2 = String::from_utf8(non_ascii_vec_2.clone()).unwrap();
-    assert!(!non_ascii_str_2.is_ascii());
+    let non_ascii_vec = "☃️".as_bytes().to_vec();
+    let non_ascii_str = String::from_utf8(non_ascii_vec.clone()).unwrap();
+    assert!(!non_ascii_str.is_ascii());
+    let non_utf8_vec = b"\xe2\x28\xa1".to_vec();
+    assert!(String::from_utf8(non_utf8_vec.clone()).is_err());
     let metadata_sections = vec![
         // ASCII
         (b"test".to_vec(), b"test 1".to_vec()),
         // Non-ASCII UTF-8
-        (non_ascii_vec_1, b"test 2".to_vec()),
-        (non_ascii_vec_2, b"test 3".to_vec()),
+        (non_ascii_vec, b"test 3".to_vec()),
+        // Not UTF-8
+        (non_utf8_vec, b"test 2".to_vec()),
         // Empty blob
         (vec![], b"test 4".to_vec()),
         // ASCII string with spaces
