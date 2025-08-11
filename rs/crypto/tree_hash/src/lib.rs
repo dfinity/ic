@@ -351,8 +351,8 @@ pub enum LookupLowerBoundStatus<'a> {
     MissingLabel,
 }
 
-/// Descends into the subtree of `t` following the given `prefix`, and then descends one more step into the largest label smaller than `label`.
-/// Returns a pair of references (label, subtree), where `label` is the actual last label traversed, and `subtree` is the subtree found under the label.
+/// Descends into the subtree of `t` at `prefix`, and looks up its largest child label smaller than or equal to `label`.
+/// On success, returns a pair of references `(label, subtree)`, where `label` is the looked up child label, and `subtree` is its subtree.
 pub fn lookup_lower_bound<'a>(
     t: &'a LabeledTree<Vec<u8>>,
     prefix: &[&[u8]],
