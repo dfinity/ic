@@ -328,7 +328,8 @@ type RewardsCoefficientPercent = Decimal;
 
 /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
 /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-/// 30.4375 = 2629800 / 86400
+/// const SECONDS_IN_DAY: u64 = 86400;
+/// 2629800 / 86400 = 30.4375 days of rewards
 const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
 #[derive(Default)]
@@ -455,11 +456,15 @@ fn step_4_compute_base_rewards_type_region(
     let base_rewards_type3 = base_rewards_type3
         .into_iter()
         .map(
-            |((day, region), (daily_rewards, nodes_count))| BaseRewardsType3 {
-                day: *day,
-                region,
-                nodes_count,
-                value: daily_rewards,
+            |((day, region), (daily_rewards, nodes_count, avg_rewards, avg_coefficient))| {
+                BaseRewardsType3 {
+                    day: *day,
+                    region,
+                    nodes_count,
+                    avg_rewards,
+                    avg_coefficient,
+                    value: daily_rewards,
+                }
             },
         )
         .collect();

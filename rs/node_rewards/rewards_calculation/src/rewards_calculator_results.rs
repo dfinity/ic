@@ -126,6 +126,8 @@ pub struct BaseRewardsType3 {
     pub day: DayUtc,
     pub region: Region,
     pub nodes_count: usize,
+    pub avg_rewards: XDRPermyriad,
+    pub avg_coefficient: Percent,
     pub value: XDRPermyriad,
 }
 
