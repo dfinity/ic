@@ -2511,7 +2511,7 @@ fn labeled_tree_lookup_lower_bound() {
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"a"[..]),
-        LookupLowerBoundStatus::MissingLabel
+        LookupLowerBoundStatus::LabelNotFound
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"d"[..]),
@@ -2531,15 +2531,15 @@ fn labeled_tree_lookup_lower_bound() {
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"0"[..]),
-        LookupLowerBoundStatus::MissingLabel
+        LookupLowerBoundStatus::LabelNotFound
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"missing"[..]], &b"0"[..]),
-        LookupLowerBoundStatus::MissingPrefix
+        LookupLowerBoundStatus::PrefixNotFound
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"c"[..]], &b"0"[..]),
-        LookupLowerBoundStatus::MissingPrefix
+        LookupLowerBoundStatus::PrefixNotFound
     );
 }
 

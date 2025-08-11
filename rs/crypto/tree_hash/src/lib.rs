@@ -346,9 +346,9 @@ pub enum LookupLowerBoundStatus<'a> {
     /// The actual key found, and its subtree.
     Found(&'a Label, &'a LabeledTree<Vec<u8>>),
     /// `prefix` is not a valid path in the tree, or it does not contain futher labels below.
-    MissingPrefix,
+    PrefixNotFound,
     /// There are either no labels at `prefix` or they are all larger than `label`.
-    MissingLabel,
+    LabelNotFound,
 }
 
 /// Descends into the subtree of `t` at `prefix`, and looks up its largest child label smaller than or equal to `label`.
@@ -359,13 +359,13 @@ pub fn lookup_lower_bound<'a>(
     label: &[u8],
 ) -> LookupLowerBoundStatus<'a> {
     let Some(tref) = lookup_path(t, prefix) else {
-        return LookupLowerBoundStatus::MissingPrefix;
+        return LookupLowerBoundStatus::PrefixNotFound;
     };
     match tref {
-        LabeledTree::Leaf(_) => LookupLowerBoundStatus::MissingPrefix,
+        LabeledTree::Leaf(_) => LookupLowerBoundStatus::PrefixNotFound,
         LabeledTree::SubTree(children) => match children.lower_bound(&Label::from(label)) {
             Some((k, v)) => LookupLowerBoundStatus::Found(k, v),
-            None => LookupLowerBoundStatus::MissingLabel,
+            None => LookupLowerBoundStatus::LabelNotFound,
         },
     }
 }
@@ -637,18 +637,18 @@ impl MixedHashTree {
     /// Returns a copy of the tree with everything pruned except the paths in `paths`.
     pub fn filtered(
         &self,
-        paths: &LabeledTree<()>,
+        filter: &LabeledTree<()>,
     ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
         fn filtered_inner(
             tree: &MixedHashTree,
-            paths: &LabeledTree<()>,
+            filter: &LabeledTree<()>,
             depth: u8,
         ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
             if depth > MAX_HASH_TREE_DEPTH {
                 return Err(MixedHashTreeFilterError::TooDeepRecursion);
             }
 
-            match (tree, paths) {
+            match (tree, filter) {
                 // Pruned and empty subtrees are always kept.
                 (MixedHashTree::Empty, _) => Ok(tree.clone()),
                 (MixedHashTree::Pruned(_), _) => Ok(tree.clone()),
@@ -690,7 +690,7 @@ impl MixedHashTree {
             }
         }
 
-        filtered_inner(self, paths, 0)
+        filtered_inner(self, filter, 0)
     }
 }
 
