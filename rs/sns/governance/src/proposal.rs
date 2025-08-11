@@ -303,10 +303,11 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
 /// state of governance.
 pub(crate) async fn validate_and_render_proposal(
     proposal: &Proposal,
-    env: &dyn Environment,
-    governance_proto: &Governance,
+    governance: &crate::governance::Governance,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<(String, Option<ActionAuxiliaryPb>), String> {
+    let env = &*governance.env;
+    let governance_proto = &governance.proto;
     let mut defects = Vec::new();
 
     let mut defects_push = |r| {
@@ -2823,6 +2824,7 @@ mod set_topics_for_custom_proposals;
 mod tests {
     use super::*;
     use crate::{
+        governance::Governance,
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
@@ -2841,6 +2843,8 @@ mod tests {
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
     use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
+    use ic_nervous_system_canisters::ledger::MockIcpLedger;
+    use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
     use ic_nervous_system_clients::canister_status::{
         CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
     };
@@ -2862,8 +2866,6 @@ mod tests {
         static ref SNS_GOVERNANCE_CANISTER_ID: CanisterId = canister_test_id(501);
         static ref SNS_LEDGER_CANISTER_ID: CanisterId = canister_test_id(502);
         static ref SNS_SWAP_CANISTER_ID: CanisterId = canister_test_id(503);
-        static ref FAKE_ENV: Box<dyn Environment> =
-            Box::new(NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)));
     }
 
     fn governance_proto_for_proposal_tests(deployed_version: Option<Version>) -> GovernanceProto {
@@ -2898,28 +2900,29 @@ mod tests {
 
     fn validate_default_proposal(proposal: &Proposal) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_proposal(
-            proposal,
-            &**FAKE_ENV,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .map(|(rendering, _action_auxiliary)| rendering)
+        // Create a minimal Governance for testing
+        let governance = Governance::new(
+            governance_proto
+                .try_into()
+                .expect("Failed validating governance proto"),
+            Box::new(NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID))),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockCMC::default()),
+        );
+        validate_and_render_proposal(proposal, &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .map(|(rendering, _action_auxiliary)| rendering)
     }
 
     fn validate_default_action(action: &Option<proposal::Action>) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_action(
-            action,
-            &**FAKE_ENV,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .map(|(rendering, _action_auxiliary)| rendering)
+        let env = NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID));
+        validate_and_render_action(action, &env, &governance_proto, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .map(|(rendering, _action_auxiliary)| rendering)
     }
 
     fn basic_principal_id() -> PrincipalId {
