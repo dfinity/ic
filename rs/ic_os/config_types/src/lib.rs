@@ -252,7 +252,7 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
-// Leftover from push-based logging. It has to stay here for backward compatibility.
+// NODE-1681: Leftover from push-based logging. Remove now that it's fully deprecated
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct Logging {}
 
