@@ -1327,7 +1327,7 @@ impl PocketIcSubnets {
             // Install the cycles ledger index.
             let cycles_ledger_ledger_init_arg = CyclesLedgerIndexInitArg {
                 ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
-                retrieve_blocks_from_ledger_interval_seconds: None, // TODO: is this the ICP mainnet config?
+                retrieve_blocks_from_ledger_interval_seconds: None,
             };
             let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_ledger_init_arg);
             ii_subnet

@@ -149,7 +149,7 @@ fn test_cycles_ledger() {
     };
     let check_cycles = |expected: u128| {
         let actual = pic.cycle_balance(canister_id);
-        // Allow the actual cycles balance to be less than the expected cycles balance by 10B cycles due to resource consumption.
+        // Allow the actual ICP cycles balance to be less than the expected cycles balance by 10B cycles due to resource consumption.
         assert!(
             expected <= actual + 10 * B && actual <= expected,
             "actual: {}; expected: {}",
@@ -172,10 +172,12 @@ fn test_cycles_ledger() {
     )
     .unwrap();
 
+    // The fee has been deducted from the deposit.
     check_balance(cycles - CYCLES_LEDGER_FEE, cycles - CYCLES_LEDGER_FEE);
     check_cycles(init_cycles - cycles);
 
     // Withdraw cycles from the cycles ledger.
+    // One more fee is charged for the withdrawal.
     let amount = cycles - 2 * CYCLES_LEDGER_FEE;
     let withdraw_args = WithdrawArgs {
         from_subaccount: None,
@@ -194,6 +196,8 @@ fn test_cycles_ledger() {
     .0
     .unwrap();
 
+    // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
+    // (this bug is independent of PocketIC and to be fixed separately).
     check_balance(0, CYCLES_LEDGER_FEE);
     check_cycles(init_cycles);
 }
