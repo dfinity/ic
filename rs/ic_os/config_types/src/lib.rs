@@ -17,6 +17,8 @@
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 //!
+//! ## Logging safety
+//!
 //! All configuration objects defined in this file are safe to log. They do not contain any secret material.
 use ic_types::malicious_behavior::MaliciousBehavior;
 use macaddr::MacAddr6;
