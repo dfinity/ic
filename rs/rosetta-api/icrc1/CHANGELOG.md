@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.5] - 2025-08-11
+### Fixed
+- Handle startup ledger errors gracefully ([#5884](https://github.com/dfinity/ic/pull/5884))
+
 ## [1.2.4] - 2025-07-07
 ### Added
 - Allow retrieving the aggregate balance of a ICRC1 token account ([#5773](https://github.com/dfinity/ic/pull/5773))
