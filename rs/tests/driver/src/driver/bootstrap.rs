@@ -1,3 +1,4 @@
+use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
@@ -17,7 +18,7 @@ use crate::{
             get_dependency_path_from_env, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -39,7 +40,6 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -96,11 +96,6 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = get_guestos_img_version()?;
-    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
-    let initial_replica_version = InitialReplicaVersion {
-        version: replica_version.clone(),
-    };
-    initial_replica_version.write_attribute(test_env);
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -181,9 +176,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
         get_guestos_initial_update_img_sha256()?,
         get_guestos_initial_update_img_url()?,
+        get_guestos_initial_launch_measurements()?,
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -198,6 +194,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
+        ic_os_launch_measurements,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -545,6 +542,12 @@ pub fn setup_nested_vms(
 ) -> anyhow::Result<()> {
     let mut result = Ok(());
 
+    info!(
+        farm.logger,
+        "Starting setup_nested_vms for {} node(s)",
+        nodes.len()
+    );
+
     thread::scope(|s| {
         let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
         for node in nodes {
@@ -573,6 +576,11 @@ pub fn setup_nested_vms(
         }
 
         // Wait for all threads to finish and return an error if any of them fails.
+        info!(
+            farm.logger,
+            "Waiting for {} VM setup threads to complete",
+            join_handles.len()
+        );
         for jh in join_handles {
             if let Err(e) = jh.join().expect("Waiting for a thread failed") {
                 warn!(farm.logger, "Setting up VM failed with: {:?}", e);
@@ -598,7 +606,13 @@ fn create_setupos_config_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let tmp_dir = env.get_path("setupos");
+    info!(
+        env.logger(),
+        "[{}] Starting create_setupos_config_image", name
+    );
+
+    // Create a unique temporary directory for this thread to avoid conflicts
+    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
@@ -614,6 +628,7 @@ fn create_setupos_config_image(
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
     let old_ip = nested_vm.get_vm()?.ipv6;
+    info!(env.logger(), "[{}] Got VM with IPv6: {}", name, old_ip);
     let segments = old_ip.segments();
     let prefix = format!(
         "{:04x}:{:04x}:{:04x}:{:04x}",
@@ -630,7 +645,7 @@ fn create_setupos_config_image(
 
     // Prep data dir
     let data_dir = tmp_dir.join("data");
-    std::fs::create_dir(&data_dir)?;
+    std::fs::create_dir_all(&data_dir)?;
 
     // Prep config contents
     let mut cmd = Command::new(create_setupos_config);
@@ -686,5 +701,9 @@ fn create_setupos_config_image(
         bail!("Could not inject configs into image");
     }
 
+    info!(
+        env.logger(),
+        "[{}] Successfully created config image at: {:?}", name, config_image
+    );
     Ok(config_image)
 }

@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
+use crate::{execution_environment::SUBNET_HEAP_DELTA_CAPACITY, flag_status::FlagStatus};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
@@ -280,6 +280,9 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Whether to store pre-signatures in the replicated state.
+    pub store_pre_signatures_in_state: FlagStatus,
 }
 
 impl SchedulerConfig {
@@ -311,6 +314,7 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            store_pre_signatures_in_state: FlagStatus::Disabled,
         }
     }
 
@@ -355,6 +359,7 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            store_pre_signatures_in_state: FlagStatus::Disabled,
         }
     }
 
