@@ -5,7 +5,7 @@ use serde_json::Value;
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, std::fmt::Debug)]
 pub struct DisburseMaturityResponse {
-    pub amount_disbursed_e8s: u64,
+    pub amount_disbursed_e8s: Option<u64>,
 }
 
 impl TryFrom<DisburseMaturityResponse> for ObjectMap {
@@ -22,7 +22,7 @@ impl TryFrom<DisburseMaturityResponse> for ObjectMap {
 impl From<NnsDisburseMaturityResponse> for DisburseMaturityResponse {
     fn from(r: NnsDisburseMaturityResponse) -> Self {
         DisburseMaturityResponse {
-            amount_disbursed_e8s: r.amount_disbursed_e8s.unwrap_or_default(),
+            amount_disbursed_e8s: r.amount_disbursed_e8s,
         }
     }
 }

@@ -17,7 +17,7 @@ pub fn handle_disburse_maturity(
             amount_disbursed_e8s,
         })) => Ok(Ok(Some(OperationOutput::DisburseMaturityResponse(
             DisburseMaturityResponse {
-                amount_disbursed_e8s: amount_disbursed_e8s.unwrap_or_default(),
+                amount_disbursed_e8s: *amount_disbursed_e8s,
             },
         )))),
         Some(Command::Error(err)) => Ok(Err(ApiError::TransactionRejected(
