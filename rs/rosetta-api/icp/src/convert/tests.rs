@@ -1,5 +1,5 @@
 use super::*;
-use crate::convert::from_account_ai_to_ai;
+use crate::convert::from_account_or_account_identifier;
 use crate::models::amount::signed_amount;
 use crate::models::operation::OperationType;
 use crate::models::OperationIdentifier;
@@ -226,7 +226,7 @@ fn account_identifier_decode_test() {
 #[test]
 fn from_account_ai_to_ai_test() {
     // Both None - OK
-    assert_eq!(from_account_ai_to_ai(None, None), Ok(None));
+    assert_eq!(from_account_or_account_identifier(None, None), Ok(None));
 
     let account = Account {
         owner: PrincipalId::new_user_test_id(1).0,
@@ -242,28 +242,29 @@ fn from_account_ai_to_ai_test() {
 
     // Both Some - Error
     let error =
-        from_account_ai_to_ai(Some(to_nns_account(account)), Some(account_id.into())).unwrap_err();
+        from_account_or_account_identifier(Some(to_nns_account(account)), Some(account_id.into()))
+            .unwrap_err();
     assert_eq!(
         error,
         ApiError::invalid_request("Cannot specify both account and account_identifier")
     );
 
     // Only AccountIdentifier
-    let result = from_account_ai_to_ai(None, Some(account_id.into()))
+    let result = from_account_or_account_identifier(None, Some(account_id.into()))
         .unwrap()
         .expect("should return an account identifier");
     assert_eq!(result, account_id);
 
     // Incorrect account id
     let incorrect_ai = icp_ledger::protobuf::AccountIdentifier { hash: vec![1u8; 2] };
-    let error = from_account_ai_to_ai(None, Some(incorrect_ai)).unwrap_err();
+    let error = from_account_or_account_identifier(None, Some(incorrect_ai)).unwrap_err();
     assert_eq!(
         error,
         ApiError::invalid_request("Could not parse recipient account identifier: Received an invalid AccountIdentifier with length 2 bytes instead of the expected 28 or 32.")
     );
 
     // Only Account, no subaccount
-    let result = from_account_ai_to_ai(Some(to_nns_account(account)), None)
+    let result = from_account_or_account_identifier(Some(to_nns_account(account)), None)
         .unwrap()
         .expect("should return an account identifier");
     assert_eq!(result, account_id);
@@ -273,7 +274,7 @@ fn from_account_ai_to_ai_test() {
         owner: PrincipalId::new_user_test_id(1).0,
         subaccount: Some([2u8; 32]),
     };
-    let result = from_account_ai_to_ai(Some(to_nns_account(account)), None)
+    let result = from_account_or_account_identifier(Some(to_nns_account(account)), None)
         .unwrap()
         .expect("should return an account identifier");
     assert_eq!(result, AccountIdentifier::from(account));
@@ -283,7 +284,7 @@ fn from_account_ai_to_ai_test() {
         owner: None,
         subaccount: None,
     };
-    let error = from_account_ai_to_ai(Some(no_owner), None).unwrap_err();
+    let error = from_account_or_account_identifier(Some(no_owner), None).unwrap_err();
     assert_eq!(
         error,
         ApiError::invalid_request("Invalid Account, the owner needs to be specified")
@@ -294,7 +295,7 @@ fn from_account_ai_to_ai_test() {
         owner: Some(PrincipalId::new_user_test_id(1)),
         subaccount: Some(vec![1u8; 2]),
     };
-    let error = from_account_ai_to_ai(Some(incorrect_sub), None).unwrap_err();
+    let error = from_account_or_account_identifier(Some(incorrect_sub), None).unwrap_err();
     assert_eq!(
         error,
         ApiError::invalid_request("Invalid subaccount length: 2, should be 32")

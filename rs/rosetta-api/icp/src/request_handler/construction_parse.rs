@@ -1,5 +1,5 @@
 use crate::{
-    convert::{self, from_account_ai_to_ai, from_arg, to_model_account_identifier},
+    convert::{self, from_account_or_account_identifier, from_arg, to_model_account_identifier},
     errors::ApiError,
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
     request_handler::{verify_network_id, RosettaRequestHandler},
@@ -357,7 +357,7 @@ fn disburse_maturity(
         ..
     } = manage
     {
-        let recipient = from_account_ai_to_ai(to_account, to_account_identifier)?;
+        let recipient = from_account_or_account_identifier(to_account, to_account_identifier)?;
 
         requests.push(Request::DisburseMaturity(DisburseMaturity {
             account: from,

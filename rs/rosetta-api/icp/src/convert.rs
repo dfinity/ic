@@ -538,7 +538,7 @@ pub fn transaction_results_to_api_error(tr: TransactionResults, token_name: &str
     ApiError::OperationsErrors(tr, token_name.to_string())
 }
 
-pub fn from_account_ai_to_ai(
+pub fn from_account_or_account_identifier(
     account: Option<ic_nns_governance_api::Account>,
     account_identifier: Option<icp_ledger::protobuf::AccountIdentifier>,
 ) -> Result<Option<icp_ledger::AccountIdentifier>, ApiError> {

@@ -365,8 +365,10 @@ impl TryFrom<&models::Request> for Request {
                     to_account_identifier,
                 })) = command
                 {
-                    let recipient =
-                        convert::from_account_ai_to_ai(to_account, to_account_identifier)?;
+                    let recipient = convert::from_account_or_account_identifier(
+                        to_account,
+                        to_account_identifier,
+                    )?;
 
                     Ok(Request::DisburseMaturity(DisburseMaturity {
                         account,
