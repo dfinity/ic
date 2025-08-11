@@ -359,7 +359,15 @@ impl ValidatedRegisterExtension {
         // This needs to happen before the canister code is installed.
         let init_blob = match init {
             ValidatedExtensionInit::TreasuryManager(init) => {
-                prepare_treasury_manager_init(governance, extension_canister_id, init).await?
+                let (init_blob, sns_amount_e8s, icp_amount_e8s) = governance
+                    .construct_treasury_manager_init_payload(init.original)
+                    .await?;
+
+                governance
+                    .deposit_treasury_manager(extension_canister_id, sns_amount_e8s, icp_amount_e8s)
+                    .await?;
+
+                init_blob
             }
         };
 
@@ -956,23 +964,6 @@ pub(crate) async fn validate_execute_extension_operation(
         operation_name,
         operation_arg: validated_arg,
     })
-}
-
-/// Prepare to initialize a treasury manager extension
-async fn prepare_treasury_manager_init(
-    governance: &Governance,
-    extension_canister_id: CanisterId,
-    init: ValidatedDepositOperationArg,
-) -> Result<Vec<u8>, GovernanceError> {
-    let (init_blob, sns_amount_e8s, icp_amount_e8s) = governance
-        .construct_treasury_manager_init_payload(init.original)
-        .await?;
-
-    governance
-        .deposit_treasury_manager(extension_canister_id, sns_amount_e8s, icp_amount_e8s)
-        .await?;
-
-    Ok(init_blob)
 }
 
 /// Execute a treasury manager deposit operation
@@ -1734,16 +1725,14 @@ mod tests {
         // Test withdraw rendering
         let withdraw_arg =
             ValidatedOperationArg::TreasuryManagerWithdraw(ValidatedWithdrawOperationArg {
-                original: ExtensionOperationArg {
-                    value: Some(Precise {
-                        value: Some(precise::Value::Map(PreciseMap {
-                            map: btreemap! {
-                                "test".to_string() => Precise {
-                                    value: Some(precise::Value::Text("data".to_string())),
-                                },
+                original: Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "test".to_string() => Precise {
+                                value: Some(precise::Value::Text("data".to_string())),
                             },
-                        })),
-                    }),
+                        },
+                    })),
                 },
             });
 

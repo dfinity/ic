@@ -1539,7 +1539,7 @@ async fn validate_and_render_register_extension(
             None
         }
         Some(chunked_wasm) => {
-            let canister_id = chunked_wasm.store_canister_id.clone();
+            let canister_id = chunked_wasm.store_canister_id;
             if let Some(canister_id) = canister_id {
                 match Wasm::try_from(chunked_wasm) {
                     Ok(wasm) => Some((wasm, canister_id)),
