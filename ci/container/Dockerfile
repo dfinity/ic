@@ -153,7 +153,6 @@ COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 COPY ./ci/container/files/docker.sh /usr/bin/docker
 
