@@ -350,7 +350,12 @@ fn lookup_metadata(
         "metadata".into(),
         metadata_section.into(),
     ];
-    let cert = read_state_with_identity(env, vec![path.clone()], identity)?;
+    let cert = read_state_with_identity_and_canister_id(
+        env,
+        vec![path.clone()],
+        identity,
+        canister_id.get(),
+    )?;
     lookup_value(&cert, path).map(|s| s.to_vec())
 }
 
