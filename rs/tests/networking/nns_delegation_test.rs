@@ -24,7 +24,7 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, get_nns_node},
 };
-use ic_types::{messages::Certificate, PrincipalId, ReplicaVersion};
+use ic_types::{messages::Certificate, Height, PrincipalId, ReplicaVersion};
 use slog::info;
 
 /// How long to wait between subsequent nns delegation fetch requests.
