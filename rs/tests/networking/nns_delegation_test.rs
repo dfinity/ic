@@ -24,7 +24,7 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, get_nns_node},
 };
-use ic_types::{messages::Certificate, Height, PrincipalId, ReplicaVersion};
+use ic_types::{messages::Certificate, Height, PrincipalId};
 use slog::info;
 
 /// How long to wait between subsequent nns delegation fetch requests.
@@ -181,7 +181,7 @@ fn upgrade_subnet(subnet: &SubnetSnapshot, env: &TestEnv) {
 
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).expect("bad TARGET_VERSION string"),
+        &target_version,
         subnet.subnet_id,
     ));
 
