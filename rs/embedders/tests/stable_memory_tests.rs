@@ -174,8 +174,5 @@ fn stable_write_traps_after_failed_stable_grow_due_to_subnet_memory() {
     // Execute the update method and expect a trap with "stable memory out of bounds"
     let err = test.ingress(canister_id, "go", vec![]).unwrap_err();
 
-    err.assert_contains(
-        ErrorCode::CanisterTrapped,
-        &format!("stable memory out of bounds"),
-    );
+    err.assert_contains(ErrorCode::CanisterTrapped, "stable memory out of bounds");
 }

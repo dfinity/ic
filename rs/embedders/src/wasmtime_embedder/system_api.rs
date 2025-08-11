@@ -3394,7 +3394,7 @@ impl SystemApi for SystemApiImpl {
         else {
             return Ok(StableGrowOutcome::Failure);
         };
-        let result = match self.memory_usage.allocate_execution_memory(
+        match self.memory_usage.allocate_execution_memory(
             execution_bytes,
             &self.api_type,
             &mut self.sandbox_safe_system_state,
@@ -3415,8 +3415,7 @@ impl SystemApi for SystemApiImpl {
                 Err(err)
             }
             Err(_) => Ok(StableGrowOutcome::Failure),
-        };
-        result
+        }
     }
 
     fn ic0_canister_cycle_balance(&mut self) -> HypervisorResult<u64> {
