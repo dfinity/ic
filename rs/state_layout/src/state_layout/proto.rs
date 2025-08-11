@@ -298,7 +298,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             on_low_wasm_memory_hook_status: item
                 .on_low_wasm_memory_hook_status
                 .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
-            source: pb_canister_snapshot_bits::SnapshotSource::from(item.source).into(),
+            source: pb_canister_state_bits::SnapshotSource::from(item.source).into(),
         }
     }
 }
@@ -333,7 +333,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             .and_then(Result::ok);
 
         let source =
-            pb_canister_snapshot_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
+            pb_canister_state_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
         let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
