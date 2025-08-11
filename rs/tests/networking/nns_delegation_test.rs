@@ -2,7 +2,12 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use ic_agent::Agent;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::{
+    rw_message::install_nns_and_check_progress,
+    upgrade::{
+        assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    },
+};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -10,21 +15,31 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            get_guestos_update_img_sha256, get_guestos_update_img_url,
+            get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            SubnetSnapshot,
+        },
     },
     systest,
-    util::block_on,
+    util::{block_on, get_nns_node},
 };
-use ic_types::{messages::Certificate, PrincipalId};
+use ic_types::{messages::Certificate, PrincipalId, ReplicaVersion};
 use slog::info;
 
 /// How long to wait between subsequent nns delegation fetch requests.
 const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
+const DKG_LENGTH: Height = Height::new(9);
+
 fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(Subnet::fast_single_node(SubnetType::System))
-        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System).with_dkg_interval_length(DKG_LENGTH),
+        )
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::Application).with_dkg_interval_length(DKG_LENGTH),
+        )
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
 
@@ -49,6 +64,10 @@ async fn nns_delegation_test(env: TestEnv, subnet_type: SubnetType) {
         .nodes()
         .next()
         .expect("There is at least one node on each subnet");
+
+    if subnet_type == SubnetType::Application {
+        upgrade_subnet(&subnet, &env);
+    }
 
     let agent = node.build_default_agent_async().await;
     info!(env.logger(), "Fetching an initial NNS delegation");
@@ -136,6 +155,34 @@ async fn get_nns_delegation_timestamp(
         };
 
     Some(leb128::read::unsigned(&mut std::io::Cursor::new(&timestamp)).unwrap())
+}
+
+fn upgrade_subnet(subnet: &SubnetSnapshot, env: &TestEnv) {
+    let nns_node = get_nns_node(&env.topology_snapshot());
+
+    let target_version = get_guestos_update_img_version().expect("target IC version");
+    let sha256 = get_guestos_update_img_sha256().unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
+
+    block_on(bless_replica_version(
+        &nns_node,
+        &target_version,
+        &env.logger(),
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
+
+    block_on(deploy_guestos_to_all_subnet_nodes(
+        &nns_node,
+        &ReplicaVersion::try_from(target_version.clone()).expect("bad TARGET_VERSION string"),
+        subnet.subnet_id,
+    ));
+
+    assert_assigned_replica_version(
+        &subnet.nodes().next().unwrap(),
+        &target_version,
+        env.logger(),
+    );
 }
 
 fn main() -> Result<()> {
