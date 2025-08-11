@@ -1,7 +1,9 @@
-use candid::{CandidType, Principal};
+use candid::{CandidType, Nat, Principal};
+use icrc_ledger_types::icrc1::account::Subaccount;
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, SubnetSpec};
 use pocket_ic::{
-    start_server, update_candid, PocketIc, PocketIcBuilder, PocketIcState, StartServerParams,
+    start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
+    StartServerParams,
 };
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -11,23 +13,28 @@ use tempfile::TempDir;
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
 
+fn test_canister_wasm() -> Vec<u8> {
+    let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
+    std::fs::read(wasm_path).unwrap()
+}
+
 #[test]
 fn with_all_icp_features() {
     let _pic = PocketIcBuilder::new().with_all_icp_features().build();
 }
 
-#[derive(CandidType)]
-struct AccountBalanceArgs {
-    account: Vec<u8>,
-}
-
-#[derive(CandidType, Deserialize)]
-struct Tokens {
-    e8s: u64,
-}
-
 #[test]
 fn test_icp_ledger() {
+    #[derive(CandidType)]
+    struct AccountBalanceArgs {
+        account: Vec<u8>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct Tokens {
+        e8s: u64,
+    }
+
     let pic = PocketIcBuilder::new().with_all_icp_features().build();
 
     let test_account_hex = "5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087";
@@ -65,6 +72,130 @@ fn test_icp_ledger() {
     .unwrap()
     .0;
     assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
+}
+
+#[test]
+fn test_cycles_ledger() {
+    #[derive(CandidType, Clone)]
+    struct Icrc1BalanceArgs {
+        owner: Principal,
+        subaccount: Option<Vec<u8>>,
+    }
+
+    #[derive(CandidType)]
+    struct WithdrawArgs {
+        from_subaccount: Option<Subaccount>,
+        to: Principal,
+        created_at_time: Option<u64>,
+        amount: Nat,
+    }
+
+    #[derive(CandidType, Deserialize, Debug)]
+    enum WithdrawError {
+        InsufficientFunds { balance: Nat },
+    }
+
+    const B: u128 = 1_000_000_000;
+    const CYCLES_LEDGER_FEE: u128 = 100_000_000;
+
+    let test_identity = Principal::from_slice(&[42; 29]);
+    let cycles_ledger_id = Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap();
+
+    let pic = PocketIcBuilder::new()
+        .with_all_icp_features()
+        .with_application_subnet()
+        .build();
+
+    let canister_id = pic.create_canister();
+    assert_eq!(
+        pic.get_subnet(canister_id).unwrap(),
+        pic.topology().get_app_subnets()[0]
+    );
+    let init_cycles = u128::MAX / 2;
+    pic.add_cycles(canister_id, init_cycles);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let check_balance = |expected: u128| {
+        // Check balance via cycles ledger.
+        let icrc1_balance_args = Icrc1BalanceArgs {
+            owner: test_identity,
+            subaccount: None,
+        };
+        let balance = update_candid::<_, (Nat,)>(
+            &pic,
+            cycles_ledger_id,
+            "icrc1_balance_of",
+            (icrc1_balance_args.clone(),),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(balance, expected);
+
+        // The cycles ledger index only syncs with the cycles ledger once per second.
+        pic.advance_time(Duration::from_secs(1));
+        pic.tick();
+
+        // Check balance via cycles ledger index.
+        let cycles_ledger_index_id = Principal::from_text("ul4oc-4iaaa-aaaaq-qaabq-cai").unwrap();
+        let balance = update_candid::<_, (Nat,)>(
+            &pic,
+            cycles_ledger_index_id,
+            "icrc1_balance_of",
+            (icrc1_balance_args,),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(balance, expected);
+    };
+    let check_cycles = |expected: u128| {
+        let actual = pic.cycle_balance(canister_id);
+        // Allow the actual cycles balance to be less than the expected cycles balance by 10B cycles due to resource consumption.
+        assert!(
+            expected <= actual + 10 * B && actual <= expected,
+            "actual: {}; expected: {}",
+            actual,
+            expected
+        );
+    };
+
+    check_balance(0);
+    check_cycles(init_cycles);
+
+    // Deposit cycles to the cycles ledger.
+    let cycles = u128::MAX / 4;
+    let cycles_nat: Nat = cycles.into();
+    update_candid::<_, ()>(
+        &pic,
+        canister_id,
+        "deposit_cycles_to_cycles_ledger",
+        (test_identity, cycles_nat),
+    )
+    .unwrap();
+
+    check_balance(cycles - CYCLES_LEDGER_FEE);
+    check_cycles(init_cycles - cycles);
+
+    // Withdraw cycles from the cycles ledger.
+    let amount = cycles - 2 * CYCLES_LEDGER_FEE;
+    let withdraw_args = WithdrawArgs {
+        from_subaccount: None,
+        to: canister_id,
+        created_at_time: None,
+        amount: amount.into(),
+    };
+    update_candid_as::<_, (Result<Nat, WithdrawError>,)>(
+        &pic,
+        cycles_ledger_id,
+        test_identity,
+        "withdraw",
+        (withdraw_args,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+
+    check_balance(0);
+    check_cycles(init_cycles);
 }
 
 #[derive(CandidType, Deserialize)]

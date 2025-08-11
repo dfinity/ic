@@ -6,7 +6,7 @@ use axum::{
     response::{Html, IntoResponse, Response as AxumResponse},
 };
 use bitcoin::Network;
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload, SetAuthorizedSubnetworkListArgs,
     SubnetListWithType, UpdateSubnetTypeArgs,
@@ -40,6 +40,7 @@ use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServi
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_icp_index::InitArg as IcpIndexInitArg;
+use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{RegistryValue, ZERO_REGISTRY_VERSION};
@@ -55,8 +56,9 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    LEDGER_INDEX_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
@@ -130,6 +132,9 @@ const CYCLES_MINTING_CANISTER_WASM: &[u8] =
     include_bytes!(env!("CYCLES_MINTING_CANISTER_WASM_PATH"));
 const ICP_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_LEDGER_CANISTER_WASM_PATH"));
 const ICP_INDEX_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_INDEX_CANISTER_WASM_PATH"));
+const CYCLES_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("CYCLES_LEDGER_CANISTER_WASM_PATH"));
+const CYCLES_LEDGER_INDEX_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH"));
 
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
@@ -466,6 +471,7 @@ struct PocketIcSubnets {
     subnet_configs: Vec<SubnetConfigInternal>,
     subnets: Arc<SubnetsImpl>,
     nns_subnet: Option<Arc<Subnet>>,
+    ii_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     state_dir: Option<PathBuf>,
@@ -567,6 +573,7 @@ impl PocketIcSubnets {
             subnet_configs: vec![],
             subnets: Arc::new(SubnetsImpl::new()),
             nns_subnet: None,
+            ii_subnet: None,
             runtime,
             state_dir,
             registry_data_provider,
@@ -610,6 +617,7 @@ impl PocketIcSubnets {
     fn clear(&mut self) {
         self.subnets.clear();
         self.nns_subnet.take();
+        self.ii_subnet.take();
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
@@ -734,6 +742,10 @@ impl PocketIcSubnets {
             self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
 
+        if let SubnetKind::II = subnet_kind {
+            self.ii_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
+
         // We need the actual subnet ID to update the chain keys.
         for chain_key in subnet_chain_keys {
             self.chain_keys
@@ -838,6 +850,7 @@ impl PocketIcSubnets {
                 registry,
                 cycles_minting,
                 icp_token,
+                cycles_token,
             } = icp_features;
             if registry {
                 self.update_registry();
@@ -847,6 +860,9 @@ impl PocketIcSubnets {
             }
             if icp_token {
                 self.deploy_icp_token();
+            }
+            if cycles_token {
+                self.deploy_cycles_token();
             }
         }
 
@@ -1191,6 +1207,136 @@ impl PocketIcSubnets {
                     CanisterInstallMode::Install,
                     ICP_INDEX_CANISTER_WASM.to_vec(),
                     Encode!(&icp_index_init_arg).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_cycles_token(&self) {
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        // Cycles ledger init args.
+        #[derive(CandidType)]
+        struct CyclesLedgerConfig {
+            max_blocks_per_request: u64,
+            index_id: Option<Principal>,
+        }
+        #[derive(CandidType)]
+        enum CyclesLedgerArgs {
+            Init(CyclesLedgerConfig),
+        }
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(CYCLES_LEDGER_CANISTER_ID)
+        {
+            // Create the cycles ledger with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"um5iw-rqaaa-aaaaq-qaaba-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // Create the cycles ledger canister and top it up with cycles so that
+            // - test identities can be initialized to have a large cycles balance on the ledger that is actually backed by ICP cycles;
+            // - additional cycles can be deposited to the ledger without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(CYCLES_LEDGER_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, CYCLES_LEDGER_CANISTER_ID);
+
+            // Install the cycles ledger.
+            // The values of the initial payload have been obtained by calling
+            // `dfx canister call um5iw-rqaaa-aaaaq-qaaba-cai icrc1_metadata --ic --update`:
+            //   record { "dfn:max_blocks_per_request"; variant { Nat = 50 : nat } };
+            //   record { "dfn:index_id"; variant { Blob = blob "\00\00\00\00\02\10\00\03\01\01" }; };
+            let cycles_ledger_config = CyclesLedgerConfig {
+                max_blocks_per_request: 50,
+                index_id: Some(CYCLES_LEDGER_INDEX_CANISTER_ID.into()),
+            };
+            let cycles_ledger_args = CyclesLedgerArgs::Init(cycles_ledger_config);
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    CYCLES_LEDGER_CANISTER_WASM.to_vec(),
+                    Encode!(&cycles_ledger_args).unwrap(),
+                )
+                .unwrap();
+        }
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(CYCLES_LEDGER_INDEX_CANISTER_ID)
+        {
+            // Create the ICP index with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"ul4oc-4iaaa-aaaaq-qaabq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(CYCLES_LEDGER_INDEX_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, CYCLES_LEDGER_INDEX_CANISTER_ID);
+
+            // Install the cycles ledger index.
+            let cycles_ledger_ledger_init_arg = CyclesLedgerIndexInitArg {
+                ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
+                retrieve_blocks_from_ledger_interval_seconds: None, // TODO: is this the ICP mainnet config?
+            };
+            let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_ledger_init_arg);
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    CYCLES_LEDGER_INDEX_CANISTER_WASM.to_vec(),
+                    Encode!(&cycles_ledger_index_arg).unwrap(),
                 )
                 .unwrap();
         }
