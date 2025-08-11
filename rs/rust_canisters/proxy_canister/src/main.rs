@@ -12,7 +12,7 @@ use ic_cdk::api::time;
 use ic_cdk::{caller, spawn};
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
+    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs, TransformContext, TransformFunc,
 };
 use proxy_canister::{
     RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
@@ -71,14 +71,64 @@ async fn send_requests_in_parallel(
 }
 
 #[update]
+pub async fn start_large_download(
+    request: RemoteHttpRequest,
+)-> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let mut request = request.clone();
+    request.request.url = format!("{}/bytes/1900000", request.request.url);
+    start_all_requests(request, 60).await
+}
+
+#[update]
+pub async fn start_large_payload(
+    request: RemoteHttpRequest,
+)-> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let mut request = request.clone();
+    // request.request.transform = Some(TransformContext {
+    //     function: TransformFunc(candid::Func {
+    //         principal: Principal::management_canister(),
+    //         method: "very_large_but_allowed_transform".to_string(),
+    //     }),
+    //     context: vec![],
+    // });
+    request.request.max_response_bytes = None;
+    start_all_requests(request, 10).await
+}
+
+#[update]
+pub async fn start_long_running(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let mut request = request.clone();
+    request.request.url = format!("{}/delay/30", request.request.url);
+    start_all_requests(request, 500).await
+}
+
+#[update]
+pub async fn start_large_requests(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let mut request = request.clone();
+    request.request.body = Some(vec![0; 1_900_000]);
+    start_all_requests(request, 60).await
+}
+
+#[update]
 pub async fn start_continuous_requests(
     request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    start_all_requests(request, 500).await
+}
+
+async fn start_all_requests(
+    request: RemoteHttpRequest,
+    replication: usize,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
     // This request establishes the session to the target server.
     let _ = send_request(request.clone()).await;
 
     spawn(async move {
-        run_continuous_request_loop(request).await;
+        run_continuous_request_loop(request, replication).await;
     });
 
     Ok(RemoteHttpResponse::new(
@@ -90,9 +140,8 @@ pub async fn start_continuous_requests(
 
 // TODO: instead of sequentially awaiting on each batch, try to send the next requests anyway, with backoff.
 // This should improve the overall qps, as the canister message queue is the bottleneck, and it's not being saturated.
-async fn run_continuous_request_loop(request: RemoteHttpRequest) {
-    const BATCH_SIZE: usize = 500;
-    let futures_iter = (0..BATCH_SIZE).map(|_| send_request(request.clone()));
+async fn run_continuous_request_loop(request: RemoteHttpRequest, batch_size: usize) {
+    let futures_iter = (0..batch_size).map(|_| send_request(request.clone()));
     let results = join_all(futures_iter).await;
 
     let mut successes = 0;
@@ -110,11 +159,11 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
     }
     println!(
         "Finished batch of {} requests => successes: {}, errors: {}",
-        BATCH_SIZE, successes, errors
+        batch_size, successes, errors
     );
 
     spawn(async move {
-        run_continuous_request_loop(request).await;
+        run_continuous_request_loop(request, batch_size).await;
     });
 }
 

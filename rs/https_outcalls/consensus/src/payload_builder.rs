@@ -41,9 +41,11 @@ use ic_types::{
     crypto::Signed,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
-    signature::BasicSignature,
+    signature::{BasicSignature, BasicSignatureBatch},
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
+use rayon::prelude::*;
+use std::time::{Duration, Instant};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
@@ -399,20 +401,25 @@ impl CanisterHttpPayloadBuilderImpl {
         payload
     }
 
-    fn validate_canister_http_payload_impl(
+    pub fn validate_canister_http_payload_impl(
         &self,
         height: Height,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), PayloadValidationError> {
-        // Empty payloads are always valid
+        let total_start = Instant::now();
+
+        // --- Block 1: Initial Checks ---
+        let block_1_start = Instant::now();
         if payload.is_empty() {
+            // Log this special case and exit.
+            println!(
+                "CanisterHttpPayloadValidation: result=OK reason=\"EmptyPayload\" total_us={}",
+                total_start.elapsed().as_micros()
+            );
             return Ok(());
         }
-
-        // Check whether feature is enabled and reject if it isn't.
-        // NOTE: All payloads that are processed at this point are non-empty
         if !self.is_enabled(validation_context).map_err(|err| {
             ValidationError::ValidationFailed(
                 consensus::PayloadValidationFailure::RegistryUnavailable(err),
@@ -420,16 +427,16 @@ impl CanisterHttpPayloadBuilderImpl {
         })? {
             return validation_failed(CanisterHttpPayloadValidationFailure::Disabled);
         }
-
-        // Check number of responses
         if payload.num_non_timeout_responses() > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
             return invalid_artifact(InvalidCanisterHttpPayloadReason::TooManyResponses {
                 expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
                 received: payload.num_non_timeout_responses(),
             });
         }
+        let block_1_duration = block_1_start.elapsed();
 
-        // Validate the timed out calls
+        // --- Block 2: State Loading and Timeout Validation ---
+        let block_2_start = Instant::now();
         let state = &self
             .state_reader
             .get_state_at(validation_context.certified_height)
@@ -443,16 +450,12 @@ impl CanisterHttpPayloadBuilderImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
-
         for timeout_id in &payload.timeouts {
-            // Get requests
             let request = http_contexts.get(timeout_id).ok_or(
                 CanisterHttpPayloadValidationError::InvalidArtifact(
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(*timeout_id),
                 ),
             )?;
-
-            // Check that they are timed out and no dupicates
             if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time
                 || delivered_ids.contains(timeout_id)
             {
@@ -461,41 +464,36 @@ impl CanisterHttpPayloadBuilderImpl {
                 ));
             }
         }
+        let block_2_duration = block_2_start.elapsed();
 
-        // Get the consensus registry version
+        // --- Block 3: Registry Version Lookup ---
+        let block_3_start = Instant::now();
         let consensus_registry_version = registry_version_at_height(self.cache.as_ref(), height)
             .ok_or(CanisterHttpPayloadValidationError::ValidationFailed(
                 CanisterHttpPayloadValidationFailure::ConsensusRegistryVersionUnavailable,
             ))?;
+        let block_3_duration = block_3_start.elapsed();
 
-        // Check conditions on individual responses
+        // --- Block 4 & 5: Response Loops (Cheap Checks) ---
+        let block_4_5_start = Instant::now();
         for response in &payload.responses {
-            // Check that response is consistent
             utils::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-
-            // Validate response against `ValidationContext`
             utils::check_response_against_context(
                 consensus_registry_version,
                 response,
                 validation_context,
             )
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-
-            // Check that the response is not submitted twice
             if delivered_ids.contains(&response.content.id) {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                     response.content.id,
                 ));
             }
         }
-
-        // Check that there are no duplicate responses among non-replicated requests.
-        // As it's very easy for a malicious delegated node to submit multiple responses (even different).
         let mut non_replicated_ids = HashSet::new();
         for response in &payload.responses {
             let callback_id = &response.content.id;
-
             if let Some(&CanisterHttpRequestContext {
                 replication: Replication::NonReplicated(_),
                 ..
@@ -508,7 +506,10 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
         }
+        let block_4_5_duration = block_4_5_start.elapsed();
 
+        // --- Block 6 & 7: Committee Lookup & Main Signature Verification Loop ---
+        let block_6_7_start = Instant::now();
         let committee = self
             .membership
             .get_canister_http_committee(height)
@@ -517,117 +518,163 @@ impl CanisterHttpPayloadBuilderImpl {
                     CanisterHttpPayloadValidationFailure::Membership,
                 )
             })?;
+        // NEW: Initialize detailed cumulative timers for the loop's interior
+        let mut loop7_committee_logic_duration = Duration::ZERO;
+        let mut loop7_signer_check_duration = Duration::ZERO;
+        let mut loop7_crypto_verify_duration = Duration::ZERO; // Renamed for clarity
 
-        // Verify the signatures
-        // NOTE: We do this in a separate loop because this check is expensive and we want to
-        // do all the cheap checks first
-        for response in &payload.responses {
-            let callback_id = response.content.id;
-            let (effective_committee, effective_threshold) = match http_contexts.get(&callback_id) {
-                Some(&CanisterHttpRequestContext {
-                    replication: Replication::NonReplicated(ref node_id),
-                    ..
-                }) => (vec![*node_id], 1),
-                None
-                | Some(&CanisterHttpRequestContext {
-                    replication: Replication::FullyReplicated,
-                    ..
-                }) => {
-                    let threshold = match self
-                        .membership
-                        .get_committee_threshold(height, Committee::CanisterHttp)
-                    {
-                        Ok(threshold) => threshold,
-                        Err(err) => {
-                            warn!(self.log, "Failed to get membership: {:?}", err);
-                            return validation_failed(
-                                CanisterHttpPayloadValidationFailure::Membership,
-                            );
+        let x: Result<(), PayloadValidationError> = payload
+            .responses
+            .par_iter()
+            .map(|response| {
+                // --- Measure Sub-block A: Committee/Threshold Logic ---
+                let committee_logic_start = Instant::now();
+                let callback_id = response.content.id;
+                let (effective_committee, effective_threshold) =
+                    match http_contexts.get(&callback_id) {
+                        Some(&CanisterHttpRequestContext {
+                            replication: Replication::NonReplicated(ref node_id),
+                            ..
+                        }) => (vec![*node_id], 1),
+                        None
+                        | Some(&CanisterHttpRequestContext {
+                            replication: Replication::FullyReplicated,
+                            ..
+                        }) => {
+                            let threshold = match self
+                                .membership
+                                .get_committee_threshold(height, Committee::CanisterHttp)
+                            {
+                                Ok(threshold) => threshold,
+                                Err(err) => {
+                                    warn!(self.log, "Failed to get membership: {:?}", err);
+                                    return validation_failed(
+                                        CanisterHttpPayloadValidationFailure::Membership,
+                                    );
+                                }
+                            };
+                            (committee.clone(), threshold)
                         }
                     };
-                    (committee.clone(), threshold)
+                let loop7_committee_logic_duration = committee_logic_start.elapsed();
+
+                // --- Measure Sub-block B: Signer Validation ---
+                let signer_check_start = Instant::now();
+                let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
+                    .proof
+                    .signature
+                    .signatures_map
+                    .keys()
+                    .cloned()
+                    .partition(|signer| effective_committee.iter().any(|id| id == signer));
+                if !invalid_signers.is_empty() {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
+                        invalid_signers,
+                        committee: effective_committee,
+                        valid_signers,
+                    });
                 }
-            };
 
-            let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
-                .proof
-                .signature
-                .signatures_map
-                .keys()
-                .cloned()
-                .partition(|signer| effective_committee.iter().any(|id| id == signer));
-            if !invalid_signers.is_empty() {
-                return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
-                    invalid_signers,
-                    committee: effective_committee,
-                    valid_signers,
-                });
-            }
+                if valid_signers.len() < effective_threshold {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                        committee: effective_committee,
+                        signers: valid_signers,
+                        expected_threshold: effective_threshold,
+                    });
+                }
+                let loop7_signer_check_duration = signer_check_start.elapsed();
 
-            if valid_signers.len() < effective_threshold {
-                return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
-                    committee: effective_committee,
-                    signers: valid_signers,
-                    expected_threshold: effective_threshold,
-                });
-            }
+                let crypto_start = Instant::now();
 
-            self.crypto
-                .verify_aggregate(&response.proof, consensus_registry_version)
-                .map_err(|err| {
-                    CanisterHttpPayloadValidationError::InvalidArtifact(
-                        InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                    )
-                })?;
-        }
-
-        let faults_tolerated = match self.membership.get_canister_http_committee(height) {
-            Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
-            _ => {
-                warn!(self.log, "Failed to get canister http committee");
-                return validation_failed(CanisterHttpPayloadValidationFailure::Membership);
-            }
-        };
-
-        for response in &payload.divergence_responses {
-            let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
-                .shares
-                .iter()
-                .map(|share| share.signature.signer)
-                .partition(|signer| committee.iter().any(|id| id == signer));
-
-            if !invalid_signers.is_empty() {
-                return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
-                    invalid_signers,
-                    committee,
-                    valid_signers,
-                });
-            }
-
-            for share in response.shares.iter() {
                 self.crypto
-                    .verify(share, consensus_registry_version)
+                    .verify_aggregate(&response.proof, consensus_registry_version)
                     .map_err(|err| {
                         CanisterHttpPayloadValidationError::InvalidArtifact(
                             InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
                         )
                     })?;
-            }
+                let loop7_crypto_verify_duration = crypto_start.elapsed();
+                Ok(())
+            })
+            .collect();
+        x?;
+        let block_6_7_duration = block_6_7_start.elapsed();
 
-            let grouped_shares = group_shares_by_callback_id(response.shares.iter());
-            if grouped_shares.len() != 1 {
-                return invalid_artifact(
-                    InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
-                );
-            }
-            for (_, grouped_shares) in grouped_shares {
-                if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
+        // --- Block 8: Divergence Proofs ---
+        let block_8_start = Instant::now();
+        let mut crypto_ind_verify_duration = Duration::ZERO;
+        if !payload.divergence_responses.is_empty() {
+            let faults_tolerated = match self.membership.get_canister_http_committee(height) {
+                Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
+                _ => {
+                    warn!(self.log, "Failed to get canister http committee");
+                    return validation_failed(CanisterHttpPayloadValidationFailure::Membership);
+                }
+            };
+
+            for response in &payload.divergence_responses {
+                let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
+                    .shares
+                    .iter()
+                    .map(|share| share.signature.signer)
+                    .partition(|signer| committee.iter().any(|id| id == signer));
+                if !invalid_signers.is_empty() {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
+                        invalid_signers,
+                        committee: committee.clone(),
+                        valid_signers,
+                    });
+                }
+
+                for share in response.shares.iter() {
+                    let crypto_start = Instant::now();
+                    self.crypto
+                        .verify(share, consensus_registry_version)
+                        .map_err(|err| {
+                            CanisterHttpPayloadValidationError::InvalidArtifact(
+                                InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+                            )
+                        })?;
+                    crypto_ind_verify_duration += crypto_start.elapsed();
+                }
+
+                let grouped_shares = group_shares_by_callback_id(response.shares.iter());
+                if grouped_shares.len() != 1 {
                     return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,
+                        InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                     );
+                }
+                for (_, grouped_shares) in grouped_shares {
+                    if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,
+                        );
+                    }
                 }
             }
         }
+        let block_8_duration = block_8_start.elapsed();
+
+        // This is the only log output for the entire successful run.
+        println!(
+            "CanisterHttpPayloadValidation: result=OK total_us={} num_responses={} num_timeouts={} num_divergence={} block_1_initial_checks_us={} block_2_state_timeouts_us={} block_3_registry_us={} block_4_5_cheap_response_loops_us={} block_6_7_sig_verify_loop_us={} (loop7_committee_logic_us={}, loop7_signer_check_us={}, loop7_crypto_agg_us={}) block_8_divergence_loop_us={} (crypto_ind_us={})",
+            total_start.elapsed().as_micros(),
+            payload.responses.len(),
+            payload.timeouts.len(),
+            payload.divergence_responses.len(),
+            block_1_duration.as_micros(),
+            block_2_duration.as_micros(),
+            block_3_duration.as_micros(),
+            block_4_5_duration.as_micros(),
+            block_6_7_duration.as_micros(),
+            // --- NEW DETAILED METRICS FOR THE LOOP ---
+            loop7_committee_logic_duration.as_micros(),
+            loop7_signer_check_duration.as_micros(),
+            loop7_crypto_verify_duration.as_micros(),
+            // --- END NEW METRICS ---
+            block_8_duration.as_micros(),
+            crypto_ind_verify_duration.as_micros()
+        );
 
         Ok(())
     }

@@ -4,6 +4,9 @@ use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::SigConverter;
 use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
 
+use std::time::Instant;
+use std::time::Duration;
+
 #[cfg(test)]
 mod tests;
 
@@ -52,57 +55,103 @@ impl BasicSigVerifierInternal {
         message: &H,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let total_start = Instant::now();
+    
         if signatures.signatures_map.is_empty() {
             return Err(CryptoError::InvalidArgument {
                 message: "Empty BasicSignatureBatch. At least one signature should be included in the batch.".to_string(),
             });
         };
-
-        let message = message.as_signed_bytes();
-        let mut msgs = Vec::with_capacity(signatures.signatures_map.len());
-        let mut sigs = Vec::with_capacity(signatures.signatures_map.len());
-        let mut keys = Vec::with_capacity(signatures.signatures_map.len());
-
+    
+        // 1. Message Serialization
+        let message_ser_start = Instant::now();
+        let message_bytes = message.as_signed_bytes();
+        let message_ser_duration = message_ser_start.elapsed();
+    
+        let num_sigs = signatures.signatures_map.len();
+        let mut msgs = Vec::with_capacity(num_sigs);
+        let mut sigs = Vec::with_capacity(num_sigs);
+        let mut keys = Vec::with_capacity(num_sigs);
+    
+        // 2. Data Preparation Loop
+        let loop_start = Instant::now();
+        let mut key_fetch_duration = Duration::new(0, 0);
+        let mut key_deserialize_duration = Duration::new(0, 0);
+    
         for (signer, signature) in signatures.signatures_map.iter() {
+            let key_fetch_start = Instant::now();
             let pk_proto =
                 key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
-
+            key_fetch_duration += key_fetch_start.elapsed();
+    
             let pubkey_alg = AlgorithmId::from(pk_proto.algorithm);
             if pubkey_alg != AlgorithmId::Ed25519 {
+                // Early exit, so we log what we have so far on a single line
+                println!(
+                    "BatchedSigVerify(ERROR): reason=\"AlgorithmNotSupported\" algorithm={:?} total_us={}",
+                    pubkey_alg,
+                    total_start.elapsed().as_micros()
+                );
                 return Err(CryptoError::AlgorithmNotSupported {
                     algorithm: pubkey_alg,
-                    reason: "Only Ed25519 is supported in batched basic sig verification."
-                        .to_string(),
+                    reason: "Only Ed25519 is supported in batched basic sig verification.".to_string(),
                 });
             }
+    
+            let key_deserialize_start = Instant::now();
             let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(|e| {
                 CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::Ed25519,
-                    key_bytes: Some(pk_proto.key_value),
+                    key_bytes: Some(pk_proto.key_value.clone()),
                     internal_error: e.to_string(),
                 }
             })?;
-
-            msgs.push(&message[..]);
+            key_deserialize_duration += key_deserialize_start.elapsed();
+    
+            msgs.push(&message_bytes[..]);
             sigs.push(&signature.get_ref().0[..]);
             keys.push(pk);
         }
-
+        let loop_duration = loop_start.elapsed();
+    
+        // 3. Seed Generation
+        let seed_gen_start = Instant::now();
         let seed = vault.new_public_seed().map_err(|e| match e {
             PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
         })?;
+        let seed_gen_duration = seed_gen_start.elapsed();
         let rng = &mut seed.into_rng();
-
-        ic_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
+    
+        // 4. Core Cryptography
+        let verification_start = Instant::now();
+        let result = ic_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
             CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::Ed25519,
-                public_key_bytes: vec![],
+                public_key_bytes: vec![], // Note: We lose which key/sig failed in a batch
                 sig_bytes: vec![],
                 internal_error: e.to_string(),
             }
-        })
+        });
+        let verification_duration = verification_start.elapsed();
+        let total_duration = total_start.elapsed();
+    
+        // The single, one-line, consolidated log message
+        println!(
+            "BatchedSigVerify: result={} total_us={} message_ser_us={} loop_us={} sigs={} key_fetch_us={} key_deserialize_us={} seed_gen_us={} verification_us={}",
+            if result.is_ok() { "OK" } else { "FAIL" },
+            total_duration.as_micros(),
+            message_ser_duration.as_micros(),
+            loop_duration.as_micros(),
+            num_sigs,
+            key_fetch_duration.as_micros(),
+            key_deserialize_duration.as_micros(),
+            seed_gen_duration.as_micros(),
+            verification_duration.as_micros(),
+        );
+    
+        result
     }
 }
 
