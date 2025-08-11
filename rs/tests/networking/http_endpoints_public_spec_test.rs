@@ -30,6 +30,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
@@ -45,7 +46,7 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, UniversalCanister},
 };
-use ic_types::CanisterId;
+use ic_types::{CanisterId, PrincipalId};
 use itertools::Itertools;
 use reqwest::Response;
 use slog::{info, Logger};
@@ -57,19 +58,22 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
-    info!(&logger, "Checking readiness of all nodes...");
+    install_nns_and_check_progress(env.topology_snapshot());
 
-    snapshot.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
+    info!(&logger, "Checking readiness of all API boundary nodes...");
+
+    for api_bn in env.topology_snapshot().api_boundary_nodes() {
+        api_bn
+            .await_status_is_healthy()
+            .expect("API boundary node did not come up healthy.");
+    }
 
     let (sys_uc1_id, sys_uc2_id, app_uc_id) = get_canister_ids(&snapshot);
     let (sys_agent, app_agent) = get_agents(&snapshot);
@@ -168,10 +172,10 @@ fn read_state(env: TestEnv) {
             let response = CanisterReadState::new(
                 vec![Path::from(vec![
                     Label::from("canister"),
-                    Label::from(effective_canister_id),
+                    Label::from(primary),
                     Label::from("controllers"),
                 ])],
-                primary.into(),
+                effective_canister_id.into(),
             )
             .read_state(socket)
             .await;
@@ -185,27 +189,31 @@ fn read_time(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
-    let socket = get_socket_addr(&snapshot);
+    let subnet_replica_socket = get_socket_addr(&snapshot);
+    let api_bn_socket = get_api_bn_socket_addr(&snapshot);
 
     block_on(async {
-        // Test that calling "time" path on the existing canister id works
-        let response =
-            CanisterReadState::new(vec![Path::from(Label::from("time"))], primary.into())
-                .read_state(socket)
-                .await;
-        let status = inspect_response(response, "ReadState", &logger).await;
-        assert_2xx(&status);
+        // Test that requesting the "time" path on an existing canister id works.
+        let read_state = |effective_canister_id: CanisterId, socket: SocketAddr| {
+            CanisterReadState::new(
+                vec![Path::from(Label::from("time"))],
+                effective_canister_id.into(),
+            )
+            .read_state(socket)
+        };
+        for socket in [subnet_replica_socket, api_bn_socket] {
+            let response = read_state(primary, socket).await;
+            let status = inspect_response(response, "ReadState", &logger).await;
+            assert_2xx(&status);
+        }
 
-        // Test that calling "time" on the management canister
-        // NOTE: On a boundary node this would get rejected, since the boundary node is not able to route
-        // the call, since it's not clear which subnet it should route to.
-        // Without a boundary node, this call is just fine
-        let response = CanisterReadState::new(
-            vec![Path::from(Label::from("time"))],
-            CanisterId::ic_00().into(),
-        )
-        .read_state(socket)
-        .await;
+        // Test that requesting the "time" path on an management canister id fails.
+        let response = read_state(CanisterId::ic_00(), api_bn_socket).await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        assert_4xx(&status);
+
+        // Test that requesting the "time" path on an management canister id works when bypassing the API BN.
+        let response = read_state(CanisterId::ic_00(), subnet_replica_socket).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
     });
@@ -272,7 +280,15 @@ fn get_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
     SocketAddr::new(sys_node.get_ip_addr(), 8080)
 }
 
-fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterId; 4]) {
+fn get_api_bn_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
+    let api_bn = snapshot
+        .api_boundary_nodes()
+        .next()
+        .expect("There should be at least one API boundary node");
+    SocketAddr::new(api_bn.get_ip_addr(), 8080)
+}
+
+fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterId; 5]) {
     let (primary, sys_uc, app_uc) = get_canister_ids(snapshot);
     (
         primary,
@@ -281,10 +297,12 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
             sys_uc,
             // Valid destination on other subnet
             app_uc,
-            // Invalid canister id
+            // Non-existing canister id
             CanisterId::from(1337),
             // Management canister
             CanisterId::ic_00(),
+            // Invalid canister id
+            CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap(),
         ],
     )
 }
