@@ -2823,6 +2823,7 @@ mod set_topics_for_custom_proposals;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::governance::ValidGovernanceProto;
     use crate::{
         governance::Governance,
         pb::v1::{
@@ -2874,7 +2875,12 @@ mod tests {
             ledger_canister_id: Some(PrincipalId::from(*SNS_LEDGER_CANISTER_ID)),
             swap_canister_id: Some(PrincipalId::from(*SNS_SWAP_CANISTER_ID)),
 
-            sns_metadata: None,
+            sns_metadata: Some(SnsMetadata {
+                logo: None,
+                url: Some("https://example.com".to_string()),
+                name: Some("Example".to_string()),
+                description: Some("Very descriptive description".to_string()),
+            }),
             sns_initialization_parameters: "".to_string(),
             parameters: Some(DEFAULT_PARAMS.clone()),
             id_to_nervous_system_functions: EMPTY_FUNCTIONS.clone(),
@@ -2902,8 +2908,7 @@ mod tests {
         let governance_proto = governance_proto_for_proposal_tests(None);
         // Create a minimal Governance for testing
         let governance = Governance::new(
-            governance_proto
-                .try_into()
+            ValidGovernanceProto::try_from(governance_proto)
                 .expect("Failed validating governance proto"),
             Box::new(NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID))),
             Box::new(MockICRC1Ledger::default()),
