@@ -569,7 +569,7 @@ impl TryFrom<pb::DkgPayload> for DkgPayload {
 }
 
 /// Errors which could occur when creating a Dkg payload.
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum DkgPayloadCreationError {
     CryptoError(CryptoError),
     StateManagerError(StateManagerError),
