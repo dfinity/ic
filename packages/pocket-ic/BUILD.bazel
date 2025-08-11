@@ -108,6 +108,7 @@ rust_test_suite(
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
+	"//packages/pocket-ic/test_canister:test_canister.wasm.gz",
     ],
     env = {
         "RUST_TEST_THREADS": "2",
