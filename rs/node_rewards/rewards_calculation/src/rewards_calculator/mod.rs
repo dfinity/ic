@@ -116,7 +116,7 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
-        subnets_fr: subnets_fr,
+        subnets_fr,
         provider_results: results_per_provider,
     })
 }
@@ -185,8 +185,8 @@ fn step_0_subnets_nodes_fr(
                     subnet_assigned_fr: subnet_fr,
                     num_blocks_proposed,
                     num_blocks_failed,
-                    original_fr: original_fr,
-                    relative_fr: relative_fr,
+                    original_fr,
+                    relative_fr,
                 },
             );
         }
@@ -430,6 +430,7 @@ fn step_4_compute_base_rewards_type_region(
             }
             let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
 
+            ((day, region), (region_rewards_avg, nodes_count))
             (
                 (day, region),
                 (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
@@ -442,6 +443,7 @@ fn step_4_compute_base_rewards_type_region(
             let base_rewards_for_day = if is_type3(&node.node_reward_type) {
                 let region_key = type3_region_key(&node.region);
 
+                let (base_rewards_daily, _) = base_rewards_type3
                 let (base_rewards_daily, _, _, _) = base_rewards_type3
                     .get(&(day, region_key))
                     .expect("Type3 base rewards expected for provider");

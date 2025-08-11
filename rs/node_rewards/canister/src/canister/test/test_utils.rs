@@ -56,7 +56,7 @@ pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Rc<M
             fake_registry.clone(),
         ))
         .clone(),
-        metrics_manager.clone(),
+        Rc::new(MetricsManager::new_test(mock)),
     );
     CANISTER_TEST.with_borrow_mut(|c| *c = canister);
     (fake_registry, metrics_manager)
