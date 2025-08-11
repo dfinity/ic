@@ -354,6 +354,29 @@ fn lookup_metadata(
     lookup_value(&cert, path).map(|s| s.to_vec())
 }
 
+fn test_non_utf8_metadata(env: TestEnv) {
+    let node = get_first_app_node(&env);
+    let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+    let mut canister: Canister<'_> =
+        block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
+
+    let non_utf8_vec = b"\xe2\x28\xa1".to_vec();
+    assert!(String::from_utf8(non_utf8_vec.clone()).is_err());
+
+    let custom_section = CustomSection {
+        name: non_utf8_vec,
+        content: b"test".to_vec(),
+    };
+
+    // Create a wasm with non UTF-8 custom section name.
+    let wasm = wasm_with_custom_sections(vec![custom_section]);
+
+    // Installing the wasm fails
+    let err =
+        block_on(wasm.install_with_retries_onto_canister(&mut canister, None, None)).unwrap_err();
+    assert!(err.contains("Canister's Wasm module is not valid"));
+}
+
 fn test_metadata_path(env: TestEnv) {
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
@@ -364,21 +387,18 @@ fn test_metadata_path(env: TestEnv) {
     let non_ascii_vec = "☃️".as_bytes().to_vec();
     let non_ascii_str = String::from_utf8(non_ascii_vec.clone()).unwrap();
     assert!(!non_ascii_str.is_ascii());
-    let non_utf8_vec = b"\xe2\x28\xa1".to_vec();
-    assert!(String::from_utf8(non_utf8_vec.clone()).is_err());
+
     let metadata_sections = vec![
         // ASCII
         (b"test".to_vec(), b"test 1".to_vec()),
         // Non-ASCII UTF-8
-        (non_ascii_vec, b"test 3".to_vec()),
-        // Not UTF-8
-        (non_utf8_vec, b"test 2".to_vec()),
+        (non_ascii_vec, b"test 2".to_vec()),
         // Empty blob
-        (vec![], b"test 4".to_vec()),
+        (vec![], b"test 3".to_vec()),
         // ASCII string with spaces
         (
             b"metadata section name with spaces".to_vec(),
-            b"test 5".to_vec(),
+            b"test 4".to_vec(),
         ),
     ];
 
@@ -737,6 +757,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_invalid_request_rejected))
         .add_test(systest!(test_absent_request))
         .add_test(systest!(test_invalid_path_rejected))
+        .add_test(systest!(test_non_utf8_metadata))
         .add_test(systest!(test_metadata_path))
         .add_test(systest!(test_canister_path))
         .add_test(systest!(test_request_path))
