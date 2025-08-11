@@ -3,7 +3,10 @@ use crate::{
     logs::INFO,
     pb::v1::Governance as GovernanceProto,
     pb::{
-        sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+        sns_root_types::{
+            register_extension_response, CanisterCallError, ListSnsCanistersRequest,
+            ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
+        },
         v1::{
             governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
             ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
@@ -13,9 +16,12 @@ use crate::{
     types::{Environment, Wasm},
 };
 use candid::{Decode, Encode, Nat};
+use candid_utils::printing;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
+use ic_management_canister_types_private::{
+    CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
+};
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -43,6 +49,11 @@ impl Display for ExtensionType {
     }
 }
 
+pub enum ValidatedExtensionInit {
+    TreasuryManager(ValidatedDepositOperationArg),
+    // Future: other extension type init arguments would go here
+}
+
 /// Enum that captures all possible validated operation arguments
 #[derive(Clone, Debug)]
 pub enum ValidatedOperationArg {
@@ -56,7 +67,7 @@ pub enum ValidatedOperationArg {
 
 impl ValidatedOperationArg {
     /// Returns the original Precise value that was validated
-    pub fn get_original_value(&self) -> &ExtensionOperationArg {
+    pub fn get_original_value(&self) -> &Precise {
         match self {
             Self::TreasuryManagerDeposit(arg) => &arg.original,
             Self::TreasuryManagerWithdraw(arg) => &arg.original,
@@ -84,19 +95,13 @@ pub trait RenderablePayload {
     fn render_for_proposal(&self) -> String;
 }
 
-impl RenderablePayload for ExtensionOperationArg {
+impl RenderablePayload for Precise {
     fn render_for_proposal(&self) -> String {
-        match &self.value {
-            Some(value) => format!(
-                r#"### Extension Operation
-
-**Raw Payload:**
-```
-{:#?}
-```"#,
-                value
-            ),
-            None => "### Extension Operation\n\n*No payload provided*".to_string(),
+        if let Ok(candid_str) = printing::pretty(self) {
+            candid_str
+        } else {
+            // Fallback in case Candid serialization crashes.
+            format!("{:#?}", self)
         }
     }
 }
@@ -128,12 +133,25 @@ impl ExtensionOperationSpec {
     }
 }
 
+/// Validates treasury manager init arguments
+fn validate_treasury_manager_init(init: ExtensionInit) -> Result<ValidatedExtensionInit, String> {
+    let ExtensionInit { value } = init;
+
+    ValidatedDepositOperationArg::try_from(value).map(ValidatedExtensionInit::TreasuryManager)
+}
+
+/// Validates treasury manager init arguments
+fn validate_treasury_manager_init(init: ExtensionInit) -> Result<ValidatedExtensionInit, String> {
+    let ExtensionInit { value } = init;
+
+    ValidatedDepositOperationArg::try_from(value).map(ValidatedExtensionInit::TreasuryManager)
+}
+
 /// Validates deposit operation arguments
-fn validate_deposit_operation(
-    _governance: &Governance,
-    arg: ExtensionOperationArg,
-) -> Result<ValidatedOperationArg, String> {
-    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
+fn validate_deposit_operation(arg: ExtensionOperationArg) -> Result<ValidatedOperationArg, String> {
+    let ExtensionOperationArg { value } = arg;
+
+    ValidatedDepositOperationArg::try_from(value).map(ValidatedOperationArg::TreasuryManagerDeposit)
 }
 
 /// Validates withdraw operation arguments (currently requires empty arguments)
@@ -141,7 +159,10 @@ fn validate_withdraw_operation(
     _governance: &Governance,
     arg: ExtensionOperationArg,
 ) -> Result<ValidatedOperationArg, String> {
-    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
+    let ExtensionOperationArg { value } = arg;
+
+    ValidatedWithdrawOperationArg::try_from(value)
+        .map(ValidatedOperationArg::TreasuryManagerWithdraw)
 }
 
 impl ExtensionType {
@@ -178,6 +199,7 @@ pub struct ExtensionSpec {
     pub extension_types: Vec<ExtensionType>,
     // Custom per-extension operations can be added here in the future
     // TODO: Add a way to specify initialization arguments schema for the extension.
+    pub validate_init_arg: fn(ExtensionInit) -> Result<ValidatedExtensionInit, String>,
 }
 
 impl ExtensionSpec {
@@ -193,6 +215,14 @@ impl ExtensionSpec {
         // name collisions.
 
         Ok(())
+    }
+
+    pub fn validate_init_arg(&self, init: ExtensionInit) -> Result<ValidatedExtensionInit, String> {
+        (self.validate_init_arg)(init)
+    }
+
+    pub fn validate_init_arg(&self, init: ExtensionInit) -> Result<ValidatedExtensionInit, String> {
+        (self.validate_init_arg)(init)
     }
 
     /// Get all operations for this extension
@@ -253,6 +283,54 @@ pub struct ValidatedRegisterExtension {
     pub init: ExtensionInit,
 }
 
+impl ValidatedRegisterExtension {
+    pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
+        let ValidatedRegisterExtension { wasm, spec, init } = self;
+
+        let Wasm::Chunked {
+            store_canister_id, ..
+        } = &wasm
+        else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "RegisterExtension proposal must contain a chunked wasm module.",
+            ));
+        };
+
+        // Use the store canister to install the extension itself.
+        let extension_canister_id = *store_canister_id;
+
+        let init = spec.validate_init_arg(init).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Extension init argument validation failed: {}", err),
+            )
+        })?;
+
+        governance
+            .register_extension_with_root(extension_canister_id)
+            .await?;
+
+        // This needs to happen before the canister code is installed.
+        let init_blob = match init {
+            ValidatedExtensionInit::TreasuryManager(init) => {
+                prepare_treasury_manager_init(governance, extension_canister_id, init).await?
+            }
+        };
+
+        governance
+            .upgrade_non_root_canister(
+                extension_canister_id,
+                wasm,
+                init_blob,
+                CanisterInstallMode::Install,
+            )
+            .await?;
+
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct ValidatedExecuteExtensionOperation {
     pub extension_canister_id: CanisterId,
@@ -309,9 +387,74 @@ impl Governance {
         (treasury_sns_subaccount, treasury_icp_subaccount)
     }
 
+    async fn register_extension_with_root(
+        &self,
+        extension_canister_id: CanisterId,
+    ) -> Result<(), GovernanceError> {
+        let payload = candid::Encode!(&RegisterExtensionRequest {
+            canister_id: Some(extension_canister_id.get()),
+        })
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidPrincipal,
+                format!("Could not encode RegisterExtensionRequest: {err:?}"),
+            )
+        })?;
+
+        let reply = self
+            .env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "register_extension",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })?;
+
+        let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Could not decode RegisterExtensionResponse: {err:?}"),
+                )
+            })?;
+
+        if let Some(register_extension_response::Result::Err(CanisterCallError {
+            code,
+            description,
+        })) = result
+        {
+            let code = if let Some(code) = code {
+                code.to_string()
+            } else {
+                "<no code>".to_string()
+            };
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Root.register_extension failed with code {}: {}",
+                    code, description
+                ),
+            ));
+        }
+
+        log!(
+            INFO,
+            "Root.register_extension succeeded for canister {}",
+            extension_canister_id.get()
+        );
+
+        Ok(())
+    }
+
     async fn construct_treasury_manager_deposit_allowances(
         &self,
-        value: Option<Precise>,
+        value: Precise,
     ) -> Result<(Vec<Allowance>, u64, u64), GovernanceError> {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
         let treasury_sns_subaccount = self.sns_treasury_subaccount();
@@ -354,10 +497,10 @@ impl Governance {
     /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
     pub async fn construct_treasury_manager_init_payload(
         &self,
-        init: ExtensionInit,
+        value: Precise,
     ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
         let (allowances, sns_amount_e8s, icp_amount_e8s) = self
-            .construct_treasury_manager_deposit_allowances(init.value)
+            .construct_treasury_manager_deposit_allowances(value)
             .await?;
 
         let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
@@ -374,10 +517,10 @@ impl Governance {
     /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
     pub async fn construct_treasury_manager_deposit_payload(
         &self,
-        arg: ExtensionOperationArg,
+        value: Precise,
     ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
         let (allowances, sns_amount_e8s, icp_amount_e8s) = self
-            .construct_treasury_manager_deposit_allowances(arg.value)
+            .construct_treasury_manager_deposit_allowances(value)
             .await?;
 
         let arg = DepositRequest { allowances };
@@ -393,7 +536,7 @@ impl Governance {
 
     pub async fn deposit_treasury_manager(
         &self,
-        treasury_manager_canister_id: CanisterId,
+        extension_canister_id: CanisterId,
         sns_amount_e8s: u64,
         icp_amount_e8s: u64,
     ) -> Result<(), GovernanceError> {
@@ -401,7 +544,7 @@ impl Governance {
         let treasury_icp_subaccount = self.icp_treasury_subaccount();
 
         let to = Account {
-            owner: treasury_manager_canister_id.get().0,
+            owner: extension_canister_id.get().0,
             subaccount: None,
         };
 
@@ -451,7 +594,7 @@ pub mod treasury_manager {
 
     /// Returns `(init, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
     pub fn construct_deposit_allowances(
-        arg: Option<Precise>,
+        arg: Precise,
         sns_token: Asset,
         icp_token: Asset,
         treasury_sns_account: Account,
@@ -459,13 +602,11 @@ pub mod treasury_manager {
     ) -> Result<(Vec<Allowance>, u64, u64), String> {
         const PREFIX: &str = "Cannot parse ExtensionInit as TreasuryManagerInit: ";
 
-        let mut map = match arg {
-            Some(Precise {
-                value: Some(precise::Value::Map(PreciseMap { map })),
-            }) => map,
-            _ => {
-                return Err(format!("{}Top-level type must be PreciseMap.", PREFIX));
-            }
+        let Precise {
+            value: Some(precise::Value::Map(PreciseMap { mut map })),
+        } = arg
+        else {
+            return Err(format!("{}Top-level type must be PreciseMap.", PREFIX));
         };
 
         if map.len() != 2 {
@@ -565,6 +706,7 @@ pub(crate) fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<Extensi
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
             extension_types: vec![ExtensionType::TreasuryManager],
+            validate_init_arg: validate_treasury_manager_init,
         })
     } else if cfg!(all(test, not(feature = "test"))) {
         // In regular test mode (without feature), use the test allowed extensions
@@ -668,7 +810,6 @@ async fn canister_module_hash(
 }
 
 /// Validates that this is a supported extension operation.
-// TODO: Validate the operation arguments as well.
 // TODO: Enforce 50% treasury limits.
 pub(crate) async fn validate_execute_extension_operation(
     governance: &crate::governance::Governance,
@@ -781,6 +922,23 @@ pub(crate) async fn validate_execute_extension_operation(
         operation_name,
         operation_arg: validated_arg,
     })
+}
+
+/// Prepare to initialize a treasury manager extension
+async fn prepare_treasury_manager_init(
+    governance: &Governance,
+    extension_canister_id: CanisterId,
+    init: ValidatedDepositOperationArg,
+) -> Result<Vec<u8>, GovernanceError> {
+    let (init_blob, sns_amount_e8s, icp_amount_e8s) = governance
+        .construct_treasury_manager_init_payload(init.original)
+        .await?;
+
+    governance
+        .deposit_treasury_manager(extension_canister_id, sns_amount_e8s, icp_amount_e8s)
+        .await?;
+
+    Ok(init_blob)
 }
 
 /// Execute a treasury manager deposit operation
@@ -901,14 +1059,14 @@ pub struct ValidatedDepositOperationArg {
     /// Amount of ICP tokens to allocate from treasury
     pub treasury_allocation_icp_e8s: u64,
     /// Original Precise value with all fields
-    original: ExtensionOperationArg,
+    original: Precise,
 }
 
-impl TryFrom<ExtensionOperationArg> for ValidatedDepositOperationArg {
+impl TryFrom<Option<Precise>> for ValidatedDepositOperationArg {
     type Error = String;
 
-    fn try_from(arg: ExtensionOperationArg) -> Result<Self, Self::Error> {
-        let ExtensionOperationArg { value: Some(value) } = &arg else {
+    fn try_from(value: Option<Precise>) -> Result<Self, Self::Error> {
+        let Some(value) = value else {
             return Err("Deposit operation arguments must be provided".to_string());
         };
 
@@ -936,7 +1094,7 @@ impl TryFrom<ExtensionOperationArg> for ValidatedDepositOperationArg {
         Ok(Self {
             treasury_allocation_sns_e8s,
             treasury_allocation_icp_e8s,
-            original: arg,
+            original: value,
         })
     }
 }
@@ -960,27 +1118,35 @@ impl RenderablePayload for ValidatedDepositOperationArg {
 #[derive(Debug, Clone)]
 pub struct ValidatedWithdrawOperationArg {
     /// Original operation arguments
-    original: ExtensionOperationArg,
+    original: Precise,
 }
 
-impl TryFrom<ExtensionOperationArg> for ValidatedWithdrawOperationArg {
+impl TryFrom<Option<Precise>> for ValidatedWithdrawOperationArg {
     type Error = String;
 
-    fn try_from(arg: ExtensionOperationArg) -> Result<Self, Self::Error> {
+    fn try_from(value: Option<Precise>) -> Result<Self, Self::Error> {
+        let original = value.unwrap_or_default();
+
         // For now, only allow empty arguments
         // This ensures withdraw operations don't accept parameters yet
-        if arg.value.is_some() {
+        if original.value.is_some() {
             return Err("Withdraw operation does not accept arguments at this time".to_string());
         }
 
-        Ok(Self { original: arg })
+        Ok(Self { original })
     }
 }
 
 impl RenderablePayload for ValidatedWithdrawOperationArg {
     fn render_for_proposal(&self) -> String {
         // Since we're not parsing the fields yet, just show the raw operation
-        self.original.render_for_proposal()
+        let raw_payload = self.original.render_for_proposal();
+
+        format!(
+            r#"### Treasury Withdrawal
+
+{raw_payload}"#,
+        )
     }
 }
 
@@ -1029,6 +1195,7 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
             extension_types: vec![ExtensionType::TreasuryManager],
+            validate_init_arg: validate_treasury_manager_init,
         }
     }
 }
@@ -1345,22 +1512,20 @@ mod tests {
             ValidatedOperationArg::TreasuryManagerDeposit(ValidatedDepositOperationArg {
                 treasury_allocation_sns_e8s: 1000000,
                 treasury_allocation_icp_e8s: 2000000,
-                original: ExtensionOperationArg {
-                    value: Some(Precise {
-                        value: Some(precise::Value::Map(PreciseMap {
-                            map: btreemap! {
-                                "treasury_allocation_sns_e8s".to_string() => Precise {
-                                    value: Some(precise::Value::Nat(1000000)),
-                                },
-                                "treasury_allocation_icp_e8s".to_string() => Precise {
-                                    value: Some(precise::Value::Nat(2000000)),
-                                },
-                                "other_field".to_string() => Precise {
-                                    value: Some(precise::Value::Text("Some Value".to_string())),
-                                },
+                original: Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000)),
                             },
-                        })),
-                    }),
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000)),
+                            },
+                            "other_field".to_string() => Precise {
+                                value: Some(precise::Value::Text("Some Value".to_string())),
+                            },
+                        },
+                    })),
                 },
             });
 
@@ -1408,6 +1573,7 @@ mod tests {
                 ExtensionType::TreasuryManager,
                 ExtensionType::TreasuryManager,
             ],
+            validate_init_arg: validate_treasury_manager_init,
         };
 
         let result = spec.validate();
@@ -1422,6 +1588,7 @@ mod tests {
             version: ExtensionVersion(1),
             topic: Topic::Governance,
             extension_types: vec![ExtensionType::TreasuryManager],
+            validate_init_arg: validate_treasury_manager_init,
         };
 
         assert!(spec.validate().is_ok());

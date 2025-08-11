@@ -1502,13 +1502,13 @@ pub async fn validate_and_render_execute_nervous_system_function(
 
 async fn validate_and_render_execute_extension_operation(
     governance: &crate::governance::Governance,
-    execute: &ExecuteExtensionOperation,
+    operation: &ExecuteExtensionOperation,
 ) -> Result<String, String> {
     let ValidatedExecuteExtensionOperation {
         extension_canister_id,
         operation_name,
         operation_arg,
-    } = validate_execute_extension_operation(governance, execute.clone())
+    } = validate_execute_extension_operation(env, root_canister_id, operation.clone())
         .await
         .map_err(|err| err.error_message)?;
 
@@ -1539,8 +1539,9 @@ async fn validate_and_render_register_extension(
             None
         }
         Some(chunked_wasm) => {
-            if let Some(canister_id) = chunked_wasm.store_canister_id {
-                match Wasm::try_from(chunked_wasm.clone()) {
+            let canister_id = chunked_wasm.store_canister_id.clone();
+            if let Some(canister_id) = canister_id {
+                match Wasm::try_from(chunked_wasm) {
                     Ok(wasm) => Some((wasm, canister_id)),
                     Err(err) => {
                         defects.push(format!("Invalid chunked_canister_wasm: {}", err));
@@ -1604,7 +1605,7 @@ async fn validate_and_render_register_extension(
 
 ## Extension Configuration
 
-The extension will be deployed and configured according to the provided parameters.",
+The extension will be deployed and configured according to the parameters provided above.",
     ))
 }
 
