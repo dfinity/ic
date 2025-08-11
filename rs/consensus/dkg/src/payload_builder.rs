@@ -6,7 +6,7 @@ use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{debug, error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::{
     chain_key_initialization::Initialization, CatchUpPackageContents,
 };
@@ -304,7 +304,7 @@ fn as_next_transcripts(
 
     for (tag, transcript) in summary.current_transcripts().iter() {
         if !next_transcripts.contains_key(tag) {
-            warn!(logger, "Reusing current transcript for tag {:?}", tag);
+            debug!(logger, "Reusing current transcript for tag {:?}", tag);
             next_transcripts.insert(tag.clone(), transcript.clone());
         }
     }
