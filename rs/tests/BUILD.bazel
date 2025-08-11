@@ -6,6 +6,8 @@ load("@rules_oci//oci:defs.bzl", "oci_image")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
+# Just some bogus change to trigger a build
+
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
