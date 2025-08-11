@@ -1,6 +1,5 @@
 use crate::extensions::{
-    validate_execute_extension_operation, ExtensionKind, ValidatedExecuteExtensionOperation,
-    ValidatedRegisterExtension,
+    validate_execute_extension_operation, ExtensionType, ValidatedRegisterExtension,
 };
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
@@ -92,7 +91,6 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
-use sns_treasury_manager::Error as TreasuryManagerError;
 
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
@@ -131,7 +129,7 @@ use maplit::{btreemap, hashset};
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use sns_treasury_manager::Balances;
+
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -2445,7 +2443,7 @@ impl Governance {
             .await?;
 
         // Step 2. Validate the init arguments.
-        if spec.kind != ExtensionKind::TreasuryManager {
+        if !spec.supports_extension_type(ExtensionType::TreasuryManager) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Only TreasuryManager extensions are currently supported.",
@@ -2669,70 +2667,15 @@ impl Governance {
             ));
         }
 
-        let ValidatedExecuteExtensionOperation {
-            extension_canister_id,
-            operation_name,
-            operation_arg,
-        } = execute_extension_operation.try_into().map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Invalid ExecuteExtensionOperation proposal: {:?}", err),
-            )
-        })?;
-
-        validate_execute_extension_operation(
+        let validated_operation = validate_execute_extension_operation(
             &*self.env,
             self.proto.root_canister_id_or_panic(),
-            extension_canister_id,
-            operation_name,
-            &operation_arg,
+            execute_extension_operation,
         )
         .await?;
 
-        let treasury_manager_canister_id = extension_canister_id;
-
-        let (arg, sns_amount_e8s, icp_amount_e8s) = self
-            .construct_treasury_manager_deposit_payload(operation_arg)
-            .await?;
-
-        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
-            .await?;
-
-        let balances = self
-            .env
-            .call_canister(treasury_manager_canister_id, "deposit", arg)
-            .await
-            .map_err(|(code, err)| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Canister method call {}.deposit failed with code {:?}: {}",
-                        treasury_manager_canister_id, code, err
-                    ),
-                )
-            })
-            .and_then(|blob| {
-                Decode!(&blob, Result<Balances, TreasuryManagerError>).map_err(|err| {
-                    GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!("Error decoding TreasuryManager.deposit response: {:?}", err),
-                    )
-                })
-            })?
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("TreasuryManager.deposit failed: {:?}", err),
-                )
-            })?;
-
-        log!(
-            INFO,
-            "TreasuryManager.deposit succeeded with response: {:?}",
-            balances
-        );
-
-        Ok(())
+        // Execute the validated operation
+        validated_operation.execute(self).await
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
