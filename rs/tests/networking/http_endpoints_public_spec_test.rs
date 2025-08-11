@@ -51,6 +51,7 @@ use itertools::Itertools;
 use reqwest::Response;
 use slog::{info, Logger};
 use std::net::SocketAddr;
+use url::Url;
 
 const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
 
@@ -189,31 +190,31 @@ fn read_time(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
-    let subnet_replica_socket = get_socket_addr(&snapshot);
-    let api_bn_socket = get_api_bn_socket_addr(&snapshot);
+    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
         // Test that requesting the "time" path on an existing canister id works.
-        let read_state = |effective_canister_id: CanisterId, socket: SocketAddr| {
+        let read_state = |effective_canister_id: CanisterId, url: Url| {
             CanisterReadState::new(
                 vec![Path::from(Label::from("time"))],
                 effective_canister_id.into(),
             )
-            .read_state(socket)
+            .read_state_at_url(url)
         };
-        for socket in [subnet_replica_socket, api_bn_socket] {
-            let response = read_state(primary, socket).await;
+        for url in [&subnet_replica_url, &api_bn_url] {
+            let response = read_state(primary, url.clone()).await;
             let status = inspect_response(response, "ReadState", &logger).await;
             assert_2xx(&status);
         }
 
         // Test that requesting the "time" path on an management canister id fails.
-        let response = read_state(CanisterId::ic_00(), api_bn_socket).await;
+        let response = read_state(CanisterId::ic_00(), api_bn_url).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_4xx(&status);
 
         // Test that requesting the "time" path on an management canister id works when bypassing the API BN.
-        let response = read_state(CanisterId::ic_00(), subnet_replica_socket).await;
+        let response = read_state(CanisterId::ic_00(), subnet_replica_url).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
     });
@@ -280,12 +281,18 @@ fn get_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
     SocketAddr::new(sys_node.get_ip_addr(), 8080)
 }
 
-fn get_api_bn_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
+fn get_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
+    let (sys_subnet, _) = get_subnets(snapshot);
+    let sys_node = sys_subnet.nodes().next().unwrap();
+    sys_node.get_public_url()
+}
+
+fn get_api_bn_url(snapshot: &TopologySnapshot) -> Url {
     let api_bn = snapshot
         .api_boundary_nodes()
         .next()
         .expect("There should be at least one API boundary node");
-    SocketAddr::new(api_bn.get_ip_addr(), 8080)
+    api_bn.get_public_url()
 }
 
 fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterId; 5]) {

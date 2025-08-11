@@ -10,6 +10,7 @@ use ic_types::{
 use reqwest::{header::CONTENT_TYPE, StatusCode};
 use serde_cbor::Value as CBOR;
 use std::{net::SocketAddr, time::Duration};
+use url::Url;
 
 const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
 const METHOD_NAME: &str = "test";
@@ -237,6 +238,12 @@ impl CanisterReadState {
     }
 
     pub async fn read_state(self, addr: SocketAddr) -> reqwest::Response {
+        let url_string = format!("http://{}", addr);
+        let url = Url::parse(&url_string).unwrap();
+        self.read_state_at_url(url).await
+    }
+
+    pub async fn read_state_at_url(self, mut url: Url) -> reqwest::Response {
         let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
 
         let call_content = HttpReadStateContent::ReadState {
@@ -256,12 +263,18 @@ impl CanisterReadState {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-        let url = format!(
-            "http://{}/api/v2/canister/{}/read_state",
-            addr, self.effective_canister_id
-        );
 
-        reqwest::Client::new()
+        url.set_path(&format!("api/v2/canister/{}/read_state",
+            self.effective_canister_id
+        ));
+        println!("url: {}", url);
+
+        let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build().unwrap();
+
+        client
             .post(url)
             .body(body)
             .header(CONTENT_TYPE, APPLICATION_CBOR)
