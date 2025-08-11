@@ -1,5 +1,5 @@
 {
-  "checksum": "24a8276eaa17492b1f85b1d35cf9c646d51cd7e7d8f3caa5e0f6c2939f8daac3",
+  "checksum": "aaed43fd2abd33fc2849c355609cb0d8940b7c532004d73f30967aa954190f8e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7601,7 +7601,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -21220,6 +21220,10 @@
               "target": "ed25519_dalek"
             },
             {
+              "id": "either 1.15.0",
+              "target": "either"
+            },
+            {
               "id": "env-file-reader 0.3.0",
               "target": "env_file_reader"
             },
@@ -23805,14 +23809,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "either 1.14.0": {
+    "either 1.15.0": {
       "name": "either",
-      "version": "1.14.0",
+      "version": "1.15.0",
       "package_url": "https://github.com/rayon-rs/either",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/either/1.14.0/download",
-          "sha256": "b7914353092ddf589ad78f25c5c1c21b7f80b0ff8621e7c814c3485b5306da9d"
+          "url": "https://static.crates.io/crates/either/1.15.0/download",
+          "sha256": "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
         }
       },
       "targets": [
@@ -23837,12 +23841,13 @@
         "crate_features": {
           "common": [
             "default",
+            "std",
             "use_std"
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.14.0"
+        "version": "1.15.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -39912,7 +39917,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             }
           ],
@@ -39968,7 +39973,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             }
           ],
@@ -40024,7 +40029,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             }
           ],
@@ -40095,7 +40100,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             }
           ],
@@ -40151,7 +40156,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             }
           ],
@@ -41484,7 +41489,7 @@
               "target": "chrono"
             },
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -43025,7 +43030,7 @@
               "target": "bitflags"
             },
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -48646,7 +48651,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -62513,7 +62518,7 @@
               "target": "chrono"
             },
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -62602,7 +62607,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -62877,7 +62882,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -80579,7 +80584,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -89474,7 +89479,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.15.0",
               "target": "either"
             },
             {
@@ -95486,6 +95491,7 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.22",
+    "either 1.15.0",
     "env-file-reader 0.3.0",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
