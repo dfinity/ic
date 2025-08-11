@@ -126,6 +126,10 @@ impl PeerManager {
                         self.log,
                         "Got transport infos but is empty. version {}", version
                     );
+                    self.metrics
+                        .topology_watcher_errors
+                        .with_label_values(&["empty_list_of_node_records"])
+                        .inc();
                     Vec::new()
                 }
                 Err(e) => {
@@ -133,6 +137,10 @@ impl PeerManager {
                         self.log,
                         "failed to get node record from registry at version {} : {}", version, e
                     );
+                    self.metrics
+                        .topology_watcher_errors
+                        .with_label_values(&["error_getting_node_records"])
+                        .inc();
                     Vec::new()
                 }
             };
@@ -145,6 +153,10 @@ impl PeerManager {
                             // with the highest registry version.
                             subnet_nodes.insert(peer_id, SocketAddr::new(ip_addr, 4100));
                         } else {
+                            self.metrics
+                                .topology_watcher_errors
+                                .with_label_values(&["error_parsing_ip_address"])
+                                .inc();
                             warn!(
                                 self.log,
                                 "Failed to get parse Ip addr {} for peer {} at registry version {}",
@@ -155,6 +167,10 @@ impl PeerManager {
                         }
                     }
                     None => {
+                        self.metrics
+                            .topology_watcher_errors
+                            .with_label_values(&["http_field_missing"])
+                            .inc();
                         warn!(
                             self.log,
                             "Failed to get flow endpoint for peer {} at registry version {}",
@@ -165,6 +181,7 @@ impl PeerManager {
                 }
             }
         }
+
         SubnetTopology::new(
             subnet_nodes,
             earliest_registry_version,
