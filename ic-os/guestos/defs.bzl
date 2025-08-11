@@ -48,6 +48,7 @@ def image_deps(mode, malicious = False):
             # Required by the GuestOS
             "//rs/ic_os/release:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.
             "//rs/ic_os/release:guestos_tool": "/opt/ic/bin/guestos_tool:0755",  # Tool for generating network config and hardware observability.
+            "//rs/ic_os/os_tools/guest_disk": "/opt/ic/bin/guest_disk:0755",
             "//rs/ic_os/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
             "//rs/ic_os/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
@@ -74,6 +75,7 @@ def image_deps(mode, malicious = False):
         "boot_args_template": Label("//ic-os/bootloader:guestos_boot_args.template"),
         # GuestOS requires dm-verity root partition signing
         "requires_root_signing": True,
+        "generate_launch_measurements": True,
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]

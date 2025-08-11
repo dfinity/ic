@@ -1515,19 +1515,9 @@ async fn validate_and_render_execute_extension_operation(
         extension_canister_id,
         operation_name,
         operation_arg,
-    } = execute.clone().try_into()?;
-
-    validate_execute_extension_operation(
-        env,
-        root_canister_id,
-        extension_canister_id,
-        operation_name.clone(),
-        &operation_arg,
-    )
-    .await
-    .map_err(|err| err.error_message)?;
-
-    let operation_arg = format!("{:#?}", operation_arg);
+    } = validate_execute_extension_operation(env, root_canister_id, execute.clone())
+        .await
+        .map_err(|err| err.error_message)?;
 
     Ok(format!(
         r"# Proposal to execute extension operation:
