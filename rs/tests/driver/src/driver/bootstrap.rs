@@ -1,3 +1,4 @@
+use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
@@ -17,7 +18,7 @@ use crate::{
             get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
             get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
             get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -39,7 +40,6 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -96,11 +96,6 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = get_guestos_img_version()?;
-    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
-    let initial_replica_version = InitialReplicaVersion {
-        version: replica_version.clone(),
-    };
-    initial_replica_version.write_attribute(test_env);
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -181,9 +176,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
         get_guestos_initial_update_img_sha256()?,
         get_guestos_initial_update_img_url()?,
+        get_guestos_initial_launch_measurements()?,
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -198,6 +194,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
+        ic_os_launch_measurements,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,

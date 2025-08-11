@@ -166,6 +166,7 @@ use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -1137,22 +1138,16 @@ impl HasRegistryLocalStore for TestEnv {
     }
 }
 
-pub trait HasIcDependencies {
+pub trait HasFarmUrl {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
 }
 
-impl<T: HasTestEnv> HasIcDependencies for T {
+impl<T: HasTestEnv> HasFarmUrl for T {
     fn get_farm_url(&self) -> Result<Url> {
         let dep_rel_path = "farm_base_url";
         let url = read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| FarmBaseUrl::read_attribute(&self.test_env()).to_string());
         Ok(Url::parse(&url)?)
-    }
-
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
-        Ok(initial_replica_version.version)
     }
 }
 
@@ -1163,31 +1158,47 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-pub fn get_current_branch_version() -> Result<String> {
-    read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+pub fn get_current_branch_version() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(read_dependency_from_env_to_string(
+        "ENV_DEPS__IC_VERSION_FILE",
+    )?)?;
+
+    Ok(replica_version)
 }
 
-pub fn get_mainnet_nns_revision() -> String {
-    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet nns version from environment")
+pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet nns version from environment"),
+    )?;
+
+    Ok(replica_version)
 }
 
-pub fn get_mainnet_application_subnet_revision() -> String {
-    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet application subnet version from environment")
+pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet application subnet version from environment"),
+    )?;
+
+    Ok(replica_version)
 }
 
 // The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
 
 /// Pull the version of the initial GuestOS image from the environment.
-pub fn get_guestos_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
+pub fn get_guestos_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the initial GuestOS image from the environment.
 pub fn get_guestos_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the initial GuestOS image from the environment.
@@ -1195,13 +1206,18 @@ pub fn get_guestos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
+pub fn get_guestos_launch_measurements() -> Result<Option<GuestLaunchMeasurements>> {
+    read_guest_launch_measurements("ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE")
+}
+
 /// Pull the URL of the initial GuestOS update image from the environment.
 ///
 /// With the initial image, there is also a corresponding initial update image.
 /// The version is shared, so only the URL and hash are provided.
 pub fn get_guestos_initial_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the initial GuestOS update image from the environment.
@@ -1213,14 +1229,18 @@ pub fn get_guestos_initial_update_img_sha256() -> Result<String> {
 }
 
 /// Pull the version of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
+pub fn get_guestos_update_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the target GuestOS update image from the environment.
@@ -1228,15 +1248,23 @@ pub fn get_guestos_update_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
+pub fn get_guestos_initial_launch_measurements() -> Result<Option<GuestLaunchMeasurements>> {
+    read_guest_launch_measurements("ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE")
+}
+
 /// Pull the version of the initial SetupOS image from the environment.
-pub fn get_setupos_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
+pub fn get_setupos_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the initial SetupOS image from the environment.
 pub fn get_setupos_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the initial SetupOS image from the environment.
@@ -1245,14 +1273,18 @@ pub fn get_setupos_img_sha256() -> Result<String> {
 }
 
 /// Pull the version of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
+pub fn get_hostos_update_img_version() -> Result<ReplicaVersion> {
+    let replica_version =
+        ReplicaVersion::try_from(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)?;
+
+    Ok(replica_version)
 }
 
 /// Pull the URL of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 /// Pull the hash of the target HostOS update image from the environment.
@@ -1261,8 +1293,9 @@ pub fn get_hostos_update_img_sha256() -> Result<String> {
 }
 
 pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 pub fn get_empty_disk_img_sha256() -> Result<String> {
@@ -1270,12 +1303,24 @@ pub fn get_empty_disk_img_sha256() -> Result<String> {
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+}
+
+fn read_guest_launch_measurements(v: &str) -> Result<Option<GuestLaunchMeasurements>> {
+    // The launch measurements are not always set.
+    // TODO(NODE-1652): Remove this check once the environment variable is always set.
+    if std::env::var(v).is_ok() {
+        serde_json::from_str(&read_dependency_from_env_to_string(v)?)
+            .context("Could not deserialize guest launch measurements")
+    } else {
+        Ok(None)
+    }
 }
 
 pub trait HasGroupSetup {
@@ -2466,17 +2511,6 @@ impl From<FarmBaseUrl> for Url {
 impl TestEnvAttribute for FarmBaseUrl {
     fn attribute_name() -> String {
         "farm_url".to_string()
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct InitialReplicaVersion {
-    pub version: ReplicaVersion,
-}
-
-impl TestEnvAttribute for InitialReplicaVersion {
-    fn attribute_name() -> String {
-        "initial_replica_version".to_string()
     }
 }
 
