@@ -110,12 +110,21 @@ pub fn write_rewards_to_csv(
         // base_rewards_type3.csv
         let mut writer =
             csv::Writer::from_writer(File::create(np_folder.join("base_rewards_type3.csv"))?);
-        writer.write_record(&["day", "region", "nodes_count", "xdr_permyriad"])?;
+        writer.write_record(&[
+            "day",
+            "region",
+            "nodes_count",
+            "avg_coefficient",
+            "avg_rewards_xdr_permyriad",
+            "xdr_permyriad",
+        ])?;
         for br in &provider_result.base_rewards_type3 {
             writer.write_record(&[
                 br.day.to_string(),
                 br.region.to_string(),
                 br.nodes_count.to_string(),
+                br.avg_coefficient.to_string(),
+                br.avg_rewards.to_string(),
                 format!("{:.4}", br.value),
             ])?;
         }

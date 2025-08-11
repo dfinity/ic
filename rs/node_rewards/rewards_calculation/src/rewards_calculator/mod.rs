@@ -329,7 +329,8 @@ type RewardsCoefficientPercent = Decimal;
 
 /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
 /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-/// 30.4375 = 2629800 / 86400
+/// const SECONDS_IN_DAY: u64 = 86400;
+/// 2629800 / 86400 = 30.4375 days of rewards
 const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
 #[derive(Default)]
@@ -429,7 +430,10 @@ fn step_4_compute_base_rewards_type_region(
             }
             let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
 
-            ((day, region), (region_rewards_avg, nodes_count))
+            (
+                (day, region),
+                (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+            )
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -438,7 +442,7 @@ fn step_4_compute_base_rewards_type_region(
             let base_rewards_for_day = if is_type3(&node.node_reward_type) {
                 let region_key = type3_region_key(&node.region);
 
-                let (base_rewards_daily, _) = base_rewards_type3
+                let (base_rewards_daily, _, _, _) = base_rewards_type3
                     .get(&(day, region_key))
                     .expect("Type3 base rewards expected for provider");
                 base_rewards_daily
@@ -456,11 +460,15 @@ fn step_4_compute_base_rewards_type_region(
     let base_rewards_type3 = base_rewards_type3
         .into_iter()
         .map(
-            |((day, region), (daily_rewards, nodes_count))| BaseRewardsType3 {
-                day: *day,
-                region,
-                nodes_count,
-                value: daily_rewards,
+            |((day, region), (daily_rewards, nodes_count, avg_rewards, avg_coefficient))| {
+                BaseRewardsType3 {
+                    day: *day,
+                    region,
+                    nodes_count,
+                    avg_rewards,
+                    avg_coefficient,
+                    value: daily_rewards,
+                }
             },
         )
         .collect();
