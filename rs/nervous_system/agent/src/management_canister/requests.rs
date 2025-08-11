@@ -42,6 +42,10 @@ impl Request for UploadChunkArgs {
         candid::encode_one(self)
     }
 
+    fn effective_canister_id(&self) -> Option<Principal> {
+        Some(self.canister_id)
+    }
+
     type Response = UploadChunksResult;
 }
 
@@ -74,6 +78,10 @@ impl Request for StoredChunksArgs {
 
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
+    }
+
+    fn effective_canister_id(&self) -> Option<Principal> {
+        Some(self.canister_id)
     }
 
     type Response = StoredChunksResult;
@@ -177,6 +185,10 @@ impl Request for CanisterStatusArgs {
         candid::encode_one(self)
     }
 
+    fn effective_canister_id(&self) -> Option<Principal> {
+        Some(self.canister_id)
+    }
+
     type Response = CanisterStatusResult;
 }
 
@@ -203,6 +215,10 @@ impl Request for StopCanisterArgs {
         candid::encode_one(self)
     }
 
+    fn effective_canister_id(&self) -> Option<Principal> {
+        Some(self.canister_id)
+    }
+
     type Response = ();
 }
 
@@ -227,6 +243,10 @@ impl Request for DeleteCanisterArgs {
 
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
+    }
+
+    fn effective_canister_id(&self) -> Option<Principal> {
+        Some(self.canister_id)
     }
 
     type Response = ();

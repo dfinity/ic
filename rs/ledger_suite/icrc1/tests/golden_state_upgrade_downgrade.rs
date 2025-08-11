@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
+    AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
 use ic_ledger_suite_state_machine_tests::{
@@ -19,6 +19,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use lazy_static::lazy_static;
 use std::str::FromStr;
+use std::time::Duration;
 
 mod common;
 
@@ -191,6 +192,9 @@ impl LedgerSuiteConfig {
         // Top up the ledger suite canisters so that they do not risk running out of cycles as
         // part of the upgrade/downgrade testing.
         top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
+        // Advance the time to make sure the ledger gets the current time for checking allowances.
+        state_machine.advance_time(Duration::from_secs(1u64));
+        state_machine.tick();
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
@@ -199,6 +203,7 @@ impl LedgerSuiteConfig {
                 index_canister_id,
                 self.burns_without_spender.clone(),
                 None,
+                AllowancesRecentlyPurged::No,
             ));
         }
         // Upgrade to the new canister versions
@@ -210,6 +215,7 @@ impl LedgerSuiteConfig {
                 index_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
+                AllowancesRecentlyPurged::Yes,
             ));
         }
         // Verify that the index principal was set in the ledger
@@ -223,6 +229,7 @@ impl LedgerSuiteConfig {
                 index_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
+                AllowancesRecentlyPurged::Yes,
             );
         }
     }
@@ -454,6 +461,7 @@ impl LedgerState {
         &self,
         state_machine: &StateMachine,
         canister_id: CanisterId,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         let num_ledger_blocks =
             get_blocks(state_machine, Principal::from(canister_id), 0, 0).chain_length;
@@ -461,6 +469,7 @@ impl LedgerState {
             state_machine,
             canister_id,
             num_ledger_blocks,
+            allowances_recently_purged,
         );
     }
 
@@ -481,6 +490,7 @@ impl LedgerState {
         index_id: CanisterId,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         previous_ledger_state: Option<LedgerState>,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) -> Self {
         let num_blocks_to_fetch = previous_ledger_state
             .as_ref()
@@ -498,7 +508,11 @@ impl LedgerState {
                 ledger_id,
                 num_blocks_to_fetch,
             );
-        ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
+        ledger_state.verify_balances_and_allowances(
+            state_machine,
+            ledger_id,
+            allowances_recently_purged,
+        );
         // Verify parity between the blocks in the ledger+archive, and those in the index
         verify_ledger_archive_and_index_block_parity(
             state_machine,

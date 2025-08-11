@@ -157,7 +157,7 @@ fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_generated_more_
 #[test]
 fn should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_persistence_fails() {
     let mut pks_returning_io_error = MockPublicKeyStore::new();
-    let io_error = io::Error::new(io::ErrorKind::Other, "oh no!");
+    let io_error = io::Error::other("oh no!");
     pks_returning_io_error
         .expect_set_once_ni_dkg_dealing_encryption_pubkey()
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));

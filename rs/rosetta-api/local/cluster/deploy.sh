@@ -197,7 +197,7 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q cadvisor ||
 
 # Wait for cAdvisor server to be ready
 echo "Waiting for cAdvisor server to be ready..."
-wait_for_ready pod app=cadvisor monitoring 300
+wait_for_ready pod app.kubernetes.io/name=cadvisor monitoring 300
 
 # Install or upgrade kube-prometheus
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-prometheus || {

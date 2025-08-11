@@ -88,15 +88,16 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
-    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_catch_up_package_contents_key,
+    make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
+    CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_features::{
     ChainKeyConfig, KeyConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -124,8 +125,9 @@ pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
-        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterCyclesCostSchedule,
+        ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        ValidationContext, XNetPayload,
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
@@ -257,6 +259,14 @@ pub fn add_global_registry_records(
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
         .add(
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            registry_version,
+            Some(pb_routing_table.clone()),
+        )
+        .unwrap();
+    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
+    registry_data_provider
+        .add(
             &make_routing_table_record_key(),
             registry_version,
             Some(pb_routing_table),
@@ -320,7 +330,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
-        guest_launch_measurement_sha256_hex: None,
+        guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
@@ -447,8 +457,8 @@ fn add_subnet_local_registry_records(
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
             key_configs: chain_keys_enabled_status
-                .iter()
-                .map(|(key_id, _)| KeyConfig {
+                .keys()
+                .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
                         1
@@ -460,6 +470,7 @@ fn add_subnet_local_registry_records(
                 .collect(),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         })
         .with_features(features)
         .build();
@@ -888,7 +899,7 @@ pub struct StateMachine {
     time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
-    ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
+    ni_dkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -905,6 +916,7 @@ pub struct StateMachine {
     vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    cost_schedule: CanisterCyclesCostSchedule,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -984,6 +996,7 @@ pub struct StateMachineBuilder {
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
     create_at_registry_version: RegistryVersion,
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl StateMachineBuilder {
@@ -1023,6 +1036,14 @@ impl StateMachineBuilder {
             bitcoin_testnet_uds_path: None,
             remove_old_states: true,
             create_at_registry_version: INITIAL_REGISTRY_VERSION,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        }
+    }
+
+    pub fn with_cost_schedule(self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        Self {
+            cost_schedule,
+            ..self
         }
     }
 
@@ -1286,6 +1307,7 @@ impl StateMachineBuilder {
             self.log_level,
             self.remove_old_states,
             self.create_at_registry_version,
+            self.cost_schedule,
         )
     }
 
@@ -1628,6 +1650,7 @@ impl StateMachine {
         log_level: Option<Level>,
         remove_old_states: bool,
         create_at_registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1917,7 +1940,7 @@ impl StateMachine {
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
 
-                    ni_dkg_ids.insert(key_id.clone(), nidkg_id);
+                    ni_dkg_ids.insert(NiDkgMasterPublicKeyId::VetKd(id.clone()), nidkg_id);
 
                     (public_key, private_key)
                 }
@@ -2010,6 +2033,7 @@ impl StateMachine {
             vetkd_payload_builder,
             remove_old_states,
             cycles_account_manager,
+            cost_schedule,
         }
     }
 
@@ -2309,6 +2333,7 @@ impl StateMachine {
                 timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
+                replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
                 .sign(&response_metadata, node.node_id, registry_version)
@@ -2643,9 +2668,11 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
-            idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: self.ni_dkg_ids.clone(),
+            chain_key_data: ChainKeyData {
+                master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                idkg_pre_signatures: BTreeMap::new(),
+                nidkg_ids: self.ni_dkg_ids.clone(),
+            },
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
@@ -2659,13 +2686,7 @@ impl StateMachine {
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
-        assert_eq!(
-            self.state_manager
-                .latest_state_certification_hash()
-                .unwrap()
-                .0,
-            batch_number
-        );
+        assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
         self.check_critical_errors();
 
@@ -2817,6 +2838,7 @@ impl StateMachine {
     /// This function panics if the state hash computation takes more than a few
     /// seconds to complete.
     pub fn await_state_hash(&self) -> CryptoHashOfState {
+        self.state_manager.flush_tip_channel();
         let h = self.state_manager.latest_state_height();
         let started_at = Instant::now();
         loop {
@@ -3812,6 +3834,7 @@ impl StateMachine {
             msg.content(),
             effective_canister_id,
             subnet_size,
+            self.cost_schedule,
         )
     }
 
@@ -4002,11 +4025,20 @@ impl StateMachine {
             )
             .expect("ranges are not well formed");
 
+        let pb_routing_table = PbRoutingTable::from(routing_table);
+        self.registry_data_provider
+            .add(
+                &make_canister_ranges_key(CanisterId::from_u64(0)),
+                next_version,
+                Some(pb_routing_table.clone()),
+            )
+            .unwrap();
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         self.registry_data_provider
             .add(
                 &make_routing_table_record_key(),
                 next_version,
-                Some(PbRoutingTable::from(routing_table)),
+                Some(pb_routing_table),
             )
             .unwrap();
         self.registry_client.update_to_latest_version();
@@ -4320,6 +4352,47 @@ impl StateMachine {
     pub fn certify_latest_state(&self) {
         certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
     }
+
+    /// Execute a block containing the latest xnet payload.
+    /// This function assumes the `StateMachine` was built with `StatMachineBuilder::build_with_subnets`.
+    pub fn execute_xnet(&self) {
+        self.certify_latest_state();
+        let certified_height = self.state_manager.latest_certified_height();
+        let registry_version = self.registry_client.get_latest_version();
+        let validation_context = ValidationContext {
+            time: self.get_time(),
+            registry_version,
+            certified_height,
+        };
+        let subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .unwrap()
+            .unwrap();
+        let subnet_records = SubnetRecords {
+            membership_version: subnet_record.clone(),
+            context_version: subnet_record,
+        };
+        self.pocket_xnet
+            .read()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .refill(registry_version, self.replica_logger.clone());
+        let payload_builder = self.payload_builder.read().unwrap();
+        let payload_builder = payload_builder.as_ref().unwrap();
+        let batch_payload = payload_builder.get_payload(
+            certified_height,
+            &[], // Because the latest state is certified, we do not need to provide any `past_payloads`.
+            &validation_context,
+            &subnet_records,
+        );
+
+        let xnet_payload = batch_payload.xnet.clone();
+        let payload = PayloadBuilder::new().with_xnet_payload(xnet_payload);
+
+        self.execute_payload(payload);
+    }
 }
 
 /// Make sure the latest state is certified.
@@ -4525,6 +4598,101 @@ impl PayloadBuilder {
     pub fn ingress_ids(&self) -> Vec<MessageId> {
         self.ingress_messages.iter().map(|i| i.id()).collect()
     }
+}
+
+struct SubnetsImpl {
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+}
+
+impl SubnetsImpl {
+    fn new() -> Self {
+        Self {
+            subnets: Arc::new(RwLock::new(BTreeMap::new())),
+        }
+    }
+}
+
+impl Subnets for SubnetsImpl {
+    fn insert(&self, state_machine: Arc<StateMachine>) {
+        self.subnets
+            .write()
+            .unwrap()
+            .insert(state_machine.get_subnet_id(), state_machine);
+    }
+    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
+        self.subnets.read().unwrap().get(&subnet_id).cloned()
+    }
+}
+
+fn multi_subnet_setup(
+    subnets: Arc<SubnetsImpl>,
+    subnet_seed: u8,
+    subnet_type: SubnetType,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+) -> Arc<StateMachine> {
+    let config =
+        StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
+    StateMachineBuilder::new()
+        .with_config(Some(config))
+        .with_subnet_seed([subnet_seed; 32])
+        .with_registry_data_provider(registry_data_provider)
+        .build_with_subnets(subnets)
+}
+
+/// Sets up two `StateMachine` that can communicate with each other.
+pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+    // Set up registry data provider.
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+    // Set up the two state machines for the two (app) subnets.
+    let subnets = Arc::new(SubnetsImpl::new());
+    let env1 = multi_subnet_setup(
+        subnets.clone(),
+        1,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+    let env2 = multi_subnet_setup(
+        subnets.clone(),
+        2,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+
+    // Set up routing table with two subnets.
+    let subnet_id1 = env1.get_subnet_id();
+    let subnet_id2 = env2.get_subnet_id();
+    let range1 = CanisterIdRange {
+        start: CanisterId::from_u64(0),
+        end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
+    };
+    let range2 = CanisterIdRange {
+        start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
+        end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
+    };
+    let mut routing_table = RoutingTable::new();
+    routing_table.insert(range1, subnet_id1).unwrap();
+    routing_table.insert(range2, subnet_id2).unwrap();
+
+    // Set up subnet list for registry.
+    let subnet_list = vec![subnet_id1, subnet_id2];
+
+    // Add initial and global registry records.
+    add_initial_registry_records(registry_data_provider.clone());
+    add_global_registry_records(
+        subnet_id1,
+        routing_table,
+        subnet_list,
+        BTreeMap::new(),
+        registry_data_provider,
+    );
+
+    // Reload registry on the two state machines to make sure that
+    // both the state machines have a consistent view of the registry.
+    env1.reload_registry();
+    env2.reload_registry();
+
+    (env1, env2)
 }
 
 // This test should panic on a critical error due to non-monotone timestamps.

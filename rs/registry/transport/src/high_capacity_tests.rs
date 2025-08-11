@@ -156,6 +156,7 @@ async fn test_dechunkify_delta() {
                     version: 7,
                     value: b"inline".to_vec(),
                     deletion_marker: false,
+                    timestamp_nanoseconds: 0,
                 },
                 // This is the most interesting element; nevertheless, the other
                 // cases are included in this test, because ofc, even though a
@@ -164,11 +165,13 @@ async fn test_dechunkify_delta() {
                     version: 8,
                     value: RECONSTITUTED_MONOLITHIC_BLOB.clone(),
                     deletion_marker: false,
+                    timestamp_nanoseconds: 0,
                 },
                 RegistryValue {
                     version: 9,
                     value: vec![],
                     deletion_marker: true,
+                    timestamp_nanoseconds: 0,
                 },
             ],
         },

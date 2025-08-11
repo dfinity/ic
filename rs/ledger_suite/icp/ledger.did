@@ -431,10 +431,7 @@ type icrc21_consent_message_spec = record {
     metadata: icrc21_consent_message_metadata;
     device_spec: opt variant {
         GenericDisplay;
-        LineDisplay: record {
-            characters_per_line: nat16;
-            lines_per_page: nat16;
-        };
+        FieldsDisplay;
     };
 };
 
@@ -444,13 +441,31 @@ type icrc21_consent_message_request = record {
     user_preferences: icrc21_consent_message_spec;
 };
 
+type Icrc21Value = variant {
+    TokenAmount: record {
+        decimals: nat8;
+        amount: nat64;
+        symbol: text;
+    };
+    TimestampSeconds: record {
+        amount: nat64;
+    };
+    DurationSeconds: record {
+        amount: nat64;
+    };
+    Text: record {
+        content: text;
+    };
+};
+
+type FieldsDisplay = record {
+        intent: text;
+        fields: vec record { text; Icrc21Value };
+};
+
 type icrc21_consent_message = variant {
     GenericDisplayMessage: text;
-    LineDisplayMessage: record {
-        pages: vec record {
-            lines: vec text;
-        };
-    };
+    FieldsDisplayMessage: FieldsDisplay;
 };
 
 type icrc21_consent_info = record {
@@ -477,6 +492,35 @@ type icrc21_error = variant {
 type icrc21_consent_message_response = variant {
     Ok: icrc21_consent_info;
     Err: icrc21_error;
+};
+
+// The arguments for the `get_allowances` endpoint.
+// The `prev_spender_id` argument can be used for pagination. If specified
+// the endpoint returns allowances that are lexicographically greater than
+// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
+type GetAllowancesArgs = record {
+    from_account_id: TextAccountIdentifier;
+    prev_spender_id: opt TextAccountIdentifier;
+    take: opt nat64;
+};
+
+// The allowances returned by the `get_allowances` endpoint.
+type Allowances = vec record {
+    from_account_id: TextAccountIdentifier;
+    to_spender_id: TextAccountIdentifier;
+    allowance: Tokens;
+    expires_at: opt nat64;
+};
+
+type TipOfChainRes = record {
+    certification: opt blob;
+    tip_index: BlockIndex;
+};
+
+type RemoveApprovalArgs = record {
+  from_subaccount : opt SubAccount;
+  spender : AccountIdentifier;
+  fee : opt Icrc1Tokens
 };
 
 service: (LedgerCanisterPayload) -> {
@@ -531,8 +575,14 @@ service: (LedgerCanisterPayload) -> {
     icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
     icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
 
+    remove_approval : (RemoveApprovalArgs) -> (ApproveResult);
+
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    get_allowances : (GetAllowancesArgs) -> (Allowances) query;
+
+    tip_of_chain : () -> (TipOfChainRes) query;
 
     is_ledger_ready: () -> (bool) query;
 }

@@ -18,7 +18,7 @@ use ic_rosetta_api::request::transaction_operation_results::TransactionOperation
 use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
     RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
     StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -129,7 +129,6 @@ where
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
             | Request::RegisterVote(RegisterVote { account, .. })
-            | Request::MergeMaturity(MergeMaturity { account, .. })
             | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
             | Request::ListNeurons(ListNeurons { account, .. })

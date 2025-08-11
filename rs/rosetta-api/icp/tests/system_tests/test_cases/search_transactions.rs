@@ -272,18 +272,19 @@ fn test_search_transactions_by_account() {
                             .into_iter()
                             .map(|block| icp_ledger::Block::decode(block).unwrap())
                             .collect::<Vec<icp_ledger::Block>>();
+                        // Collect all account identifiers that are involved in the generated
+                        // transactions, but for each transaction, only the accounts whose balances
+                        // are changed, or, in case of an approve operation, the spender account.
+                        // The reason for not including the spender account in the transfer
+                        // operation is that since the balance of the account is not affected,
+                        // Rosetta will not generate an operation for it.
                         let account_identifiers = icp_blocks
                             .clone()
                             .iter()
                             .flat_map(|block| match block.transaction.operation {
-                                icp_ledger::Operation::Transfer {
-                                    from, spender, to, ..
-                                } => spender
-                                    .map_or(vec![from, to], |spender| vec![from, to, spender]),
+                                icp_ledger::Operation::Transfer { from, to, .. } => vec![from, to],
                                 icp_ledger::Operation::Mint { to, .. } => vec![to],
-                                icp_ledger::Operation::Burn { from, spender, .. } => {
-                                    spender.map_or(vec![from], |spender| vec![from, spender])
-                                }
+                                icp_ledger::Operation::Burn { from, .. } => vec![from],
                                 icp_ledger::Operation::Approve { from, spender, .. } => {
                                     vec![from, spender]
                                 }

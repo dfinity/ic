@@ -4,8 +4,9 @@ use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nns_test_utils::sns_wasm::{build_governance_sns_wasm, build_root_sns_wasm};
+use ic_sns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
-use ic_sns_root::pb::v1::SnsRootCanister;
+use ic_sns_root::pb::v1::{Extensions, SnsRootCanister};
 use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
 };
@@ -56,12 +57,19 @@ fn swap_init(now: SystemTime) -> Init {
 }
 
 fn governance_init() -> Governance {
-    GovernanceCanisterInitPayloadBuilder::new()
+    let mut governance = GovernanceCanisterInitPayloadBuilder::new()
         .with_root_canister_id(PrincipalId::new_anonymous())
         .with_ledger_canister_id(PrincipalId::new_anonymous())
         .with_swap_canister_id(PrincipalId::new_anonymous())
         .with_ledger_canister_id(PrincipalId::new_anonymous())
-        .build()
+        .build();
+
+    governance.metrics = Some(GovernanceCachedMetrics {
+        timestamp_seconds: u64::MAX, // Ensure that cached metrics are not attempted to be refreshed in tests.
+        ..Default::default()
+    });
+
+    governance
 }
 
 fn root_init() -> SnsRootCanister {
@@ -72,6 +80,9 @@ fn root_init() -> SnsRootCanister {
         index_canister_id: Some(PrincipalId::new_anonymous()),
         archive_canister_ids: vec![],
         dapp_canister_ids: vec![],
+        extensions: Some(Extensions {
+            extension_canister_ids: vec![],
+        }),
         testflight: false,
         timers: None,
     }

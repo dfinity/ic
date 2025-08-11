@@ -4,9 +4,14 @@ package state.canister_state_bits.v1;
 import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
-import "state/v1/metadata.proto";
 import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
+
+enum SnapshotSource {
+  SNAPSHOT_SOURCE_UNSPECIFIED = 0;
+  SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER = 1;
+  SNAPSHOT_SOURCE_UPLOADED_MANUALLY = 2;
+}
 
 message CallContext {
   message Ingress {
@@ -272,6 +277,7 @@ message CanisterLoadSnapshot {
   uint64 canister_version = 1;
   uint64 taken_at_timestamp = 2;
   bytes snapshot_id = 3;
+  SnapshotSource source = 4;
 }
 
 message CanisterControllers {
@@ -281,6 +287,18 @@ message CanisterControllers {
 message CanisterSettingsChange {
   optional CanisterControllers controllers = 1;
   optional bytes environment_variables_hash = 2;
+}
+
+message CanisterRename {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 total_num_changes = 2;
+  RenameTo rename_to = 3;
+}
+
+message RenameTo {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 version = 2;
+  uint64 total_num_changes = 3;
 }
 
 message CanisterChange {
@@ -297,6 +315,7 @@ message CanisterChange {
     CanisterControllersChange canister_controllers_change = 8;
     CanisterLoadSnapshot canister_load_snapshot = 9;
     CanisterSettingsChange canister_settings_change = 10;
+    CanisterRename canister_rename = 11;
   }
 }
 
@@ -376,7 +395,7 @@ message CanisterStateBits {
   reserved 1;
   reserved "controller";
   uint64 last_full_execution_round = 2;
-  CallContextManager call_context_manager = 3;
+  reserved 3;
   uint64 compute_allocation = 4;
   int64 accumulated_priority = 5;
   reserved 6;

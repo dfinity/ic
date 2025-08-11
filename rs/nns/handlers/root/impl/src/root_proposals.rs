@@ -12,15 +12,12 @@ use ic_nervous_system_root::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::registry::get_value;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_protobuf::registry::{
-    node::v1::NodeRecord as NodeRecordPb, routing_table::v1::RoutingTable as RoutingTablePb,
-    subnet::v1::SubnetRecord as SubnetRecordPb,
+    node::v1::NodeRecord as NodeRecordPb, subnet::v1::SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{
-    make_node_record_key, make_routing_table_record_key, make_subnet_record_key,
-};
-use ic_registry_routing_table::RoutingTable;
+use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
+use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
 use std::{cell::RefCell, collections::BTreeMap, convert::TryFrom, str::FromStr};
 
 use crate::now_seconds;
@@ -484,28 +481,29 @@ pub fn get_pending_root_proposals_to_upgrade_governance_canister(
     })
 }
 
-/// In order to get the subnet id of the NNS, we get the routing table and
-/// figure out which subnet has the governance canister's id.
+/// In order to get the subnet id of the NNS, we call the registry canister's
+/// get_subnet_for_canister method.
 async fn get_nns_subnet_id() -> Result<SubnetId, String> {
-    let routing_table = RoutingTable::try_from(
-        get_value::<RoutingTablePb>(make_routing_table_record_key().as_bytes(), None)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Error getting routing table of the nns subnet. Error: {:?}",
-                    e
-                )
-            })?
-            .0,
+    let request = GetSubnetForCanisterRequest {
+        principal: Some(GOVERNANCE_CANISTER_ID.get()),
+    };
+    let (response,): (Result<SubnetForCanister, String>,) = call(
+        REGISTRY_CANISTER_ID.get().0,
+        "get_subnet_for_canister",
+        (request,),
     )
-    .map_err(|e| format!("Error decoding routing table: {:?}", e))?;
-    routing_table
-        .route(GOVERNANCE_CANISTER_ID.into())
-        .ok_or_else(|| {
-            "Error getting the subnet id of the subnet containing the governance canister \
-             from the routing table"
-                .to_string()
-        })
+    .await
+    .map_err(|(code, message)| {
+        format!(
+            "Error when calling get_subnet_for_canister, code: {:?}, message: {}",
+            code, message
+        )
+    })?;
+    let response = response?;
+    let nns_subnet_id = response
+        .subnet_id
+        .ok_or("Calling get_subnet_for_canister did not return a subnet id".to_string())?;
+    Ok(SubnetId::from(nns_subnet_id))
 }
 
 /// Returns the membership for the nns subnetwork, and the version at which it

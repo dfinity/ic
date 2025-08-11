@@ -450,7 +450,7 @@ impl HttpsOutcallsService for CanisterHttp {
                                 }
                             }
                             None => {
-                                // Eventually only this branch should be active. 
+                                // Eventually only this branch should be active.
                                 dark_launch_result
                             }
                         }
@@ -474,10 +474,10 @@ impl HttpsOutcallsService for CanisterHttp {
                 }
                 Ok(resp) => Ok(resp),
             }
-        } else { // Application subnet. 
+        } else { // Application subnet.
             // TODO: as technically socks proxies are now tried all the time, instead of using
-            // the "socks_proxy_allowed" flag, we should instead send the relevant URLs in the 
-            // "socks_proxy_addrs" param. Particularly, the caller should send the API BNs in 
+            // the "socks_proxy_allowed" flag, we should instead send the relevant URLs in the
+            // "socks_proxy_addrs" param. Particularly, the caller should send the API BNs in
             // the case of system subnets, and the socks5.ic0.app URL in the case of app subnets.
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
@@ -600,6 +600,7 @@ impl HttpsOutcallsService for CanisterHttp {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     // Check we are within limit for number of headers.
     if raw_headers.len() > HEADERS_LIMIT {

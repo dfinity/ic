@@ -7,7 +7,6 @@ edition = "2021"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 anyhow = { workspace = true }
-regex = { workspace = true }
 reqwest = { workspace = true }
 rusb = "0.9"
 serde = { workspace = true }

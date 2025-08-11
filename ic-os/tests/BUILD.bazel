@@ -1,4 +1,4 @@
 test_suite(
     name = "integration_tests",
-    tests = ["//rs/ic_os/os_tools/hostos_tool:hostos_tool_integration_tests"],
+    tests = ["//rs/ic_os/os_tools/guest_vm_runner:guest_vm_runner_integration_tests"],
 )

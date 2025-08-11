@@ -3,7 +3,7 @@
 use super::super::ThresholdError;
 use super::*;
 use ic_crypto_internal_bls12_381_type::{
-    G1Projective, G2Projective, LagrangeCoefficients, NodeIndex, Scalar,
+    G1Projective, G2Projective, LagrangeCoefficients, NodeIndex, NodeIndices, Scalar,
 };
 
 impl PublicCoefficients {
@@ -81,10 +81,11 @@ impl PublicCoefficients {
             return Ok(Vec::new());
         }
 
-        match LagrangeCoefficients::at_zero(samples) {
-            Ok(c) => Ok(c.coefficients().to_vec()),
-            Err(_) => Err(ThresholdError::DuplicateX),
-        }
+        let indices = NodeIndices::from_slice(samples).map_err(|_| ThresholdError::DuplicateX)?;
+
+        Ok(LagrangeCoefficients::at_zero(&indices)
+            .coefficients()
+            .to_vec())
     }
 
     pub(super) fn remove_zeros(&mut self) {

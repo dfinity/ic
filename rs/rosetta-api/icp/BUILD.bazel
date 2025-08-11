@@ -96,7 +96,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.5"
+ROSETTA_VERSION = "2.1.6"
 
 rust_library(
     name = "rosetta-api",

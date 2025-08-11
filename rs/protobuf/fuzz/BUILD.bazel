@@ -1,0 +1,16 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary_afl")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_fuzz_test_binary_afl(
+    name = "decode_block",
+    srcs = [
+        "fuzz_targets/decode_block.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/protobuf",
+        "//rs/types/types",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)

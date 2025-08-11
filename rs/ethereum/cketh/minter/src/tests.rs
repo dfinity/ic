@@ -18,16 +18,8 @@ fn test_evm_rpc_id_staging_value() {
 }
 
 mod eth_get_logs {
-    use crate::eth_rpc::{into_nat, Quantity};
     use evm_rpc_client::{Hex, Hex20, Hex32};
     use std::str::FromStr;
-
-    #[test]
-    fn should_convert_quantity_to_nat() {
-        let quantity = Quantity::new(0x4b85a0fcd); //20_272_779_213 wei
-        let nat = into_nat(quantity);
-        assert_eq!(nat.to_string(), "20_272_779_213")
-    }
 
     #[test]
     fn deserialize_get_logs() {

@@ -9,13 +9,6 @@ use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
 use utils::to_cidr;
 
-mod boot_args;
-mod guest_direct_boot;
-#[cfg(target_os = "linux")]
-mod guest_vm;
-mod mount;
-mod systemd_notifier;
-
 #[derive(Subcommand)]
 pub enum Commands {
     /// Generate systemd network configuration files. Bridges available NIC's for IC IPv6 connectivity.
@@ -32,7 +25,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
-    RunGuestVm {},
 }
 
 #[derive(Parser)]
@@ -44,15 +36,13 @@ struct HostOSArgs {
     command: Option<Commands>,
 }
 
-#[cfg(not(target_os = "linux"))]
 pub fn main() -> Result<()> {
-    eprintln!("ERROR: this only runs on Linux.");
-    std::process::exit(1)
-}
+    #[cfg(not(target_os = "linux"))]
+    {
+        eprintln!("ERROR: this only runs on Linux.");
+        std::process::exit(1)
+    }
 
-#[tokio::main]
-#[cfg(target_os = "linux")]
-pub async fn main() -> Result<()> {
     let opts = HostOSArgs::parse();
 
     match opts.command {
@@ -124,7 +114,6 @@ pub async fn main() -> Result<()> {
             println!("{}", generated_mac);
             Ok(())
         }
-        Some(Commands::RunGuestVm {}) => guest_vm::run_guest_vm().await,
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),
