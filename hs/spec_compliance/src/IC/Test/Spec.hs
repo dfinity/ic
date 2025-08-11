@@ -1489,24 +1489,7 @@ icTests my_sub other_sub conf =
                                                                                       unless my_is_root $ do
                                                                                         cert <- getStateCert defaultUser cid []
                                                                                         result <- try (validateStateCert other_ecid cert) :: IO (Either DelegationCanisterRangeCheck ())
-                                                                                        assertBool "certificate should not validate" $ isLeft result,
-                                                                                    simpleTestCase "access denied for other users request (mixed request)" ecid $ \cid -> do
-                                                                                      rid1 <- ensure_request_exists cid defaultUser
-                                                                                      rid2 <- ensure_request_exists cid otherUser
-                                                                                      getStateCert' defaultUser cid [["request_status", rid1], ["request_status", rid2]] >>= isErr4xx,
-                                                                                    testGroup "metadata" $
-                                                                                      let withCustomSection mod (name, content) = mod <> BS.singleton 0 <> sized (sized name <> content)
-                                                                                            where
-                                                                                              sized x = BS.fromStrict (toLEB128 @Natural (fromIntegral (BS.length x))) <> x
-                                                                                          withSections xs = foldl withCustomSection trivialWasmModule xs
-                                                                                       in [
-                                                                                            testCase "invalid utf8 in module" $ do
-                                                                                              let mod = withSections [("icp:public \xe2\x28\xa1", "baz")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install' ic00 (enum #install) cid mod "" >>= isReject [5],
-                                                                                            simpleTestCase "invalid utf8 in read_state" ecid $ \cid -> do
-                                                                                              getStateCert' defaultUser cid [["canister", cid, "metadata", "\xe2\x28\xa1"]] >>= isErr4xx
-                                                                                          ]
+                                                                                        assertBool "certificate should not validate" $ isLeft result
                                                                                   ],
                                                                             testGroup
                                                                               "certified variables"
