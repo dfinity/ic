@@ -977,34 +977,38 @@ fn can_reject_module_with_custom_sections_too_big() {
 
 #[test]
 fn can_reject_module_with_duplicate_custom_sections() {
-    let mut module = wasm_encoder::Module::new();
-    module.section(&wasm_encoder::CustomSection {
-        name: Cow::Borrowed("icp:private custom1"),
-        data: Cow::Borrowed(&[0, 1]),
-    });
-    module.section(&wasm_encoder::CustomSection {
-        name: Cow::Borrowed("icp:public custom2"),
-        data: Cow::Borrowed(&[0, 2]),
-    });
-    module.section(&wasm_encoder::CustomSection {
-        name: Cow::Borrowed("icp:public custom1"),
-        data: Cow::Borrowed(&[0, 3]),
-    });
-    let wasm = BinaryEncodedWasm::new(module.finish());
+    for visibility_1 in ["public", "private"] {
+        for visibility_2 in ["public", "private"] {
+            let mut module = wasm_encoder::Module::new();
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(&format!("icp:{} custom1", visibility_1)),
+                data: Cow::Borrowed(&[0, 1]),
+            });
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed("icp:public custom2"),
+                data: Cow::Borrowed(&[0, 2]),
+            });
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(&format!("icp:{} custom1", visibility_2)),
+                data: Cow::Borrowed(&[0, 3]),
+            });
+            let wasm = BinaryEncodedWasm::new(module.finish());
 
-    // Rejects the module because of duplicate custom section names.
-    assert_eq!(
-        validate_wasm_binary(
-            &wasm,
-            &EmbeddersConfig {
-                max_custom_sections: 5,
-                ..Default::default()
-            }
-        ),
-        Err(WasmValidationError::InvalidCustomSection(
-            "Invalid custom section: name custom1 already exists".to_string()
-        ))
-    );
+            // Rejects the module because of duplicate custom section names.
+            assert_eq!(
+                validate_wasm_binary(
+                    &wasm,
+                    &EmbeddersConfig {
+                        max_custom_sections: 5,
+                        ..Default::default()
+                    }
+                ),
+                Err(WasmValidationError::InvalidCustomSection(
+                    "Invalid custom section: name custom1 already exists".to_string()
+                ))
+            );
+        }
+    }
 }
 
 #[test]

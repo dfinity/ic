@@ -264,15 +264,16 @@ impl CanisterReadState {
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
 
-        url.set_path(&format!("api/v2/canister/{}/read_state",
+        url.set_path(&format!(
+            "api/v2/canister/{}/read_state",
             self.effective_canister_id
         ));
-        println!("url: {}", url);
 
         let client = reqwest::Client::builder()
-        .http2_prior_knowledge()
-        .danger_accept_invalid_certs(true)
-        .build().unwrap();
+            .http2_prior_knowledge()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
 
         client
             .post(url)

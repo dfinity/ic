@@ -361,7 +361,7 @@ fn test_metadata_path(env: TestEnv) {
         block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
     let canister_id = canister.canister_id();
 
-    let non_ascii_vec_1 = b"\x0e2\x028\x0a1".to_vec();
+    let non_ascii_vec_1 = b"\xe2\x28\xa1".to_vec();
     let non_ascii_str_1 = String::from_utf8(non_ascii_vec_1.clone()).unwrap();
     assert!(!non_ascii_str_1.is_ascii());
     let non_ascii_vec_2 = "☃️".as_bytes().to_vec();
@@ -627,7 +627,20 @@ fn test_request_path_access(env: TestEnv) {
         assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 
-    // Reading both requests at the same time should fail
+    // Reading both requests (to the same canister) at the same time should fail
+    let paths = vec![
+        vec!["request_status".into(), (*request_id1).into()],
+        vec!["request_status".into(), (*request_id2).into()],
+    ];
+    let result = read_state_with_identity(&env, paths.clone(), get_identity());
+    assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
+
+    // Reading both requests (to different canisters) at the same time should fail
+    let another_canister_id = block_on(async {
+        let mcan = MessageCanister::new_with_cycles(&agent, effective_canister_id, u128::MAX).await;
+        mcan.canister_id()
+    });
+    let (request_id2, _) = make_update_call(&agent, &another_canister_id);
     let paths = vec![
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
