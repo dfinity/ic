@@ -235,8 +235,8 @@ system_test_nns(
 
 rust_binary(
     name = "nns_delegation_test",
-    srcs = ["nns_delegation_test.rs"],
     testonly = True,
+    srcs = ["nns_delegation_test.rs"],
     crate_name = "ic_systest_nns_delegation_test",
     deps = [
         # Keep sorted.
@@ -272,8 +272,8 @@ system_test_nns(
         "long_test",
     ],
     test_driver_target = ":nns_delegation_test",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
+    uses_guestos_img = True,
+    uses_guestos_mainnet_img = False,
     uses_guestos_update = True,
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
 )
