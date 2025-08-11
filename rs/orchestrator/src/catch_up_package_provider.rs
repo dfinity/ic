@@ -53,13 +53,14 @@ use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
-use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
+use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
+use tokio::{sync::Mutex, time::timeout};
 
+const INITIAL_BACKOFF: Duration = Duration::from_secs(30);
 /// Fetches catch-up packages from peers and local storage.
 ///
 /// CUPs are used to determine which version of the IC peers are running
 /// and hence which version of the IC this node should be starting.
-#[derive(Clone)]
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
@@ -67,6 +68,7 @@ pub(crate) struct CatchUpPackageProvider {
     crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
+    backoff: Mutex<Duration>,
 }
 
 impl CatchUpPackageProvider {
@@ -79,6 +81,26 @@ impl CatchUpPackageProvider {
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
+        Self::new_with_initial_backoff(
+            registry,
+            cup_dir,
+            crypto,
+            crypto_tls_config,
+            logger,
+            node_id,
+            INITIAL_BACKOFF,
+        )
+    }
+
+    fn new_with_initial_backoff(
+        registry: Arc<RegistryHelper>,
+        cup_dir: PathBuf,
+        crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        logger: ReplicaLogger,
+        node_id: NodeId,
+        initial_backoff: Duration,
+    ) -> Self {
         Self {
             node_id,
             registry,
@@ -86,6 +108,7 @@ impl CatchUpPackageProvider {
             crypto,
             crypto_tls_config,
             logger,
+            backoff: Mutex::new(initial_backoff),
         }
     }
 
@@ -144,14 +167,23 @@ impl CatchUpPackageProvider {
             .map(CatchUpPackageParam::try_from)
             .and_then(Result::ok);
 
-        for (node_id, node_record) in peers.iter() {
-            if let Some((proto, cup)) = self
+        // Iterate over the peers in reverse order, so that we try the current node first.
+        for (node_id, node_record) in peers.iter().rev() {
+            match self
                 .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
-                // Note: None is < Some(_)
-                if Some(CatchUpPackageParam::from(&cup)) > param {
-                    return Some(proto);
+                Ok((proto, cup)) => {
+                    // Note: None is < Some(_)
+                    if Some(CatchUpPackageParam::from(&cup)) > param {
+                        return Some(proto);
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Failed to fetch CUP from node {}: {}", node_id, err
+                    );
                 }
             }
         }
@@ -171,17 +203,16 @@ impl CatchUpPackageProvider {
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
-    ) -> Option<(pb::CatchUpPackage, CatchUpPackage)> {
-        let http = node_record.clone().http.or_else(|| {
-            warn!(
-                self.logger,
-                "Node record's http endpoint is None: {:?}", node_record
-            );
-            None
+    ) -> Result<(pb::CatchUpPackage, CatchUpPackage), String> {
+        let http = node_record.clone().http.ok_or_else(|| {
+            format!(
+                "Node {} record's http endpoint is None: {:?}",
+                node_id, node_record
+            )
         })?;
-        let mut uri = https_endpoint_to_url(&http, &self.logger)?;
+        let mut uri = https_endpoint_to_url(&http)?;
         uri.path_segments_mut()
-            .ok()?
+            .map_err(|()| format!("URL cannot be segmented"))?
             .push("_")
             .push("catch_up_package");
 
@@ -191,13 +222,7 @@ impl CatchUpPackageProvider {
             .fetch_catch_up_package(node_id, uri.clone(), param)
             .await?;
         let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to read CUP from peer at url {}: {:?}", uri, e
-                )
-            })
-            .ok()?;
+            .map_err(|e| format!("Failed to read CUP from peer at url {}: {:?}", uri, e))?;
 
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -206,15 +231,9 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 cup.content.block.get_value().context.registry_version,
             )
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
-                )
-            })
-            .ok()?;
+            .map_err(|e| format!("Failed to verify CUP signature at: {:?} with: {:?}", uri, e))?;
 
-        Some((protobuf, cup))
+        Ok((protobuf, cup))
     }
 
     // Attempt to fetch a `CatchUpPackage` from the given endpoint.
@@ -226,7 +245,7 @@ impl CatchUpPackageProvider {
         node_id: &NodeId,
         url: String,
         param: Option<CatchUpPackageParam>,
-    ) -> Option<pb::CatchUpPackage> {
+    ) -> Result<pb::CatchUpPackage, String> {
         let body = Bytes::from(
             param
                 .and_then(|param| serde_cbor::to_vec(&param).ok())
@@ -236,8 +255,7 @@ impl CatchUpPackageProvider {
         let client_config = self
             .crypto_tls_config
             .client_config(*node_id, self.registry.get_latest_version())
-            .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
-            .ok()?;
+            .map_err(|e| format!("Failed to create tls client config: {:?}", e))?;
 
         let https = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
@@ -246,54 +264,60 @@ impl CatchUpPackageProvider {
             .build();
 
         let client = Client::builder(TokioExecutor::new())
-            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
             .pool_max_idle_per_host(1)
             .build::<_, Full<Bytes>>(https);
 
-        let req = tokio::time::timeout(
-            tokio::time::Duration::from_secs(10),
+        let req = timeout(
+            Duration::from_secs(10),
             client.request(
                 Request::builder()
                     .method(Method::POST)
                     .header(hyper::header::CONTENT_TYPE, "application/cbor")
                     .uri(url)
                     .body(Full::from(body))
-                    .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
-                    .ok()?,
+                    .map_err(|e| format!("Failed to create request: {:?}", e))?,
             ),
         );
 
         let res = req
             .await
-            .map_err(|e| warn!(self.logger, "Querying CUP endpoint timed out: {:?}", e))
-            .ok()?
-            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
-            .ok()?;
+            .map_err(|e| format!("Querying CUP endpoint timed out: {:?}", e))?
+            .map_err(|e| format!("Failed to query CUP endpoint: {:?}", e))?;
 
-        let bytes = res
-            .into_body()
-            .collect()
-            .await
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to convert the response body to bytes: {:?}", e
-                )
-            })
-            .ok()?
-            .to_bytes();
+        let mut backoff = self.backoff.lock().await;
+        let body_req = timeout(*backoff, res.into_body().collect());
+
+        let bytes = match body_req.await {
+            Ok(result) => {
+                *backoff = INITIAL_BACKOFF; // Reset backoff on success
+                match result {
+                    Ok(bytes) => bytes.to_bytes(),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to convert the response body to bytes: {:?}",
+                            e
+                        ));
+                    }
+                }
+            }
+
+            Err(timeout_err) => {
+                let old_backoff = backoff.clone();
+                *backoff = old_backoff.saturating_mul(2);
+                return Err(format!(
+                    "Timed out while reading CUP response body after {} secs: {:?}. Setting backoff to {} secs",
+                    old_backoff.as_secs(),
+                    timeout_err,
+                    backoff.as_secs()
+                ));
+            }
+        };
 
         if bytes.is_empty() {
-            None
+            Err("Received empty CUP response body".to_string())
         } else {
             pb::CatchUpPackage::decode(&bytes[..])
-                .map_err(|e| {
-                    warn!(
-                        self.logger,
-                        "Failed to deserialize CUP from protobuf: {:?}", e
-                    )
-                })
-                .ok()
+                .map_err(|e| format!("Failed to deserialize CUP from protobuf: {:?}", e))
         }
     }
 
@@ -440,4 +464,280 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
         .ok()
         .and_then(|content| content.block)
         .map(|block| Height::from(block.height))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
+    };
+    use http_body_util::{combinators::BoxBody, StreamBody};
+    use hyper::{
+        body::{Bytes, Frame},
+        server::conn::http2,
+        service::service_fn,
+        Response,
+    };
+    use hyper_util::rt::{TokioExecutor, TokioIo};
+    use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
+    use ic_logger::no_op_logger;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_types::ids::node_test_id;
+    use rcgen::{CertificateParams, KeyPair};
+    use rustls::{
+        client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime},
+        ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
+    };
+    use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
+    use tokio::net::TcpListener;
+    use tokio_rustls::TlsAcceptor;
+
+    #[derive(Clone, Debug)]
+    enum TestService {
+        SendCup,
+        SlowBody,
+        Unresponsive,
+    }
+
+    async fn test_service(
+        service: TestService,
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        match service {
+            TestService::SlowBody => slow_body_service().await,
+            TestService::SendCup => send_cup_service().await,
+            TestService::Unresponsive => unresponsive_service().await,
+        }
+    }
+
+    async fn slow_body_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        let s = async_stream::stream! {
+            // Send one chunk
+            yield Ok(Frame::data(Bytes::from("partial data")));
+            // Stall forever
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+        };
+
+        Ok(Response::builder()
+            .status(200)
+            .header(hyper::header::CONTENT_TYPE, "application/cbor")
+            .body(BoxBody::new(StreamBody::new(s)))
+            .unwrap())
+    }
+
+    async fn unresponsive_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        tokio::time::sleep(Duration::from_secs(3600)).await;
+        unreachable!()
+    }
+
+    fn fake_cup() -> pb::CatchUpPackage {
+        pb::CatchUpPackage {
+            content: vec![1, 2, 3, 4],
+            signature: vec![5, 6, 7, 8],
+            signer: None,
+        }
+    }
+
+    async fn send_cup_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        let s = async_stream::stream! {
+            yield Ok(Frame::data(Bytes::from(fake_cup().encode_to_vec())));
+        };
+
+        Ok(Response::builder()
+            .status(200)
+            .header(hyper::header::CONTENT_TYPE, "application/cbor")
+            .body(BoxBody::new(StreamBody::new(s)))
+            .unwrap())
+    }
+
+    async fn start_server(service: TestService) -> SocketAddr {
+        let addr: SocketAddr = ([127, 0, 0, 1], 0).into();
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let key_pair = KeyPair::generate().unwrap();
+        let priv_key = PrivatePkcs8KeyDer::from(key_pair.serialize_der());
+        let cert = CertificateDer::from(
+            CertificateParams::new(vec![])
+                .unwrap()
+                .self_signed(&key_pair)
+                .unwrap(),
+        );
+
+        let mut tls_cfg = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert.clone()], priv_key.into())
+            .unwrap();
+        tls_cfg.alpn_protocols = vec![
+            b"h2".to_vec(), // HTTP/2
+        ];
+
+        let acceptor = TlsAcceptor::from(Arc::new(tls_cfg));
+        tokio::spawn(async move {
+            loop {
+                let service = service.clone();
+                let (tcp_stream, _) = listener.accept().await.unwrap();
+                let acceptor = acceptor.clone();
+                tokio::task::spawn(async move {
+                    let service = service.clone();
+                    match acceptor.accept(tcp_stream).await {
+                        Ok(tls_stream) => {
+                            let _ = http2::Builder::new(TokioExecutor::new())
+                                .serve_connection(
+                                    TokioIo::new(tls_stream),
+                                    service_fn(|_req| test_service(service.clone())),
+                                )
+                                .await;
+                        }
+                        Err(err) => eprintln!("TLS error: {:?}", err),
+                    }
+                });
+            }
+        });
+
+        local_addr
+    }
+
+    fn setup_registry() -> Arc<RegistryHelper> {
+        let data_provider = ProtoRegistryDataProvider::new();
+        let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
+        Arc::new(RegistryHelper::new(
+            node_test_id(1),
+            Arc::new(registry_client),
+            no_op_logger(),
+        ))
+    }
+
+    fn mock_tls_config() -> MockTlsConfig {
+        #[derive(Debug)]
+        struct NoVerify;
+        impl ServerCertVerifier for NoVerify {
+            fn verify_server_cert(
+                &self,
+                _end_entity: &CertificateDer,
+                _intermediates: &[CertificateDer],
+                _server_name: &ServerName,
+                _ocsp_response: &[u8],
+                _now: UnixTime,
+            ) -> Result<ServerCertVerified, rustls::Error> {
+                Ok(ServerCertVerified::assertion())
+            }
+            fn verify_tls12_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn verify_tls13_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+                rustls::crypto::ring::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
+        }
+
+        let accept_any_config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoVerify))
+            .with_no_client_auth();
+
+        let mut tls_config = MockTlsConfig::new();
+        tls_config
+            .expect_client_config()
+            .returning(move |_, _| Ok(accept_any_config.clone()));
+        tls_config
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_body_request_times_out() {
+        let server_addr = start_server(TestService::SlowBody).await;
+        let url = format!("https://{}", server_addr);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let cup_provider = CatchUpPackageProvider::new_with_initial_backoff(
+            setup_registry(),
+            tmp_dir.path().to_path_buf(),
+            Arc::new(CryptoReturningOk::default()),
+            Arc::new(mock_tls_config()),
+            no_op_logger(),
+            node_id,
+            Duration::from_secs(5),
+        );
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url.clone(), None)
+            .await
+            .expect_err("Expected timeout error when fetching CUP from slow server");
+
+        assert!(err.contains("Timed out while reading CUP response body after 5 secs: Elapsed(()). Setting backoff to 10 secs"));
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url, None)
+            .await
+            .expect_err("Expected timeout error when fetching CUP from slow server");
+
+        assert!(err.contains("Timed out while reading CUP response body after 10 secs: Elapsed(()). Setting backoff to 20 secs"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_unresponsive_times_out() {
+        let server_addr = start_server(TestService::Unresponsive).await;
+        let url = format!("https://{}", server_addr);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let cup_provider = CatchUpPackageProvider::new_with_initial_backoff(
+            setup_registry(),
+            tmp_dir.path().to_path_buf(),
+            Arc::new(CryptoReturningOk::default()),
+            Arc::new(mock_tls_config()),
+            no_op_logger(),
+            node_id,
+            Duration::from_secs(5),
+        );
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url.clone(), None)
+            .await
+            .expect_err("Expected timeout error when fetching CUP from slow server");
+
+        assert!(err.contains("Querying CUP endpoint timed out: Elapsed(())"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_suceeds() {
+        let server_addr = start_server(TestService::SendCup).await;
+        let url = format!("https://{}", server_addr);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let cup_provider = CatchUpPackageProvider::new(
+            setup_registry(),
+            tmp_dir.path().to_path_buf(),
+            Arc::new(CryptoReturningOk::default()),
+            Arc::new(mock_tls_config()),
+            no_op_logger(),
+            node_id,
+        );
+
+        let cup = cup_provider
+            .fetch_catch_up_package(&node_id, url, None)
+            .await
+            .expect("Expected timeout error when fetching CUP from slow server");
+
+        assert_eq!(cup, fake_cup());
+    }
 }
