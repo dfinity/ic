@@ -42,7 +42,12 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
         ledger_canister_id: Some(PrincipalId::from(canister_test_id(502))),
         swap_canister_id: Some(PrincipalId::from(canister_test_id(503))),
 
-        sns_metadata: None,
+        sns_metadata: Some(SnsMetadata {
+            logo: None,
+            url: Some("https://example.com".to_string()),
+            name: Some("Example".to_string()),
+            description: Some("Very descriptive description".to_string()),
+        }),
         sns_initialization_parameters: "".to_string(),
         parameters: Some(NervousSystemParameters::with_default_values()),
         id_to_nervous_system_functions: BTreeMap::new(),
