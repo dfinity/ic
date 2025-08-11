@@ -34,17 +34,18 @@ impl Step for EnsureElectedVersion {
         let upgrade_url = get_public_update_image_url(&self.version);
         info!(env.logger(), "Upgrade URL: {}", upgrade_url);
 
-        let (sha256, guest_launch_measurements) = rt.block_on(fetch_update_metadata_with_retry(
+        let sha256 = rt.block_on(fetch_update_metadata_with_retry(
             &env.logger(),
             &self.version,
         ));
+        let guest_launch_measurements = None;
 
         rt.block_on(bless_replica_version_with_urls(
             &nns_node,
             &self.version,
             vec![upgrade_url.clone()],
             sha256,
-            Some(guest_launch_measurements),
+            guest_launch_measurements,
             &env.logger(),
         ));
 
