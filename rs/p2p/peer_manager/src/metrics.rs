@@ -10,7 +10,7 @@ pub(crate) struct PeerManagerMetrics {
 }
 
 impl PeerManagerMetrics {
-    /// The constructor returns a `GossipMetrics` instance.
+    /// The constructor returns a [`PeerManagerMetrics`] instance.
     pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             topology_updates: metrics_registry.int_counter(
