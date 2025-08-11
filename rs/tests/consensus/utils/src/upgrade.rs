@@ -41,11 +41,8 @@ pub fn get_public_update_image_guest_launch_measurements(git_revision: &ReplicaV
 }
 
 /// Returns (SHA256, GuestLaunchMeasurements) of the update package with the given version.
-pub async fn fetch_update_metadata_with_retry(
-    log: &Logger,
-    version: &ReplicaVersion,
-) -> (String, GuestLaunchMeasurements) {
-    let sha256 = retry_async(
+pub async fn fetch_update_metadata_with_retry(log: &Logger, version: &ReplicaVersion) -> String {
+    retry_async(
         format!("fetch update file sha256 of version {}", version),
         log,
         READY_WAIT_TIMEOUT,
@@ -55,33 +52,9 @@ pub async fn fetch_update_metadata_with_retry(
                 .await
                 .context("Failed to fetch update file sha256")
         },
-    );
-
-    let guest_launch_measurements = retry_async(
-        format!(
-            "fetch guest launch measurements file of version {}",
-            version
-        ),
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || async {
-            let tmpfile = tempfile::NamedTempFile::new()?;
-            FileDownloader::new(None)
-                .download_file(
-                    &get_public_update_image_guest_launch_measurements(version),
-                    tmpfile.path(),
-                    None,
-                )
-                .await?;
-            serde_json::from_slice::<GuestLaunchMeasurements>(
-                &tokio::fs::read(tmpfile.path()).await?,
-            )
-            .context("Could not deserialize guest launch measurements")
-        },
-    );
-
-    futures::try_join!(sha256, guest_launch_measurements).expect("Failed to fetch update metadata")
+    )
+    .await
+    .expect("Failed to fetch update metadata")
 }
 
 pub async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String> {
