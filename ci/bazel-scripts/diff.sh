@@ -8,7 +8,7 @@
 #
 # This scripts is inspired by https://github.com/bazelbuild/bazel/blob/master/scripts/ci/ci.sh
 
-set -euo pipefail
+set -xeuo pipefail
 
 # Used to differentiate between test & build targets
 BAZEL_CMD="${1:?Please specify a command: "'build|test'"}"
