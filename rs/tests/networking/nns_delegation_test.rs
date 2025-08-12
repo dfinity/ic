@@ -16,7 +16,7 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_guestos_update_img_sha256, get_guestos_update_img_url,
+            get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
             get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             SubnetSnapshot,
         },
@@ -160,7 +160,14 @@ async fn get_nns_delegation_timestamp(
 fn upgrade_subnet(subnet: &SubnetSnapshot, env: &TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
 
+    let initial_version = get_guestos_img_version().expect("initial version");
     let target_version = get_guestos_update_img_version().expect("target IC version");
+
+    if initial_version == target_version {
+        // No upgrade needed
+        return;
+    }
+
     let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
 
