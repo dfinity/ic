@@ -2540,7 +2540,7 @@ impl CanisterManager {
 
         // Create new snapshot.
         let new_snapshot = PartialCanisterSnapshot::from_metadata(
-            valid_args,
+            &valid_args,
             state.time(),
             canister.system_state.canister_version,
             Arc::clone(&self.fd_factory),
@@ -2628,7 +2628,7 @@ impl CanisterManager {
             }
             CanisterSnapshotDataOffset::MainMemory { offset } => {
                 PartialCanisterSnapshot::write_to_page_memory(
-                    &mut partial_snapshot.wasm_memory,
+                    &mut partial_snapshot.wasm_memory_mut(),
                     offset,
                     &args.chunk,
                 )
@@ -2640,7 +2640,7 @@ impl CanisterManager {
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
                 PartialCanisterSnapshot::write_to_page_memory(
-                    &mut partial_snapshot.stable_memory,
+                    &mut partial_snapshot.stable_memory_mut(),
                     offset,
                     &args.chunk,
                 )

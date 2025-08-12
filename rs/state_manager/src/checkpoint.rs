@@ -384,11 +384,11 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
                 );
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotWasmMemory(*snapshot_id),
-                    &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
+                    &mut new_snapshot.wasm_memory_mut().page_map,
                 );
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotStableMemory(*snapshot_id),
-                    &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
+                    &mut new_snapshot.stable_memory_mut().page_map,
                 );
             }
         }

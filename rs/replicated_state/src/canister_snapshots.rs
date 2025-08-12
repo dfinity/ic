@@ -160,6 +160,13 @@ impl CanisterSnapshots {
         self.snapshots.iter_mut()
     }
 
+    /// Mutably iterate over all partial snapshots.
+    pub fn iter_mut_partial(
+        &mut self,
+    ) -> impl Iterator<Item = (&SnapshotId, &mut Arc<PartialCanisterSnapshot>)> {
+        self.partial_snapshots.iter_mut()
+    }
+
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
     /// External callers should call `ReplicatedState::delete_snapshot` instead.
@@ -579,14 +586,6 @@ impl PartialCanisterSnapshot {
         page_memory.page_map.update(&delta);
         Ok(())
     }
-
-    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
-        &mut self.execution_snapshot.stable_memory
-    }
-
-    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
-        &mut self.execution_snapshot.wasm_memory
-    }
 }
 
 /// Impl for both immutable and partial snapshots.
@@ -611,28 +610,40 @@ impl<T> CanisterSnapshotImpl<T> {
         self.size
     }
 
+    pub fn exported_globals(&self) -> &Vec<Global> {
+        &self.execution_snapshot.exported_globals
+    }
+
     pub fn execution_snapshot_impl(&self) -> &ExecutionStateSnapshotImpl<T> {
         &self.execution_snapshot
-    }
-
-    pub fn stable_memory(&self) -> &PageMemory {
-        &self.execution_snapshot.stable_memory
-    }
-
-    pub fn wasm_memory(&self) -> &PageMemory {
-        &self.execution_snapshot.wasm_memory
     }
 
     pub fn canister_module_impl(&self) -> &CanisterModuleImpl<T> {
         &self.execution_snapshot.wasm_binary
     }
 
-    pub fn exported_globals(&self) -> &Vec<Global> {
-        &self.execution_snapshot.exported_globals
+    pub fn wasm_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.wasm_memory
+    }
+
+    pub fn stable_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.stable_memory
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
         &self.chunk_store
+    }
+
+    // Needed for both mutable and immutable Snapshots because of page delta
+    // processing during checkpoints.
+    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.wasm_memory
+    }
+
+    // Needed for both mutable and immutable Snapshots because of page delta
+    // processing during checkpoints.
+    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.stable_memory
     }
 
     // Needed for both mutable and immutable Snapshots because of page delta
@@ -653,6 +664,28 @@ impl<T> CanisterSnapshotImpl<T> {
             .stable_memory
             .page_map
             .strip_all_deltas(Arc::clone(fd_factory));
+    }
+
+    /// See state_manager/src/tip.rs:switch_to_checkpoint
+    pub fn switch_to_checkpoint(
+        &mut self,
+        chunk_store_page_map: &PageMap,
+        wasm_memory_page_map: &PageMap,
+        stable_memory_page_map: &PageMap,
+        wasm_binary: CanisterModuleImpl<T>,
+    ) {
+        self.chunk_store
+            .page_map_mut()
+            .switch_to_checkpoint(chunk_store_page_map);
+        self.execution_snapshot
+            .wasm_memory
+            .page_map
+            .switch_to_checkpoint(wasm_memory_page_map);
+        self.execution_snapshot
+            .stable_memory
+            .page_map
+            .switch_to_checkpoint(stable_memory_page_map);
+        self.execution_snapshot.wasm_binary = wasm_binary;
     }
 
     pub fn certified_data(&self) -> &Vec<u8> {
