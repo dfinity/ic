@@ -7,7 +7,7 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//bazel:mainnet-icos-images.bzl", "base_download_url", "base_download_url_dev")
+load("//bazel:mainnet-icos-images.bzl", "base_download_url")
 load("//rs/tests:common.bzl", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SUBNET_HASH", "MAINNET_NNS_SUBNET_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -333,6 +333,7 @@ def system_test(
             variant = "guest-os",
             update = True,
             test = False,
+            dev = False,
         ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
@@ -366,6 +367,7 @@ def system_test(
             variant = "guest-os",
             update = True,
             test = False,
+            dev = False,
         ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
@@ -402,7 +404,7 @@ def system_test(
 
     if uses_hostos_mainnet_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url_dev(
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(
             git_commit_id = MAINNET_LATEST_HOSTOS_REVISION,
             variant = "host-os",
             update = True,
