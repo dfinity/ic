@@ -156,7 +156,6 @@ RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-co
 RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 COPY ./ci/container/files/docker.sh /usr/bin/docker
-COPY ./ci/container/files/entrypoint.sh /entrypoint.sh
 
 USER ubuntu
 
@@ -197,5 +196,4 @@ WORKDIR /
 # In GitHub that is the case and we need 1001 and we set it via ARG.
 ARG CI_USER="root"
 USER $CI_USER
-ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]

@@ -645,7 +645,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
             ),
             "ic0": crate.spec(
-                version = "^0.18.11",
+                version = "^1.0.0",
             ),
             "ic-agent": crate.spec(
                 version = "^0.40.1",
