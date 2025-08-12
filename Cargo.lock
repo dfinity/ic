@@ -2089,12 +2089,12 @@ dependencies = [
 
 [[package]]
 name = "canlog"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "canlog_derive",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-cdk 0.17.2",
+ "ic0 1.0.0",
  "proptest 1.6.0",
  "regex",
  "serde",
