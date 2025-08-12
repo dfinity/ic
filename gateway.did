@@ -1,0 +1,49 @@
+type HeaderField = record { text; text; };
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+  certificate_version: opt nat16;
+};
+
+type HttpUpdateRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+  upgrade : opt bool;
+  streaming_strategy: opt StreamingStrategy;
+};
+
+// Each canister that uses the streaming feature gets to choose their concrete
+// type; the HTTP Gateway will treat it as an opaque value that is only fed to
+// the callback method
+
+type StreamingToken = record {
+  // application-specific type
+};
+
+type StreamingCallbackHttpResponse = record {
+  body: blob;
+  token: opt StreamingToken;
+};
+
+type StreamingStrategy = variant {
+  Callback: record {
+    callback: func (StreamingToken) -> (opt StreamingCallbackHttpResponse) query;
+    token: StreamingToken;
+  };
+};
+
+service : {
+  http_request: (request: HttpRequest) -> (HttpResponse) query;
+  http_request_update: (request: HttpUpdateRequest) -> (HttpResponse);
+}
