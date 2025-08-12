@@ -158,7 +158,7 @@ impl CanisterHttpPoolManagerImpl {
             self.registry_client
                 .get_system_api_boundary_node_ids(latest_registry_version)
         } else {
-            //TODO(next): For now, only system subnets are allowed to use API BNs are proxies.
+            //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
             // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
             Ok(vec![])
         };
