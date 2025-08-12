@@ -45,7 +45,7 @@ impl GeneratedKeyDiskEncryption<'_> {
                 .key_path
                 .parent()
                 .context("Could not find parent directory for key file")?;
-            let mut temp = tempfile::Builder::new()
+            let temp = tempfile::Builder::new()
                 .permissions(Permissions::from_mode(0o600))
                 .tempfile_in(parent_dir)
                 .context("Could not create temporary file for boot partition key")?;
