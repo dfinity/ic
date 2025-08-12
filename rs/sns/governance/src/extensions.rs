@@ -1,7 +1,6 @@
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
     logs::INFO,
-    pb::v1::Governance as GovernanceProto,
     pb::{
         sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
         v1::{
@@ -1079,22 +1078,19 @@ mod tests {
     use super::*;
     use crate::governance::{Governance, ValidGovernanceProto};
     use crate::pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse};
-    use crate::pb::v1::{governance, governance::SnsMetadata, NervousSystemParameters};
+    use crate::pb::v1::{
+        governance, governance::SnsMetadata, Governance as GovernanceProto, NervousSystemParameters,
+    };
     use crate::types::test_helpers::NativeEnvironment;
     use ic_ledger_core::Tokens;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
     use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
     use maplit::btreemap;
 
-    /// Helper function to set up common environment mocking for validate_execute_extension_operation tests
-    fn setup_env_for_test(
-        extension_registered: bool,
-        operation_name: &str,
-    ) -> (Governance, ExecuteExtensionOperation) {
-        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
-        let root_canister_id = CanisterId::from_u64(1000);
-        let governance_proto = GovernanceProto {
-            root_canister_id: Some(root_canister_id.get()),
+    /// Common function to create a basic GovernanceProto for tests
+    fn create_test_governance_proto() -> GovernanceProto {
+        GovernanceProto {
+            root_canister_id: Some(CanisterId::from_u64(1000).get()),
             ledger_canister_id: Some(CanisterId::from_u64(4000).get()),
             swap_canister_id: Some(CanisterId::from_u64(5000).get()),
             parameters: Some(NervousSystemParameters::with_default_values()),
@@ -1106,7 +1102,14 @@ mod tests {
             }),
             mode: governance::Mode::Normal.into(),
             ..Default::default()
-        };
+        }
+    }
+
+    /// Creates a Governance instance with default ledger mocks for basic testing
+    fn setup_gov_for_tests(extension_registered: bool) -> Governance {
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
+        let root_canister_id = CanisterId::from_u64(1000);
+        let governance_proto = create_test_governance_proto();
         let extension_canister_id = CanisterId::from_u64(2000);
 
         // Mock list_sns_canisters call
@@ -1156,49 +1159,12 @@ mod tests {
             );
         }
 
-        // Create operation arg based on operation type
-        let operation_arg = if operation_name == "withdraw" {
-            // Withdraw operations now require empty arguments
-            ExtensionOperationArg { value: None }
-        } else {
-            // Deposit operations need the allocation values
-            ExtensionOperationArg {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(1000000))
-                            },
-                            "treasury_allocation_icp_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(2000000))
-                            },
-                             // For withdraw tests, these fields will be ignored by deposit validator
-                            "recipient_principal".to_string() => Precise {
-                                value: Some(precise::Value::Text("rdmx6-jaaaa-aaaaa-aaadq-cai".to_string()))
-                            },
-                            "withdrawal_amount_sns_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(1000000))
-                            },
-                            "withdrawal_amount_icp_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(2000000))
-                            },
-                        },
-                    })),
-                }),
-            }
-        };
-
-        let execute_operation = ExecuteExtensionOperation {
-            extension_canister_id: Some(extension_canister_id.get()),
-            operation_name: Some(operation_name.to_string()),
-            operation_arg: Some(operation_arg),
-        };
-
+        // Create default ledgers with basic expectations for any ledger calls
         let mut icp_ledger = MockICRC1Ledger::default();
-
         icp_ledger.expect_account_balance().returning(|_| {
             Ok(Tokens::from_e8s(200_000_000_000)) // Mock ICP balance
         });
+
         let mut sns_ledger = MockICRC1Ledger::default();
         sns_ledger.expect_account_balance().returning(|_| {
             Ok(Tokens::from_e8s(100_000_000_000)) // Mock SNS balance
@@ -1213,14 +1179,33 @@ mod tests {
             Box::new(MockCMC::default()),
         );
 
-        (governance, execute_operation)
+        governance
     }
 
     // Tests for validate_execute_extension_operation with proper environment mocking
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_deposit_success() {
-        let (governance, execute_operation) = setup_env_for_test(true, "deposit");
+        let governance = setup_gov_for_tests(true);
+
+        let execute_operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(CanisterId::from_u64(2000).get()),
+            operation_name: Some("deposit".to_string()),
+            operation_arg: Some(ExtensionOperationArg {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
+                        },
+                    })),
+                }),
+            }),
+        };
 
         // Test with valid operation name - should succeed
         let result = validate_execute_extension_operation(&governance, execute_operation).await;
@@ -1230,7 +1215,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_withdraw_success() {
-        let (governance, execute_operation) = setup_env_for_test(true, "withdraw");
+        let governance = setup_gov_for_tests(true);
+
+        let execute_operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(CanisterId::from_u64(2000).get()),
+            operation_name: Some("withdraw".to_string()),
+            operation_arg: Some(ExtensionOperationArg { value: None }),
+        };
 
         // Test with withdraw operation - should succeed (since test mode supports withdraw)
         let result = validate_execute_extension_operation(&governance, execute_operation).await;
@@ -1240,7 +1231,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_unregistered_extension() {
-        let (governance, execute_operation) = setup_env_for_test(false, "deposit"); // false = extension not registered
+        let governance = setup_gov_for_tests(false); // false = extension not registered
+
+        let execute_operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(CanisterId::from_u64(2000).get()),
+            operation_name: Some("deposit".to_string()),
+            operation_arg: Some(ExtensionOperationArg {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
+                        },
+                    })),
+                }),
+            }),
+        };
 
         let result = validate_execute_extension_operation(&governance, execute_operation).await;
 
@@ -1254,7 +1264,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_execute_extension_operation_invalid_operation_name() {
-        let (governance, execute_operation) = setup_env_for_test(true, "invalid_operation");
+        let governance = setup_gov_for_tests(true);
+
+        let execute_operation = ExecuteExtensionOperation {
+            extension_canister_id: Some(CanisterId::from_u64(2000).get()),
+            operation_name: Some("invalid_operation".to_string()),
+            operation_arg: Some(ExtensionOperationArg { value: None }),
+        };
 
         // Test with invalid operation name - should fail
         let result = validate_execute_extension_operation(&governance, execute_operation).await;
@@ -1269,7 +1285,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_deposit_operation() {
         // Use setup that configures mock ledgers to return balances
-        let (governance, _) = setup_env_for_test(true, "deposit");
+        let governance = setup_gov_for_tests(true);
 
         // Test valid deposit operation
         let valid_arg = ExtensionOperationArg {
@@ -1377,7 +1393,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_withdraw_operation() {
-        let (governance, _) = setup_env_for_test(true, "withdraw");
+        let governance = setup_gov_for_tests(true);
 
         // Test valid withdraw operation - must have empty arguments
         let valid_arg = ExtensionOperationArg { value: None };
@@ -1406,24 +1422,10 @@ mod tests {
         assert!(result.contains("Withdraw operation does not accept arguments at this time"));
     }
 
+    /// Creates a Governance instance with specific treasury balance expectations for testing
     fn setup_governance_with_treasury_balances(sns_balance: u64, icp_balance: u64) -> Governance {
         let env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
-
-        let root_canister_id = CanisterId::from_u64(1001);
-        let governance_proto = GovernanceProto {
-            root_canister_id: Some(root_canister_id.get()),
-            ledger_canister_id: Some(CanisterId::from_u64(4000).get()),
-            swap_canister_id: Some(CanisterId::from_u64(5000).get()),
-            parameters: Some(NervousSystemParameters::with_default_values()),
-            sns_metadata: Some(SnsMetadata {
-                logo: None,
-                url: Some("https://example.com".to_string()),
-                name: Some("Test SNS".to_string()),
-                description: Some("Test SNS for extensions".to_string()),
-            }),
-            mode: governance::Mode::Normal.into(),
-            ..Default::default()
-        };
+        let governance_proto = create_test_governance_proto();
 
         // Create mocks with configured expectations
         let mut sns_ledger = MockICRC1Ledger::new();
@@ -1431,12 +1433,6 @@ mod tests {
 
         // Get the expected subaccounts
         let governance_canister_id = env.canister_id();
-
-        Some(compute_distribution_subaccount_bytes(
-            governance_canister_id.get(),
-            TREASURY_SUBACCOUNT_NONCE,
-        ));
-
         let sns_subaccount = compute_distribution_subaccount_bytes(governance_canister_id.get(), 0);
 
         // Configure SNS ledger mock
