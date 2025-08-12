@@ -307,7 +307,6 @@ impl CatchUpPackageProvider {
                     }
                 }
             }
-
             Err(timeout_err) => {
                 let old_backoff = *backoff;
                 *backoff = old_backoff.saturating_mul(2);
