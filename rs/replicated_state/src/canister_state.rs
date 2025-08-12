@@ -571,7 +571,7 @@ impl CanisterState {
     /// the only way to ensure consistency for messages that would otherwise be
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
-    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+    pub(super) fn drop_in_progress_management_calls_after_split(&mut self) {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
