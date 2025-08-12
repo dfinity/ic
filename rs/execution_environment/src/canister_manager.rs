@@ -1978,7 +1978,7 @@ impl CanisterManager {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
         state: &'a mut ReplicatedState,
-    ) -> Result<&'a mut PartialCanisterSnapshot, CanisterManagerError> {
+    ) -> Result<&'a mut Arc<PartialCanisterSnapshot>, CanisterManagerError> {
         // If the snapshot is immutable, fail
         if state.canister_snapshots.contains(&snapshot_id) {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
@@ -2585,8 +2585,11 @@ impl CanisterManager {
         let snapshot_id = args.get_snapshot_id();
 
         let cost_schedule = state.metadata.cost_schedule;
-        let partial_snapshot: &mut PartialCanisterSnapshot =
-            self.get_partial_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
+        let partial_snapshot = Arc::make_mut(self.get_partial_snapshot_mut(
+            canister.canister_id(),
+            snapshot_id,
+            state,
+        )?);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -2628,7 +2631,7 @@ impl CanisterManager {
             }
             CanisterSnapshotDataOffset::MainMemory { offset } => {
                 PartialCanisterSnapshot::write_to_page_memory(
-                    &mut partial_snapshot.wasm_memory_mut(),
+                    partial_snapshot.wasm_memory_mut(),
                     offset,
                     &args.chunk,
                 )
@@ -2640,7 +2643,7 @@ impl CanisterManager {
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
                 PartialCanisterSnapshot::write_to_page_memory(
-                    &mut partial_snapshot.stable_memory_mut(),
+                    partial_snapshot.stable_memory_mut(),
                     offset,
                     &args.chunk,
                 )
