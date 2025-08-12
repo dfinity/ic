@@ -107,7 +107,7 @@ def commit_and_create_pr(
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
-def get_subnet_replica_version_info(subnet_id: str) -> (str, str):
+def get_subnet_replica_version_info(subnet_id: str) -> (str, str, str, str):
     """Use the dashboard to pull the latest version info for the given subnet."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}", headers={"user-agent": "python"}
@@ -137,15 +137,16 @@ def get_subnet_replica_version_info(subnet_id: str) -> (str, str):
 
     version = response["payload"]["replica_version_to_elect"]
     hash = response["payload"]["release_package_sha256_hex"]
+    launch_measurements = response["payload"]["guest_launch_measurements"]
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
     )
 
-    return (version, hash, dev_hash)
+    return (version, hash, dev_hash, launch_measurements)
 
 
-def get_latest_replica_version_info() -> (str, str):
+def get_latest_replica_version_info() -> (str, str, str, str):
     """Use the dashboard to pull the version info for the most recent GuestOS version."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedGuestosVersions",
@@ -162,15 +163,16 @@ def get_latest_replica_version_info() -> (str, str):
 
     version = latest_elect_proposal["payload"]["replica_version_to_elect"]
     hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
+    launch_measurements = latest_elect_proposal["payload"]["guest_launch_measurements"]
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
     )
 
-    return (version, hash, dev_hash)
+    return (version, hash, dev_hash, launch_measurements)
 
 
-def get_latest_hostos_version_info() -> (str, str):
+def get_latest_hostos_version_info() -> (str, str, str):
     """Use the dashboard to pull the version info for the most recent HostOS version."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedHostosVersions",
@@ -197,7 +199,7 @@ def get_latest_hostos_version_info() -> (str, str):
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
     """Fetch and update the saved subnet version and hash."""
-    (version, hash, dev_hash) = get_subnet_replica_version_info(subnet)
+    (version, hash, dev_hash, launch_measurements) = get_subnet_replica_version_info(subnet)
     logger.info("Current subnet (%s) revision: %s hash: %s", subnet, version, hash)
 
     full_path = repo_root / file_path
@@ -210,8 +212,12 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
         logger.info("Subnet revision already updated to version %s. Skipping update.", version)
         return
 
-    data["guestos"]["subnets"][subnet] = {"version": version, "update_img_hash": hash, "update_img_hash_dev": dev_hash}
-
+    data["guestos"]["subnets"][subnet] = {
+        "version": version,
+        "update_img_hash": hash,
+        "update_img_hash_dev": dev_hash,
+        "launch_measurements": launch_measurements,
+    }
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -220,7 +226,7 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
 
 def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     """Fetch and update the latest replica version and hash."""
-    (version, hash, dev_hash) = get_latest_replica_version_info()
+    (version, hash, dev_hash, launch_measurements) = get_latest_replica_version_info()
     logger.info("Latest revision: %s hash: %s", version, hash)
 
     full_path = repo_root / file_path
@@ -233,8 +239,12 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
         logger.info("Latest revision already updated to version %s. Skipping update.", version)
         return
 
-    data["guestos"]["latest_release"] = {"version": version, "update_img_hash": hash, "update_img_hash_dev": dev_hash}
-
+    data["guestos"]["latest_release"] = {
+        "version": version,
+        "update_img_hash": hash,
+        "update_img_hash_dev": dev_hash,
+        "launch_measurements": launch_measurements,
+    }
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
