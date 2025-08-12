@@ -53,6 +53,8 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
+  repeated types.v1.CanisterId dogecoin_testnet_canister_ids = 9;
+  repeated types.v1.CanisterId dogecoin_mainnet_canister_ids = 10;
 }
 
 message SetupInitialDkgContext {

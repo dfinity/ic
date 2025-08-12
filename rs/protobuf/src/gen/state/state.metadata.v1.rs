@@ -64,6 +64,12 @@ pub struct NetworkTopology {
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
+    #[prost(message, repeated, tag = "9")]
+    pub dogecoin_testnet_canister_ids:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(message, repeated, tag = "10")]
+    pub dogecoin_mainnet_canister_ids:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {

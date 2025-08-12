@@ -205,6 +205,12 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+
+    /// The ID of the canister to forward dogecoin testnet requests to.
+    pub dogecoin_testnet_canister_id: Option<CanisterId>,
+
+    /// The ID of the canister to forward dogecoin mainnet requests to.
+    pub dogecoin_mainnet_canister_id: Option<CanisterId>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -232,6 +238,8 @@ impl Default for NetworkTopology {
             chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
+            dogecoin_testnet_canister_id: None,
+            dogecoin_mainnet_canister_id: None,
         }
     }
 }
@@ -271,6 +279,14 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 None => vec![],
             },
             bitcoin_mainnet_canister_ids: match item.bitcoin_mainnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
+            dogecoin_testnet_canister_ids: match item.dogecoin_testnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
+            dogecoin_mainnet_canister_ids: match item.dogecoin_mainnet_canister_id {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
             },
@@ -333,6 +349,16 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             None => None,
         };
 
+        let dogecoin_testnet_canister_id = match item.dogecoin_testnet_canister_ids.first() {
+            Some(canister) => Some(CanisterId::try_from(canister.clone())?),
+            None => None,
+        };
+
+        let dogecoin_mainnet_canister_id = match item.dogecoin_mainnet_canister_ids.first() {
+            Some(canister) => Some(CanisterId::try_from(canister.clone())?),
+            None => None,
+        };
+
         Ok(Self {
             subnets,
             routing_table: try_from_option_field(
@@ -351,6 +377,8 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            dogecoin_testnet_canister_id,
+            dogecoin_mainnet_canister_id,
         })
     }
 }

@@ -412,4 +412,5 @@ pub struct BitcoinConfig {
 
     /// The bitcoin mainnet canister to forward requests to.
     pub mainnet_canister_id: Option<CanisterId>,
+    // TODO: Need to extend by dogecoin canisters
 }
