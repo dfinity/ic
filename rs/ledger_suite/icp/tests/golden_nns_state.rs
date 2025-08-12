@@ -425,7 +425,7 @@ impl Setup {
             "Balance of anonymous principal's default account: {}",
             balance
         );
-        let modifier = if should_be_zero { "not " } else { "" };
+        let modifier = if should_be_zero { "" } else { "not " };
         assert_eq!(
             should_be_zero,
             balance == 0u64,
