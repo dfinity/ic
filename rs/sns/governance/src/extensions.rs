@@ -107,11 +107,7 @@ pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
     pub extension_type: ExtensionType,
-    pub validate: fn(
-        &dyn Environment,
-        &GovernanceProto,
-        ExtensionOperationArg,
-    ) -> Result<ValidatedOperationArg, String>,
+    pub validate: fn(&Governance, ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
 }
 
 impl ExtensionOperationSpec {
@@ -125,18 +121,16 @@ impl ExtensionOperationSpec {
 
     async fn validate_operation_arg(
         &self,
-        env: &dyn Environment,
-        governance_proto: &GovernanceProto,
+        governance: &Governance,
         arg: ExtensionOperationArg,
     ) -> Result<ValidatedOperationArg, String> {
-        (self.validate)(env, governance_proto, arg)
+        (self.validate)(governance, arg)
     }
 }
 
 /// Validates deposit operation arguments
 fn validate_deposit_operation(
-    _env: &dyn Environment,
-    _governance_proto: &GovernanceProto,
+    _governance: &Governance,
     arg: ExtensionOperationArg,
 ) -> Result<ValidatedOperationArg, String> {
     ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
@@ -144,8 +138,7 @@ fn validate_deposit_operation(
 
 /// Validates withdraw operation arguments (currently requires empty arguments)
 fn validate_withdraw_operation(
-    _env: &dyn Environment,
-    _governance_proto: &GovernanceProto,
+    _governance: &Governance,
     arg: ExtensionOperationArg,
 ) -> Result<ValidatedOperationArg, String> {
     ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
@@ -755,7 +748,7 @@ pub(crate) async fn validate_execute_extension_operation(
     };
 
     let validated_arg = operation_spec
-        .validate_operation_arg(env, governance_proto, operation_arg)
+        .validate_operation_arg(governance, operation_arg)
         .await
         .map_err(|err| {
             GovernanceError::new_with_message(
@@ -1225,9 +1218,7 @@ mod tests {
             }),
         };
 
-        let result =
-            validate_deposit_operation(&*governance.env, &governance.proto, valid_arg.clone())
-                .unwrap();
+        let result = validate_deposit_operation(&governance, valid_arg.clone()).unwrap();
 
         match result {
             ValidatedOperationArg::TreasuryManagerDeposit(deposit) => {
@@ -1250,9 +1241,7 @@ mod tests {
             }),
         };
 
-        let result =
-            validate_deposit_operation(&*governance.env, &governance.proto, missing_sns_arg)
-                .unwrap_err();
+        let result = validate_deposit_operation(&governance, missing_sns_arg).unwrap_err();
         assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test missing ICP amount
@@ -1268,9 +1257,7 @@ mod tests {
             }),
         };
 
-        let result =
-            validate_deposit_operation(&*governance.env, &governance.proto, missing_icp_arg)
-                .unwrap_err();
+        let result = validate_deposit_operation(&governance, missing_icp_arg).unwrap_err();
         assert!(result.contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Test wrong type for SNS amount
@@ -1289,15 +1276,12 @@ mod tests {
             }),
         };
 
-        let result =
-            validate_deposit_operation(&*governance.env, &governance.proto, wrong_type_arg)
-                .unwrap_err();
+        let result = validate_deposit_operation(&governance, wrong_type_arg).unwrap_err();
         assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test no arguments provided
         let no_args = ExtensionOperationArg { value: None };
-        let result =
-            validate_deposit_operation(&*governance.env, &governance.proto, no_args).unwrap_err();
+        let result = validate_deposit_operation(&governance, no_args).unwrap_err();
         assert!(result.contains("Deposit operation arguments must be provided"));
 
         // Test not a map
@@ -1307,8 +1291,7 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(&*governance.env, &governance.proto, not_map_arg)
-            .unwrap_err();
+        let result = validate_deposit_operation(&governance, not_map_arg).unwrap_err();
         assert!(result.contains("Deposit operation arguments must be a PreciseMap"));
     }
 
@@ -1318,9 +1301,7 @@ mod tests {
 
         // Test valid withdraw operation - must have empty arguments
         let valid_arg = ExtensionOperationArg { value: None };
-        let result =
-            validate_withdraw_operation(&*governance.env, &governance.proto, valid_arg.clone())
-                .unwrap();
+        let result = validate_withdraw_operation(&governance, valid_arg.clone()).unwrap();
 
         match result {
             ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
@@ -1337,8 +1318,7 @@ mod tests {
             }),
         };
 
-        let result = validate_withdraw_operation(&*governance.env, &governance.proto, minimal_arg)
-            .unwrap_err();
+        let result = validate_withdraw_operation(&governance, minimal_arg).unwrap_err();
         assert!(result.contains("Withdraw operation does not accept arguments at this time"));
     }
 
