@@ -65,6 +65,8 @@ fn proptest_round(
         &MetricsRegistry::new(),
         Box::new(MockBitcoinAdapterClient::new()),
         Box::new(adapter_client),
+        Box::new(MockBitcoinAdapterClient::new()),
+        Box::new(MockBitcoinAdapterClient::new()),
         subnet_test_id(0),
         Arc::new(mock_registry_client(NumBytes::new(
             MAX_BTC_BLOCK_SIZE as u64,
