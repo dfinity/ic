@@ -217,10 +217,6 @@ impl<'a> QueryContext<'a> {
         match query.source {
             QuerySource::System => {
                 if let WasmMethod::CompositeQuery(_) = &method {
-                    info!(
-                        self.log,
-                        "Running composite canister http transform on canister {}.", query.receiver
-                    );
                     return Err(UserError::new(
                         ErrorCode::CompositeQueryCalledInReplicatedMode,
                         "Composite query cannot be used as transform in canister http outcalls.",
