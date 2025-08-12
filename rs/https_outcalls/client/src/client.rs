@@ -11,7 +11,6 @@ use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveErro
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
         validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
@@ -63,7 +62,6 @@ pub struct CanisterHttpAdapterClientImpl {
     rx: Receiver<CanisterHttpResponse>,
     query_service: QueryExecutionService,
     metrics: Metrics,
-    subnet_type: SubnetType,
     delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     log: ReplicaLogger,
 }
@@ -75,7 +73,6 @@ impl CanisterHttpAdapterClientImpl {
         query_service: QueryExecutionService,
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
-        subnet_type: SubnetType,
         delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
         log: ReplicaLogger,
     ) -> Self {
@@ -88,7 +85,6 @@ impl CanisterHttpAdapterClientImpl {
             rx,
             query_service,
             metrics,
-            subnet_type,
             delegation_from_nns,
             log,
         }
@@ -125,7 +121,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
-        let subnet_type = self.subnet_type;
         let delegation_from_nns = self.delegation_from_nns.borrow().clone();
         let log = self.log.clone();
 
@@ -180,8 +175,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
-                    // Socks proxy is only enabled on system subnets.
-                    socks_proxy_allowed: matches!(subnet_type, SubnetType::System),
+                    // TODO(next): figure out what we should do with this.
+                    socks_proxy_allowed: true,
                     socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {
@@ -626,7 +621,6 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
@@ -682,7 +676,6 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
@@ -746,7 +739,6 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
@@ -808,7 +800,6 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
@@ -897,7 +888,6 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
@@ -973,7 +963,6 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
@@ -1031,7 +1020,6 @@ mod tests {
             svc,
             2,
             MetricsRegistry::default(),
-            SubnetType::Application,
             rx,
             no_op_logger(),
         );
