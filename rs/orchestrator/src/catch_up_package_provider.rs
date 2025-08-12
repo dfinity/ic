@@ -589,17 +589,13 @@ mod tests {
                 let acceptor = acceptor.clone();
                 tokio::task::spawn(async move {
                     let service = service.clone();
-                    match acceptor.accept(tcp_stream).await {
-                        Ok(tls_stream) => {
-                            let _ = http2::Builder::new(TokioExecutor::new())
-                                .serve_connection(
-                                    TokioIo::new(tls_stream),
-                                    service_fn(|_req| test_service(service.clone())),
-                                )
-                                .await;
-                        }
-                        Err(err) => eprintln!("TLS error: {:?}", err),
-                    }
+                    let tls_stream = acceptor.accept(tcp_stream).await.unwrap();
+                    let _ = http2::Builder::new(TokioExecutor::new())
+                        .serve_connection(
+                            TokioIo::new(tls_stream),
+                            service_fn(|_req| test_service(service.clone())),
+                        )
+                        .await;
                 });
             }
         });
