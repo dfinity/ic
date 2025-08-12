@@ -74,7 +74,7 @@ fn main() -> io::Result<()> {
         eprintln!("Failed to setup a new process group for replica.");
         // This is a generic exit error. At this point sandboxing is
         // not turned on so we can do a simple exit with cleanup.
-        return Err(io::Error::new(io::ErrorKind::Other, err));
+        return Err(io::Error::other(err));
     }
 
     #[cfg(feature = "profiler")]

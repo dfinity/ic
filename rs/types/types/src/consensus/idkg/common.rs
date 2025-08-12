@@ -966,6 +966,7 @@ impl IDkgTranscriptParamsRef {
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[allow(clippy::large_enum_variant)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureInCreation {
     Ecdsa(QuadrupleInCreation),

@@ -7,7 +7,7 @@ mod provisional;
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
-use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
@@ -22,7 +22,6 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
@@ -324,6 +323,10 @@ impl CanisterControllersChangeRecord {
 ///    canister_version : nat64;
 ///    snapshot_id : blob;
 ///    taken_at_timestamp : nat64;
+///    source: variant {
+///         taken_from_canister : reserved;
+///         metadata_upload : reserved;
+///    };
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -331,14 +334,21 @@ pub struct CanisterLoadSnapshotRecord {
     canister_version: u64,
     snapshot_id: SnapshotId,
     taken_at_timestamp: u64,
+    source: SnapshotSource,
 }
 
 impl CanisterLoadSnapshotRecord {
-    pub fn new(canister_version: u64, snapshot_id: SnapshotId, taken_at_timestamp: u64) -> Self {
+    pub fn new(
+        canister_version: u64,
+        snapshot_id: SnapshotId,
+        taken_at_timestamp: u64,
+        source: SnapshotSource,
+    ) -> Self {
         Self {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
+            source,
         }
     }
 
@@ -352,6 +362,10 @@ impl CanisterLoadSnapshotRecord {
 
     pub fn snapshot_id(&self) -> SnapshotId {
         self.snapshot_id
+    }
+
+    pub fn source(&self) -> SnapshotSource {
+        self.source
     }
 }
 
@@ -479,11 +493,13 @@ impl CanisterChangeDetails {
         canister_version: u64,
         snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
+        source: SnapshotSource,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
+            source,
         })
     }
 
@@ -779,6 +795,10 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                         canister_version: canister_load_snapshot.canister_version,
                         snapshot_id: canister_load_snapshot.snapshot_id.to_vec(),
                         taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
+                        source: pb_canister_state_bits::SnapshotSource::from(
+                            canister_load_snapshot.source,
+                        )
+                        .into(),
                     },
                 )
             }
@@ -884,10 +904,21 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                     .map_err(|e| {
                         ProxyDecodeError::Other(format!("Failed to decode snapshot_id: {:?}", e))
                     })?;
+
+                let source = SnapshotSource::try_from(
+                    pb_canister_state_bits::SnapshotSource::try_from(canister_load_snapshot.source)
+                        .map_err(|e| {
+                            ProxyDecodeError::Other(format!(
+                                "Failed to decode snapshot source: {:?}",
+                                e
+                            ))
+                        })?,
+                )?;
                 Ok(CanisterChangeDetails::load_snapshot(
                     canister_load_snapshot.canister_version,
                     snapshot_id,
                     canister_load_snapshot.taken_at_timestamp,
+                    source,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
@@ -1207,6 +1238,8 @@ pub struct QueryStats {
 /// Struct used for encoding/decoding
 /// `(record {
 ///     status : variant { running; stopping; stopped };
+///     ready_for_migration: bool,
+///     version: nat64,
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
 ///     controller: principal;
@@ -1235,6 +1268,8 @@ pub struct QueryStats {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
+    ready_for_migration: bool,
+    version: u64,
     module_hash: Option<Vec<u8>>,
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
@@ -1265,6 +1300,8 @@ impl CanisterStatusResultV2 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         status: CanisterStatusType,
+        ready_for_migration: bool,
+        version: u64,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1295,6 +1332,8 @@ impl CanisterStatusResultV2 {
     ) -> Self {
         Self {
             status,
+            ready_for_migration,
+            version,
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
@@ -1338,6 +1377,19 @@ impl CanisterStatusResultV2 {
 
     pub fn status(&self) -> CanisterStatusType {
         self.status.clone()
+    }
+
+    pub fn ready_for_migration(&self) -> bool {
+        self.ready_for_migration
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Helper to facilitate comparing canister settings that differ only in the canister version.
+    pub fn ignore_version(self) -> Self {
+        Self { version: 0, ..self }
     }
 
     pub fn module_hash(&self) -> Option<Vec<u8>> {
@@ -3856,44 +3908,63 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
 pub enum SnapshotSource {
-    #[default]
     #[serde(rename = "taken_from_canister")]
-    TakenFromCanister,
+    TakenFromCanister(Reserved),
     #[serde(rename = "metadata_upload")]
-    MetadataUpload,
+    MetadataUpload(Reserved),
 }
 
-impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
+impl SnapshotSource {
+    /// Alternative to the literal variant `SnapshotSource::TakenFromCanister(candid::Reserved)`
+    /// for consumers that don't want to depend on Candid directly.
+    pub fn taken_from_canister() -> Self {
+        Self::TakenFromCanister(Reserved)
+    }
+
+    /// Alternative to the literal variant `SnapshotSource::MetadataUpload(candid::Reserved)`
+    /// for consumers that don't want to depend on Candid directly.
+    pub fn metadata_upload() -> Self {
+        Self::MetadataUpload(Reserved)
+    }
+}
+
+impl Default for SnapshotSource {
+    fn default() -> Self {
+        Self::TakenFromCanister(Reserved)
+    }
+}
+
+impl From<SnapshotSource> for pb_canister_state_bits::SnapshotSource {
     fn from(value: SnapshotSource) -> Self {
         match value {
-            SnapshotSource::TakenFromCanister => {
-                pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
+            SnapshotSource::TakenFromCanister(Reserved) => {
+                pb_canister_state_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::MetadataUpload => {
-                pb_canister_snapshot_bits::SnapshotSource::UploadedManually
+            SnapshotSource::MetadataUpload(Reserved) => {
+                pb_canister_state_bits::SnapshotSource::UploadedManually
             }
         }
     }
 }
 
-impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
+impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_snapshot_bits::SnapshotSource) -> Result<Self, Self::Error> {
+    fn try_from(value: pb_canister_state_bits::SnapshotSource) -> Result<Self, Self::Error> {
         match value {
-            pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
+            pb_canister_state_bits::SnapshotSource::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "SnapshotSource",
                     err: format!("Unexpected value of SnapshotSource: {:?}", value),
                 })
             }
-            pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
-                Ok(SnapshotSource::TakenFromCanister)
+            pb_canister_state_bits::SnapshotSource::TakenFromCanister => {
+                Ok(SnapshotSource::TakenFromCanister(Reserved))
             }
-            pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
-                Ok(SnapshotSource::MetadataUpload)
+            pb_canister_state_bits::SnapshotSource::UploadedManually => {
+                Ok(SnapshotSource::MetadataUpload(Reserved))
             }
         }
     }
@@ -3902,8 +3973,8 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
 /// Struct used for encoding/decoding
 /// (record {
 ///     source : variant {
-///         taken_from_canister;
-///         uploaded_manually;
+///         taken_from_canister : reserved;
+///         metadata_upload : reserved;
 ///     };
 ///     taken_at_timestamp : nat64;
 ///     wasm_module_size : nat64;
@@ -4349,13 +4420,12 @@ mod tests {
     use super::*;
     use strum::IntoEnumIterator;
 
-    use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
     use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 
     #[test]
     fn snapshot_source_exhaustive() {
         for initial in SnapshotSource::iter() {
-            let encoded = pb_canister_snapshot_bits::SnapshotSource::from(initial);
+            let encoded = pb_canister_state_bits::SnapshotSource::from(initial);
             let round_trip = SnapshotSource::try_from(encoded).unwrap();
             assert_eq!(initial, round_trip);
         }
@@ -4437,8 +4507,10 @@ mod tests {
     fn compatibility_for_snapshot_source() {
         // If this fails, you are making a potentially incompatible change to `SnapshotSource`.
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
-        let actual_variants: Vec<i32> = SnapshotSource::iter().map(|x| x as i32).collect();
-        let expected_variants = vec![0, 1];
+        let actual_variants: Vec<i32> = SnapshotSource::iter()
+            .map(|x| pb_canister_state_bits::SnapshotSource::from(x) as i32)
+            .collect();
+        let expected_variants = vec![1, 2];
         assert_eq!(actual_variants, expected_variants);
     }
 

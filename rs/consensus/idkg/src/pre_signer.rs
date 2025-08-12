@@ -935,15 +935,15 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
             .update_active_pre_signatures(&block_reader);
 
         let mut changes =
-            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
-                .then(|| {
-                    timed_call(
-                        "purge_artifacts",
-                        || self.purge_artifacts(idkg_pool, &block_reader),
-                        &metrics.on_state_change_duration,
-                    )
-                })
-                .unwrap_or_default();
+            if update_purge_height(&self.prev_finalized_height, block_reader.tip_height()) {
+                timed_call(
+                    "purge_artifacts",
+                    || self.purge_artifacts(idkg_pool, &block_reader),
+                    &metrics.on_state_change_duration,
+                )
+            } else {
+                IDkgChangeSet::default()
+            };
 
         let send_dealings = || {
             timed_call(

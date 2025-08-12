@@ -111,10 +111,10 @@ impl<P: Process> ProcessManager<P> {
                 gpid = Pid::from_raw(t_gpid);
             }
             return signal::kill(gpid, Signal::SIGTERM).map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to kill {} process with gpid {gpid}: {err}", P::NAME),
-                )
+                std::io::Error::other(format!(
+                    "Failed to kill {} process with gpid {gpid}: {err}",
+                    P::NAME
+                ))
             });
         }
         info!(self.log, "no {} process running", P::NAME);

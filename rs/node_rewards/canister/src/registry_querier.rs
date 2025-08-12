@@ -35,6 +35,16 @@ impl RegistryQuerier {
         RegistryQuerier { registry_client }
     }
 
+    ///  Returns the latest registry version corresponding to the given timestamp.
+    pub fn version_for_timestamp(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
+        self.registry_client
+            .timestamp_to_versions_map()
+            .range(..=ts)
+            .next_back()
+            .and_then(|(_, versions)| versions.iter().max())
+            .cloned()
+    }
+
     ///  Returns a list of all subnets present in the registry at the specified version.
     pub fn subnets_list(&self, version: RegistryVersion) -> Vec<SubnetId> {
         let key = make_subnet_list_record_key();
@@ -183,9 +193,16 @@ impl RegistryQuerier {
                             // A deletion
                             if let Some(start_of_interval) = last_present_ts.take() {
                                 // The node was present and is now gone. Finalize the interval.
-                                let days_between =
-                                    DayUtc::from(start_of_interval).days_until(&DayUtc::from(ts));
-                                days.extend(days_between.unwrap_or_default());
+                                let mut days_between = DayUtc::from(start_of_interval)
+                                    .days_until(&DayUtc::from(ts))
+                                    .unwrap_or_default();
+
+                                // If a node is deleted it will be rewarded until the day before deletion.
+                                if !days_between.is_empty() {
+                                    days_between.truncate(days_between.len() - 1);
+                                }
+
+                                days.extend(days_between);
                             }
                         }
                     }
@@ -229,7 +246,7 @@ impl RegistryQuerier {
     ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
         let node_operator_record_key = make_node_operator_record_key(node_operator);
         let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
-            &*registry_client,
+            registry_client,
             node_operator_record_key.as_str(),
             version,
         )
@@ -242,7 +259,7 @@ impl RegistryQuerier {
 
         let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
         let Some(data_center_record) = get_decoded_value::<DataCenterRecord>(
-            &*registry_client,
+            registry_client,
             data_center_key.as_str(),
             version,
         )

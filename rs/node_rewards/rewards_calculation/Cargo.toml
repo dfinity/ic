@@ -15,7 +15,8 @@ ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
-rust_decimal = { version = "1.37.2", features = ["serde-with-float"] }
+maplit = "1.0"
+rust_decimal = "1.37.1"
 rust_decimal_macros = "1.37.1"
 chrono = { version = "0.4.41", default-features = false, features = [
     "alloc",
@@ -23,7 +24,3 @@ chrono = { version = "0.4.41", default-features = false, features = [
 ] }
 candid = { workspace = true }
 serde = { workspace = true }
-
-[dev-dependencies]
-maplit = "1.0"
-tabled = "0.20.0"
