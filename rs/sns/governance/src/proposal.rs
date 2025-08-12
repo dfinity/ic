@@ -2834,7 +2834,7 @@ mod tests {
     use candid::Encode;
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
-    use ic_canister_profiler::SpanStats;
+
     use ic_crypto_sha2::Sha256;
     use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
@@ -2847,7 +2847,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashset};
-    use std::cell::RefCell;
+
     use std::convert::TryFrom;
 
     pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();

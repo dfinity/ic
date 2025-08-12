@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat};
 use ic_stable_structures::{storable::Bound, Storable};
 use minicbor::{Decode, Encode};
-use num_traits::{Bounded, ToPrimitive};
+use num_traits::{Bounded, CheckedDiv, ToPrimitive};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
@@ -230,6 +230,14 @@ impl Tokens {
 
     pub fn saturating_sub(self, other: Tokens) -> Tokens {
         Tokens::from_e8s(self.e8s.saturating_sub(other.e8s))
+    }
+
+    pub fn checked_div(self, other: u64) -> Option<Tokens> {
+        if other == 0 {
+            None
+        } else {
+            self.e8s.checked_div(other).map(Tokens::from_e8s)
+        }
     }
 }
 
