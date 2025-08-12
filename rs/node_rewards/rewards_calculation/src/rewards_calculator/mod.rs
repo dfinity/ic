@@ -1,7 +1,7 @@
 use crate::rewards_calculator_results::{
-    BaseRewards, BaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily, NodeProviderRewards,
-    NodeResults, NodeStatus, Percent, RewardCalculatorError, RewardsCalculatorResults,
-    XDRPermyriad,
+    BaseRewards, DailyBaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily,
+    NodeProviderRewards, NodeResults, NodeStatus, Percent, RewardCalculatorError,
+    RewardsCalculatorResults, XDRPermyriad,
 };
 use crate::types::{
     NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
@@ -328,13 +328,14 @@ type RewardsCoefficientPercent = Decimal;
 
 /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
 /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-/// 30.4375 = 2629800 / 86400
+/// const SECONDS_IN_DAY: u64 = 86400;
+/// 2629800 / 86400 = 30.4375 days of rewards
 const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
 #[derive(Default)]
 struct Step4Results {
     base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_type3: Vec<DailyBaseRewardsType3>,
     base_rewards_per_node: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
 }
 fn step_4_compute_base_rewards_type_region(
@@ -428,7 +429,10 @@ fn step_4_compute_base_rewards_type_region(
             }
             let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
 
-            ((day, region), (region_rewards_avg, nodes_count))
+            (
+                (day, region),
+                (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+            )
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -437,7 +441,7 @@ fn step_4_compute_base_rewards_type_region(
             let base_rewards_for_day = if is_type3(&node.node_reward_type) {
                 let region_key = type3_region_key(&node.region);
 
-                let (base_rewards_daily, _) = base_rewards_type3
+                let (base_rewards_daily, _, _, _) = base_rewards_type3
                     .get(&(day, region_key))
                     .expect("Type3 base rewards expected for provider");
                 base_rewards_daily
@@ -455,11 +459,15 @@ fn step_4_compute_base_rewards_type_region(
     let base_rewards_type3 = base_rewards_type3
         .into_iter()
         .map(
-            |((day, region), (daily_rewards, nodes_count))| BaseRewardsType3 {
-                day: *day,
-                region,
-                nodes_count,
-                value: daily_rewards,
+            |((day, region), (daily_rewards, nodes_count, avg_rewards, avg_coefficient))| {
+                DailyBaseRewardsType3 {
+                    day: *day,
+                    region,
+                    nodes_count,
+                    avg_rewards,
+                    avg_coefficient,
+                    value: daily_rewards,
+                }
             },
         )
         .collect();
@@ -552,7 +560,7 @@ fn step_6_construct_provider_results(
     mut base_rewards_per_node: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
     mut adjusted_rewards: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
     base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_type3: Vec<DailyBaseRewardsType3>,
 ) -> NodeProviderRewards {
     let mut results_by_node = Vec::new();
     let mut rewards_total_xdr_permyriad = Decimal::ZERO;
