@@ -24,7 +24,6 @@ use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
 
-use crate::extensions::ValidatedOperationArg::TreasuryManagerDeposit;
 use futures::future::BoxFuture;
 use ic_ledger_core::Tokens;
 use std::{collections::BTreeMap, fmt::Display};
@@ -180,7 +179,9 @@ fn validate_deposit_operation(
             ));
         }
 
-        Ok(TreasuryManagerDeposit(structually_valid))
+        Ok(ValidatedOperationArg::TreasuryManagerDeposit(
+            structually_valid,
+        ))
     })
 }
 
