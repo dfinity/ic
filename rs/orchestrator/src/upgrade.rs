@@ -11,7 +11,7 @@ use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
     error::{UpgradeError, UpgradeResult},
-    ImageUpgrader,
+    ImageUpgrader, Rebooting,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -36,6 +36,16 @@ use std::{
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
+
+#[must_use = "This may be a `Stop` variant, which should be handled"]
+pub(crate) enum OrchestratorControlFlow {
+    /// The node is assigned to the subnet with the given subnet id.
+    Assigned(SubnetId),
+    /// The node is unassigned.
+    Unassigned,
+    /// The node should stop the orchestrator.
+    Stop,
+}
 
 pub struct ReplicaProcess {
     version: ReplicaVersion,
@@ -143,7 +153,7 @@ impl Upgrade {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
+    pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
         let (subnet_id, local_cup_proto, local_cup) = {
@@ -201,7 +211,7 @@ impl Upgrade {
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
                                     self.remove_state().await?;
-                                    return Ok(None);
+                                    return Ok(OrchestratorControlFlow::Unassigned);
                                 }
                                 Err(other) => return Err(other),
                             }
@@ -216,8 +226,7 @@ impl Upgrade {
                     }
                     // If no subnet is assigned to the node id, we're unassigned.
                     _ => {
-                        self.check_for_upgrade_as_unassigned().await?;
-                        return Ok(None);
+                        return self.check_for_upgrade_as_unassigned().await;
                     }
                 },
             }
@@ -276,7 +285,7 @@ impl Upgrade {
         ) {
             self.stop_replica()?;
             return match self.remove_state().await {
-                Ok(()) => Ok(None),
+                Ok(()) => Ok(OrchestratorControlFlow::Unassigned),
                 Err(err) => {
                     warn!(
                         self.logger,
@@ -305,8 +314,11 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            self.execute_upgrade(&new_replica_version).await?;
-            return Ok(Some(subnet_id));
+            return self
+                .execute_upgrade(&new_replica_version)
+                .await
+                .map_err(OrchestratorError::from)
+                .map(|Rebooting| OrchestratorControlFlow::Stop);
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -321,7 +333,7 @@ impl Upgrade {
         // not arrive at the corresponding CUP yet.
         self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
-        Ok(Some(subnet_id))
+        Ok(OrchestratorControlFlow::Assigned(subnet_id))
     }
 
     // Special case for when we are doing bootstrap subnet recovery for
@@ -421,7 +433,9 @@ impl Upgrade {
         Ok(())
     }
 
-    async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<()> {
+    async fn check_for_upgrade_as_unassigned(
+        &mut self,
+    ) -> OrchestratorResult<OrchestratorControlFlow> {
         let registry_version = self.registry.get_latest_version();
 
         // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
@@ -436,17 +450,20 @@ impl Upgrade {
             })?;
 
         if self.replica_version == replica_version {
-            return Ok(());
+            return Ok(OrchestratorControlFlow::Unassigned);
         }
+
         info!(
             self.logger,
             "Replica upgrade on unassigned node detected: old version {}, new version {}",
             self.replica_version,
             replica_version
         );
+
         self.execute_upgrade(&replica_version)
             .await
             .map_err(OrchestratorError::from)
+            .map(|Rebooting| OrchestratorControlFlow::Stop)
     }
 
     /// Stop the current replica process.
@@ -524,7 +541,9 @@ impl Upgrade {
 }
 
 #[async_trait]
-impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
+impl ImageUpgrader<ReplicaVersion> for Upgrade {
+    type UpgradeType = OrchestratorControlFlow;
+
     fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
         self.prepared_upgrade_version.as_ref()
     }
@@ -570,7 +589,7 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
         principal.as_slice().iter().fold(0, |acc, x| (acc ^ x)) as usize
     }
 
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<Option<SubnetId>> {
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
         self.check().await.map_err(UpgradeError::from)
     }
 }

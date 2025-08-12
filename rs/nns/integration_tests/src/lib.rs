@@ -103,6 +103,9 @@ mod governance_neurons;
 mod governance_time_warp;
 
 #[cfg(test)]
+mod governance_proposals;
+
+#[cfg(test)]
 mod known_neurons;
 
 #[cfg(test)]

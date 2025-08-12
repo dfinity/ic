@@ -145,6 +145,15 @@ Examples:
         )
     )
 
+    # Test aggregated balance query
+    results.append(
+        run_example(
+            ["python3", "get_account_balance.py"] + base_args + ["--principal-id", args.principal_id, "--aggregate"],
+            "get_account_balance.py (aggregated)",
+            show_output,
+        )
+    )
+
     # Test transfer if funded private key and principal IDs are provided
     if args.private_key_path and args.to_principal:
         print("\nTesting transfer with provided funded account")

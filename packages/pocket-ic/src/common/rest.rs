@@ -537,6 +537,26 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+/// Specifies ICP features enabled by deploying their corresponding system canisters
+/// when creating a PocketIC instance and keeping them up to date
+/// during the PocketIC instance lifetime.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpFeatures {
+    pub registry: bool,
+    pub cycles_minting: bool,
+    pub icp_token: bool,
+}
+
+impl IcpFeatures {
+    pub fn all_icp_features() -> Self {
+        Self {
+            registry: true,
+            cycles_minting: true,
+            icp_token: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
@@ -544,6 +564,8 @@ pub struct InstanceConfig {
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub icp_features: Option<IcpFeatures>,
+    pub allow_incomplete_state: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -671,6 +693,39 @@ impl ExtendedSubnetConfigSet {
             return Ok(());
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
+    }
+
+    pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
+        let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
+            if let Some(config) = subnet {
+                if !matches!(config.state_config, SubnetStateConfig::New) {
+                    return Err(format!(
+                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
+                        subnet_desc, icp_feature
+                    ));
+                }
+            }
+            Ok(())
+        };
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            registry,
+            cycles_minting,
+            icp_token,
+        } = icp_features;
+        // NNS canisters
+        for (flag, icp_feature_str) in [
+            (*registry, "registry"),
+            (*cycles_minting, "cycles_minting"),
+            (*icp_token, "icp_token"),
+        ] {
+            if flag {
+                check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
+                self.nns = Some(self.nns.unwrap_or_default());
+            }
+        }
+        Ok(self)
     }
 }
 

@@ -110,7 +110,7 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
     invoke.run(f"{container_cmd} create --name {container_name} {image_tag}")
     invoke.run(f"{container_cmd} export -o {tar_file} {container_name}")
     invoke.run(f"mkdir -p {tar_dir}")
-    invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner -C {tar_dir}")
+    invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
     invoke.run(
         f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
     )

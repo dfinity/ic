@@ -5,8 +5,8 @@ use clap::Parser;
 
 use ic_sns_cli::{
     add_sns_wasm_for_tests, deploy_testflight, health, init_config_file, list,
-    neuron_id_to_candid_subaccount, prepare_canisters, propose, upgrade_sns_controlled_canister,
-    CliArgs, SubCommand,
+    neuron_id_to_candid_subaccount, prepare_canisters, propose, register_extension,
+    upgrade_sns_controlled_canister, CliArgs, SubCommand,
 };
 
 #[tokio::main]
@@ -37,6 +37,12 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        SubCommand::RegisterExtension(args) => match register_extension::exec(args, &agent).await {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                bail!("{}", err);
+            }
+        },
         SubCommand::RefundAfterSnsControlledCanisterUpgrade(args) => {
             match upgrade_sns_controlled_canister::refund(args, &agent).await {
                 Ok(_) => Ok(()),

@@ -369,6 +369,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "env_var_name_exists",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
             "env_var_value_size",
             vec![(
                 API_VERSION_IC0,

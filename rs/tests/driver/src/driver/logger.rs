@@ -113,7 +113,7 @@ impl<D: Decorator> Drain for SysTestLogFormatter<D> {
 }
 
 fn convert_time_fmt_error(cause: time::error::Format) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, cause)
+    io::Error::other(cause)
 }
 
 const TIMESTAMP_FORMAT: &[time::format_description::FormatItem] = time::macros::format_description!(

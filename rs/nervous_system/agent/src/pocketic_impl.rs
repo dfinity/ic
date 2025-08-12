@@ -1,15 +1,13 @@
-use std::time::Duration;
-
-use crate::management_canister::requests::{
-    CanisterStatusArgs, DeleteCanisterArgs, StopCanisterArgs, StoredChunksArgs, UploadChunkArgs,
+use crate::{
+    AgentFor, CallCanisters, CallCanistersWithStoppedCanisterError, CanisterInfo, ProgressNetwork,
+    Request,
 };
-use crate::{AgentFor, CallCanisters, CanisterInfo, ProgressNetwork};
-use crate::{CallCanistersWithStoppedCanisterError, Request};
 use candid::Principal;
 use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
 use pocket_ic::common::rest::RawEffectivePrincipal;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::ErrorCode;
+use std::time::Duration;
 use thiserror::Error;
 
 /// A wrapper around PocketIc that specifies a sender for the requests.
@@ -43,78 +41,6 @@ pub enum PocketIcCallError {
 impl crate::sealed::Sealed for PocketIc {}
 impl crate::sealed::Sealed for PocketIcAgent<'_> {}
 
-impl PocketIcAgent<'_> {
-    async fn get_subnet(
-        &self,
-        canister_id: Principal,
-    ) -> Result<RawEffectivePrincipal, PocketIcCallError> {
-        let Some(subnet_id) = self.pocket_ic.get_subnet(canister_id).await else {
-            return Err(PocketIcCallError::CanisterSubnetNotFound(canister_id));
-        };
-
-        Ok(RawEffectivePrincipal::CanisterId(
-            subnet_id.as_slice().to_vec(),
-        ))
-    }
-
-    async fn management_canister_call<R: Request>(
-        &self,
-        request: R,
-    ) -> Result<R::Response, PocketIcCallError> {
-        let payload = request.payload().map_err(PocketIcCallError::CandidEncode)?;
-
-        let canister_id = match request.method() {
-            "upload_chunk" => {
-                candid::decode_one::<UploadChunkArgs>(payload.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?
-                    .canister_id
-            }
-            "stored_chunks" => {
-                candid::decode_one::<StoredChunksArgs>(payload.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?
-                    .canister_id
-            }
-            "canister_status" => {
-                candid::decode_one::<CanisterStatusArgs>(payload.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?
-                    .canister_id
-            }
-            "stop_canister" => {
-                candid::decode_one::<StopCanisterArgs>(payload.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?
-                    .canister_id
-            }
-            "delete_canister" => {
-                candid::decode_one::<DeleteCanisterArgs>(payload.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?
-                    .canister_id
-            }
-            mathod_name => {
-                unimplemented!(
-                    "PocketIcAgent does not currently implement IC00.{}",
-                    mathod_name
-                );
-            }
-        };
-
-        let effective_principal = self.get_subnet(canister_id).await?;
-
-        let response = self
-            .pocket_ic
-            .update_call_with_effective_principal(
-                Principal::management_canister(),
-                effective_principal,
-                self.sender,
-                request.method(),
-                payload,
-            )
-            .await
-            .map_err(PocketIcCallError::PocketIc)?;
-
-        candid::decode_one(response.as_slice()).map_err(PocketIcCallError::CandidDecode)
-    }
-}
-
 impl CallCanisters for PocketIcAgent<'_> {
     type Error = PocketIcCallError;
     async fn call<R: Request>(
@@ -124,16 +50,39 @@ impl CallCanisters for PocketIcAgent<'_> {
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
 
-        // Currently, PocketIc does not route calls to aaaaa-aa, saying that it does not belong
-        // to any subnet. So we need to explicitly treat this case.
-        if canister_id == Principal::management_canister() {
-            return self.management_canister_call(request).await;
-        }
-
         let request_bytes = request.payload().map_err(PocketIcCallError::CandidEncode)?;
+
+        let effective_canister_id = request
+            .effective_canister_id()
+            .map(|effective_canister_id| {
+                RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec())
+            });
+
         let response = if request.update() {
+            if let Some(effective_canister_id) = effective_canister_id {
+                self.pocket_ic
+                    .update_call_with_effective_principal(
+                        canister_id,
+                        effective_canister_id,
+                        self.sender,
+                        request.method(),
+                        request_bytes,
+                    )
+                    .await
+            } else {
+                self.pocket_ic
+                    .update_call(canister_id, self.sender, request.method(), request_bytes)
+                    .await
+            }
+        } else if let Some(effective_canister_id) = effective_canister_id {
             self.pocket_ic
-                .update_call(canister_id, self.sender, request.method(), request_bytes)
+                .query_call_with_effective_principal(
+                    canister_id,
+                    effective_canister_id,
+                    self.sender,
+                    request.method(),
+                    request_bytes,
+                )
                 .await
         } else {
             self.pocket_ic

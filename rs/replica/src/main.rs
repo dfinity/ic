@@ -74,7 +74,7 @@ fn main() -> io::Result<()> {
         eprintln!("Failed to setup a new process group for replica.");
         // This is a generic exit error. At this point sandboxing is
         // not turned on so we can do a simple exit with cleanup.
-        return Err(io::Error::new(io::ErrorKind::Other, err));
+        return Err(io::Error::other(err));
     }
 
     #[cfg(feature = "profiler")]
@@ -294,7 +294,7 @@ fn main() -> io::Result<()> {
 
     std::thread::sleep(Duration::from_millis(5000));
 
-    if config.malicious_behaviour.maliciously_seg_fault() {
+    if config.malicious_behavior.maliciously_seg_fault() {
         rt_main.spawn(async move {
             loop {
                 // Exit roughly every 8 seconds.
@@ -316,7 +316,7 @@ fn main() -> io::Result<()> {
         let _drop_sigpipe_handler = sigpipe_handler;
         info!(logger, "IC Replica Running");
         // Blocking on `SIGINT` or `SIGTERM`.
-        shutdown_signal(logger.inner_logger.root.clone()).await
+        shutdown_signal(logger.clone()).await
     });
     info!(save_logger, "IC Replica Terminating");
 

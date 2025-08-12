@@ -31,11 +31,13 @@ ic_cdk::printer::set_panic_hook::{{closure}}
 std::panicking::rust_panic_with_hook
 std::panicking::begin_panic_handler::{{closure}}
 std::sys::backtrace::__rust_end_short_backtrace
-rust_begin_unwind
+__rustc::rust_begin_unwind
 core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
+_wasm_backtrace_canister::__canister_method_ic0_trap::{{closure}}
+canister_update ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(

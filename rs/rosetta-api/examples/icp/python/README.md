@@ -133,6 +133,13 @@ python get_proposal_info.py --node-address <NODE_ADDRESS> --proposal-id <PROPOSA
 
 Fetches detailed information about a specific proposal, including its status, voting results, proposer, and execution time.
 
+**Get Minimum Dissolve Delay of a Neuron**:
+```sh
+python get_minimum_dissolve_delay.py --node-address <NODE_ADDRESS>
+```
+
+Returns the minimum dissolve delay of a neuron that still allows it to vote on NNS proposals.
+
 ## Testing All Examples
 
 The `run_tests.sh` script provides a convenient way to test multiple examples at once. The script creates a clean virtual environment, installs dependencies, and then runs the appropriate tests based on the arguments you provide.

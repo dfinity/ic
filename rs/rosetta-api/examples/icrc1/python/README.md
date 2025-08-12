@@ -52,6 +52,10 @@ print(f"Token: {client.token_info['symbol']} (decimals: {client.token_info['deci
 # Get account balance (with auto-discovered token info)
 balance = client.get_balance(principal="abc123...")
 print(f"Balance: {int(balance['balances'][0]['value']) / 10**balance['balances'][0]['currency']['decimals']} {balance['balances'][0]['currency']['symbol']}")
+
+# Get aggregated balance across all subaccounts
+aggregated_balance = client.get_aggregated_balance(principal="abc123...")
+print(f"Total Balance (All Subaccounts): {int(aggregated_balance['balances'][0]['value']) / 10**aggregated_balance['balances'][0]['currency']['decimals']} {aggregated_balance['balances'][0]['currency']['symbol']}")
 ```
 
 ### Making a Transfer
@@ -138,6 +142,19 @@ python3 get_account_balance.py --node-address http://localhost:8082 \
                        --principal-id <principal-id> \
                        --sub-account <optional-subaccount>
 ```
+
+**Get Aggregated Balance (All Subaccounts)**:
+```sh
+python3 get_account_balance.py --node-address http://localhost:8082 \
+                       --canister-id <canister-id> \
+                       --principal-id <principal-id> \
+                       --aggregate
+```
+
+The aggregated balance feature returns the sum of balances across all subaccounts of a principal, which is useful for:
+- Getting the total balance of a user across all their subaccounts
+- Portfolio management and reporting  
+- Simplified balance checking without needing to query each subaccount individually
 
 ### Key Information
 

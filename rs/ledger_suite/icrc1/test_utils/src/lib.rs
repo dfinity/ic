@@ -902,8 +902,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                             memo: memo.clone(),
                         };
 
-                        if to == from || to == minter || from == minter || tx_hash_set.contains(&tx)
-                        {
+                        if to == minter || from == minter || tx_hash_set.contains(&tx) {
                             None
                         } else {
                             let caller =
@@ -1145,8 +1144,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                                                 memo: memo.clone(),
                                             };
 
-                                            if from == to
-                                                || from == minter
+                                            if from == minter
                                                 || to == minter
                                                 || spender == from
                                                 || spender == to

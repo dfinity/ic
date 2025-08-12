@@ -32,11 +32,11 @@ pub const STOP_DISSOLVE: &str = "STOP_DISSOLVE";
 pub const SET_DISSOLVE_TIMESTAMP: &str = "SET_DISSOLVE_TIMESTAMP";
 pub const CHANGE_AUTO_STAKE_MATURITY: &str = "CHANGE_AUTO_STAKE_MATURITY";
 pub const DISBURSE: &str = "DISBURSE";
+pub const DISBURSE_MATURITY: &str = "DISBURSE_MATURITY";
 pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
 pub const REMOVE_HOTKEY: &str = "REMOVE_HOTKEY";
 pub const SPAWN: &str = "SPAWN";
-pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
 pub const REGISTER_VOTE: &str = "REGISTER_VOTE";
 pub const STAKE_MATURITY: &str = "STAKE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
@@ -71,6 +71,9 @@ pub enum RequestType {
     #[serde(rename = "DISBURSE")]
     #[serde(alias = "Disperse")]
     Disburse { neuron_index: u64 },
+    #[serde(rename = "DISBURSE_MATURITY")]
+    #[serde(alias = "DisburseMaturity")]
+    DisburseMaturity { neuron_index: u64 },
     #[serde(rename = "ADD_HOT_KEY")]
     #[serde(alias = "AddHotKey")]
     AddHotKey { neuron_index: u64 },
@@ -80,9 +83,6 @@ pub enum RequestType {
     #[serde(rename = "SPAWN")]
     #[serde(alias = "Spawn")]
     Spawn { neuron_index: u64 },
-    #[serde(rename = "MERGE_MATURITY")]
-    #[serde(alias = "MergeMaturity")]
-    MergeMaturity { neuron_index: u64 },
     #[serde(rename = "STAKE_MATURITY")]
     #[serde(alias = "StakeMaturity")]
     StakeMaturity { neuron_index: u64 },
@@ -125,13 +125,13 @@ impl RequestType {
             RequestType::AddHotKey { .. } => ADD_HOT_KEY,
             RequestType::RemoveHotKey { .. } => REMOVE_HOTKEY,
             RequestType::Spawn { .. } => SPAWN,
-            RequestType::MergeMaturity { .. } => MERGE_MATURITY,
             RequestType::RegisterVote { .. } => REGISTER_VOTE,
             RequestType::StakeMaturity { .. } => STAKE_MATURITY,
             RequestType::NeuronInfo { .. } => NEURON_INFO,
             RequestType::ListNeurons { .. } => LIST_NEURONS,
             RequestType::Follow { .. } => FOLLOW,
             RequestType::RefreshVotingPower { .. } => REFRESH_VOTING_POWER,
+            RequestType::DisburseMaturity { .. } => DISBURSE_MATURITY,
         }
     }
 
@@ -151,12 +151,12 @@ impl RequestType {
                 | RequestType::AddHotKey { .. }
                 | RequestType::RemoveHotKey { .. }
                 | RequestType::Spawn { .. }
-                | RequestType::MergeMaturity { .. }
                 | RequestType::RegisterVote { .. }
                 | RequestType::StakeMaturity { .. }
                 | RequestType::NeuronInfo { .. }
                 | RequestType::ListNeurons { .. }
                 | RequestType::Follow { .. }
+                | RequestType::DisburseMaturity { .. }
         )
     }
 }
@@ -312,6 +312,14 @@ pub struct Disburse {
     pub neuron_index: u64,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct DisburseMaturity {
+    pub account: icp_ledger::AccountIdentifier,
+    pub percentage_to_disburse: u32,
+    pub recipient: Option<icp_ledger::AccountIdentifier>,
+    pub neuron_index: u64,
+}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct AddHotKey {
     pub account: icp_ledger::AccountIdentifier,
@@ -334,14 +342,6 @@ pub struct Spawn {
     pub spawned_neuron_index: u64,
     pub controller: Option<PrincipalId>,
     pub percentage_to_spawn: Option<u32>,
-    #[serde(default)]
-    pub neuron_index: u64,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub struct MergeMaturity {
-    pub account: icp_ledger::AccountIdentifier,
-    pub percentage_to_merge: u32,
     #[serde(default)]
     pub neuron_index: u64,
 }
@@ -591,6 +591,41 @@ impl TryFrom<KeyMetadata> for ObjectMap {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct DisburseMaturityMetadata {
+    #[serde(default)]
+    pub neuron_index: u64,
+    #[serde(default)]
+    pub percentage_to_disburse: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub recipient: Option<AccountIdentifier>,
+}
+
+impl TryFrom<Option<ObjectMap>> for DisburseMaturityMetadata {
+    type Error = ApiError;
+
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse DISBURSE_MATURITY operation metadata from a JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl TryFrom<DisburseMaturityMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: DisburseMaturityMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert DisburseMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert DisburseMaturityMetadata to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
 #[test]
 fn test_parse_key_metadata() {
     use std::str::FromStr;
@@ -701,38 +736,6 @@ impl TryFrom<RegisterVoteMetadata> for ObjectMap {
             Ok(Value::Object(o)) => Ok(o),
             Ok(o) => Err(ApiError::internal_error(format!("Could not convert RegisterVoteMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
             Err(err) => Err(ApiError::internal_error(format!("Could not convert RegisterVoteMetadata to ObjectMap: {:?}",err))),
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
-pub struct MergeMaturityMetadata {
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub percentage_to_merge: Option<u32>,
-    #[serde(default)]
-    pub neuron_index: u64,
-}
-
-impl TryFrom<Option<ObjectMap>> for MergeMaturityMetadata {
-    type Error = ApiError;
-    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
-        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
-            ApiError::internal_error(format!(
-                "Could not parse MERGE_MATURITY operation metadata from metadata JSON object: {}",
-                e
-            ))
-        })
-    }
-}
-
-impl TryFrom<MergeMaturityMetadata> for ObjectMap {
-    type Error = ApiError;
-    fn try_from(d: MergeMaturityMetadata) -> Result<ObjectMap, Self::Error> {
-        match serde_json::to_value(d) {
-            Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert MergeMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert MergeMaturityMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -1242,6 +1245,38 @@ impl TransactionBuilder {
         });
         Ok(())
     }
+
+    pub fn disburse_maturity(
+        &mut self,
+        disburse_maturity: &DisburseMaturity,
+    ) -> Result<(), ApiError> {
+        let DisburseMaturity {
+            account,
+            percentage_to_disburse,
+            recipient,
+            neuron_index,
+        } = disburse_maturity;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            type_: OperationType::DisburseMaturity.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                DisburseMaturityMetadata {
+                    recipient: *recipient,
+                    neuron_index: *neuron_index,
+                    percentage_to_disburse: *percentage_to_disburse,
+                }
+                .try_into()?,
+            ),
+        });
+        Ok(())
+    }
+
     pub fn add_hot_key(&mut self, key: &AddHotKey) -> Result<(), ApiError> {
         let AddHotKey {
             account,
@@ -1342,32 +1377,6 @@ impl TransactionBuilder {
                 RegisterVoteMetadata {
                     proposal: *proposal,
                     vote: *vote,
-                    neuron_index: *neuron_index,
-                }
-                .try_into()?,
-            ),
-        });
-        Ok(())
-    }
-
-    pub fn merge_maturity(&mut self, merge: &MergeMaturity) -> Result<(), ApiError> {
-        let MergeMaturity {
-            account,
-            percentage_to_merge,
-            neuron_index,
-        } = merge;
-        let operation_identifier = self.allocate_op_id();
-        self.ops.push(Operation {
-            operation_identifier,
-            type_: OperationType::MergeMaturity.to_string(),
-            status: None,
-            account: Some(to_model_account_identifier(account)),
-            amount: None,
-            related_operations: None,
-            coin_change: None,
-            metadata: Some(
-                MergeMaturityMetadata {
-                    percentage_to_merge: Option::from(*percentage_to_merge),
                     neuron_index: *neuron_index,
                 }
                 .try_into()?,
