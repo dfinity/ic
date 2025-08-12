@@ -92,7 +92,9 @@ mod tests {
     use ic_protobuf::registry::{
         node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
     };
-    use ic_registry_keys::{make_node_operator_record_key, make_subnet_record_key};
+    use ic_registry_keys::{
+        make_node_operator_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    };
 
     use ic_registry_transport::upsert;
     use itertools::Itertools;
@@ -113,6 +115,7 @@ mod tests {
         let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
         let node_1_pk =
             ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, None).unwrap();
+        let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
         let node_2_pk =
             ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, None).unwrap();
         let node_operator = NodeOperatorRecord {
@@ -154,10 +157,6 @@ mod tests {
         let subnet_1_record = get_invariant_compliant_subnet_record(vec![node_1_pk.node_id()]);
         let subnet_2_record = get_invariant_compliant_subnet_record(vec![node_2_pk.node_id()]);
 
-        // let subnet_list_record = SubnetListRecord {
-        //     subnets: vec![subnet_1.get().into_vec(), subnet_2.get().into_vec()],
-        // };
-
         mutations.extend(vec![
             upsert(
                 make_subnet_record_key(subnet_1).as_bytes(),
@@ -167,11 +166,15 @@ mod tests {
                 make_subnet_record_key(subnet_2).as_bytes(),
                 subnet_2_record.encode_to_vec(),
             ),
-            // upsert(
-            //     make_subnet_list_record_key().as_bytes(),
-            //     subnet_list_record.encode_to_vec(),
-            // ),
         ]);
+
+        // let subnet_list_record = SubnetListRecord {
+        //     subnets: vec![subnet_1.get().into_vec(), subnet_2.get().into_vec()],
+        // };
+        // mutations.push(upsert(
+        //     make_subnet_list_record_key().as_bytes(),
+        //     subnet_list_record.encode_to_vec(),
+        // ));
 
         registry.maybe_apply_mutation_internal(mutations);
 
