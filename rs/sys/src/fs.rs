@@ -88,9 +88,56 @@ where
     PDst: AsRef<Path>,
     PTmp: AsRef<Path>,
 {
+    write_atomically_using_tmp_file_impl(dst, tmp, false, action)
+}
+
+/// Atomically writes to `dst` file if it doesn't already exist, using `tmp` as a buffer.
+///
+/// Creates `tmp` if necessary and removes it if write fails with an error.
+///
+/// # Pre-conditions
+///   * `dst` and `tmp` are not directories.
+///   * `dst` and `tmp` are on the same file system.
+///
+/// # Panics
+///
+///   Doesn't panic unless `action` panics.
+#[cfg(target_family = "unix")]
+pub fn write_atomically_using_tmp_file_noclobber<PDst, PTmp, F>(
+    dst: PDst,
+    tmp: PTmp,
+    action: F,
+) -> io::Result<()>
+where
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
+    PDst: AsRef<Path>,
+    PTmp: AsRef<Path>,
+{
+    write_atomically_using_tmp_file_impl(dst, tmp, true, action)
+}
+
+#[cfg(target_family = "unix")]
+fn write_atomically_using_tmp_file_impl<PDst, PTmp, F>(
+    dst: PDst,
+    tmp: PTmp,
+    noclobber: bool,
+    action: F,
+) -> io::Result<()>
+where
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
+    PDst: AsRef<Path>,
+    PTmp: AsRef<Path>,
+{
     let mut cleanup = OnScopeExit::new(|| {
         let _ = fs::remove_file(tmp.as_ref());
     });
+
+    if noclobber && dst.as_ref().exists() {
+        return Err(Error::new(
+            AlreadyExists,
+            format!("File {} already exists", dst.as_ref().display()),
+        ));
+    }
 
     let f = fs::OpenOptions::new()
         .write(true)
@@ -103,10 +150,16 @@ where
         w.flush()?;
     }
     f.sync_all()?;
-    fs::rename(tmp.as_ref(), dst.as_ref())?;
+    if noclobber {
+        // hard_link returns EEXIST if dst already exists
+        fs::hard_link(tmp.as_ref(), dst.as_ref())?;
+    } else {
+        // rename overwrites dst if it exists
+        fs::rename(tmp.as_ref(), dst.as_ref())?;
+        cleanup.deactivate();
+    }
     sync_path(dst.as_ref().parent().unwrap_or_else(|| Path::new("/")))?;
 
-    cleanup.deactivate();
     Ok(())
 }
 
@@ -352,6 +405,36 @@ where
         .join(tmp_name());
 
     write_atomically_using_tmp_file(dst, tmp_path.as_path(), action)
+}
+
+/// Atomically write to `dst` file if it doesn't already exist, using a random file in the parent
+/// directory of `dst` as the temporary file. If `dst` already exists when the function is called,
+/// `action` will not be executed. If `dst` is created concurrently while `action` is being
+/// executed, the effects of `action` will not be applied to `dst`.
+///
+/// # Pre-conditions
+///   * `dst` is not a directory.
+///   * The parent directory of `dst` must be writeable.
+///
+/// # Panics
+///
+///   Doesn't panic unless `action` panics.
+#[cfg(target_family = "unix")]
+pub fn write_atomically_noclobber<PDst, F>(dst: PDst, action: F) -> io::Result<()>
+where
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
+    PDst: AsRef<Path>,
+{
+    // `.parent()` returns `None` for either `/` or a prefix (e.g. 'c:\\` on
+    // windows). `write_atomically` is only available on UNIX, so we default to
+    // `/` in case `.parent()` returns `None`.
+    let tmp_path = dst
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("/"))
+        .join(tmp_name());
+
+    write_atomically_using_tmp_file_noclobber(dst, tmp_path.as_path(), action)
 }
 
 /// Append .tmp to given file path
@@ -755,7 +838,10 @@ fn clone_file_impl(_src: &Path, _dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(test)]
 mod tests {
-    use super::write_atomically_using_tmp_file;
+    use super::{write_atomically_using_tmp_file, write_atomically_using_tmp_file_noclobber};
+    use std::fs;
+    use std::io::{ErrorKind, Write};
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn test_write_success() {
@@ -764,8 +850,6 @@ mod tests {
         let tmp = tmp_dir.path().join("target_tmp.txt");
 
         write_atomically_using_tmp_file(&dst, &tmp, |buf| {
-            use std::io::Write;
-
             buf.write_all(b"test")?;
             Ok(())
         })
@@ -773,9 +857,83 @@ mod tests {
 
         assert!(!tmp.exists());
         assert_eq!(
-            std::fs::read(&dst).expect("failed to read destination file"),
+            fs::read(&dst).expect("failed to read destination file"),
             b"test".to_vec()
         );
+    }
+
+    #[test]
+    fn test_write_noclobber() {
+        let tmp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+        let dst = tmp_dir.path().join("target.txt");
+        let tmp = tmp_dir.path().join("target_tmp.txt");
+
+        write_atomically_using_tmp_file_noclobber(&dst, &tmp, |buf| {
+            buf.write_all(b"test")?;
+            Ok(())
+        })
+        .expect("failed to write atomically");
+
+        assert!(!tmp.exists());
+        assert_eq!(
+            fs::read(&dst).expect("failed to read destination file"),
+            b"test".to_vec()
+        );
+
+        // Attempt to write again, should fail because of noclobber
+        let result = write_atomically_using_tmp_file_noclobber(&dst, &tmp, |_buf| {
+            panic!("This should not be executed");
+        });
+
+        assert_eq!(
+            result.expect_err("Expected an error").kind(),
+            ErrorKind::AlreadyExists
+        );
+    }
+
+    #[test]
+    fn test_write_noclobber_concurrent() {
+        let tmp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
+        let dst = tmp_dir.path().join("target.txt");
+        let tmp = tmp_dir.path().join("target_tmp.txt");
+        // Poor man's no-dep semaphore
+        let foreground_done_writing_file = AtomicBool::new(false);
+        let background_action_started = AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            let background_write = scope.spawn(|| {
+                write_atomically_using_tmp_file_noclobber(&dst, &tmp, |buf| {
+                    background_action_started.store(true, Ordering::Release);
+                    // Wait until foreground thread is finished writing the file.
+                    while !foreground_done_writing_file.load(Ordering::Acquire) {
+                        std::thread::yield_now();
+                    }
+                    buf.write_all("background".as_bytes())?;
+                    Ok(())
+                })
+            });
+
+            // Wait until action has been invoked on background thread.
+            while !background_action_started.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+            fs::write(&dst, "foreground").expect("failed to write to destination file");
+            foreground_done_writing_file.store(true, Ordering::Release);
+
+            assert_eq!(
+                background_write
+                    .join()
+                    .unwrap()
+                    .expect_err("Expected slow write to fail")
+                    .kind(),
+                ErrorKind::AlreadyExists
+            );
+        });
+        assert_eq!(
+            fs::read(&dst).expect("failed to read destination file"),
+            b"foreground".to_vec()
+        );
+        assert!(!tmp.exists(), "Temporary file should not exist");
     }
 
     #[test]
@@ -784,12 +942,9 @@ mod tests {
         let dst = tmp_dir.path().join("target.txt");
         let tmp = tmp_dir.path().join("target_tmp.txt");
 
-        std::fs::write(&dst, b"original contents")
-            .expect("failed to write to the destination file");
+        fs::write(&dst, b"original contents").expect("failed to write to the destination file");
 
         let result = write_atomically_using_tmp_file(&dst, &tmp, |buf| {
-            use std::io::Write;
-
             buf.write_all(b"new shiny contents")?;
             Err(std::io::Error::other("something went wrong"))
         });
@@ -801,7 +956,7 @@ mod tests {
             result
         );
         assert_eq!(
-            std::fs::read(&dst).expect("failed to read destination file"),
+            fs::read(&dst).expect("failed to read destination file"),
             b"original contents".to_vec()
         );
     }
