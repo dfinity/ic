@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 type BlockStorage = BTreeMap<u64, ICRC3Value>;
 
 thread_local! {
-    static BLOCKS: RefCell<BlockStorage> = RefCell::new(BTreeMap::new());
-    static NEXT_BLOCK_ID: RefCell<u64> = RefCell::new(0);
+    static BLOCKS: RefCell<BlockStorage> = const { RefCell::new(BTreeMap::new()) };
+    static NEXT_BLOCK_ID: RefCell<u64> = const { RefCell::new(0) };;
 }
 
 /// Add a block to the ledger storage
