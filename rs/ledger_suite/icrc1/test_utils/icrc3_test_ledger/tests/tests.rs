@@ -288,3 +288,44 @@ fn test_add_complex_block() {
     assert_eq!(get_result.blocks.len(), 1);
     assert_eq!(get_result.blocks[0].block, complex_block);
 }
+
+fn production_ledger_wasm() -> Vec<u8> {
+    std::fs::read(
+        std::env::var("IC_ICRC1_LEDGER_WASM_PATH")
+            .expect("IC_ICRC1_LEDGER_WASM_PATH environment variable not set"),
+    )
+    .expect("failed to read production ledger wasm")
+}
+
+#[test]
+fn test_icrc3_blocks_compatibility_with_production_ledger() {
+    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
+    use ic_ledger_suite_state_machine_tests::InitArgs;
+
+    fn encode_init_args(args: InitArgs) -> ic_icrc1_ledger::LedgerArgument {
+        use ic_icrc1_ledger::{
+            InitArgs as ProductionInitArgs, LedgerArgument as ProductionLedgerArgument,
+        };
+
+        ProductionLedgerArgument::Init(ProductionInitArgs {
+            minting_account: args.minting_account,
+            fee_collector_account: args.fee_collector_account,
+            initial_balances: args.initial_balances,
+            transfer_fee: args.transfer_fee,
+            token_name: args.token_name,
+            decimals: args.decimals,
+            token_symbol: args.token_symbol,
+            metadata: args.metadata,
+            archive_options: args.archive_options,
+            max_memo_length: None,
+            feature_flags: None,
+            index_principal: args.index_principal,
+        })
+    }
+
+    test_icrc3_blocks_compatibility_with_production_ledger(
+        production_ledger_wasm(),
+        encode_init_args,
+        icrc3_test_ledger_wasm(),
+    );
+}

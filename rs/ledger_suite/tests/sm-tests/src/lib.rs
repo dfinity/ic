@@ -4697,10 +4697,10 @@ Charged for processing the transfer.
     let expected_fields_message = FieldsDisplay {
         intent: "Send Test Token".to_string(),
         fields: vec![
-            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}),
             ("Amount".to_string(),  Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}), // "0.01 XTST".to_string()),
             ("To".to_string(), Icrc21Value::Text{content: "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()}),
-            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}), 
+            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}),
             ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})],
     };
 
@@ -4907,15 +4907,15 @@ Charged for processing the approval.
 `test_bytes`";
 
     let expected_fields_message = FieldsDisplay {
-        intent: "Approve spending".to_string(), 
+        intent: "Approve spending".to_string(),
         fields: vec![
-            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}),
             ("Approve to spender".to_string(), Icrc21Value::Text{content: "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()}),
             ("Requested allowance".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
             ("Existing allowance".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
             ("Approval expiration".to_string(), Icrc21Value::TimestampSeconds { amount: 1620332230 }),
             ("Approval fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}),
-            ("Fees paid by".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Fees paid by".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}),
             ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})]};
 
     let mut args = ConsentMessageRequest {
@@ -5182,13 +5182,13 @@ Charged for processing the transfer.
 `test_bytes`";
 
     let expected_fields_message = FieldsDisplay {
-        intent: "Spend Test Token".to_string(), 
+        intent: "Spend Test Token".to_string(),
         fields: vec![
-            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}),
             ("Amount".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
             ("Spender".to_string(), Icrc21Value::Text{content: "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()}),
             ("To".to_string(), Icrc21Value::Text{content: "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()}),
-            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}), 
+            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}),
             ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})]};
 
     let message = extract_icrc21_message_string(
@@ -6677,4 +6677,126 @@ pub fn test_setting_fee_collector_to_minting_account<T>(
     let args = Encode!(&args).unwrap();
     env.install_canister(ledger_wasm, args, None)
         .expect("should successfully install ledger");
+}
+
+pub fn test_icrc3_blocks_compatibility_with_production_ledger<T>(
+    production_ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    icrc3_test_ledger_wasm: Vec<u8>,
+) where
+    T: CandidType,
+{
+    use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy};
+    use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+    use icrc_ledger_types::icrc3::blocks::{BlockWithId, GetBlocksRequest};
+
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter = Arc::new(minter_identity());
+    let minter_principal = minter.sender().unwrap();
+
+    runner
+        .run(
+            &(valid_transactions_strategy(minter, FEE, 20, now).no_shrink(),),
+            |(transactions,)| {
+                let env = StateMachine::new();
+                env.set_time(now);
+
+                let production_ledger_id = env
+                    .install_canister(
+                        production_ledger_wasm.clone(),
+                        Encode!(&encode_init_args(InitArgs {
+                            minting_account: Account::from(minter_principal),
+                            ..init_args(vec![])
+                        }))
+                        .unwrap(),
+                        None,
+                    )
+                    .unwrap();
+
+                // Apply the generated valid transactions to the production ledger
+                for transaction in &transactions {
+                    apply_arg_with_caller(&env, production_ledger_id, transaction);
+                }
+
+                // Retrieve all blocks from the production ledger using icrc3_get_blocks
+                let production_blocks_response =
+                    icrc3_get_blocks(&env, production_ledger_id, 0, u64::MAX as usize);
+                let production_blocks: Vec<ICRC3Value> = production_blocks_response
+                    .blocks
+                    .into_iter()
+                    .map(|block_with_id: BlockWithId| block_with_id.block)
+                    .collect();
+
+                // Install the ICRC-3 test ledger
+                let test_ledger_id = env
+                    .install_canister(icrc3_test_ledger_wasm.clone(), vec![], None)
+                    .unwrap();
+
+                // Add all production ledger blocks to the ICRC-3 test ledger
+                for block in &production_blocks {
+                    let add_block_result = Decode!(
+                        &env.execute_ingress(
+                            test_ledger_id,
+                            "add_block",
+                            Encode!(block).unwrap(),
+                        )
+                        .expect("failed to add block")
+                        .bytes(),
+                        Result<Nat, String>
+                    )
+                    .expect("failed to decode add_block response");
+
+                    prop_assert!(
+                        add_block_result.is_ok(),
+                        "Failed to add block: {:?}",
+                        add_block_result
+                    );
+                }
+
+                // Retrieve all blocks from the ICRC-3 test ledger
+                let test_blocks_response = Decode!(
+                    &env.query(
+                        test_ledger_id,
+                        "icrc3_get_blocks",
+                        Encode!(&vec![GetBlocksRequest {
+                            start: Nat::from(0u64),
+                            length: Nat::from(production_blocks.len() as u64),
+                        }])
+                        .unwrap(),
+                    )
+                    .expect("failed to get blocks from test ledger")
+                    .bytes(),
+                    GetBlocksResult
+                )
+                .expect("failed to decode icrc3_get_blocks response");
+
+                let test_blocks: Vec<ICRC3Value> = test_blocks_response
+                    .blocks
+                    .into_iter()
+                    .map(|block_with_id: BlockWithId| block_with_id.block)
+                    .collect();
+
+                // Verify that the blocks are identical
+                prop_assert_eq!(
+                    production_blocks.len(),
+                    test_blocks.len(),
+                    "Number of blocks should match"
+                );
+
+                for (i, (production_block, test_block)) in
+                    production_blocks.iter().zip(test_blocks.iter()).enumerate()
+                {
+                    prop_assert_eq!(
+                        production_block,
+                        test_block,
+                        "Block {} should be identical",
+                        i
+                    );
+                }
+
+                Ok(())
+            },
+        )
+        .unwrap();
 }

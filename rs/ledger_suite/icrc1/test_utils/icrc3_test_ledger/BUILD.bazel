@@ -54,16 +54,20 @@ rust_ic_test_suite(
     srcs = ["tests/tests.rs"],
     data = [
         ":icrc3_test_ledger_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz)",
         "ICRC3_TEST_LEDGER_CANISTER_WASM_PATH": "$(rootpath :icrc3_test_ledger_canister.wasm.gz)",
     },
     deps = [
         # Keep sorted.
         ":icrc3_test_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
