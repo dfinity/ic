@@ -42,6 +42,7 @@ Run the tests:
 
 ```bash
 bazel test //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister_test
+bazel test //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_integration_test
 ```
 
 ## Storage

@@ -23,6 +23,7 @@ num-traits = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
+ic-icrc1-test-utils = { path = ".." }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
 serde_bytes = { workspace = true }
