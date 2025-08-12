@@ -28,7 +28,7 @@ use ic_rosetta_api::{
         transaction_results::TransactionResults, Request,
     },
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
         NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn,
         Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
@@ -371,12 +371,12 @@ where
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
             | Request::RegisterVote(RegisterVote { account, .. })
-            | Request::MergeMaturity(MergeMaturity { account, .. })
             | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
             | Request::ListNeurons(ListNeurons { account, .. })
             | Request::RefreshVotingPower(RefreshVotingPower { account, .. })
-            | Request::Follow(Follow { account, .. }) => {
+            | Request::Follow(Follow { account, .. })
+            | Request::DisburseMaturity(DisburseMaturity { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
             Request::Transfer(Operation::Burn { .. }) => {

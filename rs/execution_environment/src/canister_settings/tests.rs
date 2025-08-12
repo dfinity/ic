@@ -23,7 +23,7 @@ fn test_environment_variables_hash_empty_env_vars() {
     let env_vars = BTreeMap::new();
     let hash = EnvironmentVariables::new(env_vars).hash();
     // SHA256 of empty input.
-    let expected = Sha256::hash(&[]).to_vec();
+    let expected = Sha256::hash(&[]);
     assert_eq!(hash, expected);
 }
 
@@ -38,7 +38,7 @@ fn test_environment_variables_hash_single_pair() {
     let mut hasher = Sha256::new();
     hasher.write(&key_hash);
     hasher.write(&value_hash);
-    let expected = hasher.finish().to_vec();
+    let expected = hasher.finish();
 
     assert_eq!(hash, expected);
 }
@@ -80,7 +80,7 @@ fn test_environment_variables_hash_output() {
     for pair_hash in &intermediate_hashes {
         hasher.write(pair_hash);
     }
-    let expected = hasher.finish().to_vec();
+    let expected = hasher.finish();
 
     // Verify that the actual hash matches the expected hash.
     let actual = EnvironmentVariables::new(env_vars).hash();

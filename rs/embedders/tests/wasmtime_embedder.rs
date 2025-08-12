@@ -1630,10 +1630,7 @@ fn stable_access_beyond_32_bit_range() {
         )"#
     );
 
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_wat(&wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
-        .build();
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(&wat).build();
     instance.run(func_ref("write_to_last_page")).unwrap();
 }
 
@@ -3298,7 +3295,6 @@ fn large_wasm64_stable_read_write_test() {
             call_context_test_id(13),
         ))
         .with_wat(wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
         .build();
 
     let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));

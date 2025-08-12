@@ -3,7 +3,7 @@ use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::Tokens;
-use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
+use ic_nns_constants::{ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -14,7 +14,9 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::nns::{set_authorized_subnetwork_list, update_xdr_per_icp};
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
-use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
+use ic_system_test_driver::util::{
+    block_on, create_canister, install_canister, runtime_from_url, set_controller,
+};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -136,6 +138,17 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         &env::var("SUBNET_RENTAL_WASM_PATH").unwrap(),
         None,
     );
+
+    // set the NNS root canister as a controller of the Subnet Rental Canister
+    let nns_agent = nns_node.build_default_agent();
+    block_on(async move {
+        set_controller(
+            &SUBNET_RENTAL_CANISTER_ID.get().0,
+            &ROOT_CANISTER_ID.get().0,
+            &nns_agent,
+        )
+        .await;
+    });
 
     // deploy the ckETH ledger canister (ICRC1-ledger with "ckETH" as token symbol and name) required by NNS dapp
     let cketh_init_args = InitArgsBuilder::for_tests()

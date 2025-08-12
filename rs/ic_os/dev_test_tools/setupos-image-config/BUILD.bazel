@@ -12,6 +12,7 @@ rust_library(
     ],
     deps = [
         "//rs/ic_os/config:config_lib",
+        "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:serde_json",
@@ -48,6 +49,7 @@ rust_binary(
     deps = [
         ":setupos-image-config",
         "//rs/ic_os/config:config_lib",
+        "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:serde_json",

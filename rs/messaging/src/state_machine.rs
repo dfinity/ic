@@ -5,7 +5,7 @@ use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{error, fatal, ReplicaLogger};
@@ -181,11 +181,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            ChainKeyData {
-                master_public_keys: batch.chain_key_subnet_public_keys,
-                idkg_pre_signature_ids: batch.idkg_pre_signature_ids,
-                nidkg_ids: batch.ni_dkg_ids,
-            },
+            batch.chain_key_data,
             &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,

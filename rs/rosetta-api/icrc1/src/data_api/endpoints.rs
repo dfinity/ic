@@ -113,10 +113,11 @@ pub async fn account_balance(
 ) -> Result<Json<AccountBalanceResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
-    Ok(Json(services::account_balance(
+    Ok(Json(services::account_balance_with_metadata(
         &state.storage,
         &request.account_identifier,
         &request.block_identifier,
+        &request.metadata,
         state.metadata.decimals,
         state.metadata.symbol.clone(),
     )?))

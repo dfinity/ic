@@ -1,5 +1,6 @@
 use candid::Principal;
 use candid::{Decode, Encode, Nat};
+use core::assert_eq;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -14,20 +15,20 @@ use ic_ledger_suite_state_machine_tests::{
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use icp_ledger::{
-    AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
+    AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
-    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
-    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
-    TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
+    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, UpgradeArgs,
+    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
-    account::Account,
+    account::{Account, Subaccount},
     transfer::{Memo, TransferArg, TransferError},
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
@@ -1847,6 +1848,504 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
         icp_archives,
         ic_ledger_suite_state_machine_tests::archiving::get_encoded_blocks,
     );
+}
+
+fn list_allowances(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &GetAllowancesArgs,
+) -> Allowances {
+    Decode!(
+        &env.execute_ingress_as(caller, ledger, "get_allowances", Encode!(args).unwrap())
+            .expect("failed to list allowances")
+            .bytes(),
+        Allowances
+    )
+    .expect("failed to decode get__allowances response")
+}
+
+#[test]
+fn test_allowance_listing_sequences() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    const NUM_APPROVERS: u64 = 3;
+    const NUM_SPENDERS: u64 = 3;
+    let mut initial_balances = vec![];
+
+    let mut approvers = vec![];
+    for i in 0..NUM_APPROVERS {
+        let pid = PrincipalId::new_user_test_id(i + 1);
+        approvers.push(pid);
+        initial_balances.push((Account::from(pid.0), INITIAL_BALANCE));
+    }
+
+    let mut spenders = vec![];
+    for i in 100..100 + NUM_SPENDERS {
+        spenders.push(PrincipalId::new_user_test_id(i));
+    }
+    spenders.sort_by(|first, second| {
+        AccountIdentifier::from(first.0).cmp(&AccountIdentifier::from(second.0))
+    });
+
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    for approver in &approvers {
+        for spender in &spenders {
+            let approve_args = ApproveArgs {
+                from_subaccount: None,
+                spender: Account::from(spender.0),
+                amount: Nat::from(APPROVE_AMOUNT),
+                fee: None,
+                memo: None,
+                expires_at: None,
+                expected_allowance: None,
+                created_at_time: None,
+            };
+            let response = env.execute_ingress_as(
+                *approver,
+                canister_id,
+                "icrc2_approve",
+                Encode!(&approve_args).unwrap(),
+            );
+            assert!(response.is_ok());
+        }
+    }
+
+    let mut args = GetAllowancesArgs {
+        from_account_id: AccountIdentifier::from(approvers[0].0),
+        prev_spender_id: None,
+        take: None,
+    };
+
+    for approver in approvers {
+        for (s_index, spender) in spenders.iter().enumerate() {
+            args.from_account_id = AccountIdentifier::from(approver.0);
+
+            // We expect all pairs with the current approver and spenders starting after the current spender.
+            let mut expected = vec![];
+            for spender in spenders
+                .iter()
+                .take(NUM_SPENDERS as usize)
+                .skip(s_index + 1)
+            {
+                expected.push((
+                    AccountIdentifier::from(approver.0),
+                    AccountIdentifier::from(spender.0),
+                ));
+            }
+
+            args.prev_spender_id = Some(AccountIdentifier::from(spender.0));
+            let allowances = list_allowances(&env, canister_id, approver, &args);
+            let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> = allowances
+                .into_iter()
+                .map(|a| (a.from_account_id, a.to_spender_id))
+                .collect();
+            assert_eq!(expected, spender_approver_pairs);
+
+            if s_index == 0 {
+                // If s_index is 0 we can also list all allowances by not specifying the prev_spender_id.
+                expected.insert(
+                    0,
+                    (
+                        AccountIdentifier::from(approver.0),
+                        AccountIdentifier::from(spenders[0].0),
+                    ),
+                );
+                args.prev_spender_id = None;
+                let allowances = list_allowances(&env, canister_id, approver, &args);
+                let spender_approver_pairs: Vec<(AccountIdentifier, AccountIdentifier)> =
+                    allowances
+                        .into_iter()
+                        .map(|a| (a.from_account_id, a.to_spender_id))
+                        .collect();
+                assert_eq!(expected, spender_approver_pairs);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_allowance_listing_values() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const NUM_SPENDERS: u64 = 3;
+
+    let approver = PrincipalId::new_user_test_id(1);
+
+    let mut spenders = vec![];
+    for i in 2..2 + NUM_SPENDERS {
+        spenders.push(PrincipalId::new_user_test_id(i));
+    }
+    spenders.sort_by(|first, second| {
+        AccountIdentifier::from(first.0).cmp(&AccountIdentifier::from(second.0))
+    });
+
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(approver.0), INITIAL_BALANCE)],
+    );
+
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: Account::from(spenders[0].0),
+        amount: Nat::from(1u64),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let send_approval = |args: &ApproveArgs| {
+        let response = env.execute_ingress_as(
+            approver,
+            canister_id,
+            "icrc2_approve",
+            Encode!(args).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    // Simplest possible approval
+    send_approval(&approve_args);
+
+    // Expiration far in the future
+    let now = system_time_to_nanos(env.time());
+    let expiration_far = Some(now + Duration::from_secs(3600).as_nanos() as u64);
+    let args = ApproveArgs {
+        spender: Account::from(spenders[1].0),
+        amount: Nat::from(1_000_000u64),
+        expires_at: expiration_far,
+        ..approve_args.clone()
+    };
+    send_approval(&args);
+
+    // Expiration far in the future, max possible allowance
+    let expiration_near = Some(now + Duration::from_secs(10).as_nanos() as u64);
+    let args = ApproveArgs {
+        spender: Account::from(spenders[2].0),
+        amount: Nat::from(u64::MAX),
+        expires_at: expiration_near,
+        ..approve_args
+    };
+    send_approval(&args);
+
+    let args = GetAllowancesArgs {
+        from_account_id: AccountIdentifier::from(approver),
+        prev_spender_id: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+
+    let simple = allowances[0].clone();
+    assert_eq!(simple.from_account_id, AccountIdentifier::from(approver.0));
+    assert_eq!(simple.to_spender_id, AccountIdentifier::from(spenders[0].0));
+    assert_eq!(simple.allowance, Tokens::from(1));
+    assert_eq!(simple.expires_at, None);
+
+    let exp_far = allowances[1].clone();
+    assert_eq!(exp_far.from_account_id, AccountIdentifier::from(approver.0));
+    assert_eq!(
+        exp_far.to_spender_id,
+        AccountIdentifier::from(spenders[1].0)
+    );
+    assert_eq!(exp_far.allowance, Tokens::from(1_000_000));
+    assert_eq!(exp_far.expires_at, expiration_far);
+
+    let exp_near = allowances[2].clone();
+    assert_eq!(
+        exp_near.from_account_id,
+        AccountIdentifier::from(approver.0)
+    );
+    assert_eq!(
+        exp_near.to_spender_id,
+        AccountIdentifier::from(spenders[2].0)
+    );
+    assert_eq!(exp_near.allowance, Tokens::from(u64::MAX));
+    assert_eq!(exp_near.expires_at, expiration_near);
+
+    env.advance_time(Duration::from_secs(10));
+
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(simple, allowances[0]);
+    assert_eq!(exp_far, allowances[1]);
+    assert_eq!(allowances.len(), 2);
+}
+
+#[test]
+fn test_allowance_listing_take() {
+    const INITIAL_BALANCE: u64 = 1_000_000_000;
+    const MAX_RESULTS: usize = 500;
+    const NUM_SPENDERS: usize = MAX_RESULTS + 1;
+
+    let approver = PrincipalId::new_user_test_id(1);
+
+    let mut spenders = vec![];
+    for i in 2..2 + NUM_SPENDERS {
+        spenders.push(PrincipalId::new_user_test_id(i as u64));
+    }
+    spenders.sort_by(|first, second| {
+        AccountIdentifier::from(first.0).cmp(&AccountIdentifier::from(second.0))
+    });
+    assert_eq!(spenders.len(), MAX_RESULTS + 1);
+
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(approver.0), INITIAL_BALANCE)],
+    );
+
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: Account::from(spenders[0].0),
+        amount: Nat::from(1u64),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let send_approval = |args: &ApproveArgs| {
+        let response = env.execute_ingress_as(
+            approver,
+            canister_id,
+            "icrc2_approve",
+            Encode!(args).unwrap(),
+        );
+        assert!(response.is_ok());
+    };
+
+    for spender in &spenders {
+        let args = ApproveArgs {
+            spender: Account::from(spender.0),
+            ..approve_args.clone()
+        };
+        send_approval(&args);
+    }
+
+    let mut args = GetAllowancesArgs {
+        from_account_id: AccountIdentifier::from(approver),
+        prev_spender_id: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+    args.take = Some(0u64);
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), 0);
+
+    args.take = Some(5u64);
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), 5);
+
+    args.take = Some(u64::MAX);
+    let allowances = list_allowances(&env, canister_id, approver, &args);
+    assert_eq!(allowances.len(), MAX_RESULTS);
+}
+
+#[test]
+fn test_tip_of_chain() {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 1), (Account::from(p2.0), 2)],
+    );
+    let res = env
+        .query(canister_id, "tip_of_chain_pb", vec![])
+        .expect("Failed to send tip_of_chain_pb request")
+        .bytes();
+    let tip: TipOfChainRes = dfn_protobuf::ProtoBuf::from_bytes(res)
+        .map(|c| c.0)
+        .expect("failed to decode tip_of_chain_pb result");
+
+    assert_eq!(tip.tip_index, 1);
+    assert!(tip.certification.is_some());
+
+    // Verify that the candid endpoint returns the same tip.
+    let req = Encode!(&()).expect("Failed to encode empty args");
+    let res = env
+        .query(canister_id, "tip_of_chain", req)
+        .expect("Failed to send tip_of_chain request")
+        .bytes();
+    let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode TipOfChainRes");
+    assert_eq!(tip, tip_candid);
+}
+
+#[test]
+fn test_remove_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    const SUBACCOUNT: [u8; 32] = [1u8; 32];
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+    let p4 = PrincipalId::new_user_test_id(4);
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (
+                Account {
+                    owner: p1.0,
+                    subaccount: Some(SUBACCOUNT),
+                },
+                INITIAL_BALANCE,
+            ),
+        ],
+    );
+
+    let approve = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let approve_args = ApproveArgs {
+            from_subaccount,
+            spender: spender.0.into(),
+            amount: Nat::from(APPROVE_AMOUNT),
+            fee: None,
+            memo: None,
+            expires_at: None,
+            expected_allowance: None,
+            created_at_time: None,
+        };
+        let response = env.execute_ingress_as(
+            p1,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        );
+        let result = Decode!(&response.expect("failed to create approval").bytes(), Result<Nat, ApproveError> )
+        .expect("failed to decode approve response");
+        assert!(result.is_ok());
+    };
+
+    approve(None, p2);
+    approve(Some(SUBACCOUNT), p3);
+    approve(None, p4);
+
+    let verify_allowance =
+        |from_subaccount: Option<Subaccount>, spender: PrincipalId, allowance: u64| {
+            let allowance_args = AllowanceArgs {
+                account: Account {
+                    owner: p1.0,
+                    subaccount: from_subaccount,
+                },
+                spender: Account {
+                    owner: spender.0,
+                    subaccount: None,
+                },
+            };
+
+            let response = env.execute_ingress_as(
+                p1,
+                canister_id,
+                "icrc2_allowance",
+                Encode!(&allowance_args).unwrap(),
+            );
+
+            let result = Decode!(
+                &response.expect("failed to get allowance").bytes(),
+                Allowance
+            )
+            .expect("failed to decode allowance response");
+            assert_eq!(result.allowance.0.to_u64(), Some(allowance));
+        };
+
+    verify_allowance(None, p2, APPROVE_AMOUNT);
+    verify_allowance(Some(SUBACCOUNT), p3, APPROVE_AMOUNT);
+    verify_allowance(None, p4, APPROVE_AMOUNT);
+
+    let remove_approval = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let spender_address = AccountIdentifier::new(spender, None).to_address();
+        let args = RemoveApprovalArgs {
+            from_subaccount,
+            spender: spender_address,
+            fee: Some(Nat::from(FEE)),
+        };
+        let response =
+            env.execute_ingress_as(p1, canister_id, "remove_approval", Encode!(&args).unwrap());
+        let result = Decode!(&response.expect("failed to remove approval").bytes(), Result<Nat, ApproveError> )
+        .expect("failed to decode remove_approval response");
+        assert!(result.is_ok());
+    };
+
+    remove_approval(None, p2);
+    remove_approval(Some(SUBACCOUNT), p3);
+
+    verify_allowance(None, p2, 0);
+    verify_allowance(Some(SUBACCOUNT), p3, 0);
+    // The last one was not removed
+    verify_allowance(None, p4, APPROVE_AMOUNT);
+}
+
+#[test]
+fn test_burn_whole_balance() {
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let fee_e8s = 100u64;
+    let initial_balance = 150u64;
+    initial_balances.insert(
+        AccountIdentifier::from(Account::from(p1.0)),
+        Tokens::from_e8s(initial_balance),
+    );
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(fee_e8s))
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let burn = |amount: u64, error_tokens: Option<Tokens>| {
+        let args = icp_ledger::TransferArgs {
+            memo: icp_ledger::Memo(0u64),
+            amount: Tokens::from_e8s(amount),
+            fee: Tokens::ZERO,
+            from_subaccount: None,
+            to: AccountIdentifier::from(MINTER).to_address(),
+            created_at_time: None,
+        };
+        let response = env.execute_ingress_as(p1, canister_id, "transfer", Encode!(&args).unwrap());
+        if let Some(error_tokens) = error_tokens {
+            assert!(response.is_err());
+            assert!(response.unwrap_err().description().contains(
+                &format!("Burns lower than {} are not allowed", error_tokens).to_string()
+            ));
+        } else {
+            let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )
+        .expect("failed to decode transfer response");
+            assert!(result.is_ok());
+        }
+    };
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), initial_balance);
+
+    // Balance is greater than fee, burning less than fee should not be allowed.
+    burn(fee_e8s - 1, Some(Tokens::from(fee_e8s)));
+
+    // Burning fee is ok.
+    burn(fee_e8s, None);
+
+    // Balance is now less than fee.
+    assert_eq!(balance_of(&env, canister_id, p1.0), fee_e8s / 2);
+
+    // Burning less than the whole balance is not allowed.
+    burn(fee_e8s / 2 - 1, Some(Tokens::from(fee_e8s / 2)));
+
+    // Burning whole balance is allowed, even if it is less than fee.
+    burn(fee_e8s / 2, None);
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), 0);
 }
 
 mod metrics {

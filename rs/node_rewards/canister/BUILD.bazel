@@ -8,17 +8,25 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
+    "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
+    "//rs/node_rewards/rewards_calculation",
     "//rs/protobuf",
     "//rs/registry/canister-client",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
+    "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:indexmap",
+    "@crate_index//:itertools",
     "@crate_index//:prost",
 ]
 
@@ -31,14 +39,17 @@ DEV_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:futures-util",
     "@crate_index//:maplit",
+    "@crate_index//:mockall",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:async-trait",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
@@ -82,7 +93,7 @@ LIB_SRCS = glob(
     [
         "src/**/*.rs",
     ],
-    exclude = ["**/*tests*/**"],
+    exclude = ["tests*/**"],
 )
 
 rust_library(

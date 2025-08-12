@@ -15,7 +15,6 @@ mod types;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
-pub use canister_settings::EnvironmentVariables;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
@@ -194,6 +193,7 @@ impl ExecutionServices {
 
         let scheduler = Box::new(SchedulerImpl::new(
             scheduler_config,
+            config.embedders_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
             Arc::clone(&exec_env) as Arc<_>,

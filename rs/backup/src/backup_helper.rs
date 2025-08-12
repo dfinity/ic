@@ -204,7 +204,7 @@ impl BackupHelper {
         for _ in 0..RETRIES_BINARY_DOWNLOAD {
             let res = block_on(download_binary(
                 &self.log,
-                replica_version.clone(),
+                replica_version,
                 binary_name.to_string(),
                 &self.binary_dir(replica_version),
             ));

@@ -43,18 +43,26 @@ fn test_record_voting_power_snapshot() {
     assert_eq!(snapshots.latest_snapshot_timestamp_seconds(), Some(1));
     // We should return previous ballots if the deciding voting power is more than 1.5 times the
     // minimum voting power in the first snapshot.
-    assert_eq!(
-        snapshots.previous_ballots_if_voting_power_spike_detected(149, 1),
-        None
-    );
-    assert_eq!(
-        snapshots.previous_ballots_if_voting_power_spike_detected(151, 1),
-        Some((1, voting_power_snapshot(vec![90], 100)))
-    );
     assert!(!snapshots.is_latest_snapshot_a_spike(1));
 
     for i in 0..6 {
         let timestamp_seconds = 2 + i;
+
+        let use_previous_ballots = snapshots
+            .previous_ballots_if_voting_power_spike_detected(u64::MAX, timestamp_seconds)
+            .is_some();
+
+        if cfg!(feature = "test") {
+            // In the test environment, we do not use previous ballots when the snapshots are not full,
+            // since a lot of test setups involve creating a lot of voting power.
+            assert!(!use_previous_ballots);
+        } else {
+            // In the production environment, we use previous ballots as long as there is at least one
+            // snapshot, so that when we recover from a false positive (by removing some snapshots), we
+            // can still have the spike detection mechanism in place.
+            assert!(use_previous_ballots);
+        }
+
         // The minimum voting power in the snapshots is still 100 over the next 6
         snapshots.record_voting_power_snapshot(
             timestamp_seconds,
@@ -63,14 +71,6 @@ fn test_record_voting_power_snapshot() {
         assert_eq!(
             snapshots.latest_snapshot_timestamp_seconds(),
             Some(timestamp_seconds)
-        );
-        assert_eq!(
-            snapshots.previous_ballots_if_voting_power_spike_detected(149, timestamp_seconds),
-            None
-        );
-        assert_eq!(
-            snapshots.previous_ballots_if_voting_power_spike_detected(151, timestamp_seconds),
-            Some((1, voting_power_snapshot(vec![90], 100)))
         );
         assert!(!snapshots.is_latest_snapshot_a_spike(timestamp_seconds));
     }

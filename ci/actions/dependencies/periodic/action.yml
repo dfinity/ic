@@ -18,7 +18,6 @@ runs:
         cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
         cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
         source "${NVM_DIR}/nvm.sh"
-        nvm install ${NNS_NODE_VERSION}
         nvm install ${DEFAULT_NODE_VERSION}
         nvm install ${OISY_NODE_VERSION}
         nvm use ${DEFAULT_NODE_VERSION}
@@ -27,7 +26,6 @@ runs:
       env:
         CARGO_AUDIT_VERSION: "0.21.0"
         CARGO_WASMPACK_VERSION: "0.12.1"
-        NNS_NODE_VERSION: "18.20.5"
         DEFAULT_NODE_VERSION: "20"
         OISY_NODE_VERSION: "22.11.0"
     - name: Run Dependency Scan Nightly

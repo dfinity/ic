@@ -27,6 +27,7 @@ slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]

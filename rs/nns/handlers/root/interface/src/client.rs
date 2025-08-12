@@ -5,6 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_cdk::call;
+use ic_nervous_system_clients::canister_status::MemoryMetrics;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
@@ -232,6 +233,16 @@ impl SpyNnsRootCanisterClientReply {
                 num_instructions_total: Some(candid::Nat::from(46_u32)),
                 request_payload_bytes_total: Some(candid::Nat::from(47_u32)),
                 response_payload_bytes_total: Some(candid::Nat::from(48_u32)),
+            }),
+            memory_metrics: Some(MemoryMetrics {
+                wasm_memory_size: Some(candid::Nat::from(1_u32)),
+                stable_memory_size: Some(candid::Nat::from(2_u32)),
+                global_memory_size: Some(candid::Nat::from(3_u32)),
+                wasm_binary_size: Some(candid::Nat::from(4_u32)),
+                custom_sections_size: Some(candid::Nat::from(5_u32)),
+                canister_history_size: Some(candid::Nat::from(6_u32)),
+                wasm_chunk_store_size: Some(candid::Nat::from(7_u32)),
+                snapshots_size: Some(candid::Nat::from(8_u32)),
             }),
         }))
     }
