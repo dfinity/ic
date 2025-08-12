@@ -9,7 +9,7 @@ def base_download_url(git_commit_id, variant, update, test, dev = True):
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test}/".format(
         git_commit_id = git_commit_id,
         variant = variant,
-        component = "update-img-dev" if update and dev else "disk-img-dev" if not update and dev else "update-img" if update else "disk-img",
+        component = ("update-img" if update else "disk-img") + ("-dev" if dev else ""),
         test = "-test" if test else "",
     )
 
