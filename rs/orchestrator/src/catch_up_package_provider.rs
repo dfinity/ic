@@ -54,9 +54,10 @@ use ic_types::{
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
-use tokio::{sync::Mutex, time::timeout};
+#[allow(clippy::disallowed_types)]
+use tokio::sync::Mutex;
+use tokio::time::timeout;
 
-const INITIAL_BACKOFF: Duration = Duration::from_secs(30);
 /// Fetches catch-up packages from peers and local storage.
 ///
 /// CUPs are used to determine which version of the IC peers are running
@@ -68,7 +69,11 @@ pub(crate) struct CatchUpPackageProvider {
     crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
+    #[allow(clippy::disallowed_types)]
+    // Use a tokio mutex because the lock needs to be held across an await point,
+    // and this code isn't performance-critical.
     backoff: Mutex<Duration>,
+    initial_backoff: Duration,
 }
 
 impl CatchUpPackageProvider {
@@ -88,7 +93,7 @@ impl CatchUpPackageProvider {
             crypto_tls_config,
             logger,
             node_id,
-            INITIAL_BACKOFF,
+            Duration::from_secs(30),
         )
     }
 
@@ -108,7 +113,9 @@ impl CatchUpPackageProvider {
             crypto,
             crypto_tls_config,
             logger,
+            #[allow(clippy::disallowed_types)]
             backoff: Mutex::new(initial_backoff),
+            initial_backoff,
         }
     }
 
@@ -212,7 +219,7 @@ impl CatchUpPackageProvider {
         })?;
         let mut uri = https_endpoint_to_url(&http)?;
         uri.path_segments_mut()
-            .map_err(|()| format!("URL cannot be segmented"))?
+            .map_err(|()| "URL cannot be segmented".to_string())?
             .push("_")
             .push("catch_up_package");
 
@@ -289,7 +296,7 @@ impl CatchUpPackageProvider {
 
         let bytes = match body_req.await {
             Ok(result) => {
-                *backoff = INITIAL_BACKOFF; // Reset backoff on success
+                *backoff = self.initial_backoff; // Reset backoff on success
                 match result {
                     Ok(bytes) => bytes.to_bytes(),
                     Err(e) => {
@@ -302,7 +309,7 @@ impl CatchUpPackageProvider {
             }
 
             Err(timeout_err) => {
-                let old_backoff = backoff.clone();
+                let old_backoff = *backoff;
                 *backoff = old_backoff.saturating_mul(2);
                 return Err(format!(
                     "Timed out while reading CUP response body after {} secs: {:?}. Setting backoff to {} secs",
@@ -492,14 +499,20 @@ mod tests {
         pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime},
         ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
     };
-    use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
+    use std::{
+        convert::Infallible,
+        net::SocketAddr,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
     use tokio::net::TcpListener;
     use tokio_rustls::TlsAcceptor;
 
     #[derive(Clone, Debug)]
     enum TestService {
-        SendCup,
-        SlowBody,
+        /// Service that responds with headers, and then either sends a full CUP or stalls forever.
+        SendBodyOrStall(Arc<Mutex<bool>>),
+        /// Service that never responds.
         Unresponsive,
     }
 
@@ -507,18 +520,23 @@ mod tests {
         service: TestService,
     ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
         match service {
-            TestService::SlowBody => slow_body_service().await,
-            TestService::SendCup => send_cup_service().await,
+            TestService::SendBodyOrStall(send_cup) => slow_body_service(send_cup).await,
             TestService::Unresponsive => unresponsive_service().await,
         }
     }
 
-    async fn slow_body_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+    async fn slow_body_service(
+        send_cup: Arc<Mutex<bool>>,
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
         let s = async_stream::stream! {
-            // Send one chunk
-            yield Ok(Frame::data(Bytes::from("partial data")));
-            // Stall forever
-            tokio::time::sleep(Duration::from_secs(3600)).await;
+            if *send_cup.lock().unwrap() {
+                yield Ok(Frame::data(Bytes::from(fake_cup().encode_to_vec())));
+            } else {
+                // Send one chunk
+                yield Ok(Frame::data(Bytes::from("partial data")));
+                // Stall forever
+                tokio::time::sleep(Duration::from_secs(3600)).await;
+            }
         };
 
         Ok(Response::builder()
@@ -539,18 +557,6 @@ mod tests {
             signature: vec![5, 6, 7, 8],
             signer: None,
         }
-    }
-
-    async fn send_cup_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
-        let s = async_stream::stream! {
-            yield Ok(Frame::data(Bytes::from(fake_cup().encode_to_vec())));
-        };
-
-        Ok(Response::builder()
-            .status(200)
-            .header(hyper::header::CONTENT_TYPE, "application/cbor")
-            .body(BoxBody::new(StreamBody::new(s)))
-            .unwrap())
     }
 
     async fn start_server(service: TestService) -> SocketAddr {
@@ -662,11 +668,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_catch_up_package_body_request_times_out() {
-        let server_addr = start_server(TestService::SlowBody).await;
+        let send_cup = Arc::new(Mutex::new(false));
+        let server_addr = start_server(TestService::SendBodyOrStall(send_cup.clone())).await;
         let url = format!("https://{}", server_addr);
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
+        let initial_backoff = Duration::from_secs(5);
         let cup_provider = CatchUpPackageProvider::new_with_initial_backoff(
             setup_registry(),
             tmp_dir.path().to_path_buf(),
@@ -674,7 +682,7 @@ mod tests {
             Arc::new(mock_tls_config()),
             no_op_logger(),
             node_id,
-            Duration::from_secs(5),
+            initial_backoff,
         );
 
         let err = cup_provider
@@ -684,12 +692,27 @@ mod tests {
 
         assert!(err.contains("Timed out while reading CUP response body after 5 secs: Elapsed(()). Setting backoff to 10 secs"));
 
-        let err = cup_provider
+        // Verify that the backoff was increased
+        {
+            let backoff = cup_provider.backoff.lock().await;
+            assert_eq!(*backoff, Duration::from_secs(10));
+        }
+
+        // Allow the next request to succeed
+        *send_cup.lock().unwrap() = true;
+
+        let cup = cup_provider
             .fetch_catch_up_package(&node_id, url, None)
             .await
-            .expect_err("Expected timeout error when fetching CUP from slow server");
+            .expect("Expected to fetch the CUP successfully");
 
-        assert!(err.contains("Timed out while reading CUP response body after 10 secs: Elapsed(()). Setting backoff to 20 secs"));
+        assert_eq!(cup, fake_cup());
+
+        // Verify that the backoff was reset after a successful request
+        {
+            let backoff = cup_provider.backoff.lock().await;
+            assert_eq!(*backoff, initial_backoff);
+        }
     }
 
     #[tokio::test]
@@ -715,29 +738,5 @@ mod tests {
             .expect_err("Expected timeout error when fetching CUP from slow server");
 
         assert!(err.contains("Querying CUP endpoint timed out: Elapsed(())"));
-    }
-
-    #[tokio::test]
-    async fn test_fetch_catch_up_package_suceeds() {
-        let server_addr = start_server(TestService::SendCup).await;
-        let url = format!("https://{}", server_addr);
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let node_id = node_test_id(1);
-
-        let cup_provider = CatchUpPackageProvider::new(
-            setup_registry(),
-            tmp_dir.path().to_path_buf(),
-            Arc::new(CryptoReturningOk::default()),
-            Arc::new(mock_tls_config()),
-            no_op_logger(),
-            node_id,
-        );
-
-        let cup = cup_provider
-            .fetch_catch_up_package(&node_id, url, None)
-            .await
-            .expect("Expected timeout error when fetching CUP from slow server");
-
-        assert_eq!(cup, fake_cup());
     }
 }
