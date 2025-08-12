@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:der",
     "@crate_index//:hkdf",
     "@crate_index//:mockall",
+    "@crate_index//:raw-cpuid",
     "@crate_index//:reqwest",
     "@crate_index//:sev",
     "@crate_index//:sha2",
@@ -20,8 +21,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:pem",
     "@crate_index//:rcgen",
 ]
-
-MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -36,11 +35,19 @@ rust_library(
         "fixtures/mock_amd_key_server_response.crt",
     ],
     crate_name = "ic_sev",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "sev_active",
+    srcs = ["src/bin/sev_active.rs"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES + [":sev"],
 )
 
 rust_test(

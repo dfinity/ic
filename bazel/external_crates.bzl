@@ -449,6 +449,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "convert_case": crate.spec(
                 version = "^0.6.0",
             ),
+            "raw-cpuid": crate.spec(
+                version = "11.5",
+            ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
             ),
