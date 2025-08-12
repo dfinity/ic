@@ -173,6 +173,7 @@ impl ResponseHelper {
                 response,
                 original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
+                round.cost_schedule,
             );
 
         let canister = clean_canister.clone();
@@ -297,6 +298,7 @@ impl ResponseHelper {
     ///
     /// It returns an error if the cycles balance of the clean canister differs
     /// from the cycles balances at the start of the DTS execution.
+    #[allow(clippy::result_large_err)]
     fn resume(
         paused: PausedResponseHelper,
         clean_canister: &CanisterState,
@@ -351,6 +353,7 @@ impl ResponseHelper {
 
     /// Processes the output and the state changes of Wasm execution of the
     /// response callback.
+    #[allow(clippy::result_large_err)]
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
@@ -574,6 +577,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
+            round.cost_schedule,
             wasm_execution_mode,
             round.log,
         );
@@ -934,6 +938,7 @@ pub fn execute_response(
         clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
+        round.cost_schedule,
         clean_canister.system_state.reserved_balance(),
     );
 
@@ -991,7 +996,6 @@ pub fn execute_response(
             helper.refund_for_sent_cycles(),
             call_context_id,
             call_context.has_responded(),
-            execution_parameters.execution_mode.clone(),
             call_context.instructions_executed(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
@@ -1001,7 +1005,6 @@ pub fn execute_response(
             helper.refund_for_sent_cycles(),
             call_context_id,
             call_context.has_responded(),
-            execution_parameters.execution_mode.clone(),
             call_context.instructions_executed(),
         ),
     };
@@ -1020,6 +1023,7 @@ pub fn execute_response(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
 
     process_response_result(
@@ -1078,7 +1082,6 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
-            execution_mode: execution_parameters.execution_mode.clone(),
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
@@ -1090,6 +1093,7 @@ fn execute_response_cleanup(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     process_cleanup_result(
         result,

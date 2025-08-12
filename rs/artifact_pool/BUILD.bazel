@@ -3,38 +3,6 @@ load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/interfaces",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/protobuf",
-    "//rs/sys",
-    "//rs/types/types",
-    "@crate_index//:bincode",
-    "@crate_index//:byteorder",
-    "@crate_index//:lmdb-rkv",
-    "@crate_index//:lmdb-rkv-sys",
-    "@crate_index//:nix",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:strum",
-    "@crate_index//:tempfile",
-] + select({
-    "@platforms//os:osx": [
-        "@crate_index//:rocksdb",
-    ],
-    "//conditions:default": [
-    ],
-})
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
@@ -46,31 +14,77 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "@crate_index//:criterion",
     "@crate_index//:rand",
     "@crate_index//:slog-async",
-    "@crate_index//:slog-envlogger",
     "@crate_index//:slog-term",
 ]
-
-DEV_MACRO_DEPENDENCIES = []
 
 rust_library(
     name = "artifact_pool",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_artifact_pool",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bincode",
+        "@crate_index//:byteorder",
+        "@crate_index//:lmdb-rkv",
+        "@crate_index//:lmdb-rkv-sys",
+        "@crate_index//:nix",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:strum",
+        "@crate_index//:tempfile",
+    ] + select({
+        "@platforms//os:osx": [
+            "@crate_index//:rocksdb",
+            "@crate_index//:slog-envlogger",  # needed by rocksdb implem
+        ],
+        "//conditions:default": [
+        ],
+    }),
 )
 
 rust_binary(
     name = "ic-consensus-pool-util",
-    srcs = ["src/bin/consensus_pool_util.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
+    srcs = ["bin/consensus_pool_util.rs"],
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bincode",
+        "@crate_index//:byteorder",
+        "@crate_index//:lmdb-rkv",
+        "@crate_index//:lmdb-rkv-sys",
+        "@crate_index//:nix",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:strum",
+        "@crate_index//:tempfile",
+    ] + select({
+        "@platforms//os:osx": [
+            "@crate_index//:rocksdb",
+            "@crate_index//:slog-envlogger",  # needed by rocksdb implem
+        ],
+        "//conditions:default": [
+        ],
+    }) + [
         ":artifact_pool",
         "@crate_index//:clap",
         "@crate_index//:serde-bytes-repr",
@@ -84,11 +98,41 @@ rust_test(
     deps = DEV_DEPENDENCIES,
 )
 
+BENCH_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:criterion",
+]
+
 rust_bench(
     name = "load_blocks_bench",
     testonly = True,
     srcs = ["benches/load_blocks.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":artifact_pool"],
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bincode",
+        "@crate_index//:byteorder",
+        "@crate_index//:lmdb-rkv",
+        "@crate_index//:lmdb-rkv-sys",
+        "@crate_index//:nix",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:strum",
+        "@crate_index//:tempfile",
+    ] + select({
+        "@platforms//os:osx": [
+            "@crate_index//:rocksdb",
+            "@crate_index//:slog-envlogger",  # needed by rocksdb implem
+        ],
+        "//conditions:default": [
+        ],
+    }) + DEV_DEPENDENCIES + BENCH_DEPENDENCIES + [":artifact_pool"],
 )

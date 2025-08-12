@@ -1,0 +1,294 @@
+// NOTE TO POTENTIAL CLIENTS
+// =========================
+// This API is a draft, it may change in the next few weeks. Please stay tuned, and await the final
+// version before implementing your canister code or tooling that relies on this API. Thank you for
+// your interest!
+//
+// Instructions for Treasury Manager implementers
+// ==============================================
+// 1. An implementation of this API can be integrated into the SNS framework only if it is blessed
+//    by the NNS community.
+// 2. Before blessing a particular implementation, the NNS community will review the implementation.
+//    The following requirements will be taken into account:
+//    - The implementation must be open source, version controlled, and publically available
+//      at a known location.
+//    - The purpose of the implementation must be clearly stated, and the implementation must
+//      be designed to achieve exactly that purpose.
+//    - Implementations that rely on external trusted components (e.g., DEXs) must attest to those
+//      components being reputable and trustworthy. At the very least, the external components
+//      should be controlled by a DAO.
+//    - The implementation must be well documented at least on the system design level.
+//    - The implementation must be well tested: there should be unit tests for all used functions,
+//      and there should be integration tests for both the happy scenario as well as scenarios
+//      that demonstrate resilience of the implementation to external compotent failures.
+//    - The implementation must have a public audit report / code review by at least one reputable
+//      third party that is not affiliated with the implementation team. It is up to the NNS
+//      community to decide whether a particular audit report is sufficient. These discussions
+//      should be driven by the developers of a Treasury Manager implementation, e.g.,
+//      using https://forum.dfinity.org.
+// 3. This API assumes that the underlying ledgers are operated in a reasonable way. In particular,
+//    chnaging the total supply of tokens is not taken into account. This assumption makes sense
+//    for ledgers that are operated by DAOs, e.g., the ICP ledger and the native ledger of the SNS
+//    that registers a Treasury Manager extension. However, anyone can deploy a ledger canister
+//    and remain its controller; as a rule of thumb, such ledgers should not be trusted by DAOs.
+
+// Part O. Common types
+// ====================
+
+// This might be different from, e.g., ICRC-2 allowances; it's just a way to specify how much
+// assets are expected to be available for the manager. Whether to use ICRC-1, ICRC-2, or something
+// else is an implementation detail.
+type Allowance = record {
+  asset : Asset;
+  amount_decimals : nat;
+
+  // Needed to refund excess assets that cannot be managed at this time.
+  owner_account : Account;
+};
+
+type Asset = variant {
+  Token : record {
+    ledger_fee_decimals : nat;
+    ledger_canister_id : principal;
+    symbol : text;
+  };
+};
+
+type Account = record {
+  owner : principal;
+  subaccount : opt blob;
+};
+
+// Part A. Canister init / upgrade arguments
+// =========================================
+
+type TreasuryManagerArg = variant {
+  Upgrade : record {};
+  Init : TreasuryManagerInit;
+};
+
+type TreasuryManagerInit = record {
+  allowances : vec Allowance;
+};
+
+// Part B. Update function requests
+// ================================
+
+type DepositRequest = record {
+  allowances : vec Allowance;
+};
+
+type WithdrawRequest = record {
+  // Maps Ledger canister IDs of assets to be withdrawn to the respective withdraw accounts.
+  //
+  // If not set, accounts specified at the time of deposit will be used for the withdrawal.
+  withdraw_accounts : opt vec record { principal; Account };
+};
+
+// Part C. Result of a Treasury Manager's operations
+// =================================================
+
+type Result = variant {
+  // Represents current balances of all parties known to the Treasury Manager from its perspective.
+  // Refer to the comment above `service : (TreasuryManagerArg)` for more details.
+  Ok : Balances;
+
+  // Represents all errors potentially observed during a composite operation.
+  Err : vec Error;
+};
+
+type Error = record {
+  code : nat64;
+  message : text;
+  kind : ErrorKind;
+};
+
+type ErrorKind = variant {
+  // Prevents the call from being attempted.
+  Precondition : record {};
+
+  // Prevents the response from being interpreted.
+  Postcondition : record {};
+
+  // An error that occurred while calling a canister.
+  Call : record {
+    method : text;
+    canister_id : principal;
+  };
+
+  // Backend refers to, e.g., the DEX canister that this asset manager talks to.
+  Backend : record {};
+
+  // The service is currently not available; please call back later.
+  TemporarilyUnavailable : record {};
+
+  // An exotic error that cannot be categorized using the tags above.
+  Generic : record {
+    generic_error_name : text;
+  };
+};
+
+type Balances = record {
+  timestamp_ns : nat64;
+  asset_to_balances : opt vec record { Asset; BalanceBook };
+};
+
+/// Let `k` denote a particular state, `party[k]` denote the account balance of `party`
+/// in state `k`, and `managed_assets` be the sum of all assets managed on behalf of
+/// the treasury owner in state `k`.
+///
+/// Initial managed assets
+/// ----------------------
+/// managed_assets[0] == treasury_manager[0]
+///
+///     (treasury_owner[0] == external_custodian[0] == fee_collector[0]
+///      == payees[0] == payers[0] == suspense[0] == 0)
+///
+/// Current managed assets
+/// ----------------------
+/// managed_assets[k] == treasury_manager[k] + treasury_owner[k] + external_custodian[k]
+///
+/// Under "normal operations", the following invariants hold for all k > 0:
+/// 1) suspense[k] == 0
+/// 2) managed_assets[k] == managed_assets[k-1] + payers[k] - payees[k] - fee_collector[k]
+type BalanceBook = record {
+  treasury_owner : opt Balance;
+  treasury_manager : opt Balance;
+  external_custodian : opt Balance;
+  fee_collector : opt Balance;
+  payees : opt Balance;
+  payers : opt Balance;
+
+  // An account in which items are entered temporarily before allocation to the correct
+  // or final account, e.g., due to transient errors.
+  suspense : opt Balance;
+};
+
+type Balance = record {
+  amount_decimals : nat;
+  account : opt Account;
+
+  // A human-readable name of the party that holds this balance.
+  name : opt text;
+};
+
+// Part D. Audit trail
+// ===================
+
+type AuditTrail = record {
+  transactions : vec Transaction;
+};
+
+// Most operations that a Treasury Manager performs are (direct or indirect) ledger transactions.
+// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
+// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
+// for the first time, or checking the latest ledger metadata.
+type Transaction = record {
+  result : TransactionResult;
+  timestamp_ns : nat64;
+  purpose : text;
+  canister_id : principal;
+  treasury_manager_operation : TreasuryManagerOperation;
+};
+
+type TransactionResult = variant {
+  Ok : TransactionWitness;
+  Err : Error;
+};
+
+// Most of the time, this just points to the Ledger block index. But for generality, one can
+// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
+// a token to a DEX for the first time.
+type TransactionWitness = variant {
+  // A placeholder for a transaction witness used to record a transaction attempt before
+  // it is completed.
+  Pending;
+
+  // For financial audits.
+  Ledger : vec Transfer;
+
+  // For low-level debugging.
+  NonLedger : text;
+};
+
+type Transfer = record {
+  block_index : nat;
+  amount_decimals : nat;
+  ledger_canister_id : text;
+  sender : opt Account;
+  receiver : opt Account;
+};
+
+// Example use case in the audit trail:
+//
+// ```candid
+// transactions = vec {
+//   record {
+//     treasury_manager_operation = {
+//       operation = Deposit;
+//       step = record {
+//         index = 0;
+//         is_final = false;
+//       };
+//     };
+//     ...
+//   };
+//   record {
+//     treasury_manager_operation = {
+//       operation = Deposit;
+//       step = record {
+//         index = 1;
+//         is_final = true;
+//       };
+//     };
+//     ...
+//   };
+// };
+type TreasuryManagerOperation = record {
+  operation : Operation;
+  step : Step;
+};
+
+type Operation = variant {
+  Withdraw;
+  Deposit;
+  IssueReward;
+  Balances;
+};
+
+type Step = record {
+  index : nat64;
+  is_final : bool;
+};
+
+// Parties involved in the treasury asset management process:
+// 1. treasury_owner     - e.g., the SNS Governance canister.
+// 2. treasury_manager   - this canister.
+// 3. external_custodian - e.g., the DEX in which assets are held temporarily.
+// 4. fee_collector      - takes into account all the fees incurred due to treasury_manager's work.
+// 5. payees             - e.g., developer salary payments.
+// 6. payers             - e.g., liquidity provider rewards.
+//
+// Expects flow of assets:
+//
+// (A) Initialization / Deposit
+// ============================
+//                                      ,--------------> payees
+//                                     /
+// treasury_owner ---> treasury_manager ---> external_custodian
+//              \                      \                       \
+//               `----------------------`-----------------------`--------> fee_collector
+//
+// (B) Withdrawal
+// ==============
+//             payers --->.
+//                         \
+//  external_custodian ---> treasury_manager ---> treasury_owner
+//                    \                     \
+//                     `---------------------`---------------------------> fee_collector
+service : (TreasuryManagerArg) -> {
+  deposit : (DepositRequest) -> (Result);
+  withdraw : (WithdrawRequest) -> (Result);
+  balances : (record {}) -> (Result) query;
+  audit_trail : (record {}) -> (AuditTrail) query;
+}

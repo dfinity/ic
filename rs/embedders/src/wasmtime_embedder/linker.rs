@@ -629,6 +629,23 @@ pub fn syscalls<
 
     if feature_flags.environment_variables == FlagStatus::Enabled {
         linker
+            .func_wrap("ic0", "env_var_name_exists", {
+                move |mut caller: Caller<'_, StoreData>, name_src: I, name_size: I| {
+                    let name_src: usize =
+                        name_src.try_into().expect("Failed to convert I to usize");
+                    let name_size: usize =
+                        name_size.try_into().expect("Failed to convert I to usize");
+                    charge_for_cpu(&mut caller, overhead::ENV_VAR_NAME_EXISTS)?;
+                    with_memory_and_system_api(&mut caller, |system_api, memory| {
+                        system_api.ic0_env_var_name_exists(name_src, name_size, memory)
+                    })
+                }
+            })
+            .unwrap();
+    }
+
+    if feature_flags.environment_variables == FlagStatus::Enabled {
+        linker
             .func_wrap("ic0", "env_var_value_size", {
                 move |mut caller: Caller<'_, StoreData>, name_src: I, name_size: I| {
                     let name_src: usize =

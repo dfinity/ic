@@ -65,7 +65,10 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep
+        # NOTE: github.action provides a unique identify for the artifact name
+        # in case the action is called several times:
+        #   https://docs.github.com/en/actions/reference/accessing-contextual-information-about-workflow-runs#github-context
+        name: ${{ github.job }}-${{ github.action }}-bep
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9
@@ -127,6 +130,7 @@ runs:
           ^@@crate_index__cranelift-isle          # has a non reproducible isle_tests.rs in its OUT_DIR.
           ^@@crate_index__secp256k1-sys           # has non reproducible object files, like lax_der_parsing.o, in it OUT_DIR.
           ^@@crate_index__num-traits              # has non reproducible autcfg files in its OUT_DIR. See: https://github.com/rust-num/num-traits/pull/355.
+          ^@@crate_index__sev                     # build.rs depends on the presence of /dev/sev and /dev/sev-guest. See: https://github.com/virtee/sev/issues/315
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"

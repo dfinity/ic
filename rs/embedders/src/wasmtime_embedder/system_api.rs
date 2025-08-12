@@ -21,6 +21,7 @@ use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
     NumWasmPages,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -181,7 +182,6 @@ impl InstructionLimits {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
-    pub canister_memory_limit: NumBytes,
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
@@ -313,7 +313,26 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
-        execution_mode: ExecutionMode,
+        /// The total number of instructions executed in the call context
+        call_context_instructions_executed: NumInstructions,
+    },
+
+    // For executing closures when a `Reply` is received in a composite query context.
+    CompositeReplyCallback {
+        time: Time,
+        caller: PrincipalId,
+        #[serde(with = "serde_bytes")]
+        incoming_payload: Vec<u8>,
+        incoming_cycles: Cycles,
+        call_context_id: CallContextId,
+        // Begins as empty and used to accumulate data for sending replies.
+        #[serde(with = "serde_bytes")]
+        response_data: Vec<u8>,
+        response_status: ResponseStatus,
+        /// Optional outgoing request under construction. If `None` no outgoing
+        /// request is currently under construction.
+        outgoing_request: Option<RequestInPrep>,
+        max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -333,7 +352,25 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
-        execution_mode: ExecutionMode,
+        /// The total number of instructions executed in the call context
+        call_context_instructions_executed: NumInstructions,
+    },
+
+    // For executing closures when a `Reject` is received in a composite query context.
+    CompositeRejectCallback {
+        time: Time,
+        caller: PrincipalId,
+        reject_context: RejectContext,
+        incoming_cycles: Cycles,
+        call_context_id: CallContextId,
+        // Begins as empty and used to accumulate data for sending replies.
+        #[serde(with = "serde_bytes")]
+        response_data: Vec<u8>,
+        response_status: ResponseStatus,
+        /// Optional outgoing request under construction. If `None` no outgoing
+        /// request is currently under construction.
+        outgoing_request: Option<RequestInPrep>,
+        max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -378,7 +415,14 @@ pub enum ApiType {
     Cleanup {
         caller: PrincipalId,
         time: Time,
-        execution_mode: ExecutionMode,
+        /// The total number of instructions executed in the call context
+        call_context_instructions_executed: NumInstructions,
+    },
+
+    /// Like `Cleanup`, but used in a composite query context.
+    CompositeCleanup {
+        caller: PrincipalId,
+        time: Time,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -489,7 +533,6 @@ impl ApiType {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn reply_callback(
         time: Time,
         caller: PrincipalId,
@@ -497,7 +540,6 @@ impl ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         replied: bool,
-        execution_mode: ExecutionMode,
         call_context_instructions_executed: NumInstructions,
     ) -> Self {
         Self::ReplyCallback {
@@ -514,12 +556,37 @@ impl ApiType {
             },
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-            execution_mode,
             call_context_instructions_executed,
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    pub fn composite_reply_callback(
+        time: Time,
+        caller: PrincipalId,
+        incoming_payload: Vec<u8>,
+        incoming_cycles: Cycles,
+        call_context_id: CallContextId,
+        replied: bool,
+        call_context_instructions_executed: NumInstructions,
+    ) -> Self {
+        Self::CompositeReplyCallback {
+            time,
+            caller,
+            incoming_payload,
+            incoming_cycles,
+            call_context_id,
+            response_data: vec![],
+            response_status: if replied {
+                ResponseStatus::AlreadyReplied
+            } else {
+                ResponseStatus::NotRepliedYet
+            },
+            outgoing_request: None,
+            max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            call_context_instructions_executed,
+        }
+    }
+
     pub fn reject_callback(
         time: Time,
         caller: PrincipalId,
@@ -527,7 +594,6 @@ impl ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         replied: bool,
-        execution_mode: ExecutionMode,
         call_context_instructions_executed: NumInstructions,
     ) -> Self {
         Self::RejectCallback {
@@ -544,7 +610,33 @@ impl ApiType {
             },
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-            execution_mode,
+            call_context_instructions_executed,
+        }
+    }
+
+    pub fn composite_reject_callback(
+        time: Time,
+        caller: PrincipalId,
+        reject_context: RejectContext,
+        incoming_cycles: Cycles,
+        call_context_id: CallContextId,
+        replied: bool,
+        call_context_instructions_executed: NumInstructions,
+    ) -> Self {
+        Self::CompositeRejectCallback {
+            time,
+            caller,
+            reject_context,
+            incoming_cycles,
+            call_context_id,
+            response_data: vec![],
+            response_status: if replied {
+                ResponseStatus::AlreadyReplied
+            } else {
+                ResponseStatus::NotRepliedYet
+            },
+            outgoing_request: None,
+            max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
         }
     }
@@ -580,10 +672,13 @@ impl ApiType {
             | ApiType::Init { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::SystemTask { .. }
-            | ApiType::Cleanup { .. } => ModificationTracking::Track,
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. } => ModificationTracking::Track,
         }
     }
 
@@ -593,14 +688,17 @@ impl ApiType {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
-            | ApiType::ReplicatedQuery { .. } => ExecutionMode::Replicated,
-            ApiType::NonReplicatedQuery { .. } => ExecutionMode::NonReplicated,
-            ApiType::CompositeQuery { .. } => ExecutionMode::NonReplicated,
-            ApiType::ReplyCallback { execution_mode, .. } => execution_mode.clone(),
-            ApiType::RejectCallback { execution_mode, .. } => execution_mode.clone(),
-            ApiType::PreUpgrade { .. } => ExecutionMode::Replicated,
-            ApiType::InspectMessage { .. } => ExecutionMode::NonReplicated,
-            ApiType::Cleanup { execution_mode, .. } => execution_mode.clone(),
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. } => ExecutionMode::Replicated,
+            ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::InspectMessage { .. } => ExecutionMode::NonReplicated,
         }
     }
 
@@ -610,6 +708,7 @@ impl ApiType {
             | ApiType::Init { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::NonReplicatedQuery { .. } => None,
             ApiType::Update {
@@ -624,7 +723,13 @@ impl ApiType {
             | ApiType::ReplyCallback {
                 call_context_id, ..
             }
+            | ApiType::CompositeReplyCallback {
+                call_context_id, ..
+            }
             | ApiType::RejectCallback {
+                call_context_id, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 call_context_id, ..
             }
             | ApiType::SystemTask {
@@ -655,17 +760,14 @@ impl ApiType {
             ApiType::ReplicatedQuery { .. } => "replicated query",
             ApiType::NonReplicatedQuery { .. } => "non replicated query",
             ApiType::CompositeQuery { .. } => "composite query",
-            ApiType::ReplyCallback { execution_mode, .. } => match execution_mode {
-                ExecutionMode::Replicated => "replicated reply callback",
-                ExecutionMode::NonReplicated => "non-replicated reply callback",
-            },
-            ApiType::RejectCallback { execution_mode, .. } => match execution_mode {
-                ExecutionMode::Replicated => "replicated reject callback",
-                ExecutionMode::NonReplicated => "non-replicated reject callback",
-            },
+            ApiType::ReplyCallback { .. } => "reply callback",
+            ApiType::CompositeReplyCallback { .. } => "composite reply callback",
+            ApiType::RejectCallback { .. } => "reject callback",
+            ApiType::CompositeRejectCallback { .. } => "composite reject callback",
             ApiType::PreUpgrade { .. } => "pre upgrade",
             ApiType::InspectMessage { .. } => "inspect message",
             ApiType::Cleanup { .. } => "cleanup",
+            ApiType::CompositeCleanup { .. } => "composite cleanup",
         }
     }
 
@@ -679,10 +781,13 @@ impl ApiType {
             | ApiType::NonReplicatedQuery { caller, .. }
             | ApiType::CompositeQuery { caller, .. }
             | ApiType::ReplyCallback { caller, .. }
+            | ApiType::CompositeReplyCallback { caller, .. }
             | ApiType::RejectCallback { caller, .. }
+            | ApiType::CompositeRejectCallback { caller, .. }
             | ApiType::PreUpgrade { caller, .. }
             | ApiType::InspectMessage { caller, .. }
-            | ApiType::Cleanup { caller, .. } => Some(*caller),
+            | ApiType::Cleanup { caller, .. }
+            | ApiType::CompositeCleanup { caller, .. } => Some(*caller),
         }
     }
 
@@ -693,12 +798,15 @@ impl ApiType {
             | ApiType::SystemTask { time, .. }
             | ApiType::Update { time, .. }
             | ApiType::Cleanup { time, .. }
+            | ApiType::CompositeCleanup { time, .. }
             | ApiType::NonReplicatedQuery { time, .. }
             | ApiType::ReplicatedQuery { time, .. }
             | ApiType::CompositeQuery { time, .. }
             | ApiType::PreUpgrade { time, .. }
             | ApiType::ReplyCallback { time, .. }
+            | ApiType::CompositeReplyCallback { time, .. }
             | ApiType::RejectCallback { time, .. }
+            | ApiType::CompositeRejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => time,
         }
     }
@@ -729,9 +837,6 @@ pub enum CostReturnCode {
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
-    /// Upper limit on how much the memory the canister could use.
-    limit: NumBytes,
-
     /// The Wasm memory limit set by the developer in canister settings.
     wasm_memory_limit: Option<NumBytes>,
 
@@ -764,9 +869,6 @@ struct MemoryUsage {
 
 impl MemoryUsage {
     fn new(
-        log: ReplicaLogger,
-        canister_id: CanisterId,
-        limit: NumBytes,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
@@ -775,22 +877,7 @@ impl MemoryUsage {
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
-        // A canister's current usage should never exceed its limit. This is
-        // most probably a bug. Panicking here due to this inconsistency has the
-        // danger of putting the entire subnet in a crash loop. Log an error
-        // message to page the on-call team and try to stumble along.
-        if current_usage > limit {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: current_usage {} > limit {}",
-                canister_id,
-                current_usage,
-                limit
-            );
-        }
-
         Self {
-            limit,
             wasm_memory_limit,
             current_usage,
             stable_memory_usage,
@@ -819,8 +906,11 @@ impl MemoryUsage {
                 None
             }
             ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::RejectCallback { .. } => {
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => {
                 // The Wasm memory limit is not enforced in response execution.
                 // The canister has already made a call to another canister, so
                 // introducing a new failure mode here might break canister
@@ -872,7 +962,7 @@ impl MemoryUsage {
             .current_usage
             .get()
             .overflowing_add(execution_bytes.get());
-        if overflow || new_usage > self.limit.get() {
+        if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
 
@@ -1128,9 +1218,6 @@ impl SystemApiImpl {
             .expect("Wasm memory size is larger than maximal allowed.");
 
         let memory_usage = MemoryUsage::new(
-            log.clone(),
-            sandbox_safe_system_state.canister_id,
-            execution_parameters.canister_memory_limit,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,
@@ -1159,6 +1246,10 @@ impl SystemApiImpl {
         }
     }
 
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.sandbox_safe_system_state.cost_schedule
+    }
+
     /// Refunds any cycles used for an outgoing request that doesn't get sent
     /// and returns the result of execution.
     pub fn take_execution_result(
@@ -1169,6 +1260,7 @@ impl SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
@@ -1183,7 +1275,13 @@ impl SystemApiImpl {
             | ApiType::ReplyCallback {
                 outgoing_request, ..
             }
+            | ApiType::CompositeReplyCallback {
+                outgoing_request, ..
+            }
             | ApiType::RejectCallback {
+                outgoing_request, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 outgoing_request, ..
             } => {
                 if let Some(outgoing_request) = outgoing_request.take() {
@@ -1205,6 +1303,7 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::SystemTask { .. } => Ok(None),
             ApiType::InspectMessage {
                 message_accepted, ..
@@ -1230,7 +1329,13 @@ impl SystemApiImpl {
             | ApiType::ReplyCallback {
                 response_status, ..
             }
+            | ApiType::CompositeReplyCallback {
+                response_status, ..
+            }
             | ApiType::RejectCallback {
+                response_status, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 response_status, ..
             } => match response_status {
                 ResponseStatus::JustRepliedWith(ref mut result) => Ok(result.take()),
@@ -1277,6 +1382,7 @@ impl SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::InspectMessage { .. } => None,
             ApiType::Update {
                 response_data,
@@ -1308,7 +1414,19 @@ impl SystemApiImpl {
                 max_reply_size,
                 ..
             }
+            | ApiType::CompositeReplyCallback {
+                response_data,
+                response_status,
+                max_reply_size,
+                ..
+            }
             | ApiType::RejectCallback {
+                response_data,
+                response_status,
+                max_reply_size,
+                ..
+            }
+            | ApiType::CompositeRejectCallback {
                 response_data,
                 response_status,
                 max_reply_size,
@@ -1323,14 +1441,18 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::Update { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => None,
-            ApiType::ReplyCallback { .. } => Some(0),
-            ApiType::RejectCallback { reject_context, .. } => Some(reject_context.code() as i32),
+            ApiType::ReplyCallback { .. } | ApiType::CompositeReplyCallback { .. } => Some(0),
+            ApiType::RejectCallback { reject_context, .. }
+            | ApiType::CompositeRejectCallback { reject_context, .. } => {
+                Some(reject_context.code() as i32)
+            }
         }
     }
 
@@ -1340,14 +1462,17 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => None,
-            ApiType::RejectCallback { reject_context, .. } => Some(reject_context),
+            ApiType::RejectCallback { reject_context, .. }
+            | ApiType::CompositeRejectCallback { reject_context, .. } => Some(reject_context),
         }
     }
 
@@ -1361,10 +1486,13 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => Err(self.error_for(method_name)),
             ApiType::Update {
                 outgoing_request, ..
             }
@@ -1377,12 +1505,6 @@ impl SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => {
-                // Reply and reject callbacks can be executed in non-replicated mode
-                // iff from within a composite query call. Always disallow in that case.
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    return Err(self.error_for(method_name));
-                }
-
                 match outgoing_request {
                     None => Err(HypervisorError::ToolchainContractViolation {
                         error: format!(
@@ -1413,12 +1535,15 @@ impl SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 let res = self.sandbox_safe_system_state.cycles_balance();
                 Ok(res)
@@ -1432,21 +1557,18 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    // Non-replicated mode means we are handling a composite query.
-                    // Access to this syscall not permitted.
-                    Err(self.error_for(method_name))
-                } else {
-                    Ok(self.sandbox_safe_system_state.msg_cycles_available())
-                }
+                Ok(self.sandbox_safe_system_state.msg_cycles_available())
             }
         }
     }
@@ -1457,26 +1579,21 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Update { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => Err(self.error_for(method_name)),
             ApiType::ReplyCallback {
                 incoming_cycles, ..
             }
             | ApiType::RejectCallback {
                 incoming_cycles, ..
-            } => {
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    // Execution callback in non-replicated mode means we are handling a composite query.
-                    // Access to this syscall not permitted.
-                    Err(self.error_for(method_name))
-                } else {
-                    Ok(*incoming_cycles)
-                }
-            }
+            } => Ok(*incoming_cycles),
         }
     }
 
@@ -1491,20 +1608,17 @@ impl SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    // Non-replicated mode means we are handling a composite query.
-                    // Access to this syscall not permitted.
-                    Err(self.error_for(method_name))
-                } else {
-                    Ok(self.sandbox_safe_system_state.msg_cycles_accept(max_amount))
-                }
+                Ok(self.sandbox_safe_system_state.msg_cycles_accept(max_amount))
             }
         }
     }
@@ -1566,10 +1680,14 @@ impl SystemApiImpl {
                     should_bump_canister_version: false,
                 }
             }
-            // Composite queries should persist any changes related to inter-canister
+            // Composite queries, as well as composite reply, reject and cleanup
+            // callbacks should persist any changes related to inter-canister
             // calls, like output queue requests and callbacks.
             // In case of a trap, no changes are returned.
-            ApiType::CompositeQuery { .. } => match &self.execution_error {
+            ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => match &self.execution_error {
                 Some(_) => SystemStateModifications {
                     new_certified_data: None,
                     callback_updates: vec![],
@@ -1801,26 +1919,21 @@ impl SystemApiImpl {
         match &self.api_type {
             // Longer-running messages make use of a different, possibly higher limit.
             ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,
-            // Queries have a separate limit.
+            // Queries (including composite queries) have a separate limit.
             ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
-            | ApiType::InspectMessage { .. } => page_limit.query,
-            // Callbacks and cleanup for composite queries (non-replicated execution) need to be treated as queries,
-            // whereas in replicated mode they are treated as regular messages.
-            ApiType::ReplyCallback { execution_mode, .. }
-            | ApiType::RejectCallback { execution_mode, .. }
-            | ApiType::Cleanup { execution_mode, .. } => {
-                if *execution_mode == ExecutionMode::NonReplicated {
-                    page_limit.query
-                } else {
-                    page_limit.message
-                }
-            }
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => page_limit.query,
             // All other API types get the replicated message limit.
-            ApiType::Update { .. } | ApiType::Start { .. } | ApiType::SystemTask { .. } => {
-                page_limit.message
-            }
+            ApiType::Update { .. }
+            | ApiType::Start { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::Cleanup { .. } => page_limit.message,
         }
     }
 }
@@ -1865,6 +1978,18 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Cleanup {
                 call_context_instructions_executed,
                 ..
+            }
+            | ApiType::CompositeReplyCallback {
+                call_context_instructions_executed,
+                ..
+            }
+            | ApiType::CompositeRejectCallback {
+                call_context_instructions_executed,
+                ..
+            }
+            | ApiType::CompositeCleanup {
+                call_context_instructions_executed,
+                ..
             } => *call_context_instructions_executed,
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -1903,12 +2028,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 Ok(self.sandbox_safe_system_state.environment_variables().len())
             }
@@ -1925,12 +2053,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 let keys = self
                     .sandbox_safe_system_state
@@ -1965,12 +2096,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 let keys = self
                     .sandbox_safe_system_state
@@ -2015,6 +2149,65 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_env_var_name_exists(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<i32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_exists")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                if name_size > MAX_ENV_VAR_NAME_SIZE {
+                    return Err(HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_name_exists: Variable name is too large.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
+                }
+
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_name_exists heap",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error:
+                            "ic0.env_var_name_exists: Variable name is not a valid UTF-8 string."
+                                .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+                Ok(self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .contains_key(name) as i32)
+            }
+        };
+
+        trace_syscall!(self, EnvVarNameExists, result);
+        result
+    }
+
     fn ic0_env_var_value_size(
         &self,
         name_src: usize,
@@ -2027,12 +2220,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 if name_size > MAX_ENV_VAR_NAME_SIZE {
                     return Err(HypervisorError::UserContractViolation {
@@ -2091,12 +2287,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 if name_size > MAX_ENV_VAR_NAME_SIZE {
                     return Err(HypervisorError::UserContractViolation {
@@ -2218,8 +2417,10 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::SystemTask { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. } => Err(self.error_for("ic0_msg_arg_data_size")),
             ApiType::Init {
                 incoming_payload, ..
@@ -2228,6 +2429,9 @@ impl SystemApi for SystemApiImpl {
                 incoming_payload, ..
             }
             | ApiType::ReplyCallback {
+                incoming_payload, ..
+            }
+            | ApiType::CompositeReplyCallback {
                 incoming_payload, ..
             }
             | ApiType::ReplicatedQuery {
@@ -2258,7 +2462,9 @@ impl SystemApi for SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. } => Err(self.error_for("ic0_msg_arg_data_copy")),
             ApiType::Init {
                 incoming_payload, ..
@@ -2267,6 +2473,9 @@ impl SystemApi for SystemApiImpl {
                 incoming_payload, ..
             }
             | ApiType::ReplyCallback {
+                incoming_payload, ..
+            }
+            | ApiType::CompositeReplyCallback {
                 incoming_payload, ..
             }
             | ApiType::ReplicatedQuery {
@@ -2313,10 +2522,13 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -2338,10 +2550,13 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -2380,10 +2595,13 @@ impl SystemApi for SystemApiImpl {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -2593,12 +2811,15 @@ impl SystemApi for SystemApiImpl {
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Ok(self
                 .sandbox_safe_system_state
@@ -2623,13 +2844,16 @@ impl SystemApi for SystemApiImpl {
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 valid_subslice(
                     "ic0.canister_self_copy heap",
@@ -2679,6 +2903,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_new")),
             ApiType::Update {
@@ -2693,7 +2918,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback {
                 outgoing_request, ..
             }
+            | ApiType::CompositeReplyCallback {
+                outgoing_request, ..
+            }
             | ApiType::RejectCallback {
+                outgoing_request, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 outgoing_request, ..
             } => {
                 if let Some(outgoing_request) = outgoing_request.take() {
@@ -2748,6 +2979,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_data_append")),
             ApiType::Update {
                 outgoing_request, ..
@@ -2761,7 +2993,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback {
                 outgoing_request, ..
             }
+            | ApiType::CompositeReplyCallback {
+                outgoing_request, ..
+            }
             | ApiType::RejectCallback {
+                outgoing_request, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
                 None => Err(HypervisorError::ToolchainContractViolation {
@@ -2782,6 +3020,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_on_cleanup")),
             ApiType::Update {
@@ -2796,7 +3035,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback {
                 outgoing_request, ..
             }
+            | ApiType::CompositeReplyCallback {
+                outgoing_request, ..
+            }
             | ApiType::RejectCallback {
+                outgoing_request, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
                 None => Err(HypervisorError::ToolchainContractViolation {
@@ -2838,6 +3083,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_perform")),
             ApiType::Update {
@@ -2858,7 +3104,19 @@ impl SystemApi for SystemApiImpl {
                 outgoing_request,
                 ..
             }
+            | ApiType::CompositeReplyCallback {
+                time,
+                call_context_id,
+                outgoing_request,
+                ..
+            }
             | ApiType::RejectCallback {
+                time,
+                call_context_id,
+                outgoing_request,
+                ..
+            }
+            | ApiType::CompositeRejectCallback {
                 time,
                 call_context_id,
                 outgoing_request,
@@ -2916,12 +3174,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { time, .. }
             | ApiType::Update { time, .. }
             | ApiType::Cleanup { time, .. }
+            | ApiType::CompositeCleanup { time, .. }
             | ApiType::NonReplicatedQuery { time, .. }
             | ApiType::CompositeQuery { time, .. }
             | ApiType::ReplicatedQuery { time, .. }
             | ApiType::PreUpgrade { time, .. }
             | ApiType::ReplyCallback { time, .. }
+            | ApiType::CompositeReplyCallback { time, .. }
             | ApiType::RejectCallback { time, .. }
+            | ApiType::CompositeRejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => Ok(*time),
         };
         trace_syscall!(self, Time, result);
@@ -2939,9 +3200,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => {
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => {
                 // Reply and reject callbacks can be executed in non-replicated mode
                 // iff from within a composite query call. Disallow in that case.
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
@@ -2985,12 +3249,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 Ok(self.sandbox_safe_system_state.canister_version())
             }
@@ -3195,12 +3462,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 let cycles = self.sandbox_safe_system_state.liquid_cycles_balance(
                     self.memory_usage.current_usage,
@@ -3321,10 +3591,13 @@ impl SystemApi for SystemApiImpl {
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. } => {
                 // Reply and reject callbacks can be executed in non-replicated mode
                 // iff from within a composite query call. Always disallow in that case.
@@ -3357,10 +3630,13 @@ impl SystemApi for SystemApiImpl {
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. } => {
                 // Reply and reject callbacks can be executed in non-replicated mode
                 // iff from within a composite query call. Always disallow in that case.
@@ -3404,8 +3680,11 @@ impl SystemApi for SystemApiImpl {
             ApiType::Start { .. } => Err(self.error_for("ic0_data_certificate_present")),
             ApiType::Init { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
@@ -3432,8 +3711,11 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. } => Err(self.error_for("ic0_data_certificate_size")),
@@ -3465,8 +3747,11 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. } => Err(self.error_for("ic0_data_certificate_copy")),
@@ -3538,21 +3823,20 @@ impl SystemApi for SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_certified_data_set")),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => {
+                Err(self.error_for("ic0_certified_data_set"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. } => {
-                // Reply and reject callbacks can be executed in non-replicated mode
-                // iff from within a composite query call. Disallow in that case.
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    return Err(self.error_for("ic0_certified_data_set"));
-                }
-
                 if size > CERTIFIED_DATA_MAX_LENGTH {
                     return Err(UserContractViolation {
                         error: format!(
@@ -3607,10 +3891,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::CompositeQuery { .. }
             | ApiType::Init { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => match self.sandbox_safe_system_state.status {
                 CanisterStatusView::Running => Ok(1),
@@ -3633,23 +3920,20 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles128")),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => Err(self.error_for("ic0_mint_cycles128")),
             ApiType::Update { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    // Non-replicated mode means we are handling a composite query.
-                    // Access to this syscall not permitted.
-                    Err(self.error_for("ic0_mint_cycles128"))
-                } else {
-                    let actually_minted = self.sandbox_safe_system_state.mint_cycles(amount)?;
-                    copy_cycles_to_heap(actually_minted, dst, heap, "ic0_mint_cycles_128")?;
-                    Ok(())
-                }
+                let actually_minted = self.sandbox_safe_system_state.mint_cycles(amount)?;
+                copy_cycles_to_heap(actually_minted, dst, heap, "ic0_mint_cycles_128")?;
+                Ok(())
             }
         };
         trace_syscall!(self, MintCycles128, result, amount);
@@ -3676,12 +3960,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { time, .. }
             | ApiType::Update { time, .. }
             | ApiType::Cleanup { time, .. }
+            | ApiType::CompositeCleanup { time, .. }
             | ApiType::NonReplicatedQuery { time, .. }
             | ApiType::CompositeQuery { time, .. }
             | ApiType::ReplicatedQuery { time, .. }
             | ApiType::PreUpgrade { time, .. }
             | ApiType::ReplyCallback { time, .. }
+            | ApiType::CompositeReplyCallback { time, .. }
             | ApiType::RejectCallback { time, .. }
+            | ApiType::CompositeRejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => eprintln!(
                 "{}: [Canister {}] {}",
                 time, self.sandbox_safe_system_state.canister_id, msg
@@ -3750,6 +4037,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::InspectMessage { .. } => {
                 Err(self.error_for("ic0_call_with_best_effort_response"))
             }
@@ -3765,7 +4053,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback {
                 outgoing_request, ..
             }
+            | ApiType::CompositeReplyCallback {
+                outgoing_request, ..
+            }
             | ApiType::RejectCallback {
+                outgoing_request, ..
+            }
+            | ApiType::CompositeRejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
                 None => Err(HypervisorError::ToolchainContractViolation {
@@ -3798,13 +4092,16 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_deadline")),
             ApiType::ReplicatedQuery { .. }
             | ApiType::Update { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => {
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. } => {
                 let deadline = self.sandbox_safe_system_state.msg_deadline();
                 Ok(Time::from(deadline).as_nanos_since_unix_epoch())
             }
@@ -3822,16 +4119,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::Update { .. }
             | ApiType::SystemTask { .. }
-            | ApiType::ReplicatedQuery { .. } => Ok(1),
-            ApiType::ReplyCallback { .. } | ApiType::RejectCallback { .. } => {
-                match self.execution_parameters.execution_mode {
-                    ExecutionMode::NonReplicated => Ok(0),
-                    ExecutionMode::Replicated => Ok(1),
-                }
-            }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => Ok(1),
             ApiType::InspectMessage { .. }
             | ApiType::NonReplicatedQuery { .. }
-            | ApiType::CompositeQuery { .. } => Ok(0),
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => Ok(0),
         };
         trace_syscall!(self, ic0_in_replicated_execution, result);
         result
@@ -3848,7 +4144,10 @@ impl SystemApi for SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            | ApiType::InspectMessage { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => Err(self.error_for(method_name)),
             ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
@@ -3857,19 +4156,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    // Non-replicated mode means we are handling a composite query.
-                    // Access to this syscall not permitted.
-                    Err(self.error_for(method_name))
-                } else {
-                    let cycles = self.sandbox_safe_system_state.cycles_burn128(
-                        amount,
-                        self.memory_usage.current_usage,
-                        self.memory_usage.current_message_usage,
-                    );
-                    copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-                    Ok(())
-                }
+                let cycles = self.sandbox_safe_system_state.cycles_burn128(
+                    amount,
+                    self.memory_usage.current_usage,
+                    self.memory_usage.current_message_usage,
+                );
+                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                Ok(())
             }
         };
         trace_syscall!(self, CyclesBurn128, result, amount);
@@ -3891,6 +4184,7 @@ impl SystemApi for SystemApiImpl {
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
                 execution_mode,
+                self.get_cost_schedule(),
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
@@ -3902,7 +4196,7 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .canister_creation_fee(subnet_size);
+            .canister_creation_fee(subnet_size, self.get_cost_schedule());
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
@@ -3919,7 +4213,12 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+            .http_request_fee(
+                request_size.into(),
+                Some(max_res_bytes.into()),
+                subnet_size,
+                self.get_cost_schedule(),
+            );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
@@ -4054,12 +4353,15 @@ impl SystemApi for SystemApiImpl {
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => {
                 let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
@@ -4083,13 +4385,16 @@ impl SystemApi for SystemApiImpl {
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::CompositeQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
             | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 valid_subslice(
                     "ic0.subnet_self_copy heap",

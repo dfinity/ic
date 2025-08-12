@@ -1,5 +1,5 @@
 use crate::allowances::list_allowances;
-use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
+use crate::in_memory_ledger::{verify_ledger_state, AllowancesRecentlyPurged, InMemoryLedger};
 use crate::metrics::{parse_metric, retrieve_metrics};
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
@@ -43,7 +43,9 @@ use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
     ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
 };
-use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
+use icrc_ledger_types::icrc21::responses::{
+    ConsentInfo, ConsentMessage, FieldsDisplay, Value as Icrc21Value,
+};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
@@ -2436,6 +2438,13 @@ fn apply_arg_with_caller(
             send_transfer(env, ledger_id, arg.caller.sender().unwrap(), transfer_arg)
                 .expect("transfer failed")
         }
+        LedgerEndpointArg::TransferFromArg(transfer_from_arg) => send_transfer_from(
+            env,
+            ledger_id,
+            arg.caller.sender().unwrap(),
+            transfer_from_arg,
+        )
+        .expect("transfer_from failed"),
     }
 }
 
@@ -2474,7 +2483,6 @@ pub fn test_upgrade_serialization<Tokens>(
 
                 let mut add_tx_and_verify = || {
                     while tx_index < tx_index_target {
-                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         in_memory_ledger.apply_arg_with_caller(
                             &transactions[tx_index],
                             TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
@@ -2483,6 +2491,7 @@ pub fn test_upgrade_serialization<Tokens>(
                             minter_principal,
                             Some(FEE.into()),
                         );
+                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
@@ -2490,6 +2499,7 @@ pub fn test_upgrade_serialization<Tokens>(
                         &env,
                         ledger_id,
                         tx_index as u64,
+                        AllowancesRecentlyPurged::Yes,
                     );
                 };
                 add_tx_and_verify();
@@ -2540,7 +2550,12 @@ pub fn test_upgrade_serialization<Tokens>(
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
                     // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
-                    verify_ledger_state::<Tokens>(&env, ledger_id, None);
+                    verify_ledger_state::<Tokens>(
+                        &env,
+                        ledger_id,
+                        None,
+                        AllowancesRecentlyPurged::Yes,
+                    );
                 }
 
                 Ok(())
@@ -4604,6 +4619,35 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
     }
 }
 
+fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest {
+    let mut fields_args = args.clone();
+    fields_args.user_preferences.device_spec = Some(DisplayMessageType::FieldsDisplay);
+    fields_args
+}
+
+fn modify_field(
+    fields_message: &FieldsDisplay,
+    field_name: String,
+    new_value: Option<Icrc21Value>,
+) -> FieldsDisplay {
+    let mut result = FieldsDisplay {
+        intent: fields_message.intent.clone(),
+        ..Default::default()
+    };
+    for (f_name, f_value) in &fields_message.fields {
+        if *f_name == field_name {
+            if new_value.is_some() {
+                result
+                    .fields
+                    .push((f_name.to_string(), new_value.clone().unwrap().clone()));
+            }
+        } else {
+            result.fields.push((f_name.to_string(), f_value.clone()));
+        }
+    }
+    result
+}
+
 fn test_icrc21_transfer_message(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -4632,22 +4676,33 @@ fn test_icrc21_transfer_message(
         },
     };
 
-    let expected_transfer_message = "# Approve the transfer of funds
+    let expected_transfer_message = "# Send Test Token
 
-**Amount:**
-0.01 XTST
+You are approving a transfer of funds from your account.
 
 **From:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
+
+**Amount:** `0.01 XTST`
 
 **To:**
-6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
+`6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202`
 
-**Fee:**
-0.0001 XTST
+**Fees:** `0.0001 XTST`
+Charged for processing the transfer.
 
 **Memo:**
-test_bytes";
+`test_bytes`";
+
+    let expected_fields_message = FieldsDisplay {
+        intent: "Send Test Token".to_string(),
+        fields: vec![
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Amount".to_string(),  Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}), // "0.01 XTST".to_string()),
+            ("To".to_string(), Icrc21Value::Text{content: "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()}),
+            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}), 
+            ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})],
+    };
 
     let consent_info =
         icrc21_consent_message(env, canister_id, from_account.owner, args.clone()).unwrap();
@@ -4662,6 +4717,20 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_transfer_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    assert_eq!(
+        fields_message, expected_fields_message,
+        "Expected: {:?}, got: {:?}",
+        expected_fields_message, fields_message
+    );
+
     // Make sure the accounts are formatted correctly.
     assert_eq!(from_account.to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101");
     assert_eq!(receiver_account.to_string(), "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202");
@@ -4676,11 +4745,25 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**Memo:**\ntest_bytes", "");
+    let expected_message = expected_transfer_message.replace("\n\n**Memo:**\n`test_bytes`", "");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
+    );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(&expected_fields_message, "Memo".to_string(), None);
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
     );
 
     // If the memo is not a valid UTF string, it should be hex encoded.
@@ -4701,38 +4784,53 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(
+        &expected_fields_message,
+        "Memo".to_string(),
+        Some(Icrc21Value::Text {
+            content: hex::encode(vec![0, 159, 146, 150]),
+        }),
+    );
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
+    );
 
-    // If the from account is anonymous, the message should not include the from account but only the from subaccount.
+    // If the from account is anonymous, the message should not include the account information.
     args.arg = Encode!(&transfer_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
     );
-
-    args.arg = Encode!(&TransferArg {
-        from_subaccount: None,
-        ..transfer_args.clone()
-    })
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
     .unwrap();
-
-    let message = extract_icrc21_message_string(
-        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
-            .unwrap()
-            .consent_message,
-    );
-
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
     assert_eq!(
-        message, expected_message,
-        "Expected: {}, got: {}",
-        expected_message, message
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
     );
 }
 
@@ -4780,31 +4878,45 @@ fn test_icrc21_approve_message(
         memo: Some(Memo::from(b"test_bytes".to_vec())),
     };
     assert_eq!(spender_account.to_string(), "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303");
-    let expected_approve_message = "# Authorize another address to withdraw from your account
+    let expected_approve_message = "# Approve spending
 
-**The following address is allowed to withdraw from your account:**
-djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
+You are authorizing another address to withdraw funds from your account.
 
-**Your account:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+**From:**
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
 
-**Requested withdrawal allowance:**
-0.01 XTST
+**Approve to spender:**
+`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`
 
-**Current withdrawal allowance:**
-0.01 XTST
+**Requested allowance:** `0.01 XTST`
+This is the withdrawal limit that will apply upon approval.
 
-**Expiration date:**
+**Existing allowance:** `0.01 XTST`
+Until approval, this allowance remains in effect.
+
+**Approval expiration:**
 Thu, 06 May 2021 20:17:10 +0000
 
-**Approval fee:**
-0.0001 XTST
+**Approval fees:** `0.0001 XTST`
+Charged for processing the approval.
 
-**Transaction fees to be paid by:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+**Fees paid by:**
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
 
 **Memo:**
-test_bytes";
+`test_bytes`";
+
+    let expected_fields_message = FieldsDisplay {
+        intent: "Approve spending".to_string(), 
+        fields: vec![
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Approve to spender".to_string(), Icrc21Value::Text{content: "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()}),
+            ("Requested allowance".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
+            ("Existing allowance".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
+            ("Approval expiration".to_string(), Icrc21Value::TimestampSeconds { amount: 1620332230 }),
+            ("Approval fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}),
+            ("Fees paid by".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})]};
 
     let mut args = ConsentMessageRequest {
         method: "icrc2_approve".to_owned(),
@@ -4827,6 +4939,20 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_approve_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    assert_eq!(
+        fields_message, expected_fields_message,
+        "Expected: {:?}, got: {:?}",
+        expected_fields_message, fields_message
+    );
+
     args.arg = Encode!(&ApproveArgs {
         expected_allowance: None,
         ..approve_args.clone()
@@ -4837,17 +4963,34 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    // When the expected allowance is not set, a warning should be displayed.
-    let expected_message = expected_approve_message.replace(
-        "\n\n**Current withdrawal allowance:**\n0.01 XTST",
-        "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
-    );
+    // When the expected allowance is not set, it should be skipped.
+    let expected_message =
+        expected_approve_message.replace("\n\n**Existing allowance:** `0.01 XTST`\nUntil approval, this allowance remains in effect.", "");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(
+        &expected_fields_message,
+        "Existing allowance".to_string(),
+        None,
+    );
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
+    );
 
+    // Test approval without an expiration.
     args.arg = Encode!(&ApproveArgs {
         expires_at: None,
         ..approve_args.clone()
@@ -4859,15 +5002,37 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    let expected_message =
-        expected_approve_message.replace("Thu, 06 May 2021 20:17:10 +0000", "No expiration.");
+    let expected_message = expected_approve_message.replace(
+        "Thu, 06 May 2021 20:17:10 +0000",
+        "This approval does not have an expiration.",
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(
+        &expected_fields_message,
+        "Approval expiration".to_string(),
+        Some(Icrc21Value::Text {
+            content: "This approval does not have an expiration.".to_string(),
+        }),
+    );
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
+    );
 
-    // If the approver is anonymous, the message should not include the approver account but only the approver subaccount.
+    // If the approver is anonymous, the message should not include the approver information.
     args.arg = Encode!(&approve_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
@@ -4875,12 +5040,28 @@ test_bytes";
             .consent_message,
     );
     let expected_message = expected_approve_message
-        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
-        .replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+        .replace("\n\n**Fees paid by:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","" )
+        .replace("\n\n**From:**\n`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`","");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
+    );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
+    let new_exp_fields_message =
+        modify_field(&new_exp_fields_message, "Fees paid by".to_string(), None);
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
     );
 
     // If we set the offset to 1 hour the expiration date should be 1 hour ahead.
@@ -4899,26 +5080,53 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    assert_eq!(
+        fields_message, expected_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
+    );
+    args.user_preferences.metadata.utc_offset_minutes = None;
 
+    // If memo is not specified it should not be included.
     args.arg = Encode!(&ApproveArgs {
-        from_subaccount: None,
+        memo: None,
         ..approve_args.clone()
     })
     .unwrap();
-    args.user_preferences.metadata.utc_offset_minutes = None;
 
     let message = extract_icrc21_message_string(
-        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
             .unwrap()
             .consent_message,
     );
 
-    let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
-        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let expected_message = expected_approve_message.replace("\n\n**Memo:**\n`test_bytes`", "");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
+    );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(&expected_fields_message, "Memo".to_string(), None);
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
     );
 }
 
@@ -4952,25 +5160,36 @@ fn test_icrc21_transfer_from_message(
         },
     };
 
-    let expected_transfer_from_message = "# Transfer from a withdrawal account
+    let expected_transfer_from_message = "# Spend Test Token
 
-**Withdrawal account:**
-d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+You are approving a transfer of funds from a withdrawal account.
 
-**Account sending the transfer request:**
-djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
+**From:**
+`d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101`
 
-**Amount to withdraw:**
-0.01 XTST
+**Amount:** `0.01 XTST`
+
+**Spender:**
+`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`
 
 **To:**
-6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
+`6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202`
 
-**Fee paid by withdrawal account:**
-0.0001 XTST
+**Fees:** `0.0001 XTST`
+Charged for processing the transfer.
 
 **Memo:**
-test_bytes";
+`test_bytes`";
+
+    let expected_fields_message = FieldsDisplay {
+        intent: "Spend Test Token".to_string(), 
+        fields: vec![
+            ("From".to_string(), Icrc21Value::Text{content: "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101".to_string()}), 
+            ("Amount".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 1000000, symbol: "XTST".to_string()}),
+            ("Spender".to_string(), Icrc21Value::Text{content: "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303".to_string()}),
+            ("To".to_string(), Icrc21Value::Text{content: "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202".to_string()}),
+            ("Fees".to_string(), Icrc21Value::TokenAmount {decimals: 8, amount: 10000, symbol: "XTST".to_string()}), 
+            ("Memo".to_string(), Icrc21Value::Text{content: "test_bytes".to_string()})]};
 
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, spender_account.owner, args.clone())
@@ -4982,8 +5201,21 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_transfer_from_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        spender_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    assert_eq!(
+        fields_message, expected_fields_message,
+        "Expected: {:?}, got: {:?}",
+        expected_fields_message, fields_message
+    );
 
-    // If the spender is anonymous, the message should not include the spender account but only the spender subaccount.
+    // If the spender is anonymous, the message should not include the spender account information.
     args.arg = Encode!(&transfer_from_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
@@ -4991,45 +5223,77 @@ test_bytes";
             .consent_message,
     );
     let expected_message = expected_transfer_from_message.replace(
-        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
-        "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
+        "\n\n**Spender:**\n`djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303`",
+        "",
     );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
     );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message =
+        modify_field(&expected_fields_message, "Spender".to_string(), None);
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
+    );
 
+    // If memo is not specified it should not be included.
     args.arg = Encode!(&TransferFromArgs {
-        spender_subaccount: None,
+        memo: None,
         ..transfer_from_args.clone()
     })
     .unwrap();
 
     let message = extract_icrc21_message_string(
-        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+        &icrc21_consent_message(env, canister_id, spender_account.owner, args.clone())
             .unwrap()
             .consent_message,
     );
 
-    let expected_message = expected_transfer_from_message.replace(
-        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
-        "\n\n**Subaccount sending the transfer request:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let expected_message =
+        expected_transfer_from_message.replace("\n\n**Memo:**\n`test_bytes`", "");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
         expected_message, message
+    );
+    let fields_consent_info = icrc21_consent_message(
+        env,
+        canister_id,
+        spender_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(&expected_fields_message, "Memo".to_string(), None);
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
     );
 }
 
 fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(message) => message.to_string(),
-        ConsentMessage::LineDisplayMessage { pages } => pages
-            .iter()
-            .map(|page| page.lines.join(""))
-            .collect::<Vec<String>>()
-            .join(""),
+        ConsentMessage::FieldsDisplayMessage(_) => panic!("cannot convert to string"),
+    }
+}
+
+fn extract_icrc21_fields_message(consent_message: &ConsentMessage) -> FieldsDisplay {
+    match consent_message {
+        ConsentMessage::GenericDisplayMessage(_) => panic!("should not be a string"),
+        ConsentMessage::FieldsDisplayMessage(message) => message.clone(),
     }
 }
 

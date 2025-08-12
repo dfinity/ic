@@ -19,6 +19,7 @@ type Action = variant {
   ApproveGenesisKyc : Principals;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
+  FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
 };
 
 type AddHotKey = record {
@@ -138,6 +139,18 @@ type DisburseMaturityResponse = record {
   amount_disbursed_e8s : opt nat64;
 };
 
+type SetFollowing = record {
+  topic_following : opt vec FolloweesForTopic;
+};
+
+type FolloweesForTopic = record {
+  followees : opt vec NeuronId;
+  topic : opt int32;
+};
+
+type SetFollowingResponse = record {
+};
+
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 type Command = variant {
   Spawn : Spawn;
@@ -154,6 +167,7 @@ type Command = variant {
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
   DisburseMaturity : DisburseMaturity;
+  SetFollowing : SetFollowing;
 
   // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 };
@@ -174,6 +188,7 @@ type Command_1 = variant {
   Disburse : DisburseResponse;
   RefreshVotingPower : RefreshVotingPowerResponse;
   DisburseMaturity : DisburseMaturityResponse;
+  SetFollowing : SetFollowingResponse;
 };
 
 type Command_2 = variant {
@@ -361,6 +376,7 @@ type GovernanceCachedMetrics = record {
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
+  spawning_neurons_count : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
@@ -548,6 +564,7 @@ type ManageNeuronCommandRequest = variant {
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
   DisburseMaturity : DisburseMaturity;
+  SetFollowing : SetFollowing;
 
   // KEEP THIS IN SYNC WITH COMMAND!
 };
@@ -979,6 +996,28 @@ type ProposalActionRequest = variant {
   ApproveGenesisKyc : Principals;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
+  FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+};
+
+// Creates a rented subnet from a rental request (in the Subnet Rental
+// canister).
+type FulfillSubnetRentalRequest = record {
+  // Identifies which rental request to fulfill.
+  //
+  // (Identifying the rental request by user works, because a user can have at
+  // most one rental request in the Subnet Rental canister).
+  user : opt principal;
+
+  // Which nodes will be members of the subnet.
+  node_ids : opt vec principal;
+
+  // What software the nodes will run.
+  //
+  // This must be approved by a prior proposal to bless an IC OS version.
+  //
+  // This is a full git commit ID in the ic repo. (Therefore, it must be a 40
+  // character hexidecimal string.)
+  replica_version_id : opt text;
 };
 
 type ProposalData = record {

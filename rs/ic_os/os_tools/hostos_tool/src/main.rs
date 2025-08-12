@@ -9,9 +9,6 @@ use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
 use utils::to_cidr;
 
-mod guest_vm;
-mod systemd_notifier;
-
 #[derive(Subcommand)]
 pub enum Commands {
     /// Generate systemd network configuration files. Bridges available NIC's for IC IPv6 connectivity.
@@ -28,20 +25,18 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
-    RunGuestVm {},
 }
 
 #[derive(Parser)]
 struct HostOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
+    #[arg(long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
     hostos_config_object_path: String,
 
     #[command(subcommand)]
     command: Option<Commands>,
 }
 
-#[tokio::main]
-pub async fn main() -> Result<()> {
+pub fn main() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -119,7 +114,6 @@ pub async fn main() -> Result<()> {
             println!("{}", generated_mac);
             Ok(())
         }
-        Some(Commands::RunGuestVm {}) => guest_vm::run_guest_vm().await,
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),

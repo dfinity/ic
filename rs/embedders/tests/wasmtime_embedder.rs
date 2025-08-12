@@ -12,7 +12,7 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -1630,10 +1630,7 @@ fn stable_access_beyond_32_bit_range() {
         )"#
     );
 
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_wat(&wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
-        .build();
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(&wat).build();
     instance.run(func_ref("write_to_last_page")).unwrap();
 }
 
@@ -2570,7 +2567,6 @@ fn wasm64_reject_msg_copy() {
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3093,7 +3089,6 @@ fn wasm64_msg_cycles_refunded128() {
         Cycles::new(777),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
@@ -3300,7 +3295,6 @@ fn large_wasm64_stable_read_write_test() {
             call_context_test_id(13),
         ))
         .with_wat(wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
         .build();
 
     let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
@@ -3426,6 +3420,7 @@ fn test_environment_variable_system_api() {
       (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
       (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
       (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_name_exists" (func $env_var_name_exists (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
       (import "ic0" "trap" (func $trap (param i32 i32)))
@@ -3449,7 +3444,7 @@ fn test_environment_variable_system_api() {
             (call $trap (i32.const 0) (i32.const 0))
           )
         )
-
+       
         ;; Copy first name to memory
         (local.set $index (i32.const 0))
         (local.set $name_size (call $env_var_name_size (local.get $index)))
@@ -3458,6 +3453,13 @@ fn test_environment_variable_system_api() {
             (local.get $name_dst)  ;; dst
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
+        )
+        
+        ;; Assert that the first name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
         )
 
         ;; Copy first value to memory
@@ -3481,6 +3483,13 @@ fn test_environment_variable_system_api() {
             (local.get $name_dst)  ;; dst
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
+        )
+
+        ;; Assert that the second name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
         )
 
         ;; Copy second value to memory

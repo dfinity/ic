@@ -13,11 +13,13 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        MAX_ENVIRONMENT_VARIABLES, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -35,11 +37,12 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
-    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-    OnLowWasmMemoryHookStatus, Payload, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, WasmMemoryPersistence,
+    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable,
+    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
+    NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs,
+    RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -55,7 +58,9 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
 };
-use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{
+    two_subnets_simple, StateMachine, StateMachineBuilder, StateMachineConfig,
+};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -75,6 +80,7 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext, NO_DEADLINE},
     nominal_cycles::NominalCycles,
@@ -82,12 +88,19 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
 };
+use ic_universal_canister::PayloadBuilder;
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
-use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+    mem::size_of,
+    path::Path,
+    sync::Arc,
+};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -96,7 +109,6 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
@@ -136,7 +148,6 @@ lazy_static! {
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS
         ),
-        canister_memory_limit: NumBytes::new(u64::MAX / 2),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -275,6 +286,7 @@ impl CanisterManagerBuilder {
             cycles_account_manager,
             ingress_history_writer,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
+            FlagStatus::Disabled,
         )
     }
 }
@@ -304,8 +316,6 @@ fn canister_manager_config(
         // Compute capacity for 2-core scheduler is 100%
         // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
         100,
-        MAX_CANISTER_MEMORY_SIZE,
-        MAX_CANISTER_MEMORY_SIZE,
         rate_limiting_of_instructions,
         100,
         FlagStatus::Enabled,
@@ -317,6 +327,9 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        MAX_ENVIRONMENT_VARIABLES,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
     )
 }
 
@@ -391,10 +404,7 @@ fn install_code(
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
     execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
-    execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
-        MemoryAllocation::Reserved(bytes) => bytes,
-        MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
-    };
+    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
     let dts_result = canister_manager.install_code_dts(
         context,
@@ -410,6 +420,7 @@ fn install_code(
         CompilationCostHandling::CountFullAmount,
         round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
         Config::default().dirty_page_logging,
     );
     // Canister manager tests do not trigger DTS executions.
@@ -738,7 +749,10 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     test.ingress(canister_id, "update", payload).unwrap();
 
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
+    let creation_fee = cycles_account_manager.canister_creation_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    );
     // There's only 2 canisters on the subnet, so the one created from the first one
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
@@ -760,6 +774,49 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         canister.system_state.balance(),
         *INITIAL_CYCLES - creation_fee
     );
+}
+
+#[test]
+fn create_canister_free() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            *INITIAL_CYCLES,
+        )
+        .build();
+
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let creation_fee =
+        cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
+    assert_eq!(creation_fee, Cycles::new(0));
+    // There's only 2 canisters on the subnet, so the one created from the first one
+    // with have the test id corresponding to `1`.
+    let canister = test.canister_state(canister_test_id(1));
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles.get(),
+        0
+    );
+    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
@@ -1251,6 +1308,7 @@ fn get_canister_status_of_self() {
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
+    assert!(!status.ready_for_migration());
 }
 
 #[test]
@@ -1262,11 +1320,29 @@ fn get_canister_status_of_stopped_canister() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
-            .unwrap()
-            .status();
-        assert_eq!(status, CanisterStatusType::Stopped);
+        let status_res = canister_manager
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                false,
+            )
+            .unwrap();
+        assert_eq!(status_res.status(), CanisterStatusType::Stopped);
+        assert!(!status_res.ready_for_migration());
+
+        // pretend it's ready for migration:
+        let status_res = canister_manager
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                true,
+            )
+            .unwrap();
+        assert!(status_res.ready_for_migration());
     });
 }
 
@@ -1280,11 +1356,46 @@ fn get_canister_status_of_stopping_canister() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                false,
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopping);
     });
+}
+
+#[test]
+fn canister_status_with_environment_variables() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_environment_variables_flag(FlagStatus::Enabled)
+        .build();
+    let environment_variables = btreemap![
+        "TEST_VAR".to_string() => "test_value".to_string(),
+        "TEST_VAR2".to_string() => "test_value2".to_string(),
+    ];
+
+    let expected_env_vars = environment_variables
+        .into_iter()
+        .map(|(name, value)| EnvironmentVariable { name, value })
+        .collect::<Vec<_>>();
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_environment_variables(expected_env_vars.clone())
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(*INITIAL_CYCLES, settings)
+        .unwrap();
+    let status = test.canister_status(canister_id);
+    let reply = get_reply(status);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(
+        status.settings().environment_variables(),
+        &expected_env_vars
+    );
 }
 
 #[test]
@@ -2491,7 +2602,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
     assert!(err
         .description()
-        .contains("Canister was given 64.35 KiB memory allocation but at least"));
+        .contains("Canister was given 64.44 KiB memory allocation but at least"));
 
     // canister history memory usage at the beginning of update_settings
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
@@ -3132,7 +3243,11 @@ fn unfreezing_of_frozen_canister() {
     assert_eq!(
         balance_before - balance_after,
         test.cycles_account_manager()
-            .ingress_induction_cost_from_bytes(ingress_bytes, test.subnet_size())
+            .ingress_induction_cost_from_bytes(
+                ingress_bytes,
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
     );
     // Now the canister works again.
     let result = test.ingress(canister_id, "update", wasm().reply().build());
@@ -3604,6 +3719,7 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3624,6 +3740,7 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3664,6 +3781,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3687,6 +3805,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(0),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3745,6 +3864,7 @@ fn cycles_correct_if_upgrade_fails_at_start() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3786,6 +3906,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.cycles_account_manager().execution_cost(
             wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3803,6 +3924,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3858,6 +3980,7 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -3898,6 +4021,7 @@ fn cycles_correct_if_install_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(4)
@@ -3945,6 +4069,7 @@ fn cycles_correct_if_install_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(0),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         )
     );
@@ -3987,6 +4112,7 @@ fn cycles_correct_if_install_fails_at_start() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -4026,6 +4152,7 @@ fn cycles_correct_if_install_fails_at_init() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
@@ -4208,6 +4335,7 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
                 memory_usage_after,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4302,6 +4430,7 @@ fn install_reserves_cycles_on_memory_grow() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4381,6 +4510,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4492,6 +4622,7 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
                 NumBytes::new(USAGE),
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4563,6 +4694,7 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -4697,6 +4829,7 @@ fn resource_saturation_scaling_works_in_create_canister() {
                 CAPACITY / SCALING
             ),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -4772,6 +4905,7 @@ fn resource_saturation_scaling_works_in_install_code() {
                 CAPACITY / SCALING
             ),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -5049,7 +5183,8 @@ fn canister_status_contains_reserved_cycles() {
             .storage_reservation_cycles(
                 NumBytes::new(1_000_000),
                 &ResourceSaturation::new(0, 0, CAPACITY),
-                test.subnet_size()
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
             .get()
     );
@@ -5464,6 +5599,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         + test.cycles_account_manager().execution_cost(
             instructions,
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(canister_id),
         )
         + Cycles::from(1_000_u128);
@@ -5866,6 +6002,7 @@ fn upload_chunk_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
     let _hash = test
@@ -5902,6 +6039,7 @@ fn upload_chunk_charges_if_failing() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -6106,11 +6244,15 @@ fn subnet_info_canister_call_succeeds() {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
     };
-    let SubnetInfoResponse { replica_version } = Decode!(&bytes, SubnetInfoResponse).unwrap();
+    let SubnetInfoResponse {
+        replica_version,
+        registry_version,
+    } = Decode!(&bytes, SubnetInfoResponse).unwrap();
     assert_eq!(
         replica_version,
         ic_types::ReplicaVersion::default().to_string()
     );
+    assert_eq!(registry_version, ic_types::RegistryVersion::default().get());
 }
 
 #[test]
@@ -6639,12 +6781,876 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     );
 
     // load canister snapshot
-    let load_snapshot_args =
-        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id.try_into().unwrap(), None);
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     test.subnet_message("load_canister_snapshot", load_snapshot_args.encode())
         .unwrap();
 
     // execution memory should get back to its initial value before growing stable memory
     let subnet_available_memory = test.subnet_available_memory();
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
+}
+
+#[test]
+fn test_environment_variables_are_changed_via_create_canister() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]);
+
+    // Create canister with environment variables.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(
+                    env_vars
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+                        .collect::<Vec<_>>(),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    // Verify environment variables are set.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        EnvironmentVariables::new(env_vars)
+    );
+}
+
+#[test]
+fn test_environment_variables_are_updated_on_update_settings() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]));
+
+    // Set environment variables via `update_settings`.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(
+                env_vars
+                    .iter()
+                    .map(|(name, value)| EnvironmentVariable {
+                        name: name.clone(),
+                        value: value.clone(),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify environment variables are set.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(canister.system_state.environment_variables, env_vars);
+
+    // Environment variables are unchanged when not specified.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new().build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify environment variables are unchanged.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(canister.system_state.environment_variables, env_vars);
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_disabled() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Disabled,
+            ..Default::default()
+        })
+        .build();
+
+    // Create environment variables.
+    let env_vars = BTreeMap::from([
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+    ]);
+    let env_vars_args = env_vars
+        .iter()
+        .map(|(name, value)| EnvironmentVariable {
+            name: name.clone(),
+            value: value.clone(),
+        })
+        .collect::<Vec<_>>();
+    // Create canister with environment variables.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars_args.clone())
+                .build(),
+        )
+        .unwrap();
+
+    // Verify environment variables are not set.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        EnvironmentVariables::new(BTreeMap::new())
+    );
+
+    // Set environment variables via `update_settings`.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(env_vars_args)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify environment variables are not set.
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        EnvironmentVariables::new(BTreeMap::new())
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_too_many_keys() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
+        .map(|i| (format!("KEY{}", i), "VAL".to_string()))
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!(
+                "Too many environment variables: {} (max: {})",
+                env_vars.len(),
+                MAX_ENVIRONMENT_VARIABLES
+            )
+        )
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_key_is_too_long() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let long_key = "K".repeat(MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        (long_key.clone(), "VALUE3".to_string()),
+    ];
+    let env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!(
+                "Environment variable name \"{}\" exceeds the maximum allowed length of {}.",
+                long_key, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
+            )
+        )
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_when_value_is_too_long() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let long_value = "V".repeat(MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        ("KEY3".to_string(), long_value.clone()),
+    ];
+    let env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!(
+                "Environment variable value \"{}\" exceeds the maximum allowed length of {}.",
+                long_value, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH
+            )
+        )
+    );
+}
+
+#[test]
+fn test_environment_variables_are_not_set_duplicate_keys() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        ("KEY2".to_string(), "VALUE3".to_string()),
+    ];
+    let env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister with environment variables.
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            "Duplicate environment variables are not allowed".to_string(),
+        )
+    );
+}
+
+// Helper function that updates the environment variables of a canister.
+fn update_settings_with_environment_variables(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    env_vars: Vec<EnvironmentVariable>,
+) {
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(env_vars)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+}
+
+// Helper function that fetches environment variables from the canister status API
+// and directly from the canister state, and verifies they both match the expected value.
+fn check_environment_variables_via_canister_status(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    expected_env_vars: Vec<EnvironmentVariable>,
+) {
+    let status = test.canister_status(canister_id);
+    let reply = get_reply(status);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(
+        status.settings().environment_variables(),
+        &expected_env_vars
+    );
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister
+            .system_state
+            .environment_variables
+            .iter()
+            .map(|(name, value)| EnvironmentVariable {
+                name: name.clone(),
+                value: value.clone()
+            })
+            .collect::<Vec<_>>(),
+        expected_env_vars
+    );
+}
+
+#[test]
+fn test_environment_variables() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        ("KEY3".to_string(), "VALUE3".to_string()),
+    ];
+    let mut env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister without environment variables.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new().build(),
+        )
+        .unwrap();
+
+    // Set environment variables.
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Delete a variable.
+    env_vars.remove(0);
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Add new variable.
+    env_vars.push(EnvironmentVariable {
+        name: "KEY4".to_string(),
+        value: "VALUE4".to_string(),
+    });
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Update a variable value.
+    env_vars[0].value = "VALUE2_UPDATED".to_string();
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Update a variable name.
+    env_vars[0].name = "KEY2_UPDATED".to_string();
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Delete all the environment variables.
+    env_vars.clear();
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+}
+
+/// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
+/// in addition to both canisters being controlled by the anonymous principal.
+fn install_two_universal_canisters(
+    env1: &StateMachine,
+    env2: &StateMachine,
+) -> (CanisterId, CanisterId) {
+    const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+
+    // Create a canister on each of the two subnets.
+    let canister_id1 = env1
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let canister_id2 = env2
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![PrincipalId::new_anonymous(), canister_id1.into()])
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    (canister_id1, canister_id2)
+}
+
+/// Trigger a rename for a setup according to `install_two_universal_canisters`.
+fn rename_canister(
+    env1: &StateMachine,
+    env2: &StateMachine,
+    sender_canister: CanisterId,
+    old_canister_id: CanisterId,
+    new_canister_id: CanisterId,
+    new_version: u64,
+    new_num_changes: u64,
+    send_to_subnet: bool,
+) -> WasmResult {
+    const MAX_TICKS: usize = 100;
+
+    env1.tick();
+    let sender_canister_version = env1
+        .get_latest_state()
+        .canister_state(&sender_canister)
+        .unwrap()
+        .system_state
+        .canister_version;
+
+    let arguments = RenameCanisterArgs {
+        canister_id: old_canister_id.into(),
+        rename_to: RenameToArgs {
+            canister_id: new_canister_id.into(),
+            version: new_version,
+            total_num_changes: new_num_changes,
+        },
+        sender_canister_version,
+    };
+
+    // Sending the request to the subnet should always work, sending to IC_00 works only if the
+    // routing table maps the (old) canister id to the subnet that we want to address.
+    let management_canister = if send_to_subnet {
+        CanisterId::from(env2.get_subnet_id())
+    } else {
+        IC_00
+    };
+
+    let msg_id = env1.send_ingress(
+        PrincipalId::new_anonymous(),
+        sender_canister,
+        "update",
+        wasm()
+            .call_simple(
+                management_canister,
+                Method::RenameCanister,
+                call_args()
+                    .other_side(arguments.encode())
+                    .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+            )
+            .build(),
+    );
+
+    env1.execute_xnet();
+    env2.execute_xnet();
+    env1.execute_xnet();
+    env2.execute_xnet();
+    env1.execute_xnet();
+
+    env1.await_ingress(msg_id, MAX_TICKS).unwrap()
+}
+
+#[test]
+fn can_rename_canister() {
+    let (env1, env2) = two_subnets_simple();
+
+    // Create a canister on each of the two subnets.
+    let (canister_id1, canister_id2) = install_two_universal_canisters(&env1, &env2);
+
+    let test_blob: Vec<u8> = vec![42, 41];
+
+    // Modify the memory of the canister
+    env2.execute_ingress_as(
+        PrincipalId::new_anonymous(),
+        canister_id2,
+        "update",
+        wasm()
+            .stable64_grow(1)
+            .stable64_write(0, &test_blob)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    let verify_stable_memory = |canister_id| {
+        env2.start_canister(canister_id).unwrap();
+
+        let wasm_result = env2
+            .execute_ingress_as(
+                PrincipalId::new_anonymous(),
+                canister_id,
+                "update",
+                wasm()
+                    .stable64_read(0, test_blob.len() as u64)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+
+        assert_matches!(wasm_result, WasmResult::Reply(r) if r == test_blob);
+    };
+    verify_stable_memory(canister_id2);
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    let get_num_changes = |canister_id| {
+        env2.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes()
+    };
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+    let new_version = 42;
+    let new_num_changes = 50;
+    let old_num_changes = get_num_changes(canister_id2);
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        canister_id2,
+        new_canister_id,
+        new_version,
+        new_num_changes,
+        false,
+    );
+    assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
+
+    // Verify that the right canisters are present and can be run, and that version/canister history etc are as expected.
+    let verify_rename_happened = |old_canister_id,
+                                  new_canister_id,
+                                  rename_at_version,
+                                  current_version,
+                                  expected_num_changes,
+                                  expected_history_entry| {
+        let new_canister_exists = env2
+            .get_latest_state()
+            .canister_state(&new_canister_id)
+            .is_some();
+        let old_canister_exists = env2
+            .get_latest_state()
+            .canister_state(&old_canister_id)
+            .is_some();
+        assert!(new_canister_exists);
+        assert!(!old_canister_exists);
+
+        // The version should have been updated
+        assert_eq!(
+            current_version,
+            env2.get_latest_state()
+                .canister_state(&new_canister_id)
+                .unwrap()
+                .system_state
+                .canister_version
+        );
+        assert_eq!(
+            expected_num_changes,
+            env2.get_latest_state()
+                .canister_state(&new_canister_id)
+                .unwrap()
+                .system_state
+                .get_canister_history()
+                .get_total_num_changes()
+        );
+        let history_entry = env2
+            .get_latest_state()
+            .canister_state(&new_canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .get_changes(1)
+            .next()
+            .unwrap()
+            .clone();
+
+        assert_eq!(history_entry.canister_version(), rename_at_version);
+        assert_eq!(history_entry.details(), &expected_history_entry);
+
+        verify_stable_memory(new_canister_id);
+    };
+
+    let expected_history_entry = CanisterChangeDetails::rename_canister(
+        canister_id2.into(),
+        old_num_changes,
+        new_canister_id.into(),
+        new_version,
+        new_num_changes,
+    );
+    verify_rename_happened(
+        canister_id2,
+        new_canister_id,
+        new_version + 1,
+        new_version + 1,
+        new_num_changes + 1,
+        expected_history_entry,
+    );
+
+    // Check that we can rename it a second time.
+    env2.stop_canister(new_canister_id).unwrap();
+    let third_canister_id = CanisterId::from_u64(4 * CANISTER_IDS_PER_SUBNET - 1);
+    let old_num_changes = get_num_changes(new_canister_id);
+    // Version and num_changes are lower than before. Version should just increment, but num_changes will go down.
+    let version_before_rename = env2
+        .get_latest_state()
+        .canister_state(&new_canister_id)
+        .unwrap()
+        .system_state
+        .canister_version;
+    let third_version = version_before_rename - 10;
+    let third_num_changes = 10;
+    assert_lt!(third_version, version_before_rename);
+    assert_lt!(third_num_changes, new_num_changes);
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        new_canister_id,
+        third_canister_id,
+        third_version,
+        third_num_changes,
+        true,
+    );
+    assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
+
+    let expected_history_entry = CanisterChangeDetails::rename_canister(
+        new_canister_id.into(),
+        old_num_changes,
+        third_canister_id.into(),
+        third_version,
+        third_num_changes,
+    );
+    verify_rename_happened(
+        new_canister_id,
+        third_canister_id,
+        version_before_rename + 1,
+        version_before_rename + 1,
+        third_num_changes + 1,
+        expected_history_entry.clone(),
+    );
+
+    // Check that everything is the same after a checkpoint.
+    env2.checkpointed_tick();
+    // Version advanced due messages inside previous call to `verify_rename_happened`.
+    verify_rename_happened(
+        new_canister_id,
+        third_canister_id,
+        version_before_rename + 1,
+        version_before_rename + 5,
+        third_num_changes + 1,
+        expected_history_entry,
+    );
+}
+
+#[test]
+fn cannot_rename_from_ingress() {
+    let env = StateMachineBuilder::new().build();
+
+    let canister_id = env.install_canister_wat(EMPTY_WAT, vec![], None);
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+    let arguments = RenameCanisterArgs {
+        canister_id: canister_id.into(),
+        rename_to: RenameToArgs {
+            canister_id: new_canister_id.into(),
+            version: 0,
+            total_num_changes: 0,
+        },
+        sender_canister_version: 0,
+    };
+
+    let result = env.execute_ingress(IC_00, Method::RenameCanister, arguments.encode());
+
+    assert_eq!(
+        result.unwrap_err().description(),
+        "Only canisters can call ic00 method rename_canister"
+    );
+}
+
+#[test]
+fn cannot_rename_from_non_nns() {
+    let (env1, env2) = two_subnets_simple();
+
+    // Reversed arguments so that the NNS canister is controlled by the other canister
+    let (canister_id2, canister_id1) = install_two_universal_canisters(&env2, &env1);
+
+    env1.stop_canister(canister_id1).unwrap();
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+
+    let wasm_result = rename_canister(
+        &env2,
+        &env1,
+        canister_id2,
+        canister_id1,
+        new_canister_id,
+        0,
+        0,
+        false,
+    );
+
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("It can only be called by NNS."));
+}
+
+#[test]
+fn cannot_rename_if_target_exists() {
+    const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+
+    let (env1, env2) = two_subnets_simple();
+    let (canister_id1, canister_id2) = install_two_universal_canisters(&env1, &env2);
+
+    // Install target canister id.
+    let new_canister_id = env2
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        canister_id2,
+        new_canister_id,
+        0,
+        0,
+        false,
+    );
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("is already installed"));
+}
+
+#[test]
+fn cannot_rename_running_canister() {
+    let (env1, env2) = two_subnets_simple();
+    let (canister_id1, canister_id2) = install_two_universal_canisters(&env1, &env2);
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        canister_id2,
+        new_canister_id,
+        0,
+        0,
+        false,
+    );
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("must be stopped"));
+}
+
+#[test]
+fn cannot_rename_with_snapshots() {
+    let (env1, env2) = two_subnets_simple();
+    let (canister_id1, canister_id2) = install_two_universal_canisters(&env1, &env2);
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    env2.take_canister_snapshot(TakeCanisterSnapshotArgs {
+        canister_id: canister_id2.into(),
+        replace_snapshot: None,
+    })
+    .unwrap();
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        canister_id2,
+        new_canister_id,
+        0,
+        0,
+        false,
+    );
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("must not have any snapshots"));
+}
+
+#[test]
+fn only_controllers_can_rename() {
+    let (env1, env2) = two_subnets_simple();
+    let (canister_id1, canister_id2) = install_two_universal_canisters(&env1, &env2);
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    // Remove `canister_id1` from the list of controllers.
+    env2.update_settings(
+        &canister_id2,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![PrincipalId::new_anonymous()])
+            .build(),
+    )
+    .unwrap();
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        canister_id2,
+        new_canister_id,
+        0,
+        0,
+        false,
+    );
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("Only the controllers of the canister"));
 }

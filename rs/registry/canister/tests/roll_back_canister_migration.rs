@@ -4,7 +4,7 @@ use ic_nns_test_utils::{
         local_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
         try_call_via_universal_canister,
     },
-    registry::{prepare_registry_with_two_node_sets, routing_table_mutation},
+    registry::{initial_routing_table_mutations, prepare_registry_with_two_node_sets},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -45,7 +45,7 @@ fn test_roll_back_canister_migration() {
                     .expect("failed to update the routing table");
 
                 RegistryAtomicMutateRequest {
-                    mutations: vec![routing_table_mutation(&rt)],
+                    mutations: initial_routing_table_mutations(&rt),
                     preconditions: vec![],
                 }
             };

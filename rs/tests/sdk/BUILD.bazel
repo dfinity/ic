@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -12,7 +12,6 @@ rust_library(
         "canisters/counter.mo",
     ],
     crate_name = "sdk_system_tests",
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
@@ -25,7 +24,7 @@ rust_library(
     ],
 )
 
-RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + [
+RUNTIME_DEPS = [
     "@dfx",
 ]
 
@@ -35,7 +34,6 @@ system_test_nns(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["@nns_dapp_canister//file"],
     deps = [
         # Keep sorted.
@@ -54,7 +52,6 @@ system_test(
     env = {
         "WALLET_CANISTER_0_7_2_WASM": "$(rootpath @wallet_canister_0.7.2//file)",
     },
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + [
         "@wallet_canister_0.7.2//file",
     ],

@@ -2,7 +2,7 @@ use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, get_resource_request, ResourceGroup},
+    resource::{allocate_resources, get_resource_request, AllocatedVm, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::{GroupSetup, InfraProvider},
@@ -15,12 +15,13 @@ use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::net::{Ipv6Addr, SocketAddr};
 use std::path::Path;
@@ -44,9 +45,6 @@ pub struct InternetComputer {
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
-    /// Indicates whether this `InternetComputer` instance should be installed with
-    /// GuestOS disk images of the latest-deployed mainnet version.
-    pub with_mainnet_config: bool,
     pub api_boundary_nodes: Vec<Node>,
 }
 
@@ -62,10 +60,7 @@ pub enum VmAllocationStrategy {
 
 impl InternetComputer {
     pub fn new() -> Self {
-        Self {
-            with_mainnet_config: false,
-            ..Self::default()
-        }
+        Self::default()
     }
 
     /// Set the VM resources (like number of virtual CPUs and memory) of all
@@ -216,12 +211,10 @@ impl InternetComputer {
         self
     }
 
-    pub fn with_mainnet_config(mut self) -> Self {
-        self.with_mainnet_config = true;
-        self
-    }
-
-    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+    pub fn setup_and_start_return_vms(
+        &mut self,
+        env: &TestEnv,
+    ) -> Result<BTreeMap<String, AllocatedVm>> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
@@ -283,6 +276,11 @@ impl InternetComputer {
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
+        Ok(res_group.vms)
+    }
+
+    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        self.setup_and_start_return_vms(env)?;
         Ok(())
     }
 
@@ -318,32 +316,32 @@ impl InternetComputer {
         }
     }
 
-    pub fn has_malicious_behaviours(&self) -> bool {
+    pub fn has_malicious_behaviors(&self) -> bool {
         let has_malicious_nodes: bool = self
             .subnets
             .iter()
-            .any(|s| s.nodes.iter().any(|n| n.malicious_behaviour.is_some()));
+            .any(|s| s.nodes.iter().any(|n| n.malicious_behavior.is_some()));
         let has_malicious_unassigned_nodes = self
             .unassigned_nodes
             .iter()
-            .any(|n| n.malicious_behaviour.is_some());
+            .any(|n| n.malicious_behavior.is_some());
         let has_malicious_api_boundary_nodes = self
             .api_boundary_nodes
             .iter()
-            .any(|n| n.malicious_behaviour.is_some());
+            .any(|n| n.malicious_behavior.is_some());
         has_malicious_nodes || has_malicious_unassigned_nodes || has_malicious_api_boundary_nodes
     }
 
-    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehaviour> {
+    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehavior> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
-                Some(n.malicious_behaviour.clone())
+                Some(n.malicious_behavior.clone())
             } else {
                 None
             }
         };
         // extract malicious nodes all subnet nodes
-        let mut malicious_nodes: Vec<Option<MaliciousBehaviour>> = self
+        let mut malicious_nodes: Vec<Option<MaliciousBehavior>> = self
             .subnets
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
@@ -587,6 +585,26 @@ impl Subnet {
         self
     }
 
+    /// Add the given number of nodes to the subnet.
+    ///
+    /// The nodes will inherit the VM resources of the subnet and extend required host features with the given ones.
+    pub fn add_node_with_required_host_features(
+        self,
+        required_host_features: Vec<HostFeature>,
+    ) -> Self {
+        let default_vm_resources = self.default_vm_resources;
+        let vm_allocation = self.vm_allocation.clone();
+        let required_host_features = required_host_features
+            .into_iter()
+            .chain(self.required_host_features.iter().cloned())
+            .collect();
+        self.add_node(Node::new_with_settings(
+            default_vm_resources,
+            vm_allocation,
+            required_host_features,
+        ))
+    }
+
     pub fn with_max_ingress_message_size(mut self, limit: u64) -> Self {
         self.max_ingress_bytes_per_message = Some(limit);
         self
@@ -651,7 +669,7 @@ impl Subnet {
     pub fn add_malicious_nodes(
         self,
         no_of_nodes: usize,
-        malicious_behaviour: MaliciousBehaviour,
+        malicious_behavior: MaliciousBehavior,
     ) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
             let default_vm_resources = subnet.default_vm_resources;
@@ -663,7 +681,7 @@ impl Subnet {
                     vm_allocation,
                     required_host_features,
                 )
-                .with_malicious_behaviour(malicious_behaviour.clone()),
+                .with_malicious_behavior(malicious_behavior.clone()),
             )
         })
     }
@@ -756,7 +774,7 @@ pub struct Node {
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
-    pub malicious_behaviour: Option<MaliciousBehaviour>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
 }
@@ -785,8 +803,8 @@ impl Node {
             .node_id
     }
 
-    pub fn with_malicious_behaviour(mut self, malicious_behaviour: MaliciousBehaviour) -> Self {
-        self.malicious_behaviour = Some(malicious_behaviour);
+    pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {
+        self.malicious_behavior = Some(malicious_behavior);
         self
     }
 

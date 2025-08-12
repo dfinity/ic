@@ -7,9 +7,8 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
-    PerformanceCounterType, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId,
-    TrapCode,
+    CanisterOutOfCyclesError, HypervisorError, HypervisorResult, PerformanceCounterType,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
@@ -25,6 +24,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     messages::{
         CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
     },
@@ -155,16 +155,14 @@ fn cleanup_api() -> ApiType {
     ApiType::Cleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::Replicated,
         call_context_instructions_executed: 0.into(),
     }
 }
 
 fn composite_cleanup_api() -> ApiType {
-    ApiType::Cleanup {
+    ApiType::CompositeCleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::NonReplicated,
         call_context_instructions_executed: 0.into(),
     }
 }
@@ -250,6 +248,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::EnvVarCount => vec!["*"],
         SystemApiCallId::EnvVarNameSize => vec!["*"],
         SystemApiCallId::EnvVarNameCopy => vec!["*"],
+        SystemApiCallId::EnvVarNameExists => vec!["*"],
         SystemApiCallId::EnvVarValueSize => vec!["*"],
         SystemApiCallId::EnvVarValueCopy => vec!["*"],
     };
@@ -813,6 +812,19 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::EnvVarNameExists => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_name_exists(0, var_name.len(), &heap.clone()),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         SystemApiCallId::EnvVarValueSize => {
             let mut heap = vec![0u8; 64];
             let var_name = b"TEST_VAR_1";
@@ -1331,8 +1343,10 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
-        - Cycles::from(10u128);
+    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    ) - Cycles::from(10u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
@@ -1399,6 +1413,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1479,6 +1494,7 @@ fn helper_test_on_low_wasm_memory(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let mut api = SystemApiImpl::new(
@@ -1696,6 +1712,7 @@ fn push_output_request_respects_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1806,6 +1823,7 @@ fn push_output_request_oversized_request_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -2221,6 +2239,7 @@ fn get_system_api_for_best_effort_response(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     SystemApiImpl::new(
@@ -2242,15 +2261,14 @@ fn get_system_api_for_best_effort_response(
     )
 }
 
-#[test]
-fn composite_queries_do_not_return_state_changes_on_trap() {
+fn composite_context_does_not_return_state_changes_on_trap_helper(api_type: ApiType) {
     let cycles_amount = Cycles::from(1_000_000_000_000u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
         .build();
     let mut api = get_system_api(
-        ApiTypeBuilder::build_composite_query_api(),
+        api_type,
         &get_system_state_with_cycles(cycles_amount),
         cycles_account_manager,
     );
@@ -2272,6 +2290,21 @@ fn composite_queries_do_not_return_state_changes_on_trap() {
 }
 
 #[test]
+fn composite_queries_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_query_api());
+}
+
+#[test]
+fn composite_replies_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reply_api());
+}
+
+#[test]
+fn composite_rejects_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reject_api());
+}
+
+#[test]
 fn test_env_var_name_operations() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut env_vars = BTreeMap::new();
@@ -2279,6 +2312,7 @@ fn test_env_var_name_operations() {
     let var_name_2 = "TEST_VAR_22".to_string();
     let var_value_1 = "TEST_VALUE_1".to_string();
     let var_value_2 = "TEST_VALUE_2".to_string();
+    let non_existing_var = "does_not_exist".to_string();
 
     env_vars.insert(var_name_1.clone(), var_value_1.clone());
     env_vars.insert(var_name_2.clone(), var_value_2.clone());
@@ -2293,6 +2327,23 @@ fn test_env_var_name_operations() {
 
     // Test ic0_env_var_count
     assert_eq!(api.ic0_env_var_count().unwrap(), 2);
+
+    // Test ic0_env_var_name_exists
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_1.len(), var_name_1.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_2.len(), var_name_2.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, non_existing_var.len(), non_existing_var.as_bytes())
+            .unwrap(),
+        0
+    );
 
     // Test ic0_env_var_name_size
     assert_eq!(api.ic0_env_var_name_size(0).unwrap(), var_name_1.len()); // "TEST_VAR_1"

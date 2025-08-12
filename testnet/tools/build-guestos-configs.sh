@@ -3,7 +3,7 @@
 # Build subnet based on subnet.json and transform it into removable media.
 
 # Build Requirements:
-# - Operating System: Ubuntu 20.04
+# - Operating System: Ubuntu 24.04
 # - Packages: coreutils, jq, mtools, tar, util-linux, wget, rclone
 
 set -o errexit

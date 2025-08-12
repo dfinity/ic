@@ -49,7 +49,7 @@ use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::read_dependency_from_env_to_string;
+use ic_system_test_driver::driver::test_env_api::get_current_branch_version;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -161,8 +161,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     )
     .unwrap();
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-            .expect("tip-of-branch IC version");
+        let branch_version = get_current_branch_version().expect("tip-of-branch IC version");
 
         rt.block_on(persist_metrics(
             branch_version,

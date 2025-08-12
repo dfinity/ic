@@ -290,6 +290,7 @@ where
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum Runtime {
     Remote(RemoteTestRuntime),
     Local(LocalTestRuntime),

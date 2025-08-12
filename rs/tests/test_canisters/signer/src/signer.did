@@ -1,0 +1,29 @@
+type EcdsaCurve = variant { secp256k1 };
+type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
+type GenEcdsaParams = record {
+  key_id : EcdsaKeyId;
+  derivation_path_length : nat64;
+  derivation_path_element_size : nat64;
+};
+type GenSchnorrParams = record {
+  key_id : SchnorrKeyId;
+  derivation_path_length : nat64;
+  derivation_path_element_size : nat64;
+  message_size : nat64;
+};
+type GenVetkdParams = record {
+  key_id : VetKDKeyId;
+  input_size : nat64;
+  context_size : nat64;
+};
+type ManualReply = record { signature : blob };
+type ManualReply_1 = record { encrypted_key : blob };
+type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
+type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
+type VetKDCurve = variant { bls12_381_g2 };
+type VetKDKeyId = record { name : text; curve : VetKDCurve };
+service : {
+  gen_ecdsa_sig : (GenEcdsaParams) -> (ManualReply);
+  gen_schnorr_sig : (GenSchnorrParams) -> (ManualReply);
+  gen_vetkd_key : (GenVetkdParams) -> (ManualReply_1);
+}

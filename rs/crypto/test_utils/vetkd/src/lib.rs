@@ -58,7 +58,10 @@ impl PrivateKey {
             input,
         );
 
-        let ek = EncryptedKey::combine_all(&[(0, eks)], 1, &self.public_point, &tpk, &dc, input)
+        let mut shares = std::collections::BTreeMap::new();
+        shares.insert(0, eks);
+
+        let ek = EncryptedKey::combine_all(&shares, 1, &self.public_point, &tpk, &dc, input)
             .expect("Failed to combine single EncryptedKeyShare to an EncryptedKey");
 
         ek.serialize().to_vec()

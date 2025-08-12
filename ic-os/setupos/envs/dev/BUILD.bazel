@@ -1,6 +1,7 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "artifact_bundle")
 
 # The macro contains several targets.
 # Check
@@ -20,4 +21,13 @@ icos_build(
 launch_bare_metal(
     name = "launch_bare_metal",
     image_zst_file = ":disk-img.tar.zst",
+)
+
+# Export checksums & build artifacts
+artifact_bundle(
+    name = "bundle",
+    testonly = True,
+    inputs = [":dev"],
+    prefix = "setup-os/disk-img-dev",
+    visibility = ["//visibility:public"],
 )

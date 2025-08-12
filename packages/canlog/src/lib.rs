@@ -47,13 +47,12 @@
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
+extern crate self as canlog;
 #[cfg(test)]
 mod tests;
 mod types;
 
-extern crate self as canlog;
-
-pub use crate::types::{LogFilter, Sort};
+pub use crate::types::{LogFilter, RegexString, RegexSubstitution, Sort};
 
 pub use ic_canister_log::{
     declare_log_buffer, export as export_logs, log as raw_log, GlobalBuffer, Sink,
@@ -213,6 +212,29 @@ where
     }
 }
 
+// Copy over the definition of the `ic_cdk::println!`
+// [macro](https://github.com/dfinity/cdk-rs/blob/aeea1af77ccdd1be0e35a2ff65e95552bf0ddc2d/ic-cdk/src/lib.rs#L42)
+// to avoid a dependency on the ic_cdk crate.
+/// Format and then print the formatted message
+#[cfg(target_family = "wasm")]
+macro_rules! ic_cdk_println {
+    ($fmt:expr) => ($crate::debug_print(format!($fmt)));
+    ($fmt:expr, $($arg:tt)*) => ($crate::debug_print(format!($fmt, $($arg)*)));
+}
+
+#[cfg(target_family = "wasm")]
+fn debug_print<S: std::convert::AsRef<str>>(s: S) {
+    let s = s.as_ref();
+    ic0::debug_print(s.as_bytes());
+}
+
+/// Format and then print the formatted message
+#[cfg(not(target_family = "wasm"))]
+macro_rules! ic_cdk_println {
+     ($fmt:expr) => (std::println!($fmt));
+     ($fmt:expr, $($arg:tt)*) => (std::println!($fmt, $($arg)*));
+ }
+
 #[doc(hidden)]
 #[derive(Debug)]
 pub struct PrintProxySink<Priority: 'static>(pub &'static Priority, pub &'static GlobalBuffer);
@@ -227,7 +249,7 @@ impl<Priority: LogPriorityLevels + GetLogFilter> Sink for PrintProxySink<Priorit
             entry.message,
         );
         if Priority::get_log_filter().is_match(&message) {
-            ic_cdk::println!("{}", message);
+            ic_cdk_println!("{}", message);
             self.1.append(entry)
         }
     }

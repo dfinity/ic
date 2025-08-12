@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+The CMC's `set_authorized_subnetwork_list` method is now also callable by the Subnet Rental Canister, in addition to the NNS Governance Canister.
+
 ## Deprecated
 
 ## Removed

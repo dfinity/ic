@@ -1225,7 +1225,12 @@ pub struct CanisterThresholdSigTestEnvironment {
 impl CanisterThresholdSigTestEnvironment {
     /// Creates a new test environment with the given number of nodes.
     pub fn new<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
-        Self::new_impl(num_of_nodes, |id, reg, rng| Node::new(id, reg, rng), rng)
+        Self::new_impl(
+            num_of_nodes,
+            random_registry_version(rng),
+            |id, reg, rng| Node::new(id, reg, rng),
+            rng,
+        )
     }
 
     /// Creates a new test environment with the given number of nodes and
@@ -1233,19 +1238,38 @@ impl CanisterThresholdSigTestEnvironment {
     pub fn new_with_remote_vault<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
         Self::new_impl(
             num_of_nodes,
+            random_registry_version(rng),
             |id, reg, rng| Node::new_with_remote_vault(id, reg, rng),
             rng,
         )
     }
 
-    fn new_impl<R, F>(num_of_nodes: usize, node_factory: F, rng: &mut R) -> Self
+    /// Creates a new test environment with the given number of nodes and registry version.
+    pub fn new_with_registry_version<R: RngCore + CryptoRng>(
+        num_of_nodes: usize,
+        registry_version: RegistryVersion,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_impl(
+            num_of_nodes,
+            registry_version,
+            |id, reg, rng| Node::new(id, reg, rng),
+            rng,
+        )
+    }
+
+    fn new_impl<R, F>(
+        num_of_nodes: usize,
+        registry_version: RegistryVersion,
+        node_factory: F,
+        rng: &mut R,
+    ) -> Self
     where
         R: RngCore + CryptoRng,
         F: Fn(NodeId, Arc<FakeRegistryClient>, &mut R) -> Node,
     {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-        let registry_version = random_registry_version(rng);
 
         let mut env = Self {
             nodes: Nodes::new(),
