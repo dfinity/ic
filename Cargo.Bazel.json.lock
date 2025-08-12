@@ -1,5 +1,5 @@
 {
-  "checksum": "6ad17a1e77e3efc185eed74c406a8de71536d1163b905f95eda3663aa7dead88",
+  "checksum": "e67ca206487862c4c11927720791fc6b40531022c0ba8dd3e25e06f54a1434e5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5000,7 +5000,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -5016,14 +5016,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "autocfg 1.1.0": {
+    "autocfg 1.5.0": {
       "name": "autocfg",
-      "version": "1.1.0",
+      "version": "1.5.0",
       "package_url": "https://github.com/cuviper/autocfg",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/autocfg/1.1.0/download",
-          "sha256": "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
+          "url": "https://static.crates.io/crates/autocfg/1.5.0/download",
+          "sha256": "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
         }
       },
       "targets": [
@@ -5046,7 +5046,7 @@
           "**"
         ],
         "edition": "2015",
-        "version": "1.1.0"
+        "version": "1.5.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -20982,6 +20982,10 @@
               "target": "async_stream"
             },
             {
+              "id": "autocfg 1.5.0",
+              "target": "autocfg"
+            },
+            {
               "id": "axum 0.8.4",
               "target": "axum"
             },
@@ -27802,7 +27806,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -38694,7 +38698,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -45189,7 +45193,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -46830,7 +46834,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -46915,7 +46919,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -49616,7 +49620,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -50171,7 +50175,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -50328,7 +50332,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -58078,7 +58082,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -73364,7 +73368,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -95424,6 +95428,7 @@
     "async-recursion 1.0.5",
     "async-stream 0.3.6",
     "async-trait 0.1.83",
+    "autocfg 1.5.0",
     "axum 0.8.4",
     "axum-extra 0.10.1",
     "axum-server 0.7.2",
