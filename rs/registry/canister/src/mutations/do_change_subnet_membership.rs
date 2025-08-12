@@ -85,14 +85,24 @@ pub struct ChangeSubnetMembershipPayload {
     pub node_ids_remove: Vec<NodeId>,
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
-    use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
-    use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
+    use super::*;
+    use ic_config::crypto::CryptoConfig;
+    use ic_protobuf::registry::{
+        node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
+    };
+    use ic_registry_keys::{make_node_operator_record_key, make_subnet_record_key};
 
-    use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+    use ic_registry_transport::upsert;
+    use itertools::Itertools;
 
-    use crate::common::test_helpers::get_invariant_compliant_subnet_record;
+    use crate::{
+        common::test_helpers::{
+            get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        },
+        mutations::node_management::common::make_add_node_registry_mutations,
+    };
 
     // This test is a proof of concept for how it is currently possible
     // to put a node in two subnet at once. If a node is currently in a subnet
@@ -100,37 +110,55 @@ mod tests {
     // different subnet, it will be added there.
     #[test]
     fn move_node() {
+        let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
+        let node_1_pk =
+            ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, None).unwrap();
+        let node_2_pk =
+            ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, None).unwrap();
+        let node_operator = NodeOperatorRecord {
+            node_allowance: 2,
+            ..Default::default()
+        };
         let mut registry = invariant_compliant_registry(0);
+        let mut mutations = vec![];
 
-        let node_id_1 = NodeId::new(PrincipalId::new_node_test_id(1));
-        let node_record_1 = NodeRecord::default();
-        let node_id_2 = NodeId::new(PrincipalId::new_node_test_id(2));
-        let node_record_2 = NodeRecord::default();
-        let mutations = vec![
-            upsert(
-                make_node_record_key(node_id_1).as_bytes(),
-                node_record_1.encode_to_vec(),
-            ),
-            upsert(
-                make_node_record_key(node_id_2).as_bytes(),
-                node_record_2.encode_to_vec(),
-            ),
-        ];
+        for (i, pks) in [node_1_pk.clone(), node_2_pk.clone()].iter().enumerate() {
+            let node_record = NodeRecord {
+                xnet: Some(ic_protobuf::registry::node::v1::ConnectionEndpoint {
+                    ip_addr: format!("127.0.{}.1", i),
+                    port: 8080,
+                }),
+                http: Some(ic_protobuf::registry::node::v1::ConnectionEndpoint {
+                    ip_addr: format!("127.0.{}.1", i),
+                    port: 8081,
+                }),
+                node_operator_id: PrincipalId::new_user_test_id(1).to_vec(),
+                ..Default::default()
+            };
 
-        registry.apply_mutations_for_test(mutations);
+            mutations.extend(make_add_node_registry_mutations(
+                pks.node_id(),
+                node_record,
+                pks.clone(),
+            ));
+        }
+
+        mutations.push(upsert(
+            make_node_operator_record_key(PrincipalId::new_user_test_id(1)).as_bytes(),
+            node_operator.encode_to_vec(),
+        ));
 
         let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let subnet_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
 
-        let subnet_1_record = get_invariant_compliant_subnet_record(vec![node_id_1]);
-        let subnet_2_record = get_invariant_compliant_subnet_record(vec![node_id_2]);
+        let subnet_1_record = get_invariant_compliant_subnet_record(vec![node_1_pk.node_id()]);
+        let subnet_2_record = get_invariant_compliant_subnet_record(vec![node_2_pk.node_id()]);
 
-        let subnet_list_record = SubnetListRecord {
-            subnets: vec![subnet_1.to_vec(), subnet_2.to_vec()],
-        };
+        // let subnet_list_record = SubnetListRecord {
+        //     subnets: vec![subnet_1.get().into_vec(), subnet_2.get().into_vec()],
+        // };
 
-        panic!("What");
-        let mutations = vec![
+        mutations.extend(vec![
             upsert(
                 make_subnet_record_key(subnet_1).as_bytes(),
                 subnet_1_record.encode_to_vec(),
@@ -139,18 +167,18 @@ mod tests {
                 make_subnet_record_key(subnet_2).as_bytes(),
                 subnet_2_record.encode_to_vec(),
             ),
-            upsert(
-                make_subnet_list_record_key().as_bytes(),
-                subnet_list_record.encode_to_vec(),
-            ),
-        ];
+            // upsert(
+            //     make_subnet_list_record_key().as_bytes(),
+            //     subnet_list_record.encode_to_vec(),
+            // ),
+        ]);
 
-        registry.apply_mutations_for_test(mutations);
+        registry.maybe_apply_mutation_internal(mutations);
 
         let change = ChangeSubnetMembershipPayload {
             subnet_id: subnet_2.get(),
-            node_ids_add: vec![node_id_1.get()],
-            node_ids_remove: vec![node_id_2.get()],
+            node_ids_add: vec![node_1_pk.node_id()],
+            node_ids_remove: vec![node_2_pk.node_id()],
         };
 
         // Should panic but doesn't
@@ -159,16 +187,34 @@ mod tests {
         let subnet_1_record = registry.get_subnet_or_panic(subnet_1.clone());
         let subnet_2_record = registry.get_subnet_or_panic(subnet_2.clone());
 
+        for (record, id) in [(&subnet_1_record, &subnet_1), (&subnet_2_record, &subnet_2)] {
+            println!(
+                "Subnet {} contains: [{}]",
+                id.get().to_string(),
+                record
+                    .membership
+                    .iter()
+                    .map(|p| PrincipalId::try_from(p).unwrap())
+                    .join(", ")
+            )
+        }
+
         // It is present in both subnets
         assert!(subnet_1_record
             .membership
             .iter()
-            .find(|p| NodeId::from(p).eq(&node_id_1))
+            .find(|p| {
+                let as_vec = node_1_pk.node_id().get().to_vec();
+                as_vec.eq(*p)
+            })
             .is_some());
         assert!(subnet_2_record
             .membership
             .iter()
-            .find(|p| NodeId::from(p).eq(&node_id_1))
+            .find(|p| {
+                let as_vec = node_1_pk.node_id().get().to_vec();
+                as_vec.eq(*p)
+            })
             .is_some());
     }
 }
