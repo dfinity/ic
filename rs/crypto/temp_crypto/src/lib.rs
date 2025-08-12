@@ -1113,6 +1113,7 @@ impl EcdsaSubnetConfig {
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             },

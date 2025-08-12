@@ -94,7 +94,7 @@ pub fn test(env: TestEnv) {
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
     let topo_restore_ic = env.topology_snapshot_by_name("restore");
 
-    let ic_version = env.get_initial_replica_version().unwrap();
+    let ic_version = get_guestos_img_version().unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", ic_version);
 
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);

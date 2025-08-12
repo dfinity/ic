@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/async_utils",
     "//rs/http_endpoints/metrics",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
@@ -24,6 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:url",
 ]
 

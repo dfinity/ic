@@ -791,10 +791,7 @@ mod tests {
             use std::io::Write;
 
             buf.write_all(b"new shiny contents")?;
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "something went wrong",
-            ))
+            Err(std::io::Error::other("something went wrong"))
         });
 
         assert!(!tmp.exists());

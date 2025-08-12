@@ -6,6 +6,7 @@ use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
 pub mod helpers;
+pub mod icrc2;
 pub mod ledger;
 pub mod management_canister;
 pub mod mock;

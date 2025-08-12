@@ -1,6 +1,8 @@
+pub mod disburse_maturity_response;
 mod handle_add_hotkey;
 mod handle_change_auto_stake_maturity;
 mod handle_disburse;
+mod handle_disburse_maturity;
 mod handle_follow;
 mod handle_list_neurons;
 mod handle_neuron_info;
@@ -16,6 +18,7 @@ mod handle_start_dissolve;
 mod handle_stop_dissolve;
 pub mod list_known_neurons_response;
 pub mod list_neurons_response;
+pub mod minimum_dissolve_delay_response;
 pub mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
@@ -24,7 +27,9 @@ use candid::{Decode, Encode};
 use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
 use ic_agent::{Agent, RequestId};
-use ic_nns_governance_api::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
+use ic_nns_governance_api::{
+    KnownNeuron, ListKnownNeuronsResponse, NetworkEconomics, ProposalInfo,
+};
 use std::{
     convert::TryFrom,
     sync::{atomic::AtomicBool, Arc},
@@ -55,10 +60,10 @@ use crate::{
     convert,
     errors::{ApiError, Details, ICError},
     ledger_client::{
-        handle_add_hotkey::handle_add_hotkey,
+        disburse_maturity_response::DisburseMaturityResponse, handle_add_hotkey::handle_add_hotkey,
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
-        handle_disburse::handle_disburse, handle_follow::handle_follow,
-        handle_neuron_info::handle_neuron_info,
+        handle_disburse::handle_disburse, handle_disburse_maturity::handle_disburse_maturity,
+        handle_follow::handle_follow, handle_neuron_info::handle_neuron_info,
         handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
@@ -98,6 +103,7 @@ pub trait LedgerAccess {
     async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
     async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode;
+    async fn minimum_dissolve_delay(&self) -> Result<Option<u64>, ApiError>;
 }
 
 pub struct LedgerClient {
@@ -112,12 +118,14 @@ pub struct LedgerClient {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum OperationOutput {
     BlockIndex(BlockIndex),
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
     ListNeuronsResponse(ListNeuronsResponse),
+    DisburseMaturityResponse(DisburseMaturityResponse),
 }
 
 impl TryFrom<ObjectMap> for OperationOutput {
@@ -389,6 +397,38 @@ impl LedgerAccess for LedgerClient {
                 )),
             )
         })
+    }
+    async fn minimum_dissolve_delay(&self) -> Result<Option<u64>, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
+        let bytes = agent
+            .query(
+                &self.governance_canister_id.get().0,
+                "get_network_economics_parameters",
+            )
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        Decode!(bytes.as_slice(), NetworkEconomics)
+            .map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!(
+                        "Could not decode NetworkEconomics response: {}",
+                        err
+                    )),
+                )
+            })
+            .map(
+                |network_economics| match network_economics.voting_power_economics {
+                    Some(vpe) => vpe.neuron_minimum_dissolve_delay_to_vote_seconds,
+                    None => None,
+                },
+            )
     }
     async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
         if self.offline {
@@ -691,6 +731,9 @@ impl LedgerClient {
                     OperationOutput::ListNeuronsResponse(response) => {
                         result.response = Some(ObjectMap::try_from(response)?)
                     }
+                    OperationOutput::DisburseMaturityResponse(response) => {
+                        result.response = Some(ObjectMap::try_from(response)?)
+                    }
                 }
                 result.status = Status::Completed;
                 Ok(())
@@ -786,6 +829,7 @@ impl LedgerClient {
         match request_type.clone() {
             RequestType::AddHotKey { .. } => handle_add_hotkey(bytes),
             RequestType::Disburse { .. } => handle_disburse(bytes),
+            RequestType::DisburseMaturity { .. } => handle_disburse_maturity(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),

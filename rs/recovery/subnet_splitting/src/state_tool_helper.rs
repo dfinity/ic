@@ -151,7 +151,7 @@ impl StateToolHelper {
             return Ok(());
         }
 
-        if let Some(version) = replica_version {
+        if let Some(version) = &replica_version {
             block_on(download_binary(
                 &self.logger,
                 version,
