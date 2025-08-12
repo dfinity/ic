@@ -25,12 +25,22 @@ def mainnet_icos_images():
     http_file(
         name = "mainnet_latest_setupos_disk_image",
         downloaded_file_path = "disk-img.tar.zst",
-        url = base_download_url_dev(MAINNET_LATEST_HOSTOS_REVISION, "setup-os", False, False) + "disk-img.tar.zst",
+        url = base_download_url_dev(
+            git_commit_id = MAINNET_LATEST_HOSTOS_REVISION,
+            variant = "setup-os",
+            update = False,
+            test = False,
+        ) + "disk-img.tar.zst",
     )
 
     # NODE-1682: use dev image once published release
     http_file(
         name = "mainnet_nns_setupos_disk_image",
         downloaded_file_path = "disk-img.tar.zst",
-        url = base_download_url(MAINNET_NNS_SUBNET_REVISION, "setup-os", False, False) + "disk-img.tar.zst",
+        url = base_download_url(
+            git_commit_id = MAINNET_NNS_SUBNET_REVISION,
+            variant = "setup-os",
+            update = False,
+            test = False,
+        ) + "disk-img.tar.zst",
     )
