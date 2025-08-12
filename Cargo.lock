@@ -9135,6 +9135,7 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.2.0"
 dependencies = [
+ "candid",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
@@ -13077,6 +13078,7 @@ version = "0.1.0"
 dependencies = [
  "bip32 0.5.3",
  "bitcoin 0.28.2",
+ "candid",
  "hex",
  "hex-literal",
  "hmac",
