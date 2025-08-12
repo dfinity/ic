@@ -2089,12 +2089,12 @@ dependencies = [
 
 [[package]]
 name = "canlog"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "canlog_derive",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-cdk 0.17.2",
+ "ic0 1.0.0",
  "proptest 1.6.0",
  "regex",
  "serde",
@@ -6957,7 +6957,7 @@ name = "ic-canister-profiler"
 version = "0.9.0"
 dependencies = [
  "ic-metrics-encoder",
- "ic0 0.18.11",
+ "ic0 1.0.0",
 ]
 
 [[package]]
@@ -7375,7 +7375,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-utils-ensure",
- "ic0 0.18.11",
+ "ic0 1.0.0",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "lazy_static",
@@ -10422,7 +10422,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-state-machine-tests",
- "ic0 0.21.1",
+ "ic0 1.0.0",
  "icrc-ledger-types",
  "maplit",
  "mockall",
@@ -10505,7 +10505,6 @@ name = "ic-ledger-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
- "canister-test",
  "dfn_protobuf",
  "ic-base-types",
  "ic-icp-index",
@@ -15016,12 +15015,6 @@ dependencies = [
 
 [[package]]
 name = "ic0"
-version = "0.18.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "576c539151d4769fb4d1a0c25c4108dd18facd04c5695b02cf2d226ab4e43aa5"
-
-[[package]]
-name = "ic0"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a54b5297861c651551676e8c43df805dad175cc33bc97dbd992edbbb85dcbcdf"
@@ -15037,6 +15030,12 @@ name = "ic0"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673a6b846467547f3fc61f95d246aadff03e368b53c931655300b9d1bd05a55a"
+
+[[package]]
+name = "ic0"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8877193e1921b5fd16accb0305eb46016868cd1935b05c05eca0ec007b943272"
 
 [[package]]
 name = "ic_bls12_381"
