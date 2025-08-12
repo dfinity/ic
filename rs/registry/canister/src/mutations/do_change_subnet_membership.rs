@@ -87,7 +87,7 @@ pub struct ChangeSubnetMembershipPayload {
 
 #[cfg(tests)]
 mod tests {
-    use ic_protobuf::registry::node::v1::NodeRecord;
+    use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
     use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
 
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
@@ -125,6 +125,11 @@ mod tests {
         let subnet_1_record = get_invariant_compliant_subnet_record(vec![node_id_1]);
         let subnet_2_record = get_invariant_compliant_subnet_record(vec![node_id_2]);
 
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![subnet_1.to_vec(), subnet_2.to_vec()],
+        };
+
+        panic!("What");
         let mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_1).as_bytes(),
@@ -133,6 +138,10 @@ mod tests {
             upsert(
                 make_subnet_record_key(subnet_2).as_bytes(),
                 subnet_2_record.encode_to_vec(),
+            ),
+            upsert(
+                make_subnet_list_record_key().as_bytes(),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
 
