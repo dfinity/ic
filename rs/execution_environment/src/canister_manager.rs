@@ -2659,7 +2659,7 @@ impl CanisterManager {
                 // The chunk store is initialized as empty, and no memory for it has been reserved yet.
                 // So we check and charge for the extra memory here.
                 let validated_chunk = match partial_snapshot
-                    .chunk_store
+                    .chunk_store()
                     .can_insert_chunk(self.config.wasm_chunk_store_max_size, args.chunk.clone())
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,

@@ -409,7 +409,7 @@ pub struct CanisterSnapshotImpl<T> {
     execution_snapshot: ExecutionStateSnapshotImpl<T>,
 }
 
-/// Impl specific to immutable snapshots
+/// Impl specific to immutable snapshots.
 impl CanisterSnapshot {
     // TODO
     pub fn new(
@@ -481,7 +481,7 @@ impl CanisterSnapshot {
     }
 }
 
-/// Impl specific to mutable/partial snapshots
+/// Impl specific to mutable/partial snapshots.
 impl PartialCanisterSnapshot {
     pub fn from_metadata(
         metadata: &ValidatedSnapshotMetadata,
