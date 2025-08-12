@@ -1,0 +1,28 @@
+[package]
+name = "ic-icrc3-test-ledger"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_icrc3_test_ledger"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ic-icrc3-test-ledger"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-base-types = { path = "../../../../types/base_types" }
+ic-state-machine-tests = { path = "../../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
+serde_bytes = { workspace = true }

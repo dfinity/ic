@@ -1,0 +1,43 @@
+type BlockIndex = nat;
+
+type ICRC3Value = variant {
+    Blob : blob;
+    Text : text;
+    Nat : nat;
+    Int : int;
+    Array : vec ICRC3Value;
+    Map : vec record { text; ICRC3Value };
+};
+
+type GetBlocksArgs = record {
+    // The index of the first block to fetch.
+    start : BlockIndex;
+    // Max number of blocks to fetch.
+    length : nat;
+};
+
+type GetBlocksResult = record {
+    // Total number of blocks in the
+    // block log
+    log_length : nat;
+
+    blocks : vec record { id : nat; block: ICRC3Value };
+
+    archived_blocks : vec record {
+        args : vec GetBlocksArgs;
+        callback : func (vec GetBlocksArgs) -> (GetBlocksResult) query;
+    };
+};
+
+type AddBlockResult = variant {
+    Ok : nat;
+    Err : text;
+};
+
+service : {
+    // Update endpoint to add a block to the ledger
+    add_block : (ICRC3Value) -> (AddBlockResult);
+
+    // Query endpoint to retrieve blocks (ICRC-3 compatible)
+    icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
+}
