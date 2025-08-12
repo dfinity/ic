@@ -6339,7 +6339,6 @@ dependencies = [
 name = "ic-artifact-downloader"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "axum 0.8.4",
  "backoff",
  "bytes",
@@ -7730,7 +7729,6 @@ dependencies = [
 name = "ic-consensus-manager"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "axum 0.8.4",
  "backoff",
  "bytes",
@@ -9461,7 +9459,6 @@ dependencies = [
 name = "ic-http-endpoints-async-utils"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "async-stream",
  "byte-unit",
  "bytes",
@@ -10641,7 +10638,6 @@ dependencies = [
 name = "ic-memory-transport"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "axum 0.8.4",
  "bytes",
@@ -11976,7 +11972,6 @@ dependencies = [
 name = "ic-p2p-test-utils"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "axum 0.8.4",
  "bytes",
@@ -12171,7 +12166,6 @@ dependencies = [
 name = "ic-quic-transport"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "assert_matches",
  "async-trait",
  "axum 0.8.4",
