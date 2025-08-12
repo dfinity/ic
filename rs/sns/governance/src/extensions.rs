@@ -24,6 +24,7 @@ use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
 
+use futures::future::BoxFuture;
 use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
@@ -107,7 +108,8 @@ pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
     pub extension_type: ExtensionType,
-    pub validate: fn(&Governance, ExtensionOperationArg) -> Result<ValidatedOperationArg, String>,
+    pub validate:
+        fn(&Governance, ExtensionOperationArg) -> BoxFuture<Result<ValidatedOperationArg, String>>,
 }
 
 impl ExtensionOperationSpec {
@@ -124,24 +126,56 @@ impl ExtensionOperationSpec {
         governance: &Governance,
         arg: ExtensionOperationArg,
     ) -> Result<ValidatedOperationArg, String> {
-        (self.validate)(governance, arg)
+        (self.validate)(governance, arg).await
     }
 }
 
 /// Validates deposit operation arguments
 fn validate_deposit_operation(
-    _governance: &Governance,
+    governance: &Governance,
     arg: ExtensionOperationArg,
-) -> Result<ValidatedOperationArg, String> {
-    ValidatedDepositOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerDeposit)
+) -> BoxFuture<Result<ValidatedOperationArg, String>> {
+    Box::pin(async move {
+        let structually_valid = ValidatedDepositOperationArg::try_from(arg)
+            .map(ValidatedOperationArg::TreasuryManagerDeposit)?;
+
+        let sns_subaccount = governance.sns_treasury_subaccount();
+        let icp_subaccount = governance.icp_treasury_subaccount();
+
+        // Fail if either is asking for more than 50% of current balance.  The balance could have changed
+        // since the proposal was created, and we don't assume that the proposal should work
+        let _sns_balance = governance
+            .ledger
+            .account_balance(Account {
+                owner: governance.env.canister_id().get().0,
+                subaccount: sns_subaccount,
+            })
+            .await
+            .map_err(|e| format!("Failed to get SNS treasury balance: {:?}", e))?;
+        let _nns_balance = governance
+            .nns_ledger
+            .account_balance(Account {
+                owner: governance.env.canister_id().get().0,
+                subaccount: icp_subaccount,
+            })
+            .await
+            .map_err(|e| format!("Failed to get ICP treasury balance: {:?}", e))?;
+
+        // TODO: Check if requested amounts exceed 50% of balances
+
+        Ok(structually_valid)
+    })
 }
 
 /// Validates withdraw operation arguments (currently requires empty arguments)
 fn validate_withdraw_operation(
     _governance: &Governance,
     arg: ExtensionOperationArg,
-) -> Result<ValidatedOperationArg, String> {
-    ValidatedWithdrawOperationArg::try_from(arg).map(ValidatedOperationArg::TreasuryManagerWithdraw)
+) -> BoxFuture<Result<ValidatedOperationArg, String>> {
+    Box::pin(async move {
+        ValidatedWithdrawOperationArg::try_from(arg)
+            .map(ValidatedOperationArg::TreasuryManagerWithdraw)
+    })
 }
 
 impl ExtensionType {
@@ -296,17 +330,6 @@ impl Governance {
     /// Returns the ICRC-1 subaccounts for the ICP treasury.
     fn icp_treasury_subaccount(&self) -> Option<[u8; 32]> {
         None
-    }
-
-    /// Returns the ICRC-1 subaccounts for the SNS treasury and ICP treasury.
-    fn treasury_subaccounts(&self) -> (Option<[u8; 32]>, Option<[u8; 32]>) {
-        // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-        let treasury_sns_subaccount = Some(compute_distribution_subaccount_bytes(
-            self.env.canister_id().get(),
-            TREASURY_SUBACCOUNT_NONCE,
-        ));
-        let treasury_icp_subaccount = None;
-        (treasury_sns_subaccount, treasury_icp_subaccount)
     }
 
     async fn construct_treasury_manager_deposit_allowances(
@@ -1040,6 +1063,7 @@ mod tests {
     use crate::pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse};
     use crate::pb::v1::{governance, governance::SnsMetadata, NervousSystemParameters};
     use crate::types::test_helpers::NativeEnvironment;
+    use ic_ledger_core::Tokens;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
     use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
     use maplit::btreemap;
@@ -1152,12 +1176,22 @@ mod tests {
             operation_arg: Some(operation_arg),
         };
 
+        let mut icp_ledger = MockICRC1Ledger::default();
+
+        icp_ledger.expect_account_balance().returning(|_| {
+            Ok(Tokens::from_e8s(200_000_000_000)) // Mock ICP balance
+        });
+        let mut sns_ledger = MockICRC1Ledger::default();
+        sns_ledger.expect_account_balance().returning(|_| {
+            Ok(Tokens::from_e8s(100_000_000_000)) // Mock SNS balance
+        });
+
         let governance = Governance::new(
             ValidGovernanceProto::try_from(governance_proto)
                 .expect("Failed validating governance proto"),
             Box::new(env),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockICRC1Ledger::default()),
+            Box::new(sns_ledger),
+            Box::new(icp_ledger),
             Box::new(MockCMC::default()),
         );
 
@@ -1214,8 +1248,9 @@ mod tests {
             .contains("does not have an operation named invalid_operation"));
     }
 
-    #[test]
-    fn test_validate_deposit_operation() {
+    #[tokio::test]
+    async fn test_validate_deposit_operation() {
+        // Use setup that configures mock ledgers to return balances
         let (governance, _) = setup_env_for_test(true, "deposit");
 
         // Test valid deposit operation
@@ -1234,7 +1269,9 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(&governance, valid_arg.clone()).unwrap();
+        let result = validate_deposit_operation(&governance, valid_arg.clone())
+            .await
+            .unwrap();
 
         match result {
             ValidatedOperationArg::TreasuryManagerDeposit(deposit) => {
@@ -1244,7 +1281,6 @@ mod tests {
             _ => panic!("Expected TreasuryManagerDeposit variant"),
         }
 
-        // Test missing SNS amount
         let missing_sns_arg = ExtensionOperationArg {
             value: Some(Precise {
                 value: Some(precise::Value::Map(PreciseMap {
@@ -1257,7 +1293,9 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(&governance, missing_sns_arg).unwrap_err();
+        let result = validate_deposit_operation(&governance, missing_sns_arg)
+            .await
+            .unwrap_err();
         assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test missing ICP amount
@@ -1273,7 +1311,9 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(&governance, missing_icp_arg).unwrap_err();
+        let result = validate_deposit_operation(&governance, missing_icp_arg)
+            .await
+            .unwrap_err();
         assert!(result.contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Test wrong type for SNS amount
@@ -1292,12 +1332,16 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(&governance, wrong_type_arg).unwrap_err();
+        let result = validate_deposit_operation(&governance, wrong_type_arg)
+            .await
+            .unwrap_err();
         assert!(result.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Test no arguments provided
         let no_args = ExtensionOperationArg { value: None };
-        let result = validate_deposit_operation(&governance, no_args).unwrap_err();
+        let result = validate_deposit_operation(&governance, no_args)
+            .await
+            .unwrap_err();
         assert!(result.contains("Deposit operation arguments must be provided"));
 
         // Test not a map
@@ -1307,17 +1351,21 @@ mod tests {
             }),
         };
 
-        let result = validate_deposit_operation(&governance, not_map_arg).unwrap_err();
+        let result = validate_deposit_operation(&governance, not_map_arg)
+            .await
+            .unwrap_err();
         assert!(result.contains("Deposit operation arguments must be a PreciseMap"));
     }
 
-    #[test]
-    fn test_validate_withdraw_operation() {
+    #[tokio::test]
+    async fn test_validate_withdraw_operation() {
         let (governance, _) = setup_env_for_test(true, "withdraw");
 
         // Test valid withdraw operation - must have empty arguments
         let valid_arg = ExtensionOperationArg { value: None };
-        let result = validate_withdraw_operation(&governance, valid_arg.clone()).unwrap();
+        let result = validate_withdraw_operation(&governance, valid_arg.clone())
+            .await
+            .unwrap();
 
         match result {
             ValidatedOperationArg::TreasuryManagerWithdraw(withdraw) => {
@@ -1334,8 +1382,146 @@ mod tests {
             }),
         };
 
-        let result = validate_withdraw_operation(&governance, minimal_arg).unwrap_err();
+        let result = validate_withdraw_operation(&governance, minimal_arg)
+            .await
+            .unwrap_err();
         assert!(result.contains("Withdraw operation does not accept arguments at this time"));
+    }
+
+    fn setup_governance_with_treasury_balances(sns_balance: u64, icp_balance: u64) -> Governance {
+        let env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+
+        let root_canister_id = CanisterId::from_u64(1001);
+        let governance_proto = GovernanceProto {
+            root_canister_id: Some(root_canister_id.get()),
+            ledger_canister_id: Some(CanisterId::from_u64(4000).get()),
+            swap_canister_id: Some(CanisterId::from_u64(5000).get()),
+            parameters: Some(NervousSystemParameters::with_default_values()),
+            sns_metadata: Some(SnsMetadata {
+                logo: None,
+                url: Some("https://example.com".to_string()),
+                name: Some("Test SNS".to_string()),
+                description: Some("Test SNS for extensions".to_string()),
+            }),
+            mode: governance::Mode::Normal.into(),
+            ..Default::default()
+        };
+
+        // Create mocks with configured expectations
+        let mut sns_ledger = MockICRC1Ledger::new();
+        let mut icp_ledger = MockICRC1Ledger::new();
+
+        // Get the expected subaccounts
+        let governance_canister_id = env.canister_id();
+
+        Some(compute_distribution_subaccount_bytes(
+            governance_canister_id.get(),
+            TREASURY_SUBACCOUNT_NONCE,
+        ));
+
+        let sns_subaccount = compute_distribution_subaccount_bytes(governance_canister_id.get(), 0);
+
+        // Configure SNS ledger mock
+        sns_ledger
+            .expect_account_balance()
+            .withf(move |account: &Account| {
+                account.owner == governance_canister_id.get().0
+                    && account.subaccount == Some(sns_subaccount)
+            })
+            .times(1)
+            .returning(move |_| Ok(Tokens::from_e8s(sns_balance)));
+
+        // Configure ICP ledger mock
+        icp_ledger
+            .expect_account_balance()
+            .withf(move |account: &Account| {
+                account.owner == governance_canister_id.get().0 && account.subaccount == None
+            })
+            .times(1)
+            .returning(move |_| Ok(Tokens::from_e8s(icp_balance)));
+
+        Governance::new(
+            ValidGovernanceProto::try_from(governance_proto)
+                .expect("Failed validating governance proto"),
+            Box::new(env),
+            Box::new(sns_ledger),
+            Box::new(icp_ledger),
+            Box::new(MockCMC::default()),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_validate_deposit_operation_treasury_balance_limits() {
+        // Test parameters: (sns_balance, icp_balance, sns_request, icp_request, should_succeed, error_msg)
+        let test_cases = vec![
+            // Positive case: both amounts at exactly 50%
+            (100_000_000, 200_000_000, 50_000_000, 100_000_000, true, ""),
+            // Positive case: both amounts below 50%
+            (100_000_000, 200_000_000, 30_000_000, 60_000_000, true, ""),
+            // Positive case: zero amounts
+            (100_000_000, 200_000_000, 0, 0, true, ""),
+            // Negative case: SNS exceeds 50%
+            (
+                100_000_000,
+                200_000_000,
+                51_000_000,
+                50_000_000,
+                false,
+                "SNS treasury allocation exceeds 50% of treasury balance",
+            ),
+            // Negative case: ICP exceeds 50%
+            (
+                100_000_000,
+                200_000_000,
+                40_000_000,
+                101_000_000,
+                false,
+                "ICP treasury allocation exceeds 50% of treasury balance",
+            ),
+            // Negative case: both exceed 50%
+            (
+                100_000_000,
+                200_000_000,
+                60_000_000,
+                120_000_000,
+                false,
+                "treasury allocation exceeds 50% of treasury balance",
+            ),
+        ];
+
+        for (sns_balance, icp_balance, sns_request, icp_request, should_succeed, expected_error) in
+            test_cases
+        {
+            let governance = setup_governance_with_treasury_balances(sns_balance, icp_balance);
+
+            let arg = ExtensionOperationArg {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(sns_request)),
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(icp_request)),
+                            },
+                        },
+                    })),
+                }),
+            };
+
+            let result = validate_deposit_operation(&governance, arg).await;
+
+            if should_succeed {
+                assert!(result.is_ok(),
+                        "Expected success for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {:?}",
+                        sns_balance, icp_balance, sns_request, icp_request, result);
+            } else {
+                let error = result.unwrap_err();
+                assert!(error.contains(expected_error),
+                        "Expected error containing '{}' for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {}",
+                        expected_error, sns_balance, icp_balance, sns_request, icp_request, error);
+            }
+        }
     }
 
     #[test]
