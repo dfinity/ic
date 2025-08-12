@@ -287,23 +287,7 @@ fn strip_page_map_deltas(
         }
     }
 
-    for (_id, canister_snapshot) in state.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(canister_snapshot);
-        new_snapshot
-            .chunk_store_mut()
-            .page_map_mut()
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
-            .execution_snapshot_mut()
-            .wasm_memory
-            .page_map
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
-            .execution_snapshot_mut()
-            .stable_memory
-            .page_map
-            .strip_all_deltas(Arc::clone(&fd_factory));
-    }
+    state.canister_snapshots.strip_page_map_deltas(&fd_factory);
 
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.

@@ -1273,7 +1273,7 @@ impl ReplicatedState {
     pub fn create_snapshot_from_metadata(
         &mut self,
         snapshot_id: SnapshotId,
-        snapshot: PartialCanisterSnapshot,
+        snapshot: Arc<PartialCanisterSnapshot>,
     ) {
         self.metadata
             .unflushed_checkpoint_ops

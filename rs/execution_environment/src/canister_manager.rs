@@ -2588,11 +2588,6 @@ impl CanisterManager {
         let partial_snapshot: &mut PartialCanisterSnapshot =
             self.get_partial_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
-        // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
-            return Err(CanisterManagerError::CanisterSnapshotImmutable);
-        }
-
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {

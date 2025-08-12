@@ -36,7 +36,7 @@ pub struct CanisterSnapshots {
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshots created via metadata upload, mutable via data upload.
     #[validate_eq(CompareWithValidateEq)]
-    partial_snapshots: BTreeMap<SnapshotId, PartialCanisterSnapshot>,
+    partial_snapshots: BTreeMap<SnapshotId, Arc<PartialCanisterSnapshot>>,
     /// The set of snapshots ids grouped by canisters.
     snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
     /// Memory usage of all canister snapshots in bytes.
@@ -50,11 +50,18 @@ pub struct CanisterSnapshots {
 impl CanisterSnapshots {
     pub fn new(
         snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
-        partial_snapshots: BTreeMap<SnapshotId, PartialCanisterSnapshot>,
+        partial_snapshots: BTreeMap<SnapshotId, Arc<PartialCanisterSnapshot>>,
     ) -> Self {
         let mut snapshot_ids = BTreeMap::default();
         let mut memory_usage = NumBytes::from(0);
         for (snapshot_id, snapshot) in snapshots.iter() {
+            let canister_id = snapshot_id.get_canister_id();
+            let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
+                snapshot_ids.entry(canister_id).or_default();
+            canister_snapshot_ids.insert(*snapshot_id);
+            memory_usage += snapshot.size();
+        }
+        for (snapshot_id, snapshot) in partial_snapshots.iter() {
             let canister_id = snapshot_id.get_canister_id();
             let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
                 snapshot_ids.entry(canister_id).or_default();
@@ -69,6 +76,17 @@ impl CanisterSnapshots {
         }
     }
 
+    pub fn strip_page_map_deltas(&mut self, fd_factory: &Arc<dyn PageAllocatorFileDescriptor>) {
+        for (_id, snapshot) in self.snapshots.iter_mut() {
+            let new_snapshot = Arc::make_mut(snapshot);
+            new_snapshot.strip_page_map_deltas(fd_factory);
+        }
+        for (_id, partial_snapshot) in self.partial_snapshots.iter_mut() {
+            let new_snapshot = Arc::make_mut(partial_snapshot);
+            new_snapshot.strip_page_map_deltas(fd_factory);
+        }
+    }
+
     /// Inserts a chunk into a snaphot's chunk store and updates its `size` and
     /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
     /// Returns an error if the given snapshot ID could not be found or is immutable.
@@ -79,7 +97,7 @@ impl CanisterSnapshots {
         snapshot_id: SnapshotId,
         validated_chunk: ValidatedChunk,
     ) -> Result<(), ()> {
-        let snapshot = self.get_mut(snapshot_id).ok_or(())?;
+        let snapshot = self.get_partial_mut(snapshot_id).ok_or(())?;
         let snapshot_inner = Arc::make_mut(snapshot);
         snapshot_inner
             .chunk_store_mut()
@@ -105,7 +123,7 @@ impl CanisterSnapshots {
     pub(crate) fn push_partial(
         &mut self,
         snapshot_id: SnapshotId,
-        snapshot: PartialCanisterSnapshot,
+        snapshot: Arc<PartialCanisterSnapshot>,
     ) {
         let canister_id = snapshot.canister_id();
         self.memory_usage += snapshot.size();
@@ -128,7 +146,7 @@ impl CanisterSnapshots {
     pub fn get_partial_mut(
         &mut self,
         snapshot_id: SnapshotId,
-    ) -> Option<&mut PartialCanisterSnapshot> {
+    ) -> Option<&mut Arc<PartialCanisterSnapshot>> {
         self.partial_snapshots.get_mut(&snapshot_id)
     }
 
@@ -562,14 +580,6 @@ impl PartialCanisterSnapshot {
         Ok(())
     }
 
-    pub fn execution_snapshot_mut(&mut self) -> &mut MutableExecutionStateSnapshot {
-        &mut self.execution_snapshot
-    }
-
-    pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
-        &mut self.chunk_store
-    }
-
     pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
         &mut self.execution_snapshot.stable_memory
     }
@@ -623,6 +633,26 @@ impl<T> CanisterSnapshotImpl<T> {
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
         &self.chunk_store
+    }
+
+    // Needed for both mutable and immutable Snapshots because of page delta
+    // processing during checkpoints.
+    pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
+        &mut self.chunk_store
+    }
+
+    pub fn strip_page_map_deltas(&mut self, fd_factory: &Arc<dyn PageAllocatorFileDescriptor>) {
+        self.chunk_store
+            .page_map_mut()
+            .strip_all_deltas(Arc::clone(fd_factory));
+        self.execution_snapshot
+            .wasm_memory
+            .page_map
+            .strip_all_deltas(Arc::clone(fd_factory));
+        self.execution_snapshot
+            .stable_memory
+            .page_map
+            .strip_all_deltas(Arc::clone(fd_factory));
     }
 
     pub fn certified_data(&self) -> &Vec<u8> {
