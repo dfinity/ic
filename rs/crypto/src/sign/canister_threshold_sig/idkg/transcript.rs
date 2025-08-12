@@ -97,6 +97,7 @@ pub fn create_transcript<C: CspSigner>(
     })
 }
 
+#[allow(clippy::result_large_err)]
 pub fn verify_transcript<C: CspSigner>(
     csp_client: &C,
     vault: &dyn CspVault,
@@ -588,6 +589,7 @@ fn signature_batch_err_to_verify_transcript_err(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn verify_signature_batch<C: CspSigner>(
     csp_client: &C,
     vault: &dyn CspVault,

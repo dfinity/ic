@@ -5,7 +5,7 @@ use config_types::{
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
-use ic_sev::HostSevCertificateProvider;
+use ic_sev::host::HostSevCertificateProvider;
 use std::net::Ipv6Addr;
 use utils::to_cidr;
 
@@ -100,7 +100,7 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, ICOSSettings, Ipv6Config,
         NetworkSettings,
     };
-    use ic_sev::testing::mock_host_sev_certificate_provider;
+    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use std::net::Ipv6Addr;
 
     fn hostos_config_for_test() -> HostOSConfig {

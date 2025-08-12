@@ -52,6 +52,7 @@ use ic_replicated_state::{
     CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
     SchedulerState, SystemState,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -302,6 +303,7 @@ impl CanisterManager {
         canister_freezing_threshold: NumSeconds,
         canister_cycles_balance: Cycles,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         canister_reserved_balance: Cycles,
         canister_reserved_balance_limit: Option<Cycles>,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
@@ -391,6 +393,7 @@ impl CanisterManager {
             canister_message_memory_usage,
             new_compute_allocation,
             subnet_size,
+            cost_schedule,
             canister_reserved_balance,
         );
 
@@ -424,6 +427,7 @@ impl CanisterManager {
             allocated_bytes,
             subnet_memory_saturation,
             subnet_size,
+            cost_schedule,
         );
         let reserved_balance_limit = settings
             .reserved_cycles_limit()
@@ -480,6 +484,7 @@ impl CanisterManager {
         subnet_memory_saturation: &ResourceSaturation,
         canister_cycles_balance: Cycles,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         self.validate_canister_settings(
             settings,
@@ -493,6 +498,7 @@ impl CanisterManager {
             self.config.default_freeze_threshold,
             canister_cycles_balance,
             subnet_size,
+            cost_schedule,
             Cycles::zero(),
             None,
         )
@@ -573,6 +579,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
 
@@ -590,6 +597,7 @@ impl CanisterManager {
             canister.system_state.freeze_threshold,
             canister.system_state.balance(),
             subnet_size,
+            cost_schedule,
             canister.system_state.reserved_balance(),
             canister.system_state.reserved_balance_limit(),
         )?;
@@ -695,7 +703,7 @@ impl CanisterManager {
 
         let fee = self
             .cycles_account_manager
-            .canister_creation_fee(subnet_size);
+            .canister_creation_fee(subnet_size, state.metadata.cost_schedule);
         if cycles < fee {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -723,6 +731,7 @@ impl CanisterManager {
             &subnet_memory_saturation,
             cycles - fee,
             subnet_size,
+            state.metadata.cost_schedule,
         ) {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
@@ -815,6 +824,7 @@ impl CanisterManager {
         compilation_cost_handling: CompilationCostHandling,
         round_counters: RoundCounters,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         log_dirty_pages: FlagStatus,
     ) -> DtsInstallCodeResult {
         if let Err(err) = validate_controller(&canister, &context.sender()) {
@@ -845,6 +855,7 @@ impl CanisterManager {
                     execution_parameters.compute_allocation,
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
+                    cost_schedule,
                     reveal_top_up,
                     wasm_execution_mode,
                 ) {
@@ -886,6 +897,7 @@ impl CanisterManager {
             counters: round_counters,
             log: &self.log,
             time,
+            cost_schedule,
         };
 
         match context.mode {
@@ -1016,6 +1028,8 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        ready_for_migration: bool,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
@@ -1029,6 +1043,8 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect::<Vec<PrincipalId>>();
+
+        let version = canister.system_state.canister_version;
 
         let canister_memory_usage = canister.memory_usage();
         let canister_wasm_memory_usage = canister.wasm_memory_usage();
@@ -1050,6 +1066,8 @@ impl CanisterManager {
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
+            ready_for_migration,
+            version,
             canister
                 .execution_state
                 .as_ref()
@@ -1078,6 +1096,7 @@ impl CanisterManager {
                     canister_message_memory_usage,
                     compute_allocation,
                     subnet_size,
+                    cost_schedule,
                 )
                 .get(),
             canister.system_state.reserved_balance().get(),
@@ -1226,6 +1245,7 @@ impl CanisterManager {
             &subnet_memory_saturation,
             cycles,
             subnet_size,
+            state.metadata.cost_schedule,
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
@@ -1472,6 +1492,7 @@ impl CanisterManager {
         chunk: Vec<u8>,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
     ) -> Result<UploadChunkResult, CanisterManagerError> {
         // Allow the canister itself to perform this operation.
@@ -1488,6 +1509,7 @@ impl CanisterManager {
                 canister,
                 instructions,
                 subnet_size,
+                cost_schedule,
                 // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
                 // since the number of instructions charged depends on a constant fee
                 // and Wasm64 does not bring any additional overhead for this operation.
@@ -1534,6 +1556,7 @@ impl CanisterManager {
         let memory_usage = canister.memory_usage();
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
+            cost_schedule,
             canister,
             sender,
             Cycles::zero(),
@@ -1544,6 +1567,7 @@ impl CanisterManager {
         )?;
         self.cycles_and_memory_usage_updates(
             subnet_size,
+            cost_schedule,
             canister,
             sender,
             round_limits,
@@ -1608,6 +1632,7 @@ impl CanisterManager {
     fn cycles_and_memory_usage_checks(
         &self,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         canister: &CanisterState,
         sender: PrincipalId,
         cycles_for_instructions: Cycles,
@@ -1661,6 +1686,7 @@ impl CanisterManager {
             canister.message_memory_usage(),
             canister.compute_allocation(),
             subnet_size,
+            cost_schedule,
             canister.system_state.reserved_balance(),
         );
         if canister.system_state.balance() < threshold {
@@ -1681,6 +1707,7 @@ impl CanisterManager {
                 canister.message_memory_usage(),
                 canister.compute_allocation(),
                 subnet_size,
+                cost_schedule,
                 reveal_top_up,
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
@@ -1689,9 +1716,13 @@ impl CanisterManager {
         let new_storage_reservation_cycles = match canister.memory_allocation() {
             MemoryAllocation::Reserved(_) => Cycles::zero(),
             MemoryAllocation::BestEffort => {
-                let new_storage_reservation_cycles = self
-                    .cycles_account_manager
-                    .storage_reservation_cycles(allocated_bytes, resource_saturation, subnet_size);
+                let new_storage_reservation_cycles =
+                    self.cycles_account_manager.storage_reservation_cycles(
+                        allocated_bytes,
+                        resource_saturation,
+                        subnet_size,
+                        cost_schedule,
+                    );
                 let main_balance = canister.system_state.balance() - cycles_for_instructions; // `-` on `Cycles` is saturating
                 canister
                     .system_state
@@ -1735,6 +1766,7 @@ impl CanisterManager {
     fn cycles_and_memory_usage_updates(
         &self,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         canister: &mut CanisterState,
         sender: PrincipalId,
         round_limits: &mut RoundLimits,
@@ -1764,6 +1796,7 @@ impl CanisterManager {
                 compute_allocation,
                 validated_cycles_and_memory_usage.cycles_for_instructions,
                 subnet_size,
+                cost_schedule,
                 CyclesUseCase::Instructions,
                 reveal_top_up,
             )
@@ -1845,6 +1878,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
+            state.metadata.cost_schedule,
             // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -1854,6 +1888,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
+            state.metadata.cost_schedule,
             canister,
             sender,
             cycles_for_instructions,
@@ -1874,6 +1909,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
+            state.metadata.cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2046,6 +2082,7 @@ impl CanisterManager {
             &mut canister_clone,
             self.config.canister_snapshot_baseline_instructions,
             subnet_size,
+            state.metadata.cost_schedule,
             // For the `load_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2090,7 +2127,7 @@ impl CanisterManager {
             };
 
             // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
-            if snapshot.source() == SnapshotSource::MetadataUpload
+            if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved)
                 && !globals_match(
                     &new_execution_state.exported_globals,
                     &execution_snapshot.exported_globals,
@@ -2126,7 +2163,7 @@ impl CanisterManager {
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
         // Otherwise, the snapshot is invalid.
-        if snapshot.source() == SnapshotSource::MetadataUpload {
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
             let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
             let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
             if !snapshot_hook_status
@@ -2147,6 +2184,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
+            state.metadata.cost_schedule,
             // In this case, when the canister is actually created from the snapshot, we need to check
             // if the canister is in wasm64 mode to account for its instruction usage.
             wasm_execution_mode,
@@ -2154,6 +2192,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = match self.cycles_and_memory_usage_checks(
             subnet_size,
+            state.metadata.cost_schedule,
             &new_canister,
             sender,
             cycles_for_instructions,
@@ -2170,6 +2209,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
+            state.metadata.cost_schedule,
             &mut new_canister,
             sender,
             round_limits,
@@ -2185,6 +2225,7 @@ impl CanisterManager {
                 snapshot.canister_version(),
                 snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                snapshot.source(),
             ),
         );
         state
@@ -2337,6 +2378,7 @@ impl CanisterManager {
                 .canister_snapshot_data_baseline_instructions
                 .saturating_add(&NumInstructions::new(num_response_bytes)),
             subnet_size,
+            state.metadata.cost_schedule,
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
             WasmExecutionMode::Wasm32,
         ) {
@@ -2468,6 +2510,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
+            state.metadata.cost_schedule,
             // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2477,6 +2520,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
+            state.metadata.cost_schedule,
             canister,
             sender,
             cycles_for_instructions,
@@ -2501,6 +2545,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
+            state.metadata.cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2547,11 +2592,12 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
 
+        let cost_schedule = state.metadata.cost_schedule;
         let snapshot: &mut Arc<CanisterSnapshot> =
             self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload {
+        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 
@@ -2577,6 +2623,7 @@ impl CanisterManager {
                 canister,
                 NumInstructions::new(bytes_written),
                 subnet_size,
+                cost_schedule,
                 // It does not matter if this is a Wasm64 or Wasm32 module.
                 WasmExecutionMode::Wasm32,
             )
@@ -2645,6 +2692,7 @@ impl CanisterManager {
                 let new_memory_usage = canister.memory_usage() + chunk_bytes;
                 let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
                     subnet_size,
+                    state.metadata.cost_schedule,
                     canister,
                     sender,
                     Cycles::zero(),
@@ -2655,6 +2703,7 @@ impl CanisterManager {
                 )?;
                 self.cycles_and_memory_usage_updates(
                     subnet_size,
+                    state.metadata.cost_schedule,
                     canister,
                     sender,
                     round_limits,

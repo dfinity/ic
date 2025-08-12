@@ -225,17 +225,25 @@ pub async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
 }
 
 pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, String> {
-    let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
-    channel.exec("bash").map_err(|e| e.to_string())?;
+    let mut channel = sess
+        .channel_session()
+        .map_err(|e| format!("Failed to establish a new session channel: {e}"))?;
+    channel
+        .exec("bash")
+        .map_err(|e| format!("Failed to execute bash: {e}"))?;
     channel
         .write_all(command.as_bytes())
-        .map_err(|e| e.to_string())?;
-    channel.flush().map_err(|e| e.to_string())?;
-    channel.send_eof().map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to write the command to the channel: {e}"))?;
+    channel
+        .flush()
+        .map_err(|e| format!("Failed to flush the stream: {e}"))?;
+    channel
+        .send_eof()
+        .map_err(|e| format!("Failed to send eof to the channel: {e}"))?;
     let mut out = String::new();
     channel
         .read_to_string(&mut out)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to read from the channel: {e}"))?;
     let mut err_str = String::new();
     match channel.exit_status() {
         Ok(status) => match status {
@@ -244,7 +252,7 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
                 channel
                     .stderr()
                     .read_to_string(&mut err_str)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| format!("Failed to read stderr from the channel: {e}"))?;
                 Err(format!(
                     "Error in: {}\nErr code: {}\nstdout: \n{}\nstderr: \n{}",
                     command, status, out, err_str
@@ -255,7 +263,7 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
             channel
                 .stderr()
                 .read_to_string(&mut err_str)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("Failed to read stderr from the channel: {e}"))?;
             Err(format!(
                 "Error in: {}\nError: {}\nstdout: \n{}\nstderr: \n{}",
                 command, e, out, err_str

@@ -1159,7 +1159,23 @@ pub fn create_available_pre_signature_with_key_transcript(
     key_id: IDkgMasterPublicKeyId,
     key_transcript: Option<UnmaskedTranscript>,
 ) -> PreSigId {
-    let sig_inputs = create_sig_inputs(caller, &key_id);
+    create_available_pre_signature_with_key_transcript_and_height(
+        idkg_payload,
+        caller,
+        key_id,
+        key_transcript,
+        Height::new(0),
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript_and_height(
+    idkg_payload: &mut IDkgPayload,
+    caller: u8,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+    height: Height,
+) -> PreSigId {
+    let sig_inputs = create_sig_inputs_with_height(caller, height, key_id.inner().clone());
     let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
     let mut pre_signature_ref = sig_inputs.sig_inputs_ref.pre_signature().unwrap();
     if let Some(transcript) = key_transcript {

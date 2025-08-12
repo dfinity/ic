@@ -24,7 +24,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
         last_full_execution_round: ExecutionRound::from(0),
-        call_context_manager: None,
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
         accumulated_priority: AccumulatedPriority::default(),
         priority_credit: AccumulatedPriority::default(),
@@ -243,7 +242,7 @@ fn test_canister_snapshots_decode() {
         wasm_memory_size: NumWasmPages::new(10),
         total_size: NumBytes::new(100),
         exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
-        source: SnapshotSource::TakenFromCanister,
+        source: SnapshotSource::taken_from_canister(),
         global_timer: Some(CanisterTimer::Inactive),
         on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
     };

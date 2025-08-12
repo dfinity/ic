@@ -69,6 +69,7 @@ DEV_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",

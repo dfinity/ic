@@ -51,7 +51,6 @@ use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use slog::{Drain, Logger};
-use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -393,9 +392,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
-        chain_key_subnet_public_keys: BTreeMap::new(),
-        idkg_pre_signature_ids: BTreeMap::new(),
-        ni_dkg_ids: BTreeMap::new(),
+        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],

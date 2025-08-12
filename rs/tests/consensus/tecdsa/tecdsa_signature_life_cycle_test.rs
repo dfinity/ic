@@ -38,8 +38,8 @@ const IDKG_PAYLOAD_METRICS: &str = "idkg_payload_metrics";
 const XNET_RESHARE_AGREEMENTS: &str = "xnet_reshare_agreements";
 
 /// Life cycle test requires more time
-const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(11 * 60);
+const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 fn make_vetkd_key_id(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::VetKd(VetKdKeyId {

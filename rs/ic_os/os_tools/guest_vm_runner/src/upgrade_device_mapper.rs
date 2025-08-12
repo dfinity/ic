@@ -1,6 +1,6 @@
-use crate::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use anyhow::{bail, ensure, Context, Result};
 use devicemapper::{Bytes, DevId, DmName, DmOptions, Sectors, DM};
+use ic_device::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -153,9 +153,8 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
 #[cfg(all(test, feature = "upgrade_device_mapper_test"))]
 mod tests {
     use super::*;
-    use crate::device_mapping::LoopDeviceWrapper;
     use gpt::{GptConfig, GptDisk};
-    use loopdev::LoopControl;
+    use ic_device::device_mapping::LoopDeviceWrapper;
     use std::fs::File;
     use std::os::unix::fs::FileExt;
     use std::path::PathBuf;
@@ -183,15 +182,7 @@ mod tests {
 
         let backing_file = backing_file.into_temp_path();
 
-        let loop_device = LoopDeviceWrapper(
-            LoopControl::open()
-                .expect("Failed to open loop control")
-                .next_free()
-                .expect("Failed to find free loop device"),
-        );
-        loop_device
-            .attach_file(&backing_file)
-            .expect("Failed to attach file to loop device");
+        let loop_device = LoopDeviceWrapper::attach_to_next_free(&backing_file).unwrap();
         let loop_device_path = loop_device.path().expect("Failed to get loop device path");
 
         let mut gpt = GptConfig::new()
@@ -227,6 +218,19 @@ mod tests {
             .collect()
     }
 
+    fn assert_mapped_devices_are_cleaned_up() {
+        let mapped_devices = get_mapped_devices();
+        for device in ALL_DM_NAMES_IN_CLEANUP_ORDER {
+            assert!(
+                !mapped_devices
+                    .iter()
+                    .any(|p| p.file_name() == Some(device.as_ref())),
+                "Device {} should be cleaned up",
+                device
+            );
+        }
+    }
+
     /// Tests the creation of a mapped device for the upgrade VM.
     ///
     /// - Creates a temporary backing file and attaches it to a loop device.
@@ -238,8 +242,6 @@ mod tests {
     #[test]
     fn test_create_mapped_device_for_upgrade() {
         let _lock = DM_MUTEX.lock().unwrap();
-
-        let mapped_devices_before = get_mapped_devices();
 
         let setup = create_test_setup();
 
@@ -293,8 +295,7 @@ mod tests {
             "Device file should be removed after drop"
         );
 
-        // Verify that the device mapper entries are cleaned up
-        assert_eq!(mapped_devices_before, get_mapped_devices());
+        assert_mapped_devices_are_cleaned_up();
     }
 
     #[test]
@@ -311,7 +312,6 @@ mod tests {
     fn test_clean_up_before_creation() {
         let _lock = DM_MUTEX.lock().unwrap();
 
-        let mapped_devices_before = get_mapped_devices();
         let device = create_test_setup().device;
         let device_path = device.path().to_path_buf();
         // Forget the device so it doesn't get cleaned up automatically
@@ -326,10 +326,7 @@ mod tests {
             !device_path.exists(),
             "Previous device should be cleaned up"
         );
-        assert_eq!(
-            mapped_devices_before,
-            get_mapped_devices(),
-            "Device mapper entries should be cleaned up"
-        );
+
+        assert_mapped_devices_are_cleaned_up();
     }
 }

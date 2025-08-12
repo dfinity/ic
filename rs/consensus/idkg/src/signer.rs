@@ -225,7 +225,7 @@ impl ThresholdSignerImpl {
             .map(|(id, c)| {
                 let inputs = build_signature_inputs(*id, c, block_reader).map_err(|err| if err.is_fatal() {
                     warn!(every_n_seconds => 15, self.log,
-                        "validate_signature_shares(): failed to build signatures inputs: {:?}", 
+                        "validate_signature_shares(): failed to build signatures inputs: {:?}",
                         err
                     );
                     self.metrics.sign_errors_inc("signature_inputs_malformed");
@@ -641,7 +641,37 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .signature_request_contexts()
             .iter()
             .flat_map(|(callback_id, context)| match &context.args {
-                ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => {
+                ThresholdArguments::Ecdsa(args) => {
+                    let matched_id = context.matched_pre_signature.map(|(id, _)| id);
+                    let matched_full = args.pre_signature.as_ref().map(|pre_sig| pre_sig.id);
+                    if matched_id != matched_full {
+                        warn!(
+                            every_n_seconds => 15,
+                            self.log,
+                            "ECDSA context {:?}, with different ID {:?} and full pre-sig {:?}",
+                            callback_id,
+                            matched_id,
+                            matched_full
+                        );
+                    }
+                    context.matched_pre_signature.map(|(_, height)| RequestId {
+                        callback_id: *callback_id,
+                        height,
+                    })
+                }
+                ThresholdArguments::Schnorr(args) => {
+                    let matched_id = context.matched_pre_signature.map(|(id, _)| id);
+                    let matched_full = args.pre_signature.as_ref().map(|pre_sig| pre_sig.id);
+                    if matched_id != matched_full {
+                        warn!(
+                            every_n_seconds => 15,
+                            self.log,
+                            "Schnorr context {:?}, with different ID {:?} and full pre-sig {:?}",
+                            callback_id,
+                            matched_id,
+                            matched_full
+                        );
+                    }
                     context.matched_pre_signature.map(|(_, height)| RequestId {
                         callback_id: *callback_id,
                         height,
@@ -657,15 +687,16 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .stats()
             .update_active_signature_requests(active_requests);
 
-        let mut changes = update_purge_height(&self.prev_certified_height, snapshot.get_height())
-            .then(|| {
-                timed_call(
-                    "purge_artifacts",
-                    || self.purge_artifacts(idkg_pool, snapshot.as_ref()),
-                    &metrics.on_state_change_duration,
-                )
-            })
-            .unwrap_or_default();
+        let mut changes = if update_purge_height(&self.prev_certified_height, snapshot.get_height())
+        {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(idkg_pool, snapshot.as_ref()),
+                &metrics.on_state_change_duration,
+            )
+        } else {
+            IDkgChangeSet::default()
+        };
 
         let send_signature_shares = || {
             timed_call(

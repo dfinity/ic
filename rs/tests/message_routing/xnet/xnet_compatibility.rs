@@ -27,7 +27,6 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -36,17 +35,18 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
-    get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
+    get_guestos_img_version, get_guestos_launch_measurements, get_guestos_update_img_sha256,
+    get_guestos_update_img_url, get_guestos_update_img_version, HasPublicApiUrl,
+    HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
+use ic_types::ReplicaVersion;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const DKG_INTERVAL: u64 = 9;
@@ -178,14 +178,15 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
+    let guest_launch_measurements = get_guestos_launch_measurements().unwrap();
     bless_replica_version(
         &nns_node,
         &branch_version,
-        UpdateImageType::Image,
         &logger,
-        &sha256,
+        sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     )
     .await;
@@ -269,15 +270,10 @@ async fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: ic_types::SubnetId,
     subnet_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
     logger: &Logger,
 ) {
-    deploy_guestos_to_all_subnet_nodes(
-        nns_node,
-        &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
-        subnet_id,
-    )
-    .await;
+    deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
 }
 

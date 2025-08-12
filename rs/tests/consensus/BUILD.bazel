@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -22,14 +22,14 @@ rust_library(
 
 system_test(
     name = "catch_up_loop_prevention_test",
-    malicious = True,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "k8s",
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = True,
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -43,13 +43,13 @@ system_test(
 
 system_test(
     name = "catch_up_possible_test",
-    malicious = True,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "k8s",
         "long_test",
     ],
-    uses_guestos_img = True,
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -68,7 +68,7 @@ system_test(
         "experimental_system_test_colocation",
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -104,11 +104,11 @@ rust_library(
 system_test(
     name = "liveness_with_equivocation_test",
     env = UNIVERSAL_CANISTER_ENV,
-    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = True,
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -127,7 +127,7 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -152,7 +152,7 @@ system_test(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -173,7 +173,7 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -192,7 +192,6 @@ system_test_nns(
     tags = [
         "k8s",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/cup_explorer",
@@ -227,7 +226,7 @@ system_test_nns(
         "subnet_splitting",
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
         ],
     deps = [
@@ -256,7 +255,7 @@ system_test(
     },
     uses_guestos_img = False,
     uses_guestos_recovery_dev_img = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [
         "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
         "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
         "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
@@ -277,11 +276,11 @@ system_test(
 system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
-    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = True,
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -299,11 +298,11 @@ system_test(
 system_test(
     name = "request_auth_malicious_replica_test",
     env = UNIVERSAL_CANISTER_ENV,
-    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = True,
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -328,11 +327,11 @@ system_test(
 system_test(
     name = "safety_test",
     env = UNIVERSAL_CANISTER_ENV,
-    malicious = True,
     tags = [
         "k8s",
     ],
-    uses_guestos_img = True,
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -366,7 +365,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
     deps = [
@@ -391,7 +390,7 @@ system_test_nns(
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",

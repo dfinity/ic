@@ -13,7 +13,7 @@ use ic_types::{
     crypto::{crypto_hash, CryptoHash, CryptoHashOf},
     messages::CallbackId,
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion,
+    Height, NumBytes, RegistryVersion, ReplicaVersion,
 };
 use proptest::{arbitrary::any, prelude::*};
 use std::{ops::DerefMut, time::Duration};
@@ -161,6 +161,7 @@ fn prop_response_with_shares(
                 timeout: response.timeout,
                 content_hash: crypto_hash(&response),
                 registry_version: RegistryVersion::new(1),
+                replica_version: ReplicaVersion::default(),
             };
             let shares = metadata_to_shares(num_shares, &metadata);
             (response, shares)
@@ -207,6 +208,7 @@ fn prop_random_metadata(max_timeout: u64) -> impl Strategy<Value = CanisterHttpR
             timeout: UNIX_EPOCH + Duration::from_millis(timeout),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             registry_version: RegistryVersion::new(1),
+            replica_version: ReplicaVersion::default(),
         }
     })
 }
