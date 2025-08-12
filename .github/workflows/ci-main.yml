@@ -109,7 +109,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
@@ -122,6 +122,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: "Node Name"
+        run: |
+          echo "::notice::Node Name: ${NODE_NAME}"
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         id: bazel-extra-args
@@ -298,7 +301,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -342,7 +345,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -364,7 +367,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -396,7 +399,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -409,6 +412,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: "Node Name"
+        run: |
+          echo "::notice::Node Name: ${NODE_NAME}"
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -478,7 +484,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -497,7 +503,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -534,7 +540,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:edfa1f50df780542c69b6ef4f6a4c9847c3e3971e0c759d6171f49ccb0719e8e
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
