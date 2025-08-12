@@ -233,11 +233,7 @@ impl Tokens {
     }
 
     pub fn checked_div(self, other: u64) -> Option<Tokens> {
-        if other == 0 {
-            None
-        } else {
-            self.e8s.checked_div(other).map(Tokens::from_e8s)
-        }
+        self.e8s.checked_div(other).map(Tokens::from_e8s)
     }
 }
 
