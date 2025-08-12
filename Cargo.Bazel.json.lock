@@ -1,5 +1,5 @@
 {
-  "checksum": "24a8276eaa17492b1f85b1d35cf9c646d51cd7e7d8f3caa5e0f6c2939f8daac3",
+  "checksum": "6ad17a1e77e3efc185eed74c406a8de71536d1163b905f95eda3663aa7dead88",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21473,7 +21473,7 @@
               "target": "ic_xrc_types"
             },
             {
-              "id": "ic0 0.18.11",
+              "id": "ic0 1.0.0",
               "target": "ic0"
             },
             {
@@ -36883,44 +36883,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic0 0.18.11": {
-      "name": "ic0",
-      "version": "0.18.11",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic0/0.18.11/download",
-          "sha256": "576c539151d4769fb4d1a0c25c4108dd18facd04c5695b02cf2d226ab4e43aa5"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic0",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic0",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "0.18.11"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "ic0 0.23.0": {
       "name": "ic0",
       "version": "0.23.0",
@@ -36990,6 +36952,44 @@
         ],
         "edition": "2021",
         "version": "0.24.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic0 1.0.0": {
+      "name": "ic0",
+      "version": "1.0.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic0/1.0.0/download",
+          "sha256": "8877193e1921b5fd16accb0305eb46016868cd1935b05c05eca0ec007b943272"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic0",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic0",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "1.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -95549,7 +95549,7 @@
     "ic-vetkeys 0.1.0",
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
-    "ic0 0.18.11",
+    "ic0 1.0.0",
     "ic_bls12_381 0.10.1",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
