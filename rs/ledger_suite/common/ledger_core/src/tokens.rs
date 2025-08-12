@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat};
 use ic_stable_structures::{storable::Bound, Storable};
 use minicbor::{Decode, Encode};
-use num_traits::{Bounded, CheckedDiv, ToPrimitive};
+use num_traits::{Bounded, ToPrimitive};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
