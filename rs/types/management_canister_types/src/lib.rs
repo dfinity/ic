@@ -3233,7 +3233,7 @@ pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
     GetBlockHeadersRequest as BitcoinGetBlockHeadersArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
-    GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
+    GetUtxosRequest as BitcoinGetUtxosArgs, //Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 pub use ic_btc_replica_types::{
@@ -3241,7 +3241,7 @@ pub use ic_btc_replica_types::{
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
-    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial,
+    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
