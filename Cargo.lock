@@ -15372,7 +15372,7 @@ dependencies = [
  "hkdf",
  "mockall",
  "pem 1.1.1",
-    "raw-cpuid",
+ "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
  "sev",
