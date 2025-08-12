@@ -129,6 +129,22 @@ impl ThresholdSignatureCspClient for Csp {
         signature: CspSignature,
         public_coefficients: CspPublicCoefficients,
     ) -> CryptoResult<()> {
+        Csp::threshold_verify_combined_signature(
+            algorithm_id,
+            message,
+            signature,
+            public_coefficients,
+        )
+    }
+}
+
+impl Csp {
+    pub fn threshold_verify_combined_signature(
+        algorithm_id: AlgorithmId,
+        message: &[u8],
+        signature: CspSignature,
+        public_coefficients: CspPublicCoefficients,
+    ) -> CryptoResult<()> {
         match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let clib_signature = clib::types::CombinedSignatureBytes::try_from(signature)?;
