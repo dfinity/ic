@@ -9,12 +9,11 @@ use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
-use evm_rpc_types::LegacyRejectionCode;
 pub use evm_rpc_types::{
     Block, BlockTag, ConsensusStrategy, EthMainnetService, EthSepoliaService, FeeHistory,
     FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig, GetTransactionCountArgs, Hex, Hex20, Hex256,
-    Hex32, HexByte, HttpOutcallError, JsonRpcError, LogEntry, MultiRpcResult, Nat256,
-    ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
+    Hex32, HexByte, HttpOutcallError, JsonRpcError, LegacyRejectionCode, LogEntry, MultiRpcResult,
+    Nat256, ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
     SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 
