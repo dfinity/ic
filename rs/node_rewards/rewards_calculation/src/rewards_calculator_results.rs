@@ -122,17 +122,19 @@ pub struct BaseRewards {
     pub daily: XDRPermyriad,
 }
 
-pub struct BaseRewardsType3 {
+pub struct DailyBaseRewardsType3 {
     pub day: DayUtc,
     pub region: Region,
     pub nodes_count: usize,
+    pub avg_rewards: XDRPermyriad,
+    pub avg_coefficient: Percent,
     pub value: XDRPermyriad,
 }
 
 pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: u64,
     pub base_rewards: Vec<BaseRewards>,
-    pub base_rewards_type3: Vec<BaseRewardsType3>,
+    pub base_rewards_type3: Vec<DailyBaseRewardsType3>,
     pub nodes_results: Vec<NodeResults>,
 }
 
