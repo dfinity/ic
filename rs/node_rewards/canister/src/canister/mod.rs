@@ -199,7 +199,8 @@ impl NodeRewardsCanister {
                 canister.borrow().get_metrics_manager(),
             )
         });
-        let reward_period = RewardPeriod::new(request.from, request.to).unwrap();
+        let reward_period =
+            RewardPeriod::new(request.from_timestamp_nanoseconds, request.to).unwrap();
         let registry_querier = RegistryQuerier::new(registry_client.clone());
         let version = registry_client
             .timestamp_to_versions_map()
