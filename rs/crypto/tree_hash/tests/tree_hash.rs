@@ -3381,6 +3381,9 @@ fn filtered_mixed_hash_tree() {
     let digest = mixed_hash_tree.digest();
     assert_eq!(*witness_generator.hash_tree().digest(), digest);
 
+    let filter_builder = mixed_hash_tree.filter_builder();
+    assert_eq!(filter_builder.digest(), &digest);
+
     let partial_tree = sparse_labeled_tree_from_paths(&[
         Path::from(vec![
             "label_a".into(),
@@ -3391,7 +3394,7 @@ fn filtered_mixed_hash_tree() {
     ])
     .unwrap();
 
-    let filtered_hash_tree = mixed_hash_tree.filtered(&partial_tree).unwrap();
+    let filtered_hash_tree = filter_builder.filtered(&partial_tree).unwrap();
 
     assert_eq!(digest, filtered_hash_tree.digest());
 
@@ -3418,7 +3421,7 @@ fn filtered_mixed_hash_tree() {
     .unwrap();
 
     assert_eq!(
-        mixed_hash_tree.filtered(&too_long_partial_tree),
+        filter_builder.filtered(&too_long_partial_tree),
         Err(MixedHashTreeFilterError::PathTooLong)
     );
 }

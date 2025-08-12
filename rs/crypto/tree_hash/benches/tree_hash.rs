@@ -60,6 +60,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let witness = witness_generator
             .witness(&labeled_tree)
             .expect("failed to create Witness");
+        let filter_builder = mixed_hash_tree.filter_builder();
         let filter_paths = new_request_status_filtered_tree(num_subtrees);
 
         {
@@ -270,7 +271,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
                 b.iter(|| {
                     black_box(
-                        mixed_hash_tree
+                        filter_builder
                             .filtered(&filter_paths)
                             .expect("failed to filter"),
                     )

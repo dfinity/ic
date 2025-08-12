@@ -634,13 +634,77 @@ impl MixedHashTree {
         LookupStatus::Found(t)
     }
 
-    /// Returns a copy of the tree with everything pruned except the paths in `paths`.
+    /// Construct a FilterBuilder, which allows to repeatedly construct filtered tree.
+    pub fn filter_builder(&self) -> FilterBuilder {
+        match self {
+            MixedHashTree::Empty => FilterBuilder::Empty(empty_subtree_hash()),
+            MixedHashTree::Fork(b) => {
+                let l = b.0.filter_builder();
+                let r = b.1.filter_builder();
+                let digest = compute_fork_digest(l.digest(), r.digest());
+                FilterBuilder::Fork(digest, Box::new((l, r)))
+            }
+            MixedHashTree::Labeled(label, mixed_hash_tree) => {
+                let subtree = mixed_hash_tree.filter_builder();
+                let digest = compute_node_digest(label, subtree.digest());
+                FilterBuilder::Labeled(digest, label.clone(), Box::new(subtree))
+            }
+            MixedHashTree::Leaf(contents) => {
+                let digest = compute_leaf_digest(contents);
+                FilterBuilder::Leaf(digest, contents.clone())
+            }
+            MixedHashTree::Pruned(digest) => FilterBuilder::Pruned(digest.clone()),
+        }
+    }
+}
+
+/// A MixedHashTree with additional digests at every node. Used as a builder for constructing
+/// further filtered down MixedHashTree.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum FilterBuilder {
+    Empty(Digest),
+    Fork(Digest, Box<(FilterBuilder, FilterBuilder)>),
+    Labeled(Digest, Label, Box<FilterBuilder>),
+    Leaf(Digest, Vec<u8>),
+    Pruned(Digest),
+}
+
+impl FilterBuilder {
+    pub fn digest(&self) -> &Digest {
+        match self {
+            FilterBuilder::Empty(digest) => digest,
+            FilterBuilder::Fork(digest, _) => digest,
+            FilterBuilder::Labeled(digest, ..) => digest,
+            FilterBuilder::Leaf(digest, _) => digest,
+            FilterBuilder::Pruned(digest) => digest,
+        }
+    }
+
+    /// Turn the FilterBuilder back into a MixedHashTree without any pruning.
+    fn mixed_hash_tree(&self) -> MixedHashTree {
+        match self {
+            FilterBuilder::Empty(_digest) => MixedHashTree::Empty,
+            FilterBuilder::Fork(_digest, b) => {
+                let l = b.0.mixed_hash_tree();
+                let r = b.1.mixed_hash_tree();
+                MixedHashTree::Fork(Box::new((l, r)))
+            }
+            FilterBuilder::Labeled(_digest, label, inner) => {
+                let inner = inner.mixed_hash_tree();
+                MixedHashTree::Labeled(label.clone(), Box::new(inner))
+            }
+            FilterBuilder::Leaf(_digest, items) => MixedHashTree::Leaf(items.clone()),
+            FilterBuilder::Pruned(digest) => MixedHashTree::Pruned(digest.clone()),
+        }
+    }
+
+    /// Returns a MixedHashTree with everything pruned except the paths in `filter`.
     pub fn filtered(
         &self,
         filter: &LabeledTree<()>,
     ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
         fn filtered_inner(
-            tree: &MixedHashTree,
+            tree: &FilterBuilder,
             filter: &LabeledTree<()>,
             depth: u8,
         ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
@@ -650,41 +714,38 @@ impl MixedHashTree {
 
             match (tree, filter) {
                 // Pruned and empty subtrees are always kept.
-                (MixedHashTree::Empty, _) => Ok(tree.clone()),
-                (MixedHashTree::Pruned(_), _) => Ok(tree.clone()),
+                (FilterBuilder::Empty(_), _) => Ok(tree.mixed_hash_tree()),
+                (FilterBuilder::Pruned(_), _) => Ok(tree.mixed_hash_tree()),
                 // Path ends in an inner node so we simply keep the entire subtree.
-                (_, LabeledTree::Leaf(_)) => Ok(tree.clone()),
+                (_, LabeledTree::Leaf(_)) => Ok(tree.mixed_hash_tree()),
                 // On a fork, filter both sides.
-                (MixedHashTree::Fork(b), paths) => {
-                    let l = filtered_inner(&b.0, paths, depth + 1)?;
-                    let r = filtered_inner(&b.1, paths, depth + 1)?;
-                    let both_pruned = matches!(
-                        (&l, &r),
-                        (MixedHashTree::Pruned(_), MixedHashTree::Pruned(_))
-                    );
-                    let tree = MixedHashTree::Fork(Box::new((l, r)));
-                    if both_pruned {
-                        Ok(MixedHashTree::Pruned(tree.digest()))
-                    } else {
-                        Ok(tree)
+                (FilterBuilder::Fork(digest, b), filter) => {
+                    let l = filtered_inner(&b.0, filter, depth + 1)?;
+                    let r = filtered_inner(&b.1, filter, depth + 1)?;
+
+                    // If both branches are pruned, prune the node instead.
+                    match (&l, &r) {
+                        (MixedHashTree::Pruned(_), MixedHashTree::Pruned(_)) => {
+                            Ok(MixedHashTree::Pruned(digest.clone()))
+                        }
+                        _ => Ok(MixedHashTree::Fork(Box::new((l, r)))),
                     }
                 }
-                // On a label, check if it is in `path`.
-                (
-                    MixedHashTree::Labeled(label, mixed_hash_tree),
-                    LabeledTree::SubTree(flat_map),
-                ) => match flat_map.get(label) {
-                    Some(subtree) => {
-                        let mixed_hash_tree = filtered_inner(mixed_hash_tree, subtree, depth + 1)?;
-                        Ok(MixedHashTree::Labeled(
-                            label.clone(),
-                            Box::new(mixed_hash_tree),
-                        ))
+                // On a label, check if it is in `filter`.
+                (FilterBuilder::Labeled(digest, label, inner), LabeledTree::SubTree(flat_map)) => {
+                    match flat_map.get(label) {
+                        Some(subfilter) => {
+                            let mixed_hash_tree = filtered_inner(inner, subfilter, depth + 1)?;
+                            Ok(MixedHashTree::Labeled(
+                                label.clone(),
+                                Box::new(mixed_hash_tree),
+                            ))
+                        }
+                        None => Ok(MixedHashTree::Pruned(digest.clone())),
                     }
-                    None => Ok(MixedHashTree::Pruned(tree.digest())),
-                },
+                }
                 // The tree ends in a leaf, but the path still continues. Invalid input.
-                (MixedHashTree::Leaf(_items), LabeledTree::SubTree(_flat_map)) => {
+                (FilterBuilder::Leaf(..), LabeledTree::SubTree(_)) => {
                     Err(MixedHashTreeFilterError::PathTooLong)
                 }
             }
