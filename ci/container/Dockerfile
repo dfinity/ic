@@ -10,10 +10,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail
+RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip fuse-overlayfs xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -153,7 +150,6 @@ COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 COPY ./ci/container/files/docker.sh /usr/bin/docker
 
