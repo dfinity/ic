@@ -10505,7 +10505,6 @@ name = "ic-ledger-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
- "canister-test",
  "dfn_protobuf",
  "ic-base-types",
  "ic-icp-index",
