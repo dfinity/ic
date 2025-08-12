@@ -235,7 +235,6 @@ macro_rules! ic_cdk_println {
      ($fmt:expr, $($arg:tt)*) => (std::println!($fmt, $($arg)*));
  }
 
-
 #[doc(hidden)]
 #[derive(Debug)]
 pub struct PrintProxySink<Priority: 'static>(pub &'static Priority, pub &'static GlobalBuffer);
