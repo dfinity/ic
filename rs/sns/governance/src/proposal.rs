@@ -1,6 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::extensions::validate_execute_extension_operation;
-use crate::extensions::{validate_extension_wasm, ValidatedExecuteExtensionOperation};
+use crate::extensions::validate_extension_wasm;
 use crate::pb::v1::{
     AdvanceSnsTargetVersion, ExecuteExtensionOperation, RegisterExtension,
     SetTopicsForCustomProposals, Topic,
@@ -1504,22 +1503,27 @@ async fn validate_and_render_execute_extension_operation(
     governance: &crate::governance::Governance,
     operation: &ExecuteExtensionOperation,
 ) -> Result<String, String> {
-    let ValidatedExecuteExtensionOperation {
-        extension_canister_id,
-        operation_name,
-        operation_arg,
-    } = validate_execute_extension_operation(env, root_canister_id, operation.clone())
-        .await
-        .map_err(|err| err.error_message)?;
+    // DO NOT MERGE
+    todo!()
 
-    Ok(format!(
-        r"# Proposal to execute extension operation:
+    // let context = ...
 
-* Extension canister ID: `{extension_canister_id}`
-* Operation name: `{operation_name}`
-* Operation argument: `{operation_arg}`
-#"
-    ))
+    //     let ValidatedExecuteExtensionOperation {
+    //         extension_canister_id,
+    //         operation_name,
+    //         arg,
+    //     } = validate_execute_extension_operation(env, context, operation.clone())
+    //         .await
+    //         .map_err(|err| err.error_message)?;
+
+    //     Ok(format!(
+    //         r"# Proposal to execute extension operation:
+
+    // * Extension canister ID: `{extension_canister_id}`
+    // * Operation name: `{operation_name}`
+    // * Operation argument: `{arg}`
+    // #"
+    //     ))
 }
 
 async fn validate_and_render_register_extension(
