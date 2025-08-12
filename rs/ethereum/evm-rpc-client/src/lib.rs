@@ -9,6 +9,7 @@ use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
+use evm_rpc_types::LegacyRejectionCode;
 pub use evm_rpc_types::{
     Block, BlockTag, ConsensusStrategy, EthMainnetService, EthSepoliaService, FeeHistory,
     FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig, GetTransactionCountArgs, Hex, Hex20, Hex256,
@@ -162,7 +163,22 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
                 .await
                 .unwrap_or_else(|(code, message)| {
                     MultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(
-                        HttpOutcallError::IcError { code, message },
+                        HttpOutcallError::IcError {
+                            code: match code {
+                                RejectionCode::NoError => LegacyRejectionCode::NoError,
+                                RejectionCode::SysFatal => LegacyRejectionCode::SysFatal,
+                                RejectionCode::SysTransient => LegacyRejectionCode::SysTransient,
+                                RejectionCode::DestinationInvalid => {
+                                    LegacyRejectionCode::DestinationInvalid
+                                }
+                                RejectionCode::CanisterReject => {
+                                    LegacyRejectionCode::CanisterReject
+                                }
+                                RejectionCode::CanisterError => LegacyRejectionCode::CanisterError,
+                                RejectionCode::Unknown => LegacyRejectionCode::Unknown,
+                            },
+                            message,
+                        },
                     )))
                 });
             log!(
