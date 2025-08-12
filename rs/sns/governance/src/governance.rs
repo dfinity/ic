@@ -1,4 +1,4 @@
-use crate::extensions::{validate_execute_extension_operation, ValidatedRegisterExtension};
+use crate::extensions::{validate_execute_extension_operation, validate_register_extension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::{
@@ -2346,14 +2346,8 @@ impl Governance {
             ));
         }
 
-        // Step 0. Validate the RegisterExtension proposal.
-        let validated_register_extension = ValidatedRegisterExtension::try_from(register_extension)
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Invalid RegisterExtension: {err:?}"),
-                )
-            })?;
+        let validated_register_extension =
+            validate_register_extension(self, register_extension).await?;
 
         validated_register_extension.execute(self).await?;
 
@@ -2554,11 +2548,17 @@ impl Governance {
             ));
         }
 
-        let validated_operation =
-            validate_execute_extension_operation(self, execute_extension_operation).await?;
+        let context = self.extension_context().await?;
+
+        let validated_operation = validate_execute_extension_operation(
+            &*self.env,
+            context.clone(),
+            execute_extension_operation,
+        )
+        .await?;
 
         // Execute the validated operation
-        validated_operation.execute(self).await?;
+        validated_operation.execute(self, context).await?;
 
         Ok(())
     }
