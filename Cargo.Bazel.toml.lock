@@ -2107,6 +2107,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "canlog"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd21b4c7140d033fe006495a65ec5ae24d79219eca550a74e0ba140ff9aa71dc"
+dependencies = [
+ "candid",
+ "canlog_derive",
+ "ic-canister-log",
+ "ic0 1.0.0",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "canlog_derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6620814f83b784938b29ca6ca8867967a93a4f7f08c1b7ec6256d12c1b53abe8"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "cargo-platform"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4500,13 +4527,14 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_types"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24fa2b6929665ce97f4a261dd969f87bd717d2c5ec274addf59793118ca61886"
+version = "2.0.0"
+source = "git+https://github.com/dfinity/evm-rpc-canister.git?branch=gdemay%2FXC-442-release-evm_rpc_types#9387078f69e1b0ed5ab8e5da3ac37e632a6fde41"
 dependencies = [
  "candid",
+ "canlog",
  "hex",
- "ic-cdk 0.17.2",
+ "ic-error-types 0.2.0",
+ "ic-management-canister-types",
  "num-bigint 0.4.6",
  "serde",
  "strum 0.27.1",
@@ -5989,7 +6017,7 @@ checksum = "3c9c87d961de7d2935a0bf19f4d6afe76f3d508b853ff5267e999beadd7e9286"
 dependencies = [
  "candid",
  "ic-cdk-macros 0.18.0-alpha.2",
- "ic-error-types",
+ "ic-error-types 0.1.0",
  "ic-management-canister-types",
  "ic0 0.24.0",
  "serde",
@@ -6093,6 +6121,17 @@ name = "ic-error-types"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be844216781d6f4a0853b5a8d63dee8d1b6ee0b9aef310d8c0cb82a6796d7072"
+dependencies = [
+ "serde",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "ic-error-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbeeb3d91aa179d6496d7293becdacedfc413c825cac79fd54ea1906f003ee55"
 dependencies = [
  "serde",
  "strum 0.26.3",
