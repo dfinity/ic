@@ -7,7 +7,7 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//bazel:mainnet-icos-images.bzl", "base_download_url")
+load("//bazel:mainnet-icos-images.bzl", "base_download_url", "base_download_url_dev")
 load("//rs/tests:common.bzl", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SUBNET_HASH", "MAINNET_NNS_SUBNET_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -392,7 +392,7 @@ def system_test(
 
     if uses_hostos_mainnet_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_LATEST_HOSTOS_REVISION, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url_dev(MAINNET_LATEST_HOSTOS_REVISION, "host-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS_HASH
 
     deps = list(runtime_deps)
