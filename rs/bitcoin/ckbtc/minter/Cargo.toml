@@ -34,7 +34,7 @@ ic-metrics-encoder = "1"
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
-ic0 = "0.18.9"
+ic0 = { workspace = true }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }

@@ -3,10 +3,7 @@
     "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
-  "logging": {
-    "elasticsearch_hosts": null,
-    "elasticsearch_tags": null
-  },
+  "logging": {},
   "nns": {
     "urls": NNS_URLS
   },

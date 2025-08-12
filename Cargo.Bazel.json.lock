@@ -1,5 +1,5 @@
 {
-  "checksum": "24a8276eaa17492b1f85b1d35cf9c646d51cd7e7d8f3caa5e0f6c2939f8daac3",
+  "checksum": "e51e69dadcf120b597cbc0cfa98f584bddfe30b75946f5349404c4a114f4fd20",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5000,7 +5000,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -5016,14 +5016,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "autocfg 1.1.0": {
+    "autocfg 1.5.0": {
       "name": "autocfg",
-      "version": "1.1.0",
+      "version": "1.5.0",
       "package_url": "https://github.com/cuviper/autocfg",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/autocfg/1.1.0/download",
-          "sha256": "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
+          "url": "https://static.crates.io/crates/autocfg/1.5.0/download",
+          "sha256": "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
         }
       },
       "targets": [
@@ -5046,7 +5046,7 @@
           "**"
         ],
         "edition": "2015",
-        "version": "1.1.0"
+        "version": "1.5.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -21473,7 +21473,7 @@
               "target": "ic_xrc_types"
             },
             {
-              "id": "ic0 0.18.11",
+              "id": "ic0 1.0.0",
               "target": "ic0"
             },
             {
@@ -27802,7 +27802,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -36883,44 +36883,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic0 0.18.11": {
-      "name": "ic0",
-      "version": "0.18.11",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic0/0.18.11/download",
-          "sha256": "576c539151d4769fb4d1a0c25c4108dd18facd04c5695b02cf2d226ab4e43aa5"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic0",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic0",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "0.18.11"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "ic0 0.23.0": {
       "name": "ic0",
       "version": "0.23.0",
@@ -36990,6 +36952,44 @@
         ],
         "edition": "2021",
         "version": "0.24.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic0 1.0.0": {
+      "name": "ic0",
+      "version": "1.0.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic0/1.0.0/download",
+          "sha256": "8877193e1921b5fd16accb0305eb46016868cd1935b05c05eca0ec007b943272"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic0",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic0",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "1.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38694,7 +38694,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -45189,7 +45189,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -46830,7 +46830,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -46915,7 +46915,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -49616,7 +49616,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -50171,7 +50171,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -50328,7 +50328,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -58078,7 +58078,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -73364,7 +73364,7 @@
         "deps": {
           "common": [
             {
-              "id": "autocfg 1.1.0",
+              "id": "autocfg 1.5.0",
               "target": "autocfg"
             }
           ],
@@ -95549,7 +95549,7 @@
     "ic-vetkeys 0.1.0",
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
-    "ic0 0.18.11",
+    "ic0 1.0.0",
     "ic_bls12_381 0.10.1",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
