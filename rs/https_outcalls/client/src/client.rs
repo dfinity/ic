@@ -175,7 +175,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
-                    // TODO(next): figure out what we should do with this.
+                    // TODO(next): Remove this field once everything is done. 
                     socks_proxy_allowed: true,
                     socks_proxy_addrs,
                 })
