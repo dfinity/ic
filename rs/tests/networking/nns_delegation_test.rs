@@ -194,7 +194,7 @@ fn upgrade_subnet_if_necessary(env: &TestEnv, subnet: &SubnetSnapshot, node: &Ic
         subnet.subnet_id,
     ));
 
-    assert_assigned_replica_version(&node, &target_version, env.logger());
+    assert_assigned_replica_version(node, &target_version, env.logger());
 }
 
 fn main() -> Result<()> {
