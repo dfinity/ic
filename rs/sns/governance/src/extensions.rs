@@ -1465,6 +1465,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_deposit_operation_treasury_balance_limits() {
         // Test parameters: (label, sns_balance, icp_balance, sns_request, icp_request, expected_result)
+        #[allow(clippy::type_complexity)]
         let test_cases: Vec<(&'static str, u64, u64, u64, u64, Result<(), &'static str>)> = vec![
             (
                 "Positive: exactly 50%",
