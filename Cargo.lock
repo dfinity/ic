@@ -4628,7 +4628,8 @@ dependencies = [
 [[package]]
 name = "evm_rpc_types"
 version = "2.0.0"
-source = "git+https://github.com/dfinity/evm-rpc-canister.git?branch=gdemay%2FXC-442-release-evm_rpc_types#9387078f69e1b0ed5ab8e5da3ac37e632a6fde41"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c9ed339a043ac9c0031bffdd89155d34b3d76f169a92eee16a3d5a5a8ca1bfc"
 dependencies = [
  "candid",
  "canlog 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
