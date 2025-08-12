@@ -3544,7 +3544,7 @@ impl Governance {
         }
 
         let reserved_canisters = self.reserved_canister_targets();
-        validate_and_render_proposal(proposal, self, reserved_canisters)
+        validate_and_render_proposal(self, proposal, reserved_canisters)
             .await
             .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }

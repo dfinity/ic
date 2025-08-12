@@ -302,8 +302,8 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
 /// Takes in the GovernanceProto as to be able to validate against the current
 /// state of governance.
 pub(crate) async fn validate_and_render_proposal(
-    proposal: &Proposal,
     governance: &crate::governance::Governance,
+    proposal: &Proposal,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<(String, Option<ActionAuxiliaryPb>), String> {
     let mut defects = Vec::new();
@@ -2917,7 +2917,7 @@ mod tests {
             governance_proto,
             NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)),
         );
-        validate_and_render_proposal(proposal, &governance, vec![FORBIDDEN_CANISTER])
+        validate_and_render_proposal(&governance, proposal, vec![FORBIDDEN_CANISTER])
             .now_or_never()
             .unwrap()
             .map(|(rendering, _action_auxiliary)| rendering)
