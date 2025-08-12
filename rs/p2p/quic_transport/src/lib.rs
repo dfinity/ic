@@ -307,6 +307,8 @@ impl_from_for_p2p_error!(
 );
 
 #[derive(Debug, Clone)]
+/// A generic error type for wrapping human-readable messages.
+/// This is useful because `String` does not implement `Error`.
 pub struct GenericError(pub String);
 
 impl Display for GenericError {
