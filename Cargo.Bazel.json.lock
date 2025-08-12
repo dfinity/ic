@@ -1,5 +1,5 @@
 {
-  "checksum": "e67ca206487862c4c11927720791fc6b40531022c0ba8dd3e25e06f54a1434e5",
+  "checksum": "e51e69dadcf120b597cbc0cfa98f584bddfe30b75946f5349404c4a114f4fd20",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20980,10 +20980,6 @@
             {
               "id": "async-stream 0.3.6",
               "target": "async_stream"
-            },
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
             },
             {
               "id": "axum 0.8.4",
@@ -95428,7 +95424,6 @@
     "async-recursion 1.0.5",
     "async-stream 0.3.6",
     "async-trait 0.1.83",
-    "autocfg 1.5.0",
     "axum 0.8.4",
     "axum-extra 0.10.1",
     "axum-server 0.7.2",

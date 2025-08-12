@@ -3544,7 +3544,6 @@ dependencies = [
  "async-recursion",
  "async-stream",
  "async-trait",
- "autocfg 1.5.0",
  "axum 0.8.4",
  "axum-extra",
  "axum-server",
