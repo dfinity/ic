@@ -18,7 +18,7 @@ use ic_system_test_driver::{
         test_env_api::{
             get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
             get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            SubnetSnapshot,
+            IcNodeSnapshot, SubnetSnapshot,
         },
     },
     systest,
@@ -44,6 +44,11 @@ fn setup(env: TestEnv) {
         .expect("Should be able to set up IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
+
+    // Upgrade the application subnet to test protocol compatibility between subnets running
+    // replica different versions.
+    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+    upgrade_subnet_if_necessary(&env, &subnet, &node);
 }
 
 fn nns_delegation_on_nns_test(env: TestEnv) {
@@ -55,19 +60,7 @@ fn nns_delegation_on_app_subnet_test(env: TestEnv) {
 }
 
 async fn nns_delegation_test(env: TestEnv, subnet_type: SubnetType) {
-    let subnet = env
-        .topology_snapshot()
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == subnet_type)
-        .expect("There is at least one subnet of each type");
-    let node = subnet
-        .nodes()
-        .next()
-        .expect("There is at least one node on each subnet");
-
-    if subnet_type == SubnetType::Application {
-        upgrade_subnet(&subnet, &env);
-    }
+    let (_subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let agent = node.build_default_agent_async().await;
     info!(env.logger(), "Fetching an initial NNS delegation");
@@ -133,6 +126,21 @@ async fn nns_delegation_test(env: TestEnv, subnet_type: SubnetType) {
     }
 }
 
+fn get_subnet_and_node(env: &TestEnv, subnet_type: SubnetType) -> (SubnetSnapshot, IcNodeSnapshot) {
+    let subnet = env
+        .topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == subnet_type)
+        .expect("There is at least one subnet of each type");
+
+    let node = subnet
+        .nodes()
+        .next()
+        .expect("There is at least one node in the subnet");
+
+    (subnet, node)
+}
+
 async fn get_nns_delegation_timestamp(
     agent: &Agent,
     effective_canister_id: PrincipalId,
@@ -157,7 +165,7 @@ async fn get_nns_delegation_timestamp(
     Some(leb128::read::unsigned(&mut std::io::Cursor::new(&timestamp)).unwrap())
 }
 
-fn upgrade_subnet(subnet: &SubnetSnapshot, env: &TestEnv) {
+fn upgrade_subnet_if_necessary(env: &TestEnv, subnet: &SubnetSnapshot, node: &IcNodeSnapshot) {
     let nns_node = get_nns_node(&env.topology_snapshot());
 
     let initial_version = get_guestos_img_version().expect("initial version");
@@ -186,11 +194,7 @@ fn upgrade_subnet(subnet: &SubnetSnapshot, env: &TestEnv) {
         subnet.subnet_id,
     ));
 
-    assert_assigned_replica_version(
-        &subnet.nodes().next().unwrap(),
-        &target_version,
-        env.logger(),
-    );
+    assert_assigned_replica_version(&node, &target_version, env.logger());
 }
 
 fn main() -> Result<()> {
