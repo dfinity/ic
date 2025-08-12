@@ -1389,6 +1389,10 @@ impl StateMachineBuilder {
             bitcoin_mainnet_uds_metrics_path: None,
             bitcoin_testnet_uds_path,
             bitcoin_testnet_uds_metrics_path: None,
+            dogecoin_mainnet_uds_path: None,
+            dogecoin_mainnet_uds_metrics_path: None,
+            dogecoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_metrics_path: None,
             https_outcalls_uds_path: None,
             https_outcalls_uds_metrics_path: None,
         };

@@ -590,6 +590,7 @@ where
     state_machine: Box<dyn StateMachine>,
     registry: Arc<RegistryClient_>,
     bitcoin_config: BitcoinConfig,
+    dogecoin_config: BitcoinConfig,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
     #[allow(dead_code)]
@@ -712,6 +713,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             state_machine,
             registry,
             bitcoin_config: hypervisor_config.bitcoin,
+            dogecoin_config: hypervisor_config.dogecoin,
             metrics,
             log,
             malicious_flags,
@@ -1086,6 +1088,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
+            dogecoin_testnet_canister_id: self.dogecoin_config.testnet_canister_id,
+            dogecoin_mainnet_canister_id: self.dogecoin_config.mainnet_canister_id,
         })
     }
 

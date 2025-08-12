@@ -8,10 +8,9 @@ mod tests;
 mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject,
+    BitcoinReject, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
@@ -148,6 +147,8 @@ impl BitcoinPayloadBuilder {
             let adapter_client = match request.network() {
                 Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
                 Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
+                // TODO: Dispatch to the dogecoin adapters
+                _ => todo!(),
             };
 
             // Send request to the adapter.

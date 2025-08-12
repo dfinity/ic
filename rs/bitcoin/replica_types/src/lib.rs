@@ -5,7 +5,7 @@
 //! only for serialization/deserialization of the ReplicatedState.
 
 use candid::CandidType;
-use ic_btc_interface::Network;
+use ic_btc_interface::Network as DogecoinNetwork;
 use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
@@ -15,6 +15,53 @@ use ic_protobuf::{
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum Network {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+    #[serde(rename = "regtest")]
+    Regtest,
+    #[serde(rename = "dogecoin")]
+    Dogecoin(DogecoinNetwork),
+}
+
+impl From<Network> for i32 {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Testnet => 1,
+            Network::Mainnet => 2,
+            Network::Regtest => 3,
+            Network::Dogecoin(doge) => match doge {
+                DogecoinNetwork::Testnet => 4,
+                DogecoinNetwork::Mainnet => 5,
+                DogecoinNetwork::Regtest => 6,
+            },
+        }
+    }
+}
+
+impl TryFrom<i32> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: i32) -> Result<Self, Self::Error> {
+        match network {
+            1 => Ok(Network::Testnet),
+            2 => Ok(Network::Mainnet),
+            3 => Ok(Network::Regtest),
+            4 => Ok(Network::Dogecoin(DogecoinNetwork::Testnet)),
+            5 => Ok(Network::Dogecoin(DogecoinNetwork::Mainnet)),
+            6 => Ok(Network::Dogecoin(DogecoinNetwork::Regtest)),
+            _ => {
+                return Err(ProxyDecodeError::MissingField(
+                    "SendTransactionRequest::network",
+                ))
+            }
+        }
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendTransactionRequest {
@@ -26,11 +73,7 @@ pub struct SendTransactionRequest {
 impl From<&SendTransactionRequest> for v1::SendTransactionRequest {
     fn from(request: &SendTransactionRequest) -> Self {
         Self {
-            network: match request.network {
-                Network::Testnet => 1,
-                Network::Mainnet => 2,
-                Network::Regtest => 3,
-            },
+            network: request.network.into(),
             transaction: request.transaction.clone(),
         }
     }
@@ -40,16 +83,7 @@ impl TryFrom<v1::SendTransactionRequest> for SendTransactionRequest {
     type Error = ProxyDecodeError;
     fn try_from(request: v1::SendTransactionRequest) -> Result<Self, Self::Error> {
         Ok(SendTransactionRequest {
-            network: match request.network {
-                1 => Network::Testnet,
-                2 => Network::Mainnet,
-                3 => Network::Regtest,
-                _ => {
-                    return Err(ProxyDecodeError::MissingField(
-                        "SendTransactionRequest::network",
-                    ))
-                }
-            },
+            network: request.network.try_into()?,
             transaction: request.transaction,
         })
     }
@@ -654,11 +688,7 @@ pub struct GetSuccessorsRequestInitial {
 impl From<&GetSuccessorsRequestInitial> for v1::GetSuccessorsRequestInitial {
     fn from(request: &GetSuccessorsRequestInitial) -> Self {
         Self {
-            network: match request.network {
-                Network::Testnet => 1,
-                Network::Mainnet => 2,
-                Network::Regtest => 3,
-            },
+            network: request.network.into(),
             anchor: request.anchor.clone(),
             processed_block_hashes: request.processed_block_hashes.clone(),
         }
@@ -669,16 +699,7 @@ impl TryFrom<v1::GetSuccessorsRequestInitial> for GetSuccessorsRequestInitial {
     type Error = ProxyDecodeError;
     fn try_from(request: v1::GetSuccessorsRequestInitial) -> Result<Self, Self::Error> {
         Ok(GetSuccessorsRequestInitial {
-            network: match request.network {
-                1 => Network::Testnet,
-                2 => Network::Mainnet,
-                3 => Network::Regtest,
-                _ => {
-                    return Err(ProxyDecodeError::MissingField(
-                        "GetSuccessorsRequestInitial::network",
-                    ))
-                }
-            },
+            network: request.network.try_into()?,
             anchor: request.anchor,
             processed_block_hashes: request.processed_block_hashes,
         })

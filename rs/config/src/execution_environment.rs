@@ -268,6 +268,9 @@ pub struct Config {
     /// Bitcoin configuration.
     pub bitcoin: BitcoinConfig,
 
+    /// Dogecoin configuration.
+    pub dogecoin: BitcoinConfig,
+
     /// Indicates whether composite queries are available or not.
     pub composite_queries: FlagStatus,
 
@@ -380,6 +383,7 @@ impl Default for Config {
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
+            dogecoin: BitcoinConfig::default(),
             composite_queries: FlagStatus::Enabled,
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
@@ -400,6 +404,7 @@ impl Default for Config {
     }
 }
 
+// TODO: Rename to have a neutral name like NativeCrossChainConfig or similar
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct BitcoinConfig {
     /// Canisters that have access to privileged bitcoin API (e.g. `bitcoin_get_successors`)
