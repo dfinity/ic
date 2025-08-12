@@ -284,6 +284,20 @@ impl ValidatedExecuteExtensionOperation {
 }
 
 impl Governance {
+    /// Returns the ICRC-1 subaccount for the SNS treasury
+    fn sns_treasury_subaccount(&self) -> Option<[u8; 32]> {
+        // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
+        Some(compute_distribution_subaccount_bytes(
+            self.env.canister_id().get(),
+            TREASURY_SUBACCOUNT_NONCE,
+        ))
+    }
+
+    /// Returns the ICRC-1 subaccounts for the ICP treasury.
+    fn icp_treasury_subaccount(&self) -> Option<[u8; 32]> {
+        None
+    }
+
     /// Returns the ICRC-1 subaccounts for the SNS treasury and ICP treasury.
     fn treasury_subaccounts(&self) -> (Option<[u8; 32]>, Option<[u8; 32]>) {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
@@ -300,7 +314,8 @@ impl Governance {
         value: Option<Precise>,
     ) -> Result<(Vec<Allowance>, u64, u64), GovernanceError> {
         // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-        let (treasury_sns_subaccount, treasury_icp_subaccount) = self.treasury_subaccounts();
+        let treasury_sns_subaccount = self.sns_treasury_subaccount();
+        let treasury_icp_subaccount = self.icp_treasury_subaccount();
 
         let sns_token_symbol = get_sns_token_symbol(&*self.env, self.ledger.canister_id()).await?;
 
@@ -382,7 +397,8 @@ impl Governance {
         sns_amount_e8s: u64,
         icp_amount_e8s: u64,
     ) -> Result<(), GovernanceError> {
-        let (treasury_sns_subaccount, treasury_icp_subaccount) = self.treasury_subaccounts();
+        let treasury_sns_subaccount = self.sns_treasury_subaccount();
+        let treasury_icp_subaccount = self.icp_treasury_subaccount();
 
         let to = Account {
             owner: treasury_manager_canister_id.get().0,
