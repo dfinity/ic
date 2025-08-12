@@ -1170,16 +1170,14 @@ mod tests {
             Ok(Tokens::from_e8s(100_000_000_000)) // Mock SNS balance
         });
 
-        let governance = Governance::new(
+        Governance::new(
             ValidGovernanceProto::try_from(governance_proto)
                 .expect("Failed validating governance proto"),
             Box::new(env),
             Box::new(sns_ledger),
             Box::new(icp_ledger),
             Box::new(MockCMC::default()),
-        );
-
-        governance
+        )
     }
 
     // Tests for validate_execute_extension_operation with proper environment mocking
@@ -1449,7 +1447,7 @@ mod tests {
         icp_ledger
             .expect_account_balance()
             .withf(move |account: &Account| {
-                account.owner == governance_canister_id.get().0 && account.subaccount == None
+                account.owner == governance_canister_id.get().0 && account.subaccount.is_none()
             })
             .times(1)
             .returning(move |_| Ok(Tokens::from_e8s(icp_balance)));
@@ -1466,41 +1464,38 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_deposit_operation_treasury_balance_limits() {
-        // Test parameters: (sns_balance, icp_balance, sns_request, icp_request, expected_result)
-        let test_cases: Vec<(u64, u64, u64, u64, Result<(), &'static str>)> = vec![
-            // Positive case: both amounts at exactly 50%
-            (100_000_000, 200_000_000, 50_000_000, 100_000_000, Ok(())),
-            // Positive case: both amounts below 50%
-            (100_000_000, 200_000_000, 30_000_000, 60_000_000, Ok(())),
-            // Positive case: zero amounts
-            (100_000_000, 200_000_000, 0, 0, Ok(())),
-            // Negative case: SNS exceeds 50%
+        // Test parameters: (label, sns_balance, icp_balance, sns_request, icp_request, expected_result)
+        let test_cases: Vec<(&'static str, u64, u64, u64, u64, Result<(), &'static str>)> = vec![
             (
-                100_000_000,
-                200_000_000,
-                51_000_000,
-                50_000_000,
-                Err("SNS treasury deposit request of 0.51000000 Token exceeds 50% of current SNS Token balance"),
+                "Positive: exactly 50%",
+                100_000_000, 200_000_000, 50_000_000, 100_000_000, Ok(())
             ),
-            // Negative case: ICP exceeds 50%
             (
-                100_000_000,
-                200_000_000,
-                40_000_000,
-                101_000_000,
-                Err("ICP treasury deposit request of 1.01000000 Token exceeds 50% of current ICP balance"),
+                "Positive: below 50%",
+                100_000_000, 200_000_000, 30_000_000, 60_000_000, Ok(())
             ),
-            // Negative case: both exceed 50% (will fail on SNS first)
             (
-                100_000_000,
-                200_000_000,
-                60_000_000,
-                120_000_000,
-                Err("SNS treasury deposit request of 0.60000000 Token exceeds 50% of current SNS Token balance"),
+                "Positive: zero amounts",
+                100_000_000, 200_000_000, 0, 0, Ok(())
+            ),
+            (
+                "Negative: SNS exceeds 50%",
+                100_000_000, 200_000_000, 51_000_000, 50_000_000,
+                Err("SNS treasury deposit request of 0.51000000 Token exceeds 50% of current SNS Token balance")
+            ),
+            (
+                "Negative: ICP exceeds 50%",
+                100_000_000, 200_000_000, 40_000_000, 101_000_000,
+                Err("ICP treasury deposit request of 1.01000000 Token exceeds 50% of current ICP balance")
+            ),
+            (
+                "Negative: both exceed 50% (SNS checked first)",
+                100_000_000, 200_000_000, 60_000_000, 120_000_000,
+                Err("SNS treasury deposit request of 0.60000000 Token exceeds 50% of current SNS Token balance")
             ),
         ];
 
-        for (sns_balance, icp_balance, sns_request, icp_request, expected) in test_cases {
+        for (label, sns_balance, icp_balance, sns_request, icp_request, expected) in test_cases {
             let governance = setup_governance_with_treasury_balances(sns_balance, icp_balance);
 
             let arg = ExtensionOperationArg {
@@ -1527,14 +1522,14 @@ mod tests {
             match expected {
                 Ok(()) => {
                     assert!(result.is_ok(),
-                        "Expected success for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {:?}",
-                        sns_balance, icp_balance, sns_request, icp_request, result);
+                        "{}: Expected success for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {:?}",
+                        label, sns_balance, icp_balance, sns_request, icp_request, result);
                 }
                 Err(expected_substr) => {
                     let error = result.unwrap_err();
                     assert!(error.contains(expected_substr),
-                        "Expected error containing '{}' for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {}",
-                        expected_substr, sns_balance, icp_balance, sns_request, icp_request, error);
+                        "{}: Expected error containing '{}' for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {}",
+                        label, expected_substr, sns_balance, icp_balance, sns_request, icp_request, error);
                 }
             }
         }
