@@ -23,6 +23,7 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
     time::UNIX_EPOCH,
@@ -43,7 +44,6 @@ pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameter
             NumInstructions::from(5_000_000_000),
             NumInstructions::from(5_000_000_000),
         ),
-        canister_memory_limit: NumBytes::new(4 << 30),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: 50,
@@ -217,6 +217,7 @@ pub fn get_system_api(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     SystemApiImpl::new(
         api_type,

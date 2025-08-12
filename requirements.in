@@ -25,9 +25,11 @@ pytest
 pytest-cov
 PyYAML>=6.0.2
 requests>=2.26.0
+sev-snp-measure
 simple-parsing
 tqdm
 uuid
 PyGithub>=2.3.0
+python_gitlab
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
 typing_extensions>=4.6.0

@@ -20,7 +20,7 @@ use std::{
 /// Returns a [PathBuf] to the downloaded binary.
 pub async fn download_binary(
     logger: &Logger,
-    replica_version: ReplicaVersion,
+    replica_version: &ReplicaVersion,
     binary_name: String,
     target_dir: &Path,
 ) -> RecoveryResult<PathBuf> {

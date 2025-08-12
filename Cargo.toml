@@ -128,6 +128,7 @@ members = [
     "rs/execution_environment/tools",
     "rs/http_endpoints/async_utils",
     "rs/http_endpoints/metrics",
+    "rs/http_endpoints/nns_delegation_manager",
     "rs/http_endpoints/public",
     "rs/http_endpoints/test_agent",
     "rs/http_endpoints/xnet",
@@ -144,6 +145,7 @@ members = [
     "rs/ic_os/config_types",
     "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/deterministic_ips",
+    "rs/ic_os/device",
     "rs/ic_os/dev_test_tools/launch-single-vm",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
@@ -154,10 +156,12 @@ members = [
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
+    "rs/ic_os/os_tools/guest_disk",
     "rs/ic_os/os_tools/guest_vm_runner",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",
     "rs/ic_os/os_tools/setupos_tool",
+    "rs/ic_os/sev",
     "rs/ic_os/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
@@ -259,6 +263,7 @@ members = [
     "rs/nns/test_utils_macros",
     "rs/node_rewards/canister",
     "rs/node_rewards/canister/api",
+    "rs/node_rewards/canister/protobuf_generator",
     "rs/node_rewards/rewards_calculation",
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
@@ -365,7 +370,6 @@ members = [
     "rs/sns/swap/proto_library",
     "rs/sns/test_utils",
     "rs/sns/testing",
-    "rs/starter",
     "rs/state_layout",
     "rs/state_machine_tests",
     "rs/state_manager",
@@ -406,7 +410,6 @@ members = [
     "rs/tests/financial_integrations/rosetta/rosetta_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/idx",
-    "rs/tests/idx/wabt-tests",
     "rs/tests/message_routing",
     "rs/tests/message_routing/common",
     "rs/tests/message_routing/rejoin_test_lib",
@@ -549,7 +552,9 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
+der = { version = "0.7", default-features = false }
 derive-new = "0.7.0"
+devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
 ed25519-dalek = { version = "2.1.1", features = [
     "std",
@@ -568,6 +573,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
+hkdf = "^0.12"
 http = "1.3.1"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
@@ -583,6 +589,7 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
+ic0 = "1.0.0"
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
 ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
     "acme_alpn",
@@ -613,6 +620,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ] }
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
+indexmap = "2.10.0"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
@@ -631,9 +639,11 @@ kube = { version = "0.94.0", features = ["client", "derive"] }
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
+libcryptsetup-rs = "0.13"
 libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
+loopdev-3 = "0.5"
 macaddr = "1.0"
 memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
@@ -641,7 +651,7 @@ minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.6.1"
 nftables = "0.4"
-nix = { version = "0.24.3", features = ["ptrace"] }
+nix = { version = "0.24.3", features = ["ptrace", "user"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
@@ -657,6 +667,7 @@ p256 = { version = "0.13.2", default-features = false, features = [
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
+pem = { version = "^1.0.1", default-features = false }
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.14.0", default-features = false, features = [
@@ -700,6 +711,7 @@ reqwest = { version = "0.12.15", default-features = false, features = [
 rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
+rust-ini = "0.21.2"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
@@ -714,6 +726,10 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
+sev = { version = "6.2", default-features = false, features = [
+    "crypto_nossl",
+    "snp",
+] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
 signature = "2.2.0"

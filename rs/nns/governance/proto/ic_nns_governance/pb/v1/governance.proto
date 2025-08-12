@@ -484,6 +484,13 @@ enum NnsFunction {
 
   // The proposal requests a subnet rental.
   NNS_FUNCTION_SUBNET_RENTAL_REQUEST = 52;
+
+  // STOP! Adding to NnsFunction is NOT the standard way to add new proposal
+  // types. Instead, add to the Proposal.action oneof DIRECTLY. The problem with
+  // NnsFunction is that it leads to proposals with opaque blobs (specifically,
+  // within the ExecuteNnsFunction.payload field). Such things are considered
+  // "bad practice":
+  // https://protobuf.dev/best-practices/api/#dont-encode-data-in-a-string
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -684,6 +691,8 @@ message Proposal {
     StopOrStartCanister stop_or_start_canister = 26;
     // Update the settings of a canister that is controlled by the NNS.
     UpdateCanisterSettings update_canister_settings = 27;
+    // Create a rented subnet.
+    FulfillSubnetRentalRequest fulfill_subnet_rental_request = 28;
   }
 }
 
@@ -1189,6 +1198,12 @@ message ProposalData {
 
   // The topic of the proposal.
   optional Topic topic = 23;
+
+  // When a voting power spike is detected, ballots are created using a previous snapshot of the
+  // voting power, and this field indicates the timestamp at which the snapshot was taken. This
+  // field should not be set in normal circumstances, and if it is set, it is an indicator that a
+  // bug might have caused the voting power spike.
+  optional uint64 previous_ballots_timestamp_seconds = 24;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
@@ -1878,6 +1893,12 @@ message UpdateCanisterSettings {
   optional CanisterSettings settings = 2;
 }
 
+message FulfillSubnetRentalRequest {
+  ic_base_types.pb.v1.PrincipalId user = 1;
+  repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
+  string replica_version_id = 2;
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2037,6 +2058,7 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+    uint64 spawning_neurons_count = 42;
 
     // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
     optional uint64 total_voting_power_non_self_authenticating_controller = 36;

@@ -72,6 +72,7 @@ ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks"
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }

@@ -55,3 +55,9 @@ All changes to the Replicated State should be made in separate, concise merge re
 ## Note on rolling back/forward
 
 Note that because we assume we never roll back or forward more than one release at a time, this implies that we have to be reasonably confident that each step in a multi-stage rollout will not need to be rolled back before proceeding with the next step.
+
+## Other considerations
+
+### Note on `Arc`s and cloning
+
+The `ReplicatedState` is cloned every round such that states of previous heights can be retained in memory until they are certified. For performance, it is important that as little actual copying occurs during the cloning of the `ReplicatedState`. Therefore, many of its fields and subfields are wrapped in `Arc`s, which make cloning trivial if no changes happen. If changes to a subfield do occur in the current round, the use of `Arc`s on every hierarchy level ensures that the necessary copying is limited. E.g., instead of an `Arc<BTreeMap<T>>`, we use `BTreeMap<Arc<T>>`. If a `t` is being changed, only this leaf needs to be cloned and changed (via `Arc::make_mut`), whereas with the former type, the whole tree would need to be cloned. 

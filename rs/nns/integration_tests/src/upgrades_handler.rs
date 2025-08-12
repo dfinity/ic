@@ -69,7 +69,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     .map(|_| vec!["http://release_package.tar.zst".to_string()])
                     .unwrap_or_default(),
                 replica_version_to_elect: elect,
-                guest_launch_measurement_sha256_hex: None,
+                guest_launch_measurements: None,
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
             };
         let bless_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {

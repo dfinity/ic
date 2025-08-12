@@ -1,8 +1,11 @@
+use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
-use ic_management_canister_types_private::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
+use ic_management_canister_types_private::{
+    self as ic00, CanisterInstallMode, CanisterSettingsArgsBuilder, EmptyBlob, Payload,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -110,6 +113,59 @@ fn test_storage_reservation_not_triggered() {
 
     assert_lt!(env.cycle_balance(canister_id), initial_balance);
     assert_eq!(reserved_balance(&env, canister_id), 0); // No storage reservation.
+}
+
+#[test]
+fn test_storage_reservation_not_triggered_in_noop_update_settings() {
+    let (env, canister_id) = setup(SUBNET_MEMORY_CAPACITY, None);
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    // Trigger storage reservation.
+    env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().stable_grow(1000).reply().build(),
+    )
+    .unwrap();
+
+    let initial_reserved_balance = reserved_balance(&env, canister_id);
+    assert_gt!(initial_reserved_balance, 0); // Storage reservation is triggered.
+
+    // Set the memory allocation to be equal to the current memory usage.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    let initial_memory_usage = status.memory_size().get();
+
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(initial_memory_usage)
+        .build();
+    env.update_settings(&canister_id, settings).unwrap();
+
+    // Increase the memory usage by updating controllers which increases the canister history memory usage.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_controllers(vec![PrincipalId::new_anonymous()])
+        .build();
+    env.update_settings(&canister_id, settings).unwrap();
+
+    // Check that the memory usage increased.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    let memory_usage = status.memory_size().get();
+    assert_gt!(memory_usage, initial_memory_usage);
+
+    // Increase the memory usage again by updating controllers which increases the canister history memory usage.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_controllers(vec![PrincipalId::new_anonymous()])
+        .build();
+    env.update_settings(&canister_id, settings).unwrap();
+
+    // Check that the memory usage increased again.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    let final_memory_usage = status.memory_size().get();
+    assert_gt!(final_memory_usage, memory_usage);
+
+    assert_eq!(
+        reserved_balance(&env, canister_id),
+        initial_reserved_balance
+    ); // No extra storage reservation.
 }
 
 #[test]

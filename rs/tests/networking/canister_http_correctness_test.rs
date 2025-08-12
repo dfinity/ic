@@ -42,6 +42,7 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
@@ -50,7 +51,7 @@ use proxy_canister::{
     UnvalidatedCanisterHttpRequestArgs,
 };
 use serde_json::Value;
-use std::{collections::HashSet, convert::TryFrom};
+use std::collections::{BTreeSet, HashSet};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
@@ -147,7 +148,7 @@ fn main() -> Result<()> {
                 ))
                 // This section tests the url and ip scenarios
                 .add_test(systest!(test_non_ascii_url_is_accepted))
-                .add_test(systest!(test_invalid_ip))
+                .add_test(systest!(test_invalid_ip_timeout))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
                 .add_test(systest!(test_max_url_length_exceeded))
@@ -216,6 +217,7 @@ fn test_enforce_https(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -252,6 +254,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
                     context: transform_context.clone(),
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -294,6 +297,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
                     context: transform_context.clone(),
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -332,6 +336,7 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -364,6 +369,7 @@ fn test_no_cycles_attached(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: 0,
         },
@@ -414,6 +420,7 @@ fn test_max_possible_request_size(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -458,6 +465,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -493,6 +501,7 @@ fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
             context: vec![0, 1, 2],
         }),
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, _) = block_on(async move {
@@ -536,6 +545,7 @@ fn test_4096_max_response_cycle_case_1(env: TestEnv) {
             context: vec![0, 1, 2],
         }),
         max_response_bytes: Some(16384),
+        is_replicated: None,
     };
 
     let (response, _) = block_on(async move {
@@ -573,6 +583,7 @@ fn test_4096_max_response_cycle_case_2(env: TestEnv) {
             context: vec![0, 1, 2],
         }),
         max_response_bytes: Some(16384),
+        is_replicated: None,
     };
 
     let (response, _) = block_on(async move {
@@ -612,6 +623,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
                 body: Some("".as_bytes().to_vec()),
                 transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES) as u64),
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -634,6 +646,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
                 body: Some("".as_bytes().to_vec()),
                 transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES + 1) as u64),
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -672,6 +685,7 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -702,6 +716,7 @@ fn test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes(en
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: Some(max_response_bytes),
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -740,6 +755,7 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -781,6 +797,7 @@ fn test_post_request(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -815,6 +832,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
                 body: Some("".as_bytes().to_vec()),
                 transform: None,
                 max_response_bytes: Some(max_response_bytes),
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -859,6 +877,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
                     body: Some("".as_bytes().to_vec()),
                     transform,
                     max_response_bytes: Some(max_response_bytes),
+                    is_replicated: None,
                 },
                 cycles: HTTP_REQUEST_CYCLE_PAYMENT,
             },
@@ -898,6 +917,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
                 body: Some("".as_bytes().to_vec()),
                 transform: None,
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -940,6 +960,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
                     body: Some("".as_bytes().to_vec()),
                     transform,
                     max_response_bytes: None,
+                    is_replicated: None,
                 },
                 cycles: HTTP_REQUEST_CYCLE_PAYMENT,
             },
@@ -975,6 +996,7 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1010,6 +1032,7 @@ fn test_that_redirects_are_not_followed(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1039,6 +1062,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1076,6 +1100,7 @@ fn test_invalid_domain_name(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1094,7 +1119,7 @@ fn test_invalid_domain_name(env: TestEnv) {
     );
 }
 
-fn test_invalid_ip(env: TestEnv) {
+fn test_invalid_ip_timeout(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1113,6 +1138,7 @@ fn test_invalid_ip(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1120,10 +1146,12 @@ fn test_invalid_ip(env: TestEnv) {
 
     assert_matches!(
         response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysTransient,
+        Err(
+            RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            reject_message,
             ..
-        })
+        }) => assert_eq!(reject_message, "Timeout expired")
     );
     assert_ne!(
         refunded_cycles,
@@ -1151,6 +1179,7 @@ fn test_get_hello_world_call(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: Some(max_response_bytes),
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1193,6 +1222,7 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1239,6 +1269,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1284,6 +1315,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
                 body: None,
                 transform: None,
                 max_response_bytes: Some(DEFAULT_MAX_RESPONSE_BYTES),
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1335,6 +1367,7 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
                 body: None,
                 transform: None,
                 max_response_bytes: Some(DEFAULT_MAX_RESPONSE_BYTES),
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1369,6 +1402,7 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1399,6 +1433,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1438,6 +1473,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1480,6 +1516,7 @@ fn test_response_header_name_within_limit(env: TestEnv) {
                 body: Some("".as_bytes().to_vec()),
                 transform: None,
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1508,6 +1545,7 @@ fn test_response_header_name_over_limit(env: TestEnv) {
                 body: Some("".as_bytes().to_vec()),
                 transform: None,
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1543,6 +1581,7 @@ fn test_response_header_value_within_limit(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1573,6 +1612,7 @@ fn test_response_header_value_over_limit(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1622,6 +1662,7 @@ fn test_post_call(env: TestEnv) {
         body,
         transform: None,
         max_response_bytes,
+        is_replicated: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1670,6 +1711,7 @@ fn test_head_call(env: TestEnv) {
         body,
         transform: None,
         max_response_bytes,
+        is_replicated: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1723,6 +1765,7 @@ fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
                 body: None,
                 transform: None,
                 max_response_bytes,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1761,6 +1804,7 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
                 body: None,
                 transform: None,
                 max_response_bytes,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1798,6 +1842,7 @@ fn test_non_ascii_url_is_accepted(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: Some(max_response_bytes),
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1834,6 +1879,7 @@ fn test_max_url_length(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1867,6 +1913,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         transform: None,
         max_response_bytes: None,
+        is_replicated: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1918,6 +1965,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
         max_response_bytes: None,
+        is_replicated: None,
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: proxy_canister_id_2.into(),
@@ -1964,6 +2012,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
                 body: None,
                 transform: None,
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -2001,6 +2050,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
                 body: None,
                 transform: None,
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -2037,6 +2087,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
             body: None,
             transform: None,
             max_response_bytes: None,
+            is_replicated: None,
         },
         cycles: HTTP_REQUEST_CYCLE_PAYMENT,
     };
@@ -2112,6 +2163,7 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
         max_response_bytes: None,
+        is_replicated: None,
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: get_proxy_canister_id(&env).into(),
@@ -2365,16 +2417,23 @@ fn expected_cycle_cost(
         .max_response_bytes
         .unwrap_or(MAX_CANISTER_HTTP_REQUEST_BYTES);
 
-    let dummy_context = CanisterHttpRequestContext::try_from((
+    let dummy_context = CanisterHttpRequestContext::generate_from_args(
         UNIX_EPOCH,
         &RequestBuilder::default()
             .receiver(CanisterId::from(1))
             .sender(proxy_canister)
             .build(),
         request.into(),
-    ))
+        &BTreeSet::new(),
+        &mut rand::thread_rng(),
+    )
     .unwrap();
     let req_size = dummy_context.variable_parts_size();
-    let cycle_fee = cm.http_request_fee(req_size, Some(NumBytes::from(response_size)), subnet_size);
+    let cycle_fee = cm.http_request_fee(
+        req_size,
+        Some(NumBytes::from(response_size)),
+        subnet_size,
+        CanisterCyclesCostSchedule::Normal,
+    );
     cycle_fee.get().try_into().unwrap()
 }

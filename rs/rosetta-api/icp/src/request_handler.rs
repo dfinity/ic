@@ -12,6 +12,7 @@ use crate::{
     errors::{ApiError, Details},
     ledger_client::{
         list_known_neurons_response::ListKnownNeuronsResponse,
+        minimum_dissolve_delay_response::MinimumDissolveDelayResponse,
         pending_proposals_response::PendingProposalsResponse,
         proposal_info_response::ProposalInfoResponse, LedgerAccess,
     },
@@ -207,6 +208,16 @@ impl RosettaRequestHandler {
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
                 Ok(CallResponse::new(
                     ObjectMap::try_from(pending_proposals_response)?,
+                    false,
+                ))
+            }
+            "get_minimum_dissolve_delay" => {
+                let minimum_dissolve_delay = self.ledger.minimum_dissolve_delay().await?;
+                let minimum_dissolve_delay_response = MinimumDissolveDelayResponse {
+                    neuron_minimum_dissolve_delay_to_vote_seconds: minimum_dissolve_delay,
+                };
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(minimum_dissolve_delay_response)?,
                     false,
                 ))
             }
@@ -658,6 +669,18 @@ impl RosettaRequestHandler {
         Ok(network_status)
     }
 
+    pub fn assert_has_indexed_field(
+        &self,
+        request: &models::SearchTransactionsRequest,
+    ) -> Result<(), ApiError> {
+        let has_indexed_field =
+            request.transaction_identifier.is_some() || request.account_identifier.is_some();
+        if !has_indexed_field {
+            return Err(ApiError::invalid_request("At least one of transaction_identifier, type_, or account_identifier must be provided to perform an efficient search".to_owned()));
+        }
+        Ok(())
+    }
+
     /// Search for a transaction given its hash
     pub async fn search_transactions(
         &self,
@@ -703,7 +726,6 @@ impl RosettaRequestHandler {
                 "Currency not supported in search/transactions endpoint".to_owned(),
             ));
         }
-
         let block_storage = self.ledger.read_blocks().await;
 
         let block_with_highest_block_index = block_storage

@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -12,11 +12,10 @@ system_test_nns(
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
-        "system_test_staging",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -32,11 +31,10 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
-        "system_test_hotfix",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -52,11 +50,10 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -73,11 +70,10 @@ system_test_nns(
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
-        "system_test_nightly",
+        "system_test_large",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -90,12 +86,9 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    malicious = True,
-    tags = [
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -118,11 +111,11 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    uses_guestos_dev_test = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_img = True,
+    uses_guestos_update = True,
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS +
         GRAFANA_RUNTIME_DEPS,
     deps = [

@@ -22,7 +22,8 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::{
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -50,7 +51,6 @@ use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use slog::{Drain, Logger};
-use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -132,6 +132,14 @@ fn get_registry(
     let mut routing_table = RoutingTable::new();
     routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
+    data_provider
+        .add(
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            registry_version,
+            Some(pb_routing_table.clone()),
+        )
+        .unwrap();
+    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
     data_provider
         .add(
             &make_routing_table_record_key(),
@@ -384,9 +392,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
-        chain_key_subnet_public_keys: BTreeMap::new(),
-        idkg_pre_signature_ids: BTreeMap::new(),
-        ni_dkg_ids: BTreeMap::new(),
+        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],

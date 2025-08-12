@@ -10,6 +10,7 @@ After=var.mount
 Wants=var.mount
 
 [Service]
+Type=oneshot
 User=filebeat
 Group=filebeat
 Environment="GODEBUG='madvdontneed=1'"
@@ -20,16 +21,9 @@ ExecStartPre=+/opt/ic/bin/generate-filebeat-config.sh -i /etc/filebeat/filebeat.
 
 # Only start Filebeat if configuration file is generated
 ExecStart=/bin/sh -c '\
-  if [ -f /run/ic-node/etc/filebeat/filebeat.yml ]; then \
-    exec /usr/local/bin/filebeat \
-      --environment systemd -e \
-      --path.home /var/lib/filebeat \
-      --path.config /run/ic-node/etc/filebeat \
-      --path.data /var/lib/filebeat \
-      --path.logs /var/log/filebeat; \
-  else \
-    exit 0; \
-  fi'
+  echo "Filebeat will be removed soon. It is no longer used for fetching testnet logs."; \
+  systemctl disable filebeat.service || true \
+  '
 
 Restart=on-failure
 

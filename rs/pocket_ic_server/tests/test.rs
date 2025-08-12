@@ -130,6 +130,7 @@ fn test_creation_of_instance_extended() {
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
+        allow_incomplete_state: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

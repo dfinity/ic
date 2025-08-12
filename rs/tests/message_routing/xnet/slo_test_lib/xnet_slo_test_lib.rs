@@ -538,10 +538,10 @@ pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
             let _: String = canister
                 .update_("stop", candid, ())
                 .await
-                .unwrap_or_else(|_| {
+                .unwrap_or_else(|e| {
                     panic!(
-                        "Stopping canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Stopping canister_idx={} on subnet_idx={} failed with error: {}",
+                        canister_idx, subnet_idx, e
                     )
                 });
         });

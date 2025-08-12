@@ -17,6 +17,9 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::DataCenterRecord,
@@ -31,7 +34,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
+    make_blessed_replica_versions_key, make_canister_ranges_key,
+    make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
@@ -285,17 +289,29 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
     );
 }
 
-pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
+/// Returns a list of mutations that set the initial state of the routing table.
+///
+/// Note that it's undefined behavior if they are used to modify an existing
+/// routing table.
+pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutation> {
     use ic_protobuf::registry::routing_table::v1 as pb;
 
     let rt_pb = pb::RoutingTable::from(rt);
     let mut buf = vec![];
     rt_pb.encode(&mut buf).unwrap();
-    RegistryMutation {
-        mutation_type: Type::Upsert as i32,
-        key: make_routing_table_record_key().into_bytes(),
-        value: buf,
-    }
+    vec![
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key: make_routing_table_record_key().into_bytes(),
+            value: buf.clone(),
+        },
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            value: buf,
+        },
+    ]
 }
 
 /// Returns a mutation that sets the initial state of the registry to be
@@ -340,13 +356,13 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             ..Default::default()
         }
     };
-    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    const MOCK_HASH: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
-        guest_launch_measurement_sha256_hex: None,
+        guest_launch_measurements: None,
     };
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version_id.clone()],
@@ -373,7 +389,6 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             make_subnet_record_key(subnet_pid).as_bytes(),
             system_subnet.encode_to_vec(),
         ),
-        routing_table_mutation(&RoutingTable::default()),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
@@ -389,6 +404,9 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         valid_pks,
     ));
     mutations.append(&mut threshold_pk_and_cup_mutations);
+    mutations.append(&mut initial_routing_table_mutations(
+        &RoutingTable::default(),
+    ));
     mutations
 }
 
@@ -602,12 +620,20 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     }
 
     let replica_version_id = ReplicaVersion::default().to_string();
-    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    const MOCK_HASH: &str = "abbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabba";
     let release_package_url = "http://release_package.tar.zst".to_string();
+    let guest_launch_measurements = Some(GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            measurement: vec![1, 2, 3],
+            metadata: Some(GuestLaunchMeasurementMetadata {
+                kernel_cmdline: "foo=bar".to_string(),
+            }),
+        }],
+    });
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
-        guest_launch_measurement_sha256_hex: None,
+        guest_launch_measurements,
     };
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version_id.clone()],
@@ -640,8 +666,13 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             make_subnet_record_key(nns_subnet_id).as_bytes(),
             system_subnet.encode_to_vec(),
         ),
+        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
         insert(
             make_routing_table_record_key().as_bytes(),
+            RoutingTablePB::from(routing_table.clone()).encode_to_vec(),
+        ),
+        insert(
+            make_canister_ranges_key(CanisterId::from_u64(0)).as_bytes(),
             RoutingTablePB::from(routing_table).encode_to_vec(),
         ),
         insert(

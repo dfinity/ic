@@ -34,6 +34,7 @@
 //! The start state is a dedicated state that always exists independent of which computations have
 //! been carried out. A state which has no outcoming computations is called a leaf.
 
+mod nonmainnet_features;
 pub mod pocket_ic;
 pub mod state_api;
 

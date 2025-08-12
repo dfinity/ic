@@ -1,6 +1,5 @@
 mod compilation_cache;
 mod serialized_module;
-mod signal_handler;
 pub mod wasm_executor;
 pub mod wasm_utils;
 pub mod wasmtime_embedder;
