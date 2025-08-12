@@ -136,7 +136,7 @@ fn validate_deposit_operation(
     arg: ExtensionOperationArg,
 ) -> BoxFuture<Result<ValidatedOperationArg, String>> {
     Box::pin(async move {
-        let structually_valid = ValidatedDepositOperationArg::try_from(arg)?;
+        let structurally_valid = ValidatedDepositOperationArg::try_from(arg)?;
 
         let sns_subaccount = governance.sns_treasury_subaccount();
         let icp_subaccount = governance.icp_treasury_subaccount();
@@ -160,8 +160,8 @@ fn validate_deposit_operation(
             .await
             .map_err(|e| format!("Failed to get ICP treasury balance: {:?}", e))?;
 
-        let icp_requested = Tokens::from_e8s(structually_valid.treasury_allocation_icp_e8s);
-        let sns_requested = Tokens::from_e8s(structually_valid.treasury_allocation_sns_e8s);
+        let icp_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_icp_e8s);
+        let sns_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_sns_e8s);
 
         // Unwrap is safe, only fails if divisor is zero, which we don't do.
         if sns_requested > sns_balance.checked_div(2).unwrap() {
@@ -179,7 +179,7 @@ fn validate_deposit_operation(
         }
 
         Ok(ValidatedOperationArg::TreasuryManagerDeposit(
-            structually_valid,
+            structurally_valid,
         ))
     })
 }
