@@ -1111,6 +1111,7 @@ fn serialize_protos_to_checkpoint_readwrite(
         result?;
     }
 
+    // TODO(mwe)
     let results = parallel_map(
         thread_pool,
         state.canister_snapshots.iter(),

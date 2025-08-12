@@ -215,6 +215,9 @@ pub struct CanisterSnapshotBits {
     pub global_timer: Option<CanisterTimer>,
     /// The state of the low memory hook.
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
+    /// Whether this snapshot can be mutated via snapshot data upload.
+    /// Distinguishes `CanisterSnapshotImpl<()>` from `CanisterSnapshotImpl<Mutable>`.
+    pub is_partial: bool,
 }
 
 #[derive(Clone)]

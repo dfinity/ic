@@ -1,9 +1,11 @@
 use crossbeam_channel::{unbounded, Sender};
+use either::Either;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
+    PartialCanisterSnapshot,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
@@ -925,7 +927,13 @@ pub fn load_snapshot(
     snapshot_id: &SnapshotId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
+) -> Result<
+    (
+        Either<CanisterSnapshot, PartialCanisterSnapshot>,
+        LoadCanisterMetrics,
+    ),
+    CheckpointError,
+> {
     let mut durations = BTreeMap::<&str, Duration>::default();
 
     let into_checkpoint_error =

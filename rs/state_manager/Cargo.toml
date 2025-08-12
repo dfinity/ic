@@ -10,6 +10,7 @@ documentation.workspace = true
 bit-vec = "0.6.3"
 crossbeam-channel = { workspace = true }
 hex = { workspace = true }
+either = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-canonical-state-tree-hash = { path = "../canonical_state/tree_hash" }

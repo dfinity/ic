@@ -299,6 +299,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .on_low_wasm_memory_hook_status
                 .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
             source: pb_canister_state_bits::SnapshotSource::from(item.source).into(),
+            is_partial: item.is_partial,
         }
     }
 }
@@ -354,6 +355,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             global_timer,
             on_low_wasm_memory_hook_status,
             source,
+            is_partial: item.is_partial,
         })
     }
 }
