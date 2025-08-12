@@ -296,7 +296,8 @@ impl CatchUpPackageProvider {
 
         let bytes = match body_req.await {
             Ok(result) => {
-                *backoff = self.initial_backoff; // Reset backoff on success
+                // Reset backoff on success
+                *backoff = self.initial_backoff;
                 match result {
                     Ok(bytes) => bytes.to_bytes(),
                     Err(e) => {
