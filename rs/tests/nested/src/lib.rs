@@ -219,7 +219,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     // Store the original node ID before adding new nodes
-    let original_node_id = nns_subnet.nodes().next().unwrap().node_id;
+    let original_node_id = nns_node.node_id;
 
     let node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
 
