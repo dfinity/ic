@@ -25,7 +25,7 @@ def mainnet_icos_images():
     http_file(
         name = "mainnet_latest_setupos_disk_image",
         downloaded_file_path = "disk-img.tar.zst",
-        url = base_download_url_dev(MAINNET_LATEST_HOSTOS_REVISION, "setup-os", False, False) + "disk-img-dev.tar.zst",
+        url = base_download_url_dev(MAINNET_LATEST_HOSTOS_REVISION, "setup-os", False, False) + "disk-img.tar.zst",
     )
 
     http_file(
