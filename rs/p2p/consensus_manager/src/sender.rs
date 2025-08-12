@@ -405,12 +405,12 @@ mod available_slot_set {
 #[allow(clippy::disallowed_methods)]
 #[cfg(test)]
 mod tests {
-    use anyhow::anyhow;
     use axum::http::Response;
     use ic_interfaces::p2p::consensus::{AssembleResult, Peers};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockTransport};
+    use ic_quic_transport::P2PError;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
@@ -561,7 +561,7 @@ mod tests {
             mock_transport
                 .expect_rpc()
                 .times(5)
-                .returning(move |_, _| Err(anyhow!("")))
+                .returning(move |_, _| Err(P2PError::from("".to_string())))
                 .in_sequence(&mut seq);
             mock_transport.expect_rpc().times(1).returning(move |n, _| {
                 push_tx.send(*n).unwrap();
