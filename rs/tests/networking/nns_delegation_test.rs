@@ -175,7 +175,8 @@ fn upgrade_subnet(subnet: &SubnetSnapshot, env: &TestEnv) {
         &nns_node,
         &target_version,
         &env.logger(),
-        &sha256,
+        sha256,
+        /*guest_launch_measurements=*/ None,
         vec![upgrade_url.to_string()],
     ));
 
