@@ -1,4 +1,4 @@
-//! Peer Manager
+//! Peer Manage.get()r
 //!
 //! The peer manager component periodically checks the registry
 //! and determines the subnet membership according to the latest
@@ -194,5 +194,126 @@ impl PeerManager {
             earliest_registry_version,
             latest_local_registry_version,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use ic_base_types::NodeId;
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
+    use ic_logger::no_op_logger;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
+    use ic_registry_keys::make_node_record_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_registry::{add_single_subnet_record, SubnetRecordBuilder};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_0};
+
+    use super::*;
+
+    fn set_up_peer_manager(
+        consensus_registry_version: RegistryVersion,
+        membership_over_time: Vec<(RegistryVersion, Vec<NodeId>)>,
+    ) -> PeerManager {
+        let mut mock_consensus_pool = MockConsensusPoolCache::new();
+        mock_consensus_pool
+            .expect_get_oldest_registry_version_in_use()
+            .return_const(consensus_registry_version);
+
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        for (registry_version, nodes) in membership_over_time {
+            add_single_subnet_record(
+                &data_provider,
+                registry_version.get(),
+                SUBNET_0,
+                SubnetRecordBuilder::new()
+                    .with_committee(nodes.as_slice())
+                    .build(),
+            );
+
+            for node in nodes {
+                let node_record = NodeRecord {
+                    http: Some(ConnectionEndpoint {
+                        ip_addr: String::from("127.0.0.1"),
+                        port: 8080,
+                    }),
+                    ..Default::default()
+                };
+
+                data_provider
+                    .add(
+                        &make_node_record_key(node),
+                        registry_version,
+                        Some(node_record),
+                    )
+                    .unwrap();
+            }
+        }
+
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+        registry_client.update_to_latest_version();
+
+        let (tx, _rx) = channel(SubnetTopology::default());
+        PeerManager {
+            log: no_op_logger(),
+            metrics: PeerManagerMetrics::new(&MetricsRegistry::new()),
+            subnet_id: SUBNET_0,
+            registry_client,
+            consensus_pool_cache: Arc::new(mock_consensus_pool),
+            topology_sender: tx,
+        }
+    }
+
+    #[test]
+    fn ignores_too_old_registry_versions_test() {
+        const CONSENSUS_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(10);
+        let peer_manager = set_up_peer_manager(
+            CONSENSUS_REGISTRY_VERSION,
+            vec![
+                (RegistryVersion::new(9), vec![NODE_1, NODE_2]),
+                (RegistryVersion::new(10), vec![NODE_2, NODE_3]),
+                (RegistryVersion::new(11), vec![NODE_3, NODE_4]),
+            ],
+        );
+
+        let topology = peer_manager.get_latest_subnet_topology();
+
+        assert_eq!(
+            topology.earliest_registry_version(),
+            CONSENSUS_REGISTRY_VERSION,
+        );
+        assert_eq!(topology.latest_registry_version(), RegistryVersion::new(11));
+        assert_eq!(
+            topology.get_subnet_nodes(),
+            BTreeSet::from_iter([NODE_2, NODE_3, NODE_4])
+        );
+    }
+
+    #[test]
+    fn ignores_too_new_consensus_registry_version_test() {
+        const CONSENSUS_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(12);
+        let peer_manager = set_up_peer_manager(
+            CONSENSUS_REGISTRY_VERSION,
+            vec![
+                (RegistryVersion::new(9), vec![NODE_1, NODE_2]),
+                (RegistryVersion::new(10), vec![NODE_2, NODE_3]),
+                (RegistryVersion::new(11), vec![NODE_3, NODE_4]),
+            ],
+        );
+
+        let topology = peer_manager.get_latest_subnet_topology();
+
+        assert_eq!(
+            topology.earliest_registry_version(),
+            RegistryVersion::new(11)
+        );
+        assert_eq!(topology.latest_registry_version(), RegistryVersion::new(11));
+        assert_eq!(
+            topology.get_subnet_nodes(),
+            BTreeSet::from_iter([NODE_3, NODE_4])
+        );
     }
 }
