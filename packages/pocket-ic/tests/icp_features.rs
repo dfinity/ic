@@ -66,11 +66,6 @@ fn test_nns_governance() {
         result: Option<NeuronResult>,
     }
 
-    #[derive(CandidType, Deserialize)]
-    struct NeuronInfo {
-        stake_e8s: u64,
-    }
-
     #[derive(CandidType, Deserialize, Debug)]
     struct ProposalId {
         id: u64,
