@@ -2548,17 +2548,13 @@ impl Governance {
             ));
         }
 
-        let context = self.extension_context().await?;
-
-        let validated_operation = validate_execute_extension_operation(
-            &*self.env,
-            context.clone(),
-            execute_extension_operation,
-        )
-        .await?;
+        let validated_operation =
+            validate_execute_extension_operation(self, execute_extension_operation).await?;
 
         // Execute the validated operation
-        validated_operation.execute(self, context).await?;
+        validated_operation
+            .execute(self, self.extension_context().await.unwrap())
+            .await?;
 
         Ok(())
     }

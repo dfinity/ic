@@ -126,7 +126,7 @@ pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
     pub extension_type: ExtensionType,
-    pub validate:
+    pub validate_arg:
         fn(&Governance, ExtensionOperationArg) -> BoxFuture<Result<ValidatedOperationArg, String>>,
 }
 
@@ -144,17 +144,22 @@ impl ExtensionOperationSpec {
         governance: &Governance,
         arg: ExtensionOperationArg,
     ) -> Result<ValidatedOperationArg, String> {
-        (self.validate)(governance, arg).await
+        (self.validate_arg)(governance, arg).await
     }
 }
 
 /// Validates treasury manager init arguments
-fn validate_treasury_manager_init(init: ExtensionInit) -> Result<ValidatedExtensionInit, String> {
-    let ExtensionInit { value } = init;
+fn validate_treasury_manager_init(
+    _governance: &Governance,
+    init: ExtensionInit,
+) -> BoxFuture<Result<ValidatedExtensionInit, String>> {
+    Box::pin(async move {
+        let ExtensionInit { value } = init;
 
-    let arg = ValidatedDepositOperationArg::try_from(value)?;
+        let arg = ValidatedDepositOperationArg::try_from(value)?;
 
-    Ok(ValidatedExtensionInit::TreasuryManager(arg))
+        Ok(ValidatedExtensionInit::TreasuryManager(arg))
+    })
 }
 
 /// Validates deposit operation arguments
@@ -347,6 +352,8 @@ pub struct ValidatedRegisterExtension {
 
 impl ValidatedRegisterExtension {
     pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
+        let context = governance.extension_context().await?;
+
         let ValidatedRegisterExtension {
             spec: _,
             init,
@@ -445,7 +452,20 @@ impl Governance {
     fn icp_treasury_subaccount(&self) -> Option<[u8; 32]> {
         None
     }
+    pub async fn extension_context(&self) -> Result<ExtensionContext, GovernanceError> {
+        let sns_ledger_canister_id = self.ledger.canister_id();
 
+        let sns_token_symbol = get_sns_token_symbol(&*self.env, sns_ledger_canister_id).await?;
+
+        Ok(ExtensionContext {
+            sns_token_symbol,
+            sns_ledger_canister_id,
+            sns_root_canister_id: self.proto.root_canister_id_or_panic(),
+            sns_governance_canister_id: self.env.canister_id(),
+            sns_ledger_transaction_fee_e8s: self.transaction_fee_e8s_or_panic(),
+            icp_ledger_canister_id: self.nns_ledger.canister_id(),
+        })
+    }
     async fn register_extension_with_root(
         &self,
         extension_canister_id: CanisterId,
@@ -591,6 +611,58 @@ impl Governance {
         })?;
 
         Ok((arg, sns_amount_e8s, icp_amount_e8s))
+    }
+
+    pub async fn deposit_treasury_manager(
+        &self,
+        context: ExtensionContext,
+        treasury_manager_canister_id: CanisterId,
+        sns_amount_e8s: u64,
+        icp_amount_e8s: u64,
+    ) -> Result<(), GovernanceError> {
+        let treasury_sns_subaccount = self.sns_treasury_subaccount();
+        let treasury_icp_subaccount = self.icp_treasury_subaccount();
+
+        let to = Account {
+            owner: treasury_manager_canister_id.get().0,
+            subaccount: None,
+        };
+
+        self.ledger
+            .transfer_funds(
+                sns_amount_e8s,
+                self.transaction_fee_e8s_or_panic(),
+                treasury_sns_subaccount,
+                to,
+                0,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error making SNS Token treasury transfer: {}", e),
+                )
+            })?;
+
+        self.nns_ledger
+            .transfer_funds(
+                icp_amount_e8s,
+                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
+                treasury_icp_subaccount,
+                to,
+                0,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error making ICP treasury transfer: {}", e),
+                )
+            })?;
+
+        Ok(())
     }
 }
 
@@ -871,7 +943,7 @@ pub async fn validate_register_extension(
     } = register_extension;
 
     // Phase I. Validate all local properties.
-    let (spec, wasm, extension_canister_id, init) = (|| {
+    let (spec, wasm, extension_canister_id, init) = (async {
         let Some(ChunkedCanisterWasm {
             wasm_module_hash,
             store_canister_id,
@@ -909,8 +981,9 @@ pub async fn validate_register_extension(
             .await
             .map_err(|err| format!("Invalid init argument: {}", err))?;
 
-        Ok((spec, wasm, extension_canister_id, init))
-    })()
+        Ok::<_, String>((spec, wasm, extension_canister_id, init))
+    })
+    .await
     .map_err(|err| {
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
@@ -927,7 +1000,6 @@ pub async fn validate_register_extension(
 }
 
 /// Validates that this is a supported extension operation.
-// TODO: Enforce 50% treasury limits.
 pub(crate) async fn validate_execute_extension_operation(
     governance: &crate::governance::Governance,
     operation: ExecuteExtensionOperation,
@@ -1037,7 +1109,7 @@ pub(crate) async fn validate_execute_extension_operation(
     Ok(ValidatedExecuteExtensionOperation {
         extension_canister_id,
         operation_name,
-        arg,
+        arg: validated_arg,
     })
 }
 
