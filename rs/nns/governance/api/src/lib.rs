@@ -100,18 +100,10 @@ impl NetworkEconomics {
     }
 
     pub fn with_mainnet_values() -> Self {
-        Self {
-            reject_cost_e8s: 25 * E8S_PER_ICP,                          // 25 ICP
-            neuron_management_fee_per_proposal_e8s: 1_000_000,          // 0.01 ICP
-            neuron_minimum_stake_e8s: E8S_PER_ICP,                      // 1 ICP
-            neuron_spawn_dissolve_delay_seconds: ONE_DAY_SECONDS * 7,   // 7 days
-            maximum_node_provider_rewards_e8s: 1_000_000 * E8S_PER_ICP, // 1M ICP
-            minimum_icp_xdr_rate: 100,                                  // 1 XDR
-            transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
-            max_proposals_to_keep_per_topic: 100,
-            neurons_fund_economics: Some(NeuronsFundEconomics::with_default_values()),
-            voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
-        }
+        let mut network_economics = Self::with_default_values();
+        network_economics.reject_cost_e8s = 25 * E8S_PER_ICP; // 25 ICP
+        network_economics.maximum_node_provider_rewards_e8s = 100_000 * E8S_PER_ICP; // 100k ICP
+        network_economics
     }
 }
 
