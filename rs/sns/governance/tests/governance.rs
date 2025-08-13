@@ -57,7 +57,7 @@ use ic_sns_governance::{
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
     types::native_action_ids,
 };
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
@@ -3503,6 +3503,7 @@ fn test_set_following() {
     // Boilerplate variables.
     let my_principal = PrincipalId::new_user_test_id(1000);
     let my_sns_neuron_id = neuron_id(my_principal, 0);
+    let my_sns_neuron_id_as_btree_set = btreeset! { my_sns_neuron_id.clone() };
 
     let another_principal = PrincipalId::new_user_test_id(1000);
     let another_neuron_id = neuron_id(another_principal, 0);
@@ -3532,6 +3533,7 @@ fn test_set_following() {
             vec![],
             None,
             btreemap! {},
+            btreemap! {},
         ),
         (
             "Smoke test (does the test harness work as expected?)",
@@ -3546,6 +3548,7 @@ fn test_set_following() {
             btreemap! {
                 1 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {},
         ),
         (
             "Set following for the first time.",
@@ -3565,6 +3568,34 @@ fn test_set_following() {
                 }
             }),
             btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            },
+            SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {}
+            },
         ),
         (
             "Set following works incrementally.",
@@ -3596,6 +3627,14 @@ fn test_set_following() {
                 }
             }),
             btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::TreasuryAssetManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Topic following clears legacy following for that topic.",
@@ -3624,6 +3663,11 @@ fn test_set_following() {
             }),
             // Legacy following is cleared.
             btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Topic following does not clear legacy following for other topics.",
@@ -3654,6 +3698,11 @@ fn test_set_following() {
             btreemap! {
                 1 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Specifying following for all non-critical topics in one command clears catch-all following.",
@@ -3672,6 +3721,7 @@ fn test_set_following() {
                 topic_id_to_followees: btreemap! {}
             }),
             // catch-all following is cleared.
+            btreemap! {},
             btreemap! {},
         ),
         (
@@ -3709,6 +3759,7 @@ fn test_set_following() {
             btreemap! {
                 0 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {},
         ),
         (
             "Setting following for all non-critical topics in two commands clears catch-all following.",
@@ -3752,6 +3803,20 @@ fn test_set_following() {
             }),
             // catch-all following is cleared.
             btreemap! {},
+            btreemap! {
+                Topic::SnsFrameworkManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::DappCanisterManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Complex scenario.",
@@ -3802,6 +3867,12 @@ fn test_set_following() {
             btreemap! {
                 0 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {
+                Topic::CriticalDappOperations => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {},
+            },
         )
     ];
 
@@ -3812,6 +3883,7 @@ fn test_set_following() {
         set_following_commands,
         expected_topic_followees,
         expected_followees,
+        expected_topic_follower_index,
     ) in test_cases
     {
         // Prepare the world.
@@ -3854,6 +3926,12 @@ fn test_set_following() {
         assert_eq!(
             followees, expected_followees,
             "unexpected followees: {}",
+            label
+        );
+
+        assert_eq!(
+            canister_fixture.governance.topic_follower_index, expected_topic_follower_index,
+            "unexpected topic_follower_index: {}",
             label
         );
     }

@@ -216,8 +216,8 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations)
     }
 
-    /// Ensures the requested ECDSA keys exist somewhere.
-    /// Ensures that a subnet_id is specified for EcdsaKeyRequests.
+    /// Ensures the requested Chain keys exist somewhere.
+    /// Ensures that a subnet_id is specified for ChainKeyRequests.
     /// Ensures that the requested key exists outside of the subnet being recovered.
     /// Ensures that the requested key exists on the specified subnet.
     /// This is similar to validation in do_create_subnet except for constraints to avoid requesting

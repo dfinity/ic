@@ -8,6 +8,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
+    "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
     "//rs/node_rewards/rewards_calculation",
@@ -22,6 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:indexmap",
     "@crate_index//:itertools",

@@ -3,7 +3,7 @@
   <uuid>1ea49839-7f46-4560-a4c7-fce677bbfbbd</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
   <memory unit='GiB'>490</memory>

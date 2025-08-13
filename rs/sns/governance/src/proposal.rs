@@ -1,7 +1,9 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::extensions::validate_extension_wasm;
+use crate::extensions::validate_execute_extension_operation;
+use crate::extensions::{validate_extension_wasm, ValidatedExecuteExtensionOperation};
 use crate::pb::v1::{
-    AdvanceSnsTargetVersion, RegisterExtension, SetTopicsForCustomProposals, Topic,
+    AdvanceSnsTargetVersion, ExecuteExtensionOperation, RegisterExtension,
+    SetTopicsForCustomProposals, Topic,
 };
 use crate::treasury::assess_treasury_balance;
 use crate::types::Wasm;
@@ -445,6 +447,9 @@ pub(crate) async fn validate_and_render_action(
         proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
+        }
+        proposal::Action::ExecuteExtensionOperation(execute) => {
+            validate_and_render_execute_extension_operation(env, execute, root_canister_id).await
         }
         proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
@@ -1499,6 +1504,29 @@ pub async fn validate_and_render_execute_nervous_system_function(
             }
         }
     }
+}
+
+async fn validate_and_render_execute_extension_operation(
+    env: &dyn Environment,
+    execute: &ExecuteExtensionOperation,
+    root_canister_id: CanisterId,
+) -> Result<String, String> {
+    let ValidatedExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        operation_arg,
+    } = validate_execute_extension_operation(env, root_canister_id, execute.clone())
+        .await
+        .map_err(|err| err.error_message)?;
+
+    Ok(format!(
+        r"# Proposal to execute extension operation:
+
+* Extension canister ID: `{extension_canister_id}`
+* Operation name: `{operation_name}`
+* Operation argument: `{operation_arg}`
+#"
+    ))
 }
 
 async fn validate_and_render_register_extension(

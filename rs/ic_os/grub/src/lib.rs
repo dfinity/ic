@@ -120,10 +120,7 @@ impl GrubEnv {
         }
 
         if buffer.len() > GRUB_ENV_SIZE {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Buffer too large",
-            ))
+            Err(std::io::Error::other("Buffer too large"))
         } else {
             buffer.resize(GRUB_ENV_SIZE, b'#');
             Ok(buffer)

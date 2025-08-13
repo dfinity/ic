@@ -43,7 +43,7 @@ RUN cd /tmp/ && \
 
 #
 # Second build stage:
-# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #

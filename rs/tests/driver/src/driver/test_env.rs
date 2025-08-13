@@ -83,8 +83,7 @@ impl TestEnv {
             fs::create_dir_all(parent_dir)?;
         }
         write_atomically(&path, |buf| {
-            serde_json::to_writer(buf, t)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            serde_json::to_writer(buf, t).map_err(|e| std::io::Error::other(e.to_string()))
         })
         .with_context(|| format!("{:?}: Could not write json object.", path))
     }

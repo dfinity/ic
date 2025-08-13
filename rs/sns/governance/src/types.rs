@@ -140,6 +140,9 @@ pub mod native_action_ids {
     /// RegisterExtension Action.
     pub const REGISTER_EXTENSION: u64 = 17;
 
+    /// ExecuteExtensionOperation Action.
+    pub const EXECUTE_EXTENSION_OPERATION: u64 = 18;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -160,6 +163,7 @@ pub mod native_action_ids {
             NervousSystemFunction::advance_sns_target_version(),
             NervousSystemFunction::set_topics_for_custom_proposals(),
             NervousSystemFunction::register_extension(),
+            NervousSystemFunction::execute_extension_operation(),
         ]
     }
 }
@@ -1155,6 +1159,17 @@ impl NervousSystemFunction {
         }
     }
 
+    fn execute_extension_operation() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::EXECUTE_EXTENSION_OPERATION,
+            name: "Execute SNS extension operation".to_string(),
+            description: Some(
+                "Proposal to execute an operation on a registered SNS extension.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
     fn upgrade_sns_to_next_version() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
@@ -1287,6 +1302,10 @@ impl From<Action> for NervousSystemFunction {
 
             Action::ExecuteGenericNervousSystemFunction(_) => {
                 NervousSystemFunction::execute_generic_nervous_system_function()
+            }
+
+            Action::ExecuteExtensionOperation(_) => {
+                NervousSystemFunction::execute_extension_operation()
             }
 
             Action::UpgradeSnsToNextVersion(_) => {
@@ -1882,6 +1901,7 @@ impl From<&Action> for u64 {
                 native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
+            Action::ExecuteExtensionOperation(_) => native_action_ids::EXECUTE_EXTENSION_OPERATION,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
             Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,

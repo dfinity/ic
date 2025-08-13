@@ -13,6 +13,7 @@ type Action = variant {
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   RegisterExtension : RegisterExtension;
+  ExecuteExtensionOperation : ExecuteExtensionOperation;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -758,6 +759,18 @@ type RegisterExtension = record {
   chunked_canister_wasm : opt ChunkedCanisterWasm;
 
   extension_init : opt ExtensionInit;
+};
+
+type ExtensionOperationArg = record {
+  value : opt PreciseValue;
+};
+
+type ExecuteExtensionOperation = record {
+  extension_canister_id : opt principal;
+
+  operation_name : opt text;
+
+  operation_arg : opt ExtensionOperationArg;
 };
 
 type RegisterVote = record {

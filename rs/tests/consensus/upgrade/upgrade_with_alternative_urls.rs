@@ -39,9 +39,8 @@ use ic_system_test_driver::{
     },
     util::{block_on, get_nns_node},
 };
-use ic_types::{Height, ReplicaVersion};
+use ic_types::Height;
 use slog::info;
-use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
 
@@ -87,7 +86,8 @@ fn test(env: TestEnv) {
         &nns_node,
         &target_version,
         release_package_urls,
-        get_guestos_update_img_sha256(&env).expect("no SHA256 hash"),
+        get_guestos_update_img_sha256().expect("no SHA256 hash"),
+        get_guestos_launch_measurements().expect("no launch measurements"),
         &logger,
     ));
 
@@ -95,7 +95,7 @@ fn test(env: TestEnv) {
     let target_version = get_guestos_update_img_version().unwrap();
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).unwrap(),
+        &target_version,
         subnet_id,
     ));
 

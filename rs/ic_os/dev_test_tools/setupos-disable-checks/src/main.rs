@@ -1,11 +1,11 @@
-use std::fs::Permissions;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-
 use anyhow::{Context, Error};
 use clap::Parser;
 use linux_kernel_command_line::{ImproperlyQuotedValue, KernelCommandLine};
 use regex::Regex;
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tempfile::NamedTempFile;
 use tokio::fs;
 
@@ -48,7 +48,7 @@ fn munge(
             (
                 wholematch.start(),
                 prevmatch.as_str().to_string(),
-                KernelCommandLine::try_from(thematch.as_str().trim().trim_matches('"'))?,
+                KernelCommandLine::from_str(thematch.as_str().trim().trim_matches('"'))?,
                 postmatch.as_str().to_string(),
                 wholematch.end(),
             )

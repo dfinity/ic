@@ -31,22 +31,28 @@ Success::
   principal than who made the original request with request ID R;
 . Read state requests for two paths /request_status/R and /request_status/S with two different request
   IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
+. Read state requests for the path /canister_ranges/{subnet_id} succeed and return a correct list of canister
+  ranges assigned to the subnet. Both /api/v2/subnet/{subnet_id}/read_state and
+  /api/v2/canister/{canister_id}/read_state endpoints are tested.
 
 end::catalog[] */
 
 use std::collections::BTreeSet;
+use std::panic;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{Encode, Principal};
 use canister_test::{Canister, Wasm};
 use ic_agent::agent::CallResponse;
-use ic_agent::hash_tree::Label;
+use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_message::ForwardParams;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
     agent_with_identity, block_on, get_identity, random_ed25519_identity, runtime_from_url,
     MessageCanister,
@@ -60,7 +66,7 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use slog::info;
 
 /// Encodes an unsigned integer into its binary representation using `leb128`.
@@ -126,13 +132,17 @@ fn setup(env: TestEnv) {
 }
 
 fn get_first_app_node(env: &TestEnv) -> IcNodeSnapshot {
+    get_first_app_subnet(env)
+        .nodes()
+        .next()
+        .expect("Every subnet should have at least one node")
+}
+
+fn get_first_app_subnet(env: &TestEnv) -> SubnetSnapshot {
     env.topology_snapshot()
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("There should be at least one subnet for every subnet type")
-        .nodes()
-        .next()
-        .expect("Every subnet should have at least one node")
 }
 
 async fn build_agent_with_identity(env: &TestEnv, identity: impl Identity + 'static) -> Agent {
@@ -189,6 +199,23 @@ fn read_state_with_identity_and_canister_id(
             let agent = build_agent_with_identity(env, identity).await;
             agent
                 .read_state_raw(paths, effective_canister_id.into())
+                .await
+        })
+}
+
+/// Call the `api/v2/subnet/{}/read_state` endpoint with the given paths, identity and subnet ID
+fn read_subnet_state_with_identity_and_subnet_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    identity: impl Identity + 'static,
+    subnet_id: SubnetId,
+) -> Result<Certificate, AgentError> {
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(async move {
+            let agent = build_agent_with_identity(env, identity).await;
+            agent
+                .read_subnet_state_raw(paths, subnet_id.get().into())
                 .await
         })
 }
@@ -601,6 +628,85 @@ fn test_request_path_access(env: TestEnv) {
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
+// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
+// and compares the result with the canister ranges obtained from the registry.
+fn test_canister_canister_ranges_paths(env: TestEnv) {
+    let subnet = get_first_app_subnet(&env);
+    let node = subnet.nodes().next().unwrap();
+    let effective_canister_id = node.effective_canister_id();
+
+    let path: Vec<Label<Vec<u8>>> = vec![
+        "canister_ranges".into(),
+        subnet.subnet_id.get_ref().as_slice().into(),
+    ];
+
+    let cert = read_state_with_identity_and_canister_id(
+        &env,
+        vec![path.clone()],
+        get_identity(),
+        effective_canister_id,
+    )
+    .expect("Failed to read state");
+
+    validate_canister_ranges(&subnet, &path, &cert);
+}
+
+// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+// and compares the result with the canister ranges obtained from the registry.
+fn test_subnet_canister_ranges_paths(env: TestEnv) {
+    let subnet = get_first_app_subnet(&env);
+
+    let path: Vec<Label<Vec<u8>>> = vec![
+        "canister_ranges".into(),
+        subnet.subnet_id.get_ref().as_slice().into(),
+    ];
+
+    let cert = read_subnet_state_with_identity_and_subnet_id(
+        &env,
+        vec![path.clone()],
+        get_identity(),
+        subnet.subnet_id,
+    )
+    .expect("Failed to read state");
+
+    validate_canister_ranges(&subnet, &path, &cert);
+}
+
+fn validate_canister_ranges(
+    subnet: &SubnetSnapshot,
+    path: &Vec<Label<Vec<u8>>>,
+    cert: &Certificate,
+) {
+    let SubtreeLookupResult::Found(subtree) = cert.tree.lookup_subtree(path) else {
+        panic!("State tree does not contain canister ranges subtree");
+    };
+
+    let mut canister_ranges_from_state_tree = Vec::new();
+    for path in subtree.list_paths() {
+        let LookupResult::Found(value) = subtree.lookup_path(&path) else {
+            panic!("State tree doesn't contain the requested path: {path:?}");
+        };
+        let ranges: Vec<(PrincipalId, PrincipalId)> =
+            serde_cbor::from_slice(value).expect("Failed to deserialize a canister ranges leaf");
+
+        canister_ranges_from_state_tree.extend(ranges.into_iter().map(|(start, end)| {
+            CanisterIdRange {
+                start: CanisterId::try_from_principal_id(start).unwrap(),
+                end: CanisterId::try_from_principal_id(end).unwrap(),
+            }
+        }));
+    }
+    canister_ranges_from_state_tree.sort();
+
+    let mut canister_ranges_from_registry = subnet.subnet_canister_ranges();
+    canister_ranges_from_registry.sort();
+
+    assert_eq!(
+        canister_ranges_from_registry,
+        canister_ranges_from_state_tree
+    );
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -614,6 +720,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test_canister_path))
         .add_test(systest!(test_request_path))
         .add_test(systest!(test_request_path_access))
+        .add_test(systest!(test_canister_canister_ranges_paths))
+        .add_test(systest!(test_subnet_canister_ranges_paths))
         .execute_from_args()?;
     Ok(())
 }

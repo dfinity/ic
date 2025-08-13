@@ -733,6 +733,34 @@ pub struct RegisterExtension {
     #[prost(message, optional, tag = "2")]
     pub extension_init: ::core::option::Option<ExtensionInit>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionOperationArg {
+    #[prost(message, optional, tag = "1")]
+    pub value: ::core::option::Option<Precise>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExecuteExtensionOperation {
+    #[prost(message, optional, tag = "1")]
+    pub extension_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(string, optional, tag = "2")]
+    pub operation_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub operation_arg: ::core::option::Option<ExtensionOperationArg>,
+}
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(
     candid::CandidType,
@@ -865,7 +893,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -985,6 +1013,11 @@ pub mod proposal {
         /// Id = 17.
         #[prost(message, tag = "21")]
         RegisterExtension(super::RegisterExtension),
+        /// Execute an SNS extension's operation.
+        ///
+        /// Id = 18.
+        #[prost(message, tag = "22")]
+        ExecuteExtensionOperation(super::ExecuteExtensionOperation),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1232,6 +1265,8 @@ pub struct ProposalData {
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
     /// Id 16 - SetTopicsForCustomProposals proposals.
+    /// Id 17 - RegisterExtension.
+    /// Id 18 - ExecuteExtensionOperation.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
