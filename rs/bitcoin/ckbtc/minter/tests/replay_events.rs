@@ -18,59 +18,6 @@ use ic_ckbtc_minter::{
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
-    let mut count = 0;
-    for event in events {
-        match &event.payload {
-            EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                count += 1;
-            }
-            _ => {}
-        }
-    }
-    assert_eq!(count, 0);
-}
-
-async fn should_migrate_events_for(file: impl GetEventsFile) -> CkBtcMinterState {
-    use ic_ckbtc_minter::storage::{decode_event, encode_event, migrate_events};
-    use ic_stable_structures::{
-        log::Log as StableLog,
-        memory_manager::{MemoryId, MemoryManager},
-        DefaultMemoryImpl,
-    };
-
-    file.retrieve_and_store_events_if_env().await;
-
-    let mgr = MemoryManager::init(DefaultMemoryImpl::default());
-    let old_events = StableLog::new(mgr.get(MemoryId::new(0)), mgr.get(MemoryId::new(1)));
-    let new_events = StableLog::new(mgr.get(MemoryId::new(2)), mgr.get(MemoryId::new(3)));
-    let events = file.deserialize().events;
-    events.iter().for_each(|event| {
-        old_events.append(&encode_event(event)).unwrap();
-    });
-    let removed = migrate_events(&old_events, &new_events);
-    assert!(removed > 0);
-    assert!(!new_events.is_empty());
-    assert_eq!(new_events.len() + removed, old_events.len());
-    assert_useless_events_is_empty(new_events.iter().map(|bytes| decode_event(&bytes)));
-
-    let state =
-        replay::<SkipCheckInvariantsImpl>(new_events.iter().map(|bytes| decode_event(&bytes)))
-            .expect("Failed to replay events");
-    state
-        .check_invariants()
-        .expect("Failed to check invariants");
-
-    state
-}
-
-#[tokio::test]
-async fn should_migrate_events_for_testnet() {
-    let state = should_migrate_events_for(Testnet).await;
-    assert_eq!(state.btc_network, Network::Testnet);
-    assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
-}
-
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
     Mainnet.retrieve_and_store_events_if_env().await;
@@ -190,48 +137,30 @@ fn should_replay_events_and_check_invariants() {
     test(Testnet);
 }
 
-// It's not clear why those events are here in the first place
-// but this test ensures that the number of such events doesn't grow.
+// Due to an initial bug, there were a lot of useless events.
+// Those have been "removed" with [#3424](https://github.com/dfinity/ic/pull/3434),
+// meaning that events have been migrated to a new stable memory region and those useless events
+// have been filtered out during the migration.
+// That means that those useless events still exist in the initial stable memory region and this test is to prevent
+// any regression.
 #[tokio::test]
-async fn should_not_grow_number_of_useless_events() {
-    fn test(file: impl GetEventsFile) -> (u64, Vec<usize>) {
+async fn should_not_have_useless_events() {
+    fn assert_useless_events_is_empty(file: impl GetEventsFile) {
         let events = file.deserialize();
-        let received_utxo_to_minter_with_empty_utxos = EventType::ReceivedUtxos {
-            mint_txid: None,
-            to_account: file.minter_canister_id().into(),
-            utxos: vec![],
-        };
-
-        let useless_events_indexes =
-            assert_useless_events_eq(&events.events, &received_utxo_to_minter_with_empty_utxos);
-        (events.total_event_count, useless_events_indexes)
-    }
-
-    let (total_event_count, useless_events_indexes) = test(Mainnet);
-    assert_eq!(total_event_count, 551_739);
-    assert_eq!(useless_events_indexes.len(), 0);
-
-    let (total_event_count, useless_events_indexes) = test(Testnet);
-    assert_eq!(total_event_count, 46_815);
-    assert_eq!(useless_events_indexes.len(), 4_044);
-    assert_eq!(useless_events_indexes.last(), Some(&4_614_usize));
-
-    fn assert_useless_events_eq(
-        events: &[Event],
-        expected_useless_event: &EventType,
-    ) -> Vec<usize> {
-        let mut indexes = Vec::new();
-        for (index, event) in events.iter().enumerate() {
+        let mut count = 0;
+        for event in events.events {
             match &event.payload {
                 EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                    assert_eq!(&event.payload, expected_useless_event);
-                    indexes.push(index);
+                    count += 1;
                 }
                 _ => {}
             }
         }
-        indexes
+        assert_eq!(count, 0);
     }
+
+    assert_useless_events_is_empty(Mainnet);
+    assert_useless_events_is_empty(Testnet);
 }
 
 #[derive(Debug)]
@@ -241,15 +170,6 @@ struct Mainnet;
 struct Testnet;
 
 trait GetEventsFile {
-    // TODO (XC-261):
-    // These associated types are meant to deal with the the type difference in existing
-    // event logs between mainnet (with timestamps) and testnet (without timestamps)
-    // when we deserialize them for processing. This difference will go away once
-    // we re-deploy the testnet canister. These types (and the GetEventsFile trait)
-    // should be consolidated by then.
-    type EventType: CandidType + for<'a> Deserialize<'a> + Into<Event>;
-    type ResultType: CandidType + for<'a> Deserialize<'a> + Into<GetEventsResult>;
-
     async fn retrieve_and_store_events_if_env(&self) {
         if std::env::var("RETRIEVE_MINTER_EVENTS").map(|s| s.parse().ok().unwrap_or_default())
             == Ok(true)
@@ -276,11 +196,7 @@ trait GetEventsFile {
             .call_and_wait()
             .await
             .expect("Failed to call get_events");
-        Decode!(&raw_result, Vec<Self::EventType>)
-            .unwrap()
-            .into_iter()
-            .map(|x| x.into())
-            .collect()
+        Decode!(&raw_result, Vec<Event>).unwrap()
     }
 
     async fn retrieve_and_store_events(&self) {
@@ -354,15 +270,13 @@ trait GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        Decode!(&decompressed_buffer, Self::ResultType)
+        Decode!(&decompressed_buffer, GetEventsResult)
             .expect("Failed to decode events")
             .into()
     }
 }
 
 impl GetEventsFile for Mainnet {
-    type EventType = Event;
-    type ResultType = GetEventsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap()
     }
@@ -372,8 +286,6 @@ impl GetEventsFile for Mainnet {
 }
 
 impl GetEventsFile for Testnet {
-    type EventType = Event;
-    type ResultType = GetEventsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("ml52i-qqaaa-aaaar-qaaba-cai").unwrap()
     }
