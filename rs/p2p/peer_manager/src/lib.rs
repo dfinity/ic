@@ -83,7 +83,8 @@ impl PeerManager {
 
             let mut topology = self.get_latest_subnet_topology();
             let _timer = self.metrics.topology_watcher_update_duration.start_timer();
-            // Notify watchers of latest shared state iff the latest topology is different to the old one.
+            // Notify watchers of latest shared state iff the latest topology is different
+            // to the old one.
             self.topology_sender
                 .send_if_modified(move |old_topology: &mut SubnetTopology| {
                     if old_topology == &topology {
@@ -100,19 +101,22 @@ impl PeerManager {
     fn get_latest_subnet_topology(&self) -> SubnetTopology {
         let _timer = self.metrics.topology_update_duration.start_timer();
 
+        let mut subnet_nodes = HashMap::new();
+
+        // Iterate from `min(consensus_registry_version, latest_local_registry_version)` to
+        // `max(consensus_registry_version, latest_local_registry_version)`.
+        // The `consensus_registry_version` is extracted from the latest CUP seen.
+        // The `latest_local_registry_version` is the latest registry version known to this node.
+        // In almost any case `latest_local_registry_version >= consensus_registry_version` but
+        // there may exist cases where this condition does not hold.
+        // In that case we should at least include our latest local view of the subnet.
         let latest_local_registry_version = self.registry_client.get_latest_version();
         let consensus_registry_version = self
             .consensus_pool_cache
             .get_oldest_registry_version_in_use();
-        let mut subnet_nodes = HashMap::new();
-
-        // Iterate from min(consensus_registry_version,latest_local_registry_version) to max(consensus_registry_version,latest_local_registry_version).
-        // The `consensus_registry_version` is extracted from the latest CUP seen.
-        // The `latest_local_registry_version` is the latest registry version known to this node.
-        // In almost any case `latest_local_registry_version >= consensus_registry_version` but there may exist cases where this condition does not hold.
-        // In that case we should at least include our latest local view of the subnet.
         let earliest_registry_version =
             consensus_registry_version.min(latest_local_registry_version);
+
         for version in earliest_registry_version.get()..=latest_local_registry_version.get() {
             let version = RegistryVersion::from(version);
 
@@ -124,23 +128,25 @@ impl PeerManager {
                 Ok(None) => {
                     warn!(
                         self.log,
-                        "Got transport infos but is empty. version {}", version
+                        "Got transport infos but it's empty. Registry version {version}"
                     );
                     self.metrics
                         .topology_watcher_errors
                         .with_label_values(&["empty_list_of_node_records"])
                         .inc();
+
                     Vec::new()
                 }
-                Err(e) => {
+                Err(err) => {
                     warn!(
                         self.log,
-                        "failed to get node record from registry at version {} : {}", version, e
+                        "Failed to get node record from registry at version {version}: {err}"
                     );
                     self.metrics
                         .topology_watcher_errors
                         .with_label_values(&["error_getting_node_records"])
                         .inc();
+
                     Vec::new()
                 }
             };
@@ -148,35 +154,36 @@ impl PeerManager {
             for (peer_id, info) in transport_info {
                 match info.http {
                     Some(endpoint) => {
-                        if let Ok(ip_addr) = endpoint.ip_addr.parse::<IpAddr>() {
-                            // Insert even if already present because we prefer to have the value
-                            // with the highest registry version.
-                            subnet_nodes.insert(peer_id, SocketAddr::new(ip_addr, 4100));
-                        } else {
-                            self.metrics
-                                .topology_watcher_errors
-                                .with_label_values(&["error_parsing_ip_address"])
-                                .inc();
-                            warn!(
-                                self.log,
-                                "Failed to get parse Ip addr {} for peer {} at registry version {}",
-                                endpoint.ip_addr,
-                                peer_id,
-                                version
-                            );
-                        }
+                        match endpoint.ip_addr.parse::<IpAddr>() {
+                            Ok(ip_addr) => {
+                                // Insert even if already present because we prefer to have the
+                                // value with the highest registry version.
+                                subnet_nodes.insert(peer_id, SocketAddr::new(ip_addr, 4100));
+                            }
+                            Err(err) => {
+                                warn!(
+                                    self.log,
+                                    "Failed to parse Ip addr {} for peer {peer_id} \
+                                    at registry version {version}: {err}",
+                                    endpoint.ip_addr,
+                                );
+                                self.metrics
+                                    .topology_watcher_errors
+                                    .with_label_values(&["error_parsing_ip_address"])
+                                    .inc();
+                            }
+                        };
                     }
                     None => {
+                        warn!(
+                            self.log,
+                            "Failed to get flow endpoint for peer {peer_id} \
+                            at registry version {version}",
+                        );
                         self.metrics
                             .topology_watcher_errors
                             .with_label_values(&["http_field_missing"])
                             .inc();
-                        warn!(
-                            self.log,
-                            "Failed to get flow endpoint for peer {} at registry version {}",
-                            peer_id,
-                            version
-                        );
                     }
                 }
             }
