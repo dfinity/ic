@@ -66,7 +66,7 @@ fn get_salt() -> GetSaltResponse {
     Err(GetSaltError::Unauthorized)
 }
 
-#[query(decoding_quota = 10000)]
+#[query(decode_with = "candid::decode_one_with_decoding_quota::<100000,_>")]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => export_metrics_as_http_response(),

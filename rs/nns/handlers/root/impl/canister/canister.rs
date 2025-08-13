@@ -233,7 +233,10 @@ async fn update_canister_settings(
 
 /// Resources to serve for a given http_request
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

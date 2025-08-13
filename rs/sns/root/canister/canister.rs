@@ -400,7 +400,10 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
 }
 
 // Resources to serve for a given http_request
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
