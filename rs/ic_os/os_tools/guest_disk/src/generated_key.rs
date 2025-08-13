@@ -1,7 +1,7 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
 use crate::{activate_flags, DiskEncryption, Partition};
 use anyhow::{Context, Result};
-use ic_sys::fs::write_atomically_using_tmp_file_noclobber;
+use ic_sys::fs::{write_atomically_using_tmp_file, Clobber};
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -50,7 +50,7 @@ impl GeneratedKeyDiskEncryption<'_> {
                 .tempfile_in(parent_dir)
                 .context("Could not create temporary file for boot partition key")?;
             let rand_key = rand::random::<[u8; GENERATED_KEY_SIZE_BYTES]>();
-            match write_atomically_using_tmp_file_noclobber(self.key_path, temp.path(), |buf| {
+            match write_atomically_using_tmp_file(self.key_path, temp.path(), Clobber::No, |buf| {
                 buf.write_all(&rand_key)
             }) {
                 Ok(_) => {

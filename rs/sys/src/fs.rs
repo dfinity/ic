@@ -66,6 +66,13 @@ where
     }
 }
 
+/// Whether the destination file may be overwritten.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Clobber {
+    Yes,
+    No,
+}
+
 /// Atomically writes to `dst` file, using `tmp` as a buffer.
 ///
 /// Creates `tmp` if necessary and removes it if write fails with an error.
@@ -74,53 +81,13 @@ where
 ///   * `dst` and `tmp` are not directories.
 ///   * `dst` and `tmp` are on the same file system.
 ///
-/// # Panics
-///
-///   Doesn't panic unless `action` panics.
+/// If clobber is set to Clobber::No, then `dst` will only be created if it doesn't exist, otherwise
+/// the function returns EEXIST. The check is done atomically.
 #[cfg(target_family = "unix")]
 pub fn write_atomically_using_tmp_file<PDst, PTmp, F>(
     dst: PDst,
     tmp: PTmp,
-    action: F,
-) -> io::Result<()>
-where
-    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
-    PDst: AsRef<Path>,
-    PTmp: AsRef<Path>,
-{
-    write_atomically_using_tmp_file_impl(dst, tmp, false, action)
-}
-
-/// Atomically writes to `dst` file if it doesn't already exist, using `tmp` as a buffer.
-///
-/// Creates `tmp` if necessary and removes it if write fails with an error.
-///
-/// # Pre-conditions
-///   * `dst` and `tmp` are not directories.
-///   * `dst` and `tmp` are on the same file system.
-///
-/// # Panics
-///
-///   Doesn't panic unless `action` panics.
-#[cfg(target_family = "unix")]
-pub fn write_atomically_using_tmp_file_noclobber<PDst, PTmp, F>(
-    dst: PDst,
-    tmp: PTmp,
-    action: F,
-) -> io::Result<()>
-where
-    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
-    PDst: AsRef<Path>,
-    PTmp: AsRef<Path>,
-{
-    write_atomically_using_tmp_file_impl(dst, tmp, true, action)
-}
-
-#[cfg(target_family = "unix")]
-fn write_atomically_using_tmp_file_impl<PDst, PTmp, F>(
-    dst: PDst,
-    tmp: PTmp,
-    noclobber: bool,
+    clobber: Clobber,
     action: F,
 ) -> io::Result<()>
 where
@@ -132,7 +99,7 @@ where
         let _ = fs::remove_file(tmp.as_ref());
     });
 
-    if noclobber && dst.as_ref().exists() {
+    if clobber == Clobber::No && dst.as_ref().exists() {
         return Err(Error::new(
             AlreadyExists,
             format!("File {} already exists", dst.as_ref().display()),
@@ -150,14 +117,18 @@ where
         w.flush()?;
     }
     f.sync_all()?;
-    if noclobber {
-        // hard_link returns EEXIST if dst already exists
-        fs::hard_link(tmp.as_ref(), dst.as_ref())?;
-    } else {
-        // rename overwrites dst if it exists
-        fs::rename(tmp.as_ref(), dst.as_ref())?;
-        cleanup.deactivate();
+    match clobber {
+        Clobber::Yes => {
+            // rename overwrites dst if it exists
+            fs::rename(tmp.as_ref(), dst.as_ref())?;
+            cleanup.deactivate();
+        }
+        Clobber::No => {
+            // hard_link returns EEXIST if dst already exists
+            fs::hard_link(tmp.as_ref(), dst.as_ref())?;
+        }
     }
+
     sync_path(dst.as_ref().parent().unwrap_or_else(|| Path::new("/")))?;
 
     Ok(())
@@ -380,7 +351,8 @@ fn copy_file_sparse_portable(from: &Path, to: &Path) -> io::Result<u64> {
 }
 
 /// Atomically write to `dst` file, using a random file in the parent directory
-/// of `dst` as the temporary file.
+/// of `dst` as the temporary file.  The `clobber` parameter controls whether `dst` may be
+/// overwritten if it already exists.
 ///
 /// # Pre-conditions
 ///   * `dst` is not a directory.
@@ -390,7 +362,7 @@ fn copy_file_sparse_portable(from: &Path, to: &Path) -> io::Result<u64> {
 ///
 ///   Doesn't panic unless `action` panics.
 #[cfg(target_family = "unix")]
-pub fn write_atomically<PDst, F>(dst: PDst, action: F) -> io::Result<()>
+pub fn write_atomically<PDst, F>(dst: PDst, clobber: Clobber, action: F) -> io::Result<()>
 where
     F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
     PDst: AsRef<Path>,
@@ -404,37 +376,7 @@ where
         .unwrap_or_else(|| Path::new("/"))
         .join(tmp_name());
 
-    write_atomically_using_tmp_file(dst, tmp_path.as_path(), action)
-}
-
-/// Atomically write to `dst` file if it doesn't already exist, using a random file in the parent
-/// directory of `dst` as the temporary file. If `dst` already exists when the function is called,
-/// `action` will not be executed. If `dst` is created concurrently while `action` is being
-/// executed, the effects of `action` will not be applied to `dst`.
-///
-/// # Pre-conditions
-///   * `dst` is not a directory.
-///   * The parent directory of `dst` must be writeable.
-///
-/// # Panics
-///
-///   Doesn't panic unless `action` panics.
-#[cfg(target_family = "unix")]
-pub fn write_atomically_noclobber<PDst, F>(dst: PDst, action: F) -> io::Result<()>
-where
-    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
-    PDst: AsRef<Path>,
-{
-    // `.parent()` returns `None` for either `/` or a prefix (e.g. 'c:\\` on
-    // windows). `write_atomically` is only available on UNIX, so we default to
-    // `/` in case `.parent()` returns `None`.
-    let tmp_path = dst
-        .as_ref()
-        .parent()
-        .unwrap_or_else(|| Path::new("/"))
-        .join(tmp_name());
-
-    write_atomically_using_tmp_file_noclobber(dst, tmp_path.as_path(), action)
+    write_atomically_using_tmp_file(dst, tmp_path.as_path(), clobber, action)
 }
 
 /// Append .tmp to given file path
@@ -838,7 +780,7 @@ fn clone_file_impl(_src: &Path, _dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{write_atomically_using_tmp_file, write_atomically_using_tmp_file_noclobber};
+    use super::{write_atomically_using_tmp_file, Clobber};
     use std::fs;
     use std::io::{ErrorKind, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -849,7 +791,7 @@ mod tests {
         let dst = tmp_dir.path().join("target.txt");
         let tmp = tmp_dir.path().join("target_tmp.txt");
 
-        write_atomically_using_tmp_file(&dst, &tmp, |buf| {
+        write_atomically_using_tmp_file(&dst, &tmp, Clobber::Yes, |buf| {
             buf.write_all(b"test")?;
             Ok(())
         })
@@ -868,7 +810,7 @@ mod tests {
         let dst = tmp_dir.path().join("target.txt");
         let tmp = tmp_dir.path().join("target_tmp.txt");
 
-        write_atomically_using_tmp_file_noclobber(&dst, &tmp, |buf| {
+        write_atomically_using_tmp_file(&dst, &tmp, Clobber::No, |buf| {
             buf.write_all(b"test")?;
             Ok(())
         })
@@ -881,7 +823,7 @@ mod tests {
         );
 
         // Attempt to write again, should fail because of noclobber
-        let result = write_atomically_using_tmp_file_noclobber(&dst, &tmp, |_buf| {
+        let result = write_atomically_using_tmp_file(&dst, &tmp, Clobber::No, |_buf| {
             panic!("This should not be executed");
         });
 
@@ -902,7 +844,7 @@ mod tests {
         let background_action_started = AtomicBool::new(false);
         std::thread::scope(|scope| {
             let background_write = scope.spawn(|| {
-                write_atomically_using_tmp_file_noclobber(&dst, &tmp, |buf| {
+                write_atomically_using_tmp_file(&dst, &tmp, Clobber::No, |buf| {
                     background_action_started.store(true, Ordering::Release);
                     // Wait until foreground thread is finished writing the file.
                     while !foreground_done_writing_file.load(Ordering::Acquire) {
@@ -944,7 +886,7 @@ mod tests {
 
         fs::write(&dst, b"original contents").expect("failed to write to the destination file");
 
-        let result = write_atomically_using_tmp_file(&dst, &tmp, |buf| {
+        let result = write_atomically_using_tmp_file(&dst, &tmp, Clobber::Yes, |buf| {
             buf.write_all(b"new shiny contents")?;
             Err(std::io::Error::other("something went wrong"))
         });
