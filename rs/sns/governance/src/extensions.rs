@@ -38,7 +38,7 @@ lazy_static! {
 }
 
 #[derive(Clone)]
-pub struct ExtensionContext {
+pub struct TreasuryManagerDepositContext {
     pub sns_root_canister_id: CanisterId,
     pub sns_governance_canister_id: CanisterId,
     pub sns_ledger_canister_id: CanisterId,
@@ -352,7 +352,7 @@ pub struct ValidatedRegisterExtension {
 
 impl ValidatedRegisterExtension {
     pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
-        let context = governance.extension_context().await?;
+        let context = governance.treasury_manager_deposit_context().await?;
 
         let ValidatedRegisterExtension {
             spec: _,
@@ -445,12 +445,14 @@ impl Governance {
     fn icp_treasury_subaccount(&self) -> Option<[u8; 32]> {
         None
     }
-    async fn extension_context(&self) -> Result<ExtensionContext, GovernanceError> {
+    async fn treasury_manager_deposit_context(
+        &self,
+    ) -> Result<TreasuryManagerDepositContext, GovernanceError> {
         let sns_ledger_canister_id = self.ledger.canister_id();
 
         let sns_token_symbol = get_sns_token_symbol(&*self.env, sns_ledger_canister_id).await?;
 
-        Ok(ExtensionContext {
+        Ok(TreasuryManagerDepositContext {
             sns_token_symbol,
             sns_ledger_canister_id,
             sns_root_canister_id: self.proto.root_canister_id_or_panic(),
@@ -757,7 +759,9 @@ async fn canister_module_hash(
 }
 
 /// Returns the ICRC-1 subaccounts for the SNS treasury and ICP treasury.
-fn treasury_subaccounts(context: ExtensionContext) -> (Option<[u8; 32]>, Option<[u8; 32]>) {
+fn treasury_subaccounts(
+    context: TreasuryManagerDepositContext,
+) -> (Option<[u8; 32]>, Option<[u8; 32]>) {
     // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
     let sns_governance_principal_id = context.sns_governance_canister_id.get();
     let treasury_sns_subaccount = Some(compute_distribution_subaccount_bytes(
@@ -769,7 +773,7 @@ fn treasury_subaccounts(context: ExtensionContext) -> (Option<[u8; 32]>, Option<
 }
 
 fn construct_treasury_manager_deposit_allowances(
-    context: ExtensionContext,
+    context: TreasuryManagerDepositContext,
     value: Precise,
 ) -> Result<Vec<Allowance>, String> {
     // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
@@ -803,7 +807,7 @@ fn construct_treasury_manager_deposit_allowances(
 
 /// Returns `arg_blob` in the Ok result.
 pub fn construct_treasury_manager_init_payload(
-    context: ExtensionContext,
+    context: TreasuryManagerDepositContext,
     value: Precise,
 ) -> Result<Vec<u8>, String> {
     let allowances = construct_treasury_manager_deposit_allowances(context, value)?;
@@ -817,7 +821,7 @@ pub fn construct_treasury_manager_init_payload(
 
 /// Returns `arg_blob` in the Ok result.
 fn construct_treasury_manager_deposit_payload(
-    context: ExtensionContext,
+    context: TreasuryManagerDepositContext,
     value: Precise,
 ) -> Result<Vec<u8>, String> {
     let allowances = construct_treasury_manager_deposit_allowances(context, value)?;
@@ -1041,7 +1045,7 @@ async fn execute_treasury_manager_deposit(
         )
         .await?;
 
-    let context = governance.extension_context().await?;
+    let context = governance.treasury_manager_deposit_context().await?;
     let arg_blob =
         construct_treasury_manager_deposit_payload(context, original).map_err(|err| {
             GovernanceError::new_with_message(
