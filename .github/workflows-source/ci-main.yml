@@ -201,8 +201,8 @@ jobs:
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT
 
-                merge_base_sha='${{ github.event.pull_request.base.sha }}'
-                branch_head_sha='${{ github.event.pull_request.head.sha }}'
+                merge_base_sha="$MERGE_BASE_SHA"
+                branch_head_sha="$BRANCH_HEAD_SHA"
 
                 # we can't use HEAD as a fallback for branch_head_sha because that is
                 # the merge commit which contains the changes of the current HEAD of master
