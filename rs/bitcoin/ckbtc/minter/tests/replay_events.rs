@@ -132,7 +132,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     .unwrap();
     let tx_fee_per_vbyte = submitted_tx.fee_per_vbyte.unwrap();
     let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
-        &input_utxos,
+        input_utxos,
         outputs,
         main_address.clone(),
         tx_fee_per_vbyte,
