@@ -813,11 +813,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "co4lr-qaaaa-aaaaq-aacxa-cai",
         "ICPSwap",
     );
-    const ICVC_LEDGER_SUITE: (&str, &str, &str) = (
-        "m6xut-mqaaa-aaaaq-aadua-cai",
-        "mqvz3-xaaaa-aaaaq-aadva-cai",
-        "ICVC",
-    );
     const KINIC_LEDGER_SUITE: (&str, &str, &str) = (
         "73mez-iiaaa-aaaaq-aaasq-cai",
         "7vojr-tyaaa-aaaaq-aaatq-cai",
@@ -940,7 +935,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ICPANDA_LEDGER_SUITE,
         ICPEX_LEDGER_SUITE,
         ICPSWAP_LEDGER_SUITE,
-        ICVC_LEDGER_SUITE,
         KINIC_LEDGER_SUITE,
         KONG_SWAP_LEDGER_SUITE,
         MIMIC_LEDGER_SUITE,
