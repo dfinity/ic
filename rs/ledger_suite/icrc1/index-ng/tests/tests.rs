@@ -1268,6 +1268,7 @@ mod metrics {
     }
 }
 
+#[cfg(not(feature = "icrc3_disabled"))]
 mod burn_block_fees {
     use super::*;
     use crate::common::{test_ledger_wasm, STARTING_CYCLES_PER_CANISTER};
