@@ -1,8 +1,7 @@
 use crate::{payload_builder::parse, BitcoinPayloadBuilder};
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
+    BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
