@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionResponse,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionResponse,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, ProposalContext};
@@ -12,6 +9,7 @@ use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, Height, NumBytes};
 use proptest::{prelude::*, proptest};
+use std::sync::Arc;
 
 use crate::{
     payload_builder::tests::{

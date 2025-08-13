@@ -5,6 +5,7 @@
 //! only for serialization/deserialization of the ReplicatedState.
 
 use candid::CandidType;
+use ic_btc_interface::NetworkInRequest;
 use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
@@ -40,6 +41,19 @@ impl From<Network> for v1::Network {
             Network::DogecoinMainnet => v1::Network::DogecoinMainnet,
             Network::DogecoinTestnet => v1::Network::DogecoinTestnet,
             Network::DogecoinRegtest => v1::Network::DogecoinRegtest,
+        }
+    }
+}
+
+impl From<Network> for NetworkInRequest {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => Self::Mainnet,
+            Network::Testnet => Self::Testnet,
+            Network::Regtest => Self::Regtest,
+            Network::DogecoinMainnet => Self::Mainnet,
+            Network::DogecoinTestnet => Self::Testnet,
+            Network::DogecoinRegtest => Self::Regtest,
         }
     }
 }
