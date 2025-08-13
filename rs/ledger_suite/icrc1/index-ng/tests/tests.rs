@@ -1271,7 +1271,8 @@ mod metrics {
 mod burn_block_fees {
     use super::*;
     use crate::common::{test_ledger_wasm, STARTING_CYCLES_PER_CANISTER};
-    use ic_icrc1_test_utils::icrc3::{burn_block, mint_block};
+    use ic_icrc1_ledger::Tokens;
+    use ic_icrc1_test_utils::icrc3::BlockBuilder;
     use ic_icrc3_test_ledger::AddBlockResult;
     use ic_types::time::GENESIS;
     use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -1279,7 +1280,15 @@ mod burn_block_fees {
     #[test]
     fn should_take_burn_block_fee_into_account() {
         const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+        const TEST_ACCOUNT_1: Account = Account {
+            owner: TEST_USER_1.0,
+            subaccount: None,
+        };
         const FEE_COLLECTOR: PrincipalId = PrincipalId::new_user_test_id(2);
+        const FEE_COLLECTOR_ACCOUNT: Account = Account {
+            owner: FEE_COLLECTOR.0,
+            subaccount: None,
+        };
 
         const MINT_AMOUNT: u64 = 10_000_000;
         const BURN_AMOUNT: u64 = 100_000;
@@ -1296,24 +1305,18 @@ mod burn_block_fees {
             )
             .unwrap();
 
-        let mint = mint_block(
-            0,
-            TEST_USER_1,
-            MINT_AMOUNT,
-            GENESIS.as_nanos_since_unix_epoch(),
-            Some(FEE_COLLECTOR),
-        );
+        let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .with_fee_collector(FEE_COLLECTOR_ACCOUNT)
+            .mint(TEST_ACCOUNT_1, Tokens::from(MINT_AMOUNT))
+            .build();
 
         let mut expected_balance = MINT_AMOUNT;
 
-        let burn = burn_block(
-            1,
-            TEST_USER_1,
-            BURN_AMOUNT,
-            GENESIS.as_nanos_since_unix_epoch(),
-            Some(BURN_FEE),
-            Some(0),
-        );
+        let burn = BlockBuilder::new(1, GENESIS.as_nanos_since_unix_epoch())
+            .with_fee(Tokens::from(BURN_FEE))
+            .with_fee_collector_block(0)
+            .burn(TEST_ACCOUNT_1, Tokens::from(BURN_AMOUNT))
+            .build();
 
         expected_balance -= BURN_AMOUNT + BURN_FEE;
 
