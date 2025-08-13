@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{measure_span, SpanName, SpanStats};

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;

@@ -35,12 +35,13 @@ use ic_nns_handler_root_interface::{
 };
 use std::cell::RefCell;
 
+use ic_cdk::futures::spawn_017_compat;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
-use ic_cdk::{post_upgrade, query, spawn, update};
+use ic_cdk::{post_upgrade, query, update};
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(ic_cdk::api::msg_caller())
 }
 
 thread_local! {
@@ -163,7 +164,7 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
 
     // Starts the proposal execution, which will continue after this function has
     // returned.
-    spawn(future);
+    spawn_017_compat(future);
 }
 
 #[update]
@@ -200,7 +201,7 @@ fn call_canister(proposal: CallCanisterProposal) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.
     let future = canister_management::call_canister(proposal);
-    spawn(future);
+    spawn_017_compat(future);
 }
 
 /// Change the controllers of a canister controlled by NNS Root. Only callable

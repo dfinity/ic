@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+#![allow(deprecated)]
 
 use crate::helpers::{init_async, is_api_boundary_node_principal};
 use crate::logs::export_logs_as_http_response;

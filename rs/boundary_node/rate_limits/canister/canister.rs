@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+#![allow(deprecated)]
 
 use crate::access_control::{AccessLevelResolver, WithAuthorization};
 use crate::add_config::{AddsConfig, ConfigAdder};

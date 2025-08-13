@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{candid_method, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};

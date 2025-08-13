@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::candid_method;
 use ic_cdk::{api::call, update};
 use ic_principal::Principal;

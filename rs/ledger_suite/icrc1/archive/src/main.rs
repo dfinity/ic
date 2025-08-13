@@ -192,7 +192,7 @@ fn post_upgrade() {
 #[candid_method(update)]
 fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     let max_memory_size_bytes = with_archive_opts(|opts| {
-        if ic_cdk::api::caller() != opts.ledger_id {
+        if ic_cdk::api::msg_caller() != opts.ledger_id {
             ic_cdk::api::trap(&format!(
                 "only {} can append blocks to this archive",
                 opts.ledger_id
@@ -365,12 +365,12 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "archive_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::stable::stable_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -379,7 +379,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
 
     w.encode_gauge(
         "archive_cycle_balance",

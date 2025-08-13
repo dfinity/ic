@@ -1,4 +1,5 @@
 // TODO: Jira ticket NNS1-3556
+#![allow(deprecated)]
 #![allow(static_mut_refs)]
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};

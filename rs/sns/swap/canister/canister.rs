@@ -1,5 +1,6 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
+#![allow(deprecated)]
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;

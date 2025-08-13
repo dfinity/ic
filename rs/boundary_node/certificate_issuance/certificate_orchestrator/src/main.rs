@@ -15,8 +15,8 @@ use certificate_orchestrator_interface::{
     UploadCertificateResponse,
 };
 use ic_cdk::{
-    api::{id, time},
-    caller, post_upgrade, pre_upgrade, trap,
+    api::{canister_self, msg_caller, time},
+    post_upgrade, pre_upgrade, trap,
 };
 use ic_cdk::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
@@ -559,8 +559,8 @@ fn init_fn(
     // authorize the canister ID so that timer functions are authorized
     ALLOWED_PRINCIPALS.with(|m| {
         m.borrow_mut().insert(
-            id().to_text().into(), // principal
-            (),                    //
+            canister_self().to_text().into(), // principal
+            (),                               //
         )
     });
 
@@ -624,8 +624,8 @@ fn post_upgrade_fn() {
     // authorize the canister ID so that timer functions are authorized
     ALLOWED_PRINCIPALS.with(|m| {
         m.borrow_mut().insert(
-            id().to_text().into(), // principal
-            (),                    //
+            canister_self().to_text().into(), // principal
+            (),                               //
         )
     });
 
@@ -947,8 +947,10 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| g.borrow_mut().set(tasks.borrow().len() as f64));
     });
 
-    GAUGE_CANISTER_CYCLES_BALANCE
-        .with(|g| g.borrow_mut().set(ic_cdk::api::canister_balance() as f64));
+    GAUGE_CANISTER_CYCLES_BALANCE.with(|g| {
+        g.borrow_mut()
+            .set(ic_cdk::api::canister_cycle_balance() as f64)
+    });
 
     // Export metrics
     let bs = METRICS_REGISTRY.with(|r| {
@@ -976,7 +978,7 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 #[query(name = "listAllowedPrincipals")]
 #[candid_method(query, rename = "listAllowedPrincipals")]
 fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
-    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&msg_caller())) {
         return ListAllowedPrincipalsResponse::Err(match err {
             AuthorizeError::Unauthorized => ListAllowedPrincipalsError::Unauthorized,
             AuthorizeError::UnexpectedError(err) => {
@@ -990,7 +992,7 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
         m.borrow()
             .iter()
             .map(|(k, _)| Principal::from_text(k.as_str()).expect("failed to parse principal"))
-            .filter(|k| k != &id())
+            .filter(|k| k != &canister_self())
             .collect()
     }))
 }
@@ -998,7 +1000,7 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
 #[update(name = "addAllowedPrincipal")]
 #[candid_method(update, rename = "addAllowedPrincipal")]
 fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
-    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&msg_caller())) {
         return ModifyAllowedPrincipalResponse::Err(match err {
             AuthorizeError::Unauthorized => ModifyAllowedPrincipalError::Unauthorized,
             AuthorizeError::UnexpectedError(err) => {
@@ -1015,7 +1017,7 @@ fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse
 #[update(name = "rmAllowedPrincipal")]
 #[candid_method(update, rename = "rmAllowedPrincipal")]
 fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
-    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&msg_caller())) {
         return ModifyAllowedPrincipalResponse::Err(match err {
             AuthorizeError::Unauthorized => ModifyAllowedPrincipalError::Unauthorized,
             AuthorizeError::UnexpectedError(err) => {

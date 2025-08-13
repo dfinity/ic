@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::address::ecdsa_public_key_to_address;
 use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};

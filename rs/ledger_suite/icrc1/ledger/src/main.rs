@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod benches;
 

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{candid_method, Decode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{

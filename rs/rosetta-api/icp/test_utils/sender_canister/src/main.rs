@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::candid_method;
 use ic_cdk::update;
 use ic_sender_canister_lib::{SendArg, SendResult};

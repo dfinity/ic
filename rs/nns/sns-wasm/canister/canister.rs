@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};

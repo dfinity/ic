@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_cdk::api::management_canister::main::{
     canister_status, CanisterIdRecord, CanisterStatusResponse,
 };

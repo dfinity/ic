@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;

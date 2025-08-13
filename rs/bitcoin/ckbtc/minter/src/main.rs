@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
