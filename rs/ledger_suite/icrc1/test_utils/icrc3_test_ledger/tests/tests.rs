@@ -70,7 +70,7 @@ fn test_basic_add_and_get_blocks() {
     let block0 = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
     let block1 = transfer_block(1, TEST_USER_1, TEST_USER_2, 100_000, 2000);
     let block2 = mint_block(2, TEST_USER_1, 500_000, 3000, None::<PrincipalId>);
-    let block3 = burn_block(3, TEST_USER_1, 50_000, 4000, None);
+    let block3 = burn_block(3, TEST_USER_1, 50_000, 4000, None, None);
 
     // Add blocks to the ledger
     let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
