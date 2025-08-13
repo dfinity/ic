@@ -582,7 +582,9 @@ impl CanisterState {
             scheduler_state: _,
         } = self;
 
-        system_state.drop_in_progress_management_calls_after_split();
+        system_state
+            .status
+            .drop_in_progress_management_calls_after_split();
     }
 
     /// Appends the given log to the canister log.

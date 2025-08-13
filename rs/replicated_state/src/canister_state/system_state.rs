@@ -1,9 +1,6 @@
 mod call_context_manager;
 pub mod proto;
-mod task_queue;
 pub mod wasm_chunk_store;
-
-pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::{can_push, CanisterInput};
@@ -27,8 +24,8 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, Ingress,
-    Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
+    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
     StopCanisterContext, NO_DEADLINE,
 };
 use ic_types::methods::Callback;
@@ -42,6 +39,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
+use num_traits::SaturatingSub;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -260,10 +258,7 @@ pub struct SystemState {
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: `Running`, `Stopping`, or `Stopped`.
     /// Different statuses allow for different behaviors on the `SystemState`.
-    ///
-    /// Must remain private, to ensure that the `CallContextManager` is consistent
-    /// with `queues`.
-    status: CanisterStatus,
+    pub status: CanisterStatus,
     /// Certified data blob allows canisters to certify parts of their state to
     /// securely answer queries from a single machine.
     ///
@@ -309,10 +304,6 @@ pub struct SystemState {
     /// A resource allocation operation that attempts to reserve `N` cycles will
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
-
-    /// Queue of tasks to be executed next. If a paused or aborted execution task is
-    /// present, it must be executed before any other tasks or messages.
-    pub task_queue: TaskQueue,
 
     /// Canister global timer.
     pub global_timer: CanisterTimer,
@@ -647,32 +638,175 @@ impl CanisterStatus {
             status: RunningStatus::Idle,
         })
     }
-}
 
-/*
     /// Returns `CanisterTask::OnLowWasmMemory` if the condition on the low wasm memory hook is satisfied,
     /// otherwise a heartbeat or a global timer task if one is scheduled (running status only).
     fn pop_task(&mut self) -> Option<CanisterTask> {
         match self {
-            Self::Idle(IdleStatus {
+            Self::Running(Running {
                 ref mut on_low_wasm_memory_hook_status,
                 ..
             }) if on_low_wasm_memory_hook_status.is_ready() => {
                 *on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Executed;
                 Some(CanisterTask::OnLowWasmMemory)
             }
-            Self::Idle(IdleStatus {
-                status: RunningOrStopping::Running { ref mut task_queue },
-                ..
+
+            Self::Running(Running {
+                ref mut task_queue, ..
             }) => match task_queue.pop_front() {
                 Some(ExecutionRoundTask::Heartbeat) => Some(CanisterTask::Heartbeat),
                 Some(ExecutionRoundTask::GlobalTimer) => Some(CanisterTask::GlobalTimer),
                 None => None,
             },
-            Self::Idle(_) | Self::Stopped { .. } => None,
+
+            Self::Stopping(_) | Self::Stopped(_) => None,
         }
     }
 
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    ///
+    /// Note: Since the subnet is started from a catch up package, paused executions
+    ///       indicate a serious bug. The case is handled anyway to prevent panicking.
+    pub(super) fn drop_in_progress_management_calls_after_split(&mut self) {
+        match self {
+            Self::Running(Running { ref mut status, .. }) => match status {
+                RunningStatus::PausedMessageOrTask(_) | RunningStatus::PausedInstallCode(_) => {
+                    debug_assert!(false, "There shouldn't be a paused execution or install code after a split in a running canister.");
+                }
+                RunningStatus::Idle | RunningStatus::AbortedMessageOrTask(_) => {}
+
+                // Remove aborted install code task.
+                RunningStatus::AbortedInstallCode(_) => {
+                    *status = RunningStatus::Idle;
+                }
+            },
+
+            Self::Stopped(Stopped { ref mut status }) => match status {
+                StoppedStatus::PausedInstallCode(_) => {
+                    debug_assert!(false, "There shouldn't be a paused install code after a split in a stopped canister.");
+                }
+
+                // Remove aborted install code task.
+                StoppedStatus::Idle | StoppedStatus::AbortedInstallCode(_) => {
+                    *status = StoppedStatus::Idle;
+                }
+            },
+
+            Self::Stopping(Stopping {
+                status,
+                call_context_manager,
+                ..
+            }) => {
+                let running_status = match status {
+                    StoppingStatus::PausedInstallCode(code) => {
+                        debug_assert!(false, "There shouldn't be a paused install code after a split in a stopping canister.");
+                        RunningStatus::PausedInstallCode(*code)
+                    }
+                    StoppingStatus::PausedResponse(PausedResponse { id, response }) => {
+                        debug_assert!(false, "There shouldn't be a paused response after a split in a stopping canister.");
+                        RunningStatus::PausedMessageOrTask(PausedMessageOrTask {
+                            id: *id,
+                            input: CanisterMessageOrTask::Message(CanisterMessage::Response(
+                                response.clone(),
+                            )),
+                        })
+                    }
+                    StoppingStatus::AbortedResponse(response) => {
+                        RunningStatus::AbortedMessageOrTask(
+                            response.clone().to_aborted_message_or_task(),
+                        )
+                    }
+
+                    // Remove aborted install code task.
+                    StoppingStatus::Idle | StoppingStatus::AbortedInstallCode(_) => {
+                        RunningStatus::Idle
+                    }
+                };
+
+                *self = CanisterStatus::Running(Running {
+                    call_context_manager: std::mem::take(call_context_manager),
+                    task_queue: VecDeque::new(),
+                    on_low_wasm_memory_hook_status:
+                        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+                    status: running_status,
+                });
+            }
+        }
+    }
+
+    pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        match self {
+            Self::Running(running) => running.on_low_wasm_memory_hook_status,
+            Self::Stopping(_) | Self::Stopped(_) => {
+                OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+            }
+        }
+    }
+}
+
+/// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
+///
+/// 1. In the case of `memory_allocation`
+///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+/// 2. Without memory allocation
+///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+///
+/// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
+pub fn is_low_wasm_memory_hook_condition_satisfied(
+    memory_usage: NumBytes,
+    wasm_memory_usage: NumBytes,
+    memory_allocation: Option<NumBytes>,
+    wasm_memory_limit: Option<NumBytes>,
+    wasm_memory_threshold: NumBytes,
+) -> bool {
+    // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
+    // limit is ignored for query methods, response callback handlers,
+    // global timers, heartbeats, and canister pre_upgrade.
+    let wasm_memory_limit =
+        wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
+
+    debug_assert!(
+        wasm_memory_usage <= memory_usage,
+        "Wasm memory usage {} is greater that memory usage {}.",
+        wasm_memory_usage,
+        memory_usage
+    );
+
+    let memory_usage_without_wasm_memory = memory_usage.saturating_sub(&wasm_memory_usage);
+
+    // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
+    // as min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit).
+    let wasm_capacity = memory_allocation.map_or_else(
+        || wasm_memory_limit,
+        |memory_allocation| {
+            std::cmp::min(
+                memory_allocation.saturating_sub(&memory_usage_without_wasm_memory),
+                wasm_memory_limit,
+            )
+        },
+    );
+
+    // Conceptually we can think that the remaining Wasm memory is
+    // equal to `wasm_capacity - wasm_memory_usage` and that should
+    // be compared with `wasm_memory_threshold` when checking for
+    // the condition for the hook. However, since `wasm_memory_limit`
+    // is ignored in some executions as stated above it is possible
+    // that `wasm_memory_usage` is greater than `wasm_capacity` to
+    // avoid overflowing subtraction we adopted inequality.
+    wasm_capacity < wasm_memory_usage + wasm_memory_threshold
+}
+
+/*
     fn remove_aborted_install_code_task(&mut self) {
         match self {
             Self::Idle(IdleStatus {
@@ -861,7 +995,6 @@ impl SystemState {
             status,
             certified_data: Default::default(),
             canister_metrics: CanisterMetrics::default(),
-            task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
             canister_history: CanisterHistory::default(),
@@ -889,7 +1022,6 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
@@ -917,7 +1049,6 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue,
             global_timer,
             canister_version,
             canister_history,
@@ -1511,93 +1642,6 @@ impl SystemState {
         }
     }
 
-    /// Silently discards in-progress subnet messages being executed by the
-    /// canister, in the second phase of a subnet split. This should only be called
-    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
-    /// have a matching call context.
-    ///
-    /// The other subnet (which must be *subnet A'*), produces reject responses (for
-    /// calls originating from canisters); and fails ingress messages (for calls
-    /// originating from ingress messages); for the matching subnet calls. This is
-    /// the only way to ensure consistency for messages that would otherwise be
-    /// executing on one subnet, but for which a response may only be produced by
-    /// another subnet.
-    ///
-    /// Note: Since the subnet is started from a catch up package, paused executions
-    ///       indicate a serious bug. The case is handled anyway to prevent panicking.
-    pub(super) fn drop_in_progress_management_calls_after_split(&mut self) {
-        match &mut self.status {
-            CanisterStatus::Running(Running { ref mut status, .. }) => {
-                match status {
-                    RunningStatus::PausedMessageOrTask(_) | RunningStatus::PausedInstallCode(_) => {
-                        debug_assert!(false, "There shouldn't be a paused execution or install code after a split in a running canister.");
-                    }
-                    RunningStatus::Idle | RunningStatus::AbortedMessageOrTask(_) => {}
-
-                    // Remove aborted install code task.
-                    RunningStatus::AbortedInstallCode(_) => {
-                        *status = RunningStatus::Idle;
-                    }
-                }
-                return;
-            }
-
-            CanisterStatus::Stopped(Stopped { ref mut status }) => {
-                match status {
-                    StoppedStatus::PausedInstallCode(_) => {
-                        debug_assert!(false, "There shouldn't be a paused install code after a split in a stopped canister.");
-                    }
-
-                    // Remove aborted install code task.
-                    StoppedStatus::Idle | StoppedStatus::AbortedInstallCode(_) => {
-                        *status = StoppedStatus::Idle;
-                    }
-                }
-                return;
-            }
-
-            CanisterStatus::Stopping(Stopping {
-                status,
-                call_context_manager,
-                ..
-            }) => {
-                let running_status = match status {
-                    StoppingStatus::PausedInstallCode(code) => {
-                        debug_assert!(false, "There shouldn't be a paused install code after a split in a stopping canister.");
-                        RunningStatus::PausedInstallCode(*code)
-                    }
-                    StoppingStatus::PausedResponse(PausedResponse { id, response }) => {
-                        debug_assert!(false, "There shouldn't be a paused response after a split in a stopping canister.");
-                        RunningStatus::PausedMessageOrTask(PausedMessageOrTask {
-                            id: *id,
-                            input: CanisterMessageOrTask::Message(CanisterMessage::Response(
-                                response.clone(),
-                            )),
-                        })
-                    }
-                    StoppingStatus::AbortedResponse(response) => {
-                        RunningStatus::AbortedMessageOrTask(
-                            response.clone().to_aborted_message_or_task(),
-                        )
-                    }
-
-                    // Remove aborted install code task.
-                    StoppingStatus::Idle | StoppingStatus::AbortedInstallCode(_) => {
-                        RunningStatus::Idle
-                    }
-                };
-
-                self.status = CanisterStatus::Running(Running {
-                    call_context_manager: std::mem::take(call_context_manager),
-                    task_queue: VecDeque::new(),
-                    on_low_wasm_memory_hook_status:
-                        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-                    status: running_status,
-                });
-            }
-        }
-    }
-
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
@@ -2125,10 +2169,14 @@ impl SystemState {
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
-        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
-            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-        } else {
-            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        let is_hook_condition_satisfied =
+            self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage);
+        match self.status {
+            CanisterStatus::Stopping(_) | CanisterStatus::Stopped(_) => {}
+            CanisterStatus::Running(Running {
+                ref mut on_low_wasm_memory_hook_status,
+                ..
+            }) => on_low_wasm_memory_hook_status.update(is_hook_condition_satisfied),
         }
     }
 
@@ -2419,7 +2467,6 @@ pub mod testing {
             ingress_induction_cycles_debit: Default::default(),
             reserved_balance: Default::default(),
             reserved_balance_limit: Default::default(),
-            task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: Default::default(),
             canister_history: Default::default(),
