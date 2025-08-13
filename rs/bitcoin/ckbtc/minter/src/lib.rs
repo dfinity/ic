@@ -855,8 +855,8 @@ pub enum SignTransactionError {
     /// Error from the management canister
     ManagementCanisterError(CallError),
     /// The transaction contains too many inputs.
-    /// If such a transaction where signed, there is a risk that the resulting transaction will be *non-standard*
-    /// since it will have a size over 100kB.
+    /// If such a transaction where signed, there is a risk that the resulting transaction will have a size
+    /// over 100k vbytes and therefore be *non-standard*.
     TooManyInputs {
         num_inputs: usize,
         max_num_inputs: usize,
