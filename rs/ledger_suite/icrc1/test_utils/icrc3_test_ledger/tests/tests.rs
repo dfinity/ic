@@ -1,10 +1,12 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_test_utils::icrc3::{burn_block, mint_block, transfer_block};
+use ic_icrc1_ledger::Tokens;
+use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::AddBlockResult;
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
@@ -12,6 +14,14 @@ use std::path::PathBuf;
 
 const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
 const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
+const TEST_ACCOUNT_1: Account = Account {
+    owner: TEST_USER_1.0,
+    subaccount: None,
+};
+const TEST_ACCOUNT_2: Account = Account {
+    owner: TEST_USER_2.0,
+    subaccount: None,
+};
 
 fn icrc3_test_ledger_wasm() -> Vec<u8> {
     load_wasm(
@@ -67,10 +77,18 @@ fn test_basic_add_and_get_blocks() {
     let (env, canister_id) = setup_icrc3_test_ledger();
 
     // Create some test blocks
-    let block0 = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
-    let block1 = transfer_block(1, TEST_USER_1, TEST_USER_2, 100_000, 2000);
-    let block2 = mint_block(2, TEST_USER_1, 500_000, 3000, None::<PrincipalId>);
-    let block3 = burn_block(3, TEST_USER_1, 50_000, 4000, None, None);
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000))
+        .build();
+    let block1 = BlockBuilder::new(1, 2000)
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000))
+        .build();
+    let block2 = BlockBuilder::new(2, 3000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(500_000))
+        .build();
+    let block3 = BlockBuilder::new(3, 4000)
+        .burn(TEST_ACCOUNT_1, Tokens::from(50_000))
+        .build();
 
     // Add blocks to the ledger
     let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
@@ -120,7 +138,9 @@ fn test_get_blocks_with_different_ranges() {
     // Add 5 blocks
     let mut added_blocks = Vec::new();
     for i in 0..5 {
-        let block = transfer_block(i, TEST_USER_1, TEST_USER_2, 1000 + i * 100, 1000 + i * 1000);
+        let block = BlockBuilder::new(i, 1000 + i * 1000)
+            .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(1000 + i * 100))
+            .build();
         add_block(&env, canister_id, &block).expect("Failed to add block");
         added_blocks.push(block);
     }
@@ -171,7 +191,9 @@ fn test_get_blocks_with_multiple_requests() {
 
     // Add 5 blocks
     for i in 0..5 {
-        let block = transfer_block(i, TEST_USER_1, TEST_USER_2, 1000 + i * 100, 1000 + i * 1000);
+        let block = BlockBuilder::new(i, 1000 + i * 1000)
+            .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(1000 + i * 100))
+            .build();
         add_block(&env, canister_id, &block).expect("Failed to add block");
     }
 
@@ -209,7 +231,9 @@ fn test_get_blocks_empty_request() {
     assert_eq!(result.log_length, Nat::from(0u64));
 
     // Add a block
-    let block = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
+    let block = BlockBuilder::new(0, 1000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000))
+        .build();
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
     // Test empty request with blocks present
@@ -223,7 +247,9 @@ fn test_get_blocks_zero_length() {
     let (env, canister_id) = setup_icrc3_test_ledger();
 
     // Add a block
-    let block = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
+    let block = BlockBuilder::new(0, 1000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000))
+        .build();
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
     // Test zero-length request
