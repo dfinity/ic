@@ -6,6 +6,7 @@
 
 use candid::CandidType;
 use ic_btc_interface::Network as BtcNetwork;
+use ic_btc_interface::Network as DogeNetwork;
 use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
@@ -15,6 +16,63 @@ use ic_protobuf::{
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Network {
+    Bitcoin(BtcNetwork),
+    Dogecoin(DogeNetwork),
+}
+
+impl From<Network> for v1::Network {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin(network) => match network {
+                BtcNetwork::Mainnet => v1::Network::Mainnet,
+                BtcNetwork::Testnet => v1::Network::Testnet,
+                BtcNetwork::Regtest => v1::Network::Regtest,
+            },
+            Network::Dogecoin(network) => match network {
+                BtcNetwork::Mainnet => v1::Network::DogecoinMainnet,
+                BtcNetwork::Testnet => v1::Network::DogecoinTestnet,
+                BtcNetwork::Regtest => v1::Network::DogecoinRegtest,
+            },
+        }
+    }
+}
+
+impl From<Network> for i32 {
+    fn from(network: Network) -> Self {
+        v1::Network::from(network).into()
+    }
+}
+
+impl TryFrom<v1::Network> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: v1::Network) -> Result<Self, Self::Error> {
+        match network {
+            v1::Network::Testnet => Ok(Network::Bitcoin(BtcNetwork::Testnet)),
+            v1::Network::Mainnet => Ok(Network::Bitcoin(BtcNetwork::Mainnet)),
+            v1::Network::Regtest => Ok(Network::Bitcoin(BtcNetwork::Regtest)),
+            v1::Network::DogecoinMainnet => Ok(Network::Dogecoin(DogeNetwork::Mainnet)),
+            v1::Network::DogecoinTestnet => Ok(Network::Dogecoin(DogeNetwork::Testnet)),
+            v1::Network::DogecoinRegtest => Ok(Network::Dogecoin(DogeNetwork::Regtest)),
+            _ => Err(ProxyDecodeError::MissingField("network")),
+        }
+    }
+}
+
+impl TryFrom<i32> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: i32) -> Result<Self, Self::Error> {
+        Network::try_from(
+            v1::Network::try_from(network).map_err(|_| {
+                ProxyDecodeError::Other("Failed to decode network enum".to_string())
+            })?,
+        )
+    }
+}
 
 fn from_btc_network(network: BtcNetwork) -> v1::Network {
     match network {
