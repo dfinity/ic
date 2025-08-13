@@ -17,6 +17,7 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::time::Duration;
 
 pub mod address;
@@ -848,6 +849,44 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
     solution
 }
 
+/// Error returned when signing a transaction.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SignTransactionError {
+    /// Error from the management canister
+    ManagementCanisterError(CallError),
+    /// The transaction contains too many inputs.
+    /// If such a transaction where signed, there is a risk that the resulting transaction will be *non-standard*
+    /// since it will have a size over 100kB.
+    TooManyInputs {
+        num_inputs: usize,
+        max_num_inputs: usize,
+    },
+}
+
+impl From<CallError> for SignTransactionError {
+    fn from(e: CallError) -> Self {
+        SignTransactionError::ManagementCanisterError(e)
+    }
+}
+
+impl fmt::Display for SignTransactionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SignTransactionError::ManagementCanisterError(e) => {
+                write!(f, "Management canister error: {}", e)
+            }
+            SignTransactionError::TooManyInputs {
+                num_inputs,
+                max_num_inputs,
+            } => write!(
+                f,
+                "Transaction has too many inputs: {} (maximum: {})",
+                num_inputs, max_num_inputs
+            ),
+        }
+    }
+}
+
 /// Gathers ECDSA signatures for all the inputs in the specified unsigned
 /// transaction.
 ///
@@ -860,10 +899,20 @@ pub async fn sign_transaction(
     ecdsa_public_key: &ECDSAPublicKey,
     output_account: &BTreeMap<tx::OutPoint, Account>,
     unsigned_tx: tx::UnsignedTransaction,
-) -> Result<tx::SignedTransaction, CallError> {
+) -> Result<tx::SignedTransaction, SignTransactionError> {
     use crate::address::{derivation_path, derive_public_key};
 
-    let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
+    const MAX_NUM_INPUTS: usize = 1_000;
+
+    let num_inputs = unsigned_tx.inputs.len();
+    if num_inputs > MAX_NUM_INPUTS {
+        return Err(SignTransactionError::TooManyInputs {
+            max_num_inputs: MAX_NUM_INPUTS,
+            num_inputs: num_inputs,
+        });
+    }
+
+    let mut signed_inputs = Vec::with_capacity(num_inputs);
     let sighasher = tx::TxSigHasher::new(&unsigned_tx);
     for input in &unsigned_tx.inputs {
         let outpoint = &input.previous_output;
