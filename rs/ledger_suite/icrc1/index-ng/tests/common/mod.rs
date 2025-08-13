@@ -121,6 +121,7 @@ pub fn ledger_wasm() -> Vec<u8> {
     })
 }
 
+#[allow(dead_code)]
 pub fn test_ledger_wasm() -> Vec<u8> {
     let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
         "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",

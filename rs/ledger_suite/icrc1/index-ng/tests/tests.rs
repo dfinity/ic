@@ -1279,6 +1279,7 @@ mod burn_block_fees {
     #[test]
     fn should_take_burn_block_fee_into_account() {
         const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+        const FEE_COLLECTOR: PrincipalId = PrincipalId::new_user_test_id(2);
 
         const MINT_AMOUNT: u64 = 10_000_000;
         const BURN_AMOUNT: u64 = 100_000;
@@ -1300,6 +1301,7 @@ mod burn_block_fees {
             TEST_USER_1,
             MINT_AMOUNT,
             GENESIS.as_nanos_since_unix_epoch(),
+            Some(FEE_COLLECTOR),
         );
 
         let mut expected_balance = MINT_AMOUNT;
@@ -1310,6 +1312,7 @@ mod burn_block_fees {
             BURN_AMOUNT,
             GENESIS.as_nanos_since_unix_epoch(),
             Some(BURN_FEE),
+            Some(0),
         );
 
         expected_balance -= BURN_AMOUNT + BURN_FEE;
@@ -1330,14 +1333,27 @@ mod burn_block_fees {
 
         wait_until_sync_is_completed(&env, index_id, ledger_id);
 
-        let actual_balance =
+        let actual_user_balance =
             icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER_1)));
 
-        // Verify that the burn fee was taken into account.
+        // Verify that the burn fee was deducted from the user account.
         assert_eq!(
-            actual_balance, expected_balance,
-            "Actual balance does not match expected balance after burn block ({} vs {})",
-            actual_balance, expected_balance
+            actual_user_balance, expected_balance,
+            "Actual user balance does not match expected balance after burn block ({} vs {})",
+            actual_user_balance, expected_balance
+        );
+
+        let actual_fee_collector_balance = icrc1_balance_of(
+            &env,
+            index_id,
+            Account::from(Principal::from(FEE_COLLECTOR)),
+        );
+
+        // Verify that the burn fee was credited to the fee collector.
+        assert_eq!(
+            actual_fee_collector_balance, BURN_FEE,
+            "Actual fee collector balance does not match expected balance after burn block ({} vs {})",
+            actual_fee_collector_balance, BURN_FEE
         );
     }
 
