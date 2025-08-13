@@ -19087,6 +19087,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-transport-types",
  "ic-vetkeys",
+ "icrc-ledger-types",
  "k256 0.13.4",
  "lazy_static",
  "reqwest 0.12.15",
@@ -19155,6 +19156,7 @@ dependencies = [
  "ic-https-outcalls-adapter-client",
  "ic-https-outcalls-service",
  "ic-icp-index",
+ "ic-icrc1-index-ng",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
@@ -19217,6 +19219,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk 0.17.2",
+ "icrc-ledger-types",
  "serde",
  "serde_bytes",
 ]
