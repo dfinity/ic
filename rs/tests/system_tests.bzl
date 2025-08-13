@@ -8,7 +8,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "base_download_url")
-load("//rs/tests:common.bzl", "MAINNET_APPLICATION_SUBNET_HASH", "MAINNET_APPLICATION_SUBNET_REVISION", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SUBNET_HASH", "MAINNET_NNS_SUBNET_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SUBNET_HASH", "MAINNET_NNS_SUBNET_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -212,7 +212,6 @@ def system_test(
         colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_img = True,
         uses_guestos_mainnet_img = False,
-        uses_guestos_latest_release_mainnet_img = False,
         uses_guestos_recovery_dev_img = False,
         uses_guestos_malicious_img = False,
         uses_guestos_update = False,
@@ -252,8 +251,7 @@ def system_test(
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
       uses_guestos_img: the test uses the branch GuestOS image
-      uses_guestos_mainnet_img: the test uses the NNS subnet mainnet GuestOS image
-      uses_guestos_latest_release_mainnet_img: the test uses the latest release mainnet GuestOS image
+      uses_guestos_mainnet_img: the test uses the mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
       uses_guestos_malicious_img: the test uses the malicious GuestOS image
       uses_guestos_update: the test uses the branch GuestOS update image
@@ -306,7 +304,7 @@ def system_test(
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
     if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
@@ -338,19 +336,6 @@ def system_test(
             dev = False,
         ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
-        # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
-
-    if uses_guestos_latest_release_mainnet_img:
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APPLICATION_SUBNET_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(
-            git_commit_id = MAINNET_APPLICATION_SUBNET_REVISION,
-            variant = "guest-os",
-            update = True,
-            test = False,
-            dev = False,  # TODO(NODE-1684): Use dev image once support for dev hashes
-        ) + "update-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APPLICATION_SUBNET_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_guestos_recovery_dev_img:
