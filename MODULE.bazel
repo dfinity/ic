@@ -136,10 +136,10 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
-# bitcoin container used in test
+# dogecoin container used in test
 oci.pull(
     name = "dogecoind",
-    image = "hub.docker.com/r/vasilyvsg/dogecoind@sha256:b51ddbe181281056f4edb94738715e9eb435577a3d04cc0884d90f98ac72f666",
+    image = "ghcr.io/ninegua/dogecoind@sha256:5f84b807823b647acdfa71ccf85d1f096eda244a64bb8bcadd0937944309acef",
     platforms = [
         "linux/amd64",
     ],
