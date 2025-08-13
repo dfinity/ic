@@ -161,6 +161,8 @@ pub fn registration(env: TestEnv) {
         ),
     )
     .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
+
     let num_unassigned_nodes = new_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 1);
 }
@@ -458,6 +460,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         ),
     )
     .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -672,7 +675,6 @@ pub fn recovery_upgrader_test(env: TestEnv) {
 pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
-    // start the nested VM and wait for it to join the network
     let initial_topology = env.topology_snapshot();
     start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
