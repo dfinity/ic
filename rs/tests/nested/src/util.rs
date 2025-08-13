@@ -39,6 +39,7 @@ use reqwest::Client;
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use slog::{info, Logger};
 
 /// Use an SSH channel to check the version on the running HostOS.
@@ -65,9 +66,10 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
 /// Submit a proposal to elect a new GuestOS version
 pub(crate) async fn elect_guestos_version(
     nns_node: &IcNodeSnapshot,
-    target_version: ReplicaVersion,
+    target_version: &ReplicaVersion,
     sha256: String,
     upgrade_urls: Vec<String>,
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
@@ -81,6 +83,7 @@ pub(crate) async fn elect_guestos_version(
         Some(target_version),
         Some(sha256),
         upgrade_urls,
+        guest_launch_measurements,
         vec![],
     )
     .await;
@@ -132,14 +135,17 @@ pub(crate) async fn update_unassigned_nodes(
         &governance_canister,
         proposal_sender,
         test_neuron_id,
-        target_version.to_string(),
+        target_version,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
 /// Get the current GuestOS version from the metrics endpoint of the guest.
-pub async fn check_guestos_version(client: &Client, ipv6_address: &Ipv6Addr) -> Result<String> {
+pub async fn check_guestos_version(
+    client: &Client,
+    ipv6_address: &Ipv6Addr,
+) -> Result<ReplicaVersion> {
     let url = format!("https://[{ipv6_address}]:9100/metrics");
 
     let response = client
@@ -156,10 +162,13 @@ pub async fn check_guestos_version(client: &Client, ipv6_address: &Ipv6Addr) -> 
     let re =
         Regex::new(r#"guestos_version\{version="([^"]+)""#).context("Failed to compile regex")?;
 
-    re.captures(&body)
+    let capture = re
+        .captures(&body)
         .and_then(|caps| caps.get(1))
         .map(|m| m.as_str().to_string())
-        .context("Version string not found in response")
+        .context("Version string not found in response")?;
+
+    Ok(ReplicaVersion::try_from(capture)?)
 }
 
 /// Submit a proposal to elect a new HostOS version
@@ -209,16 +218,19 @@ pub(crate) async fn update_nodes_hostos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
+pub(crate) fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
-    info!(logger, "Setup nested VMs ...");
+    info!(logger, "Setting up nested VM(s) ...");
 
     let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
     let farm = Farm::new(farm_url, logger.clone());
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
-    let nodes = vec![NestedNode::new(name.to_owned())];
+    let nodes: Vec<NestedNode> = names
+        .iter()
+        .map(|name| NestedNode::new(name.to_string()))
+        .collect();
 
     let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
         .expect("Failed to build resource request for nested test.");
@@ -247,14 +259,16 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
         &nns_public_key,
     )
     .expect("Unable to setup nested VMs.");
+
+    info!(logger, "Nested VM(s) setup complete!");
 }
 
 /// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
-pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
+pub(crate) fn simple_setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
     info!(
         logger,
-        "Setup minimal nested VM without IC infrastructure..."
+        "Setting up minimal nested VM(s) without IC infrastructure..."
     );
 
     let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
@@ -262,7 +276,10 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
-    let nodes = vec![NestedNode::new(name.to_owned())];
+    let nodes: Vec<NestedNode> = names
+        .iter()
+        .map(|name| NestedNode::new(name.to_string()))
+        .collect();
 
     // Allocate VM resources
     let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
@@ -289,10 +306,10 @@ pub(crate) fn simple_setup_nested_vm(env: TestEnv, name: &str) {
     )
     .expect("Unable to setup nested VMs with minimal config.");
 
-    info!(logger, "Minimal nested VM setup complete!");
+    info!(logger, "Minimal nested VM(s) setup complete!");
 }
 
-pub(crate) fn start_nested_vm(env: TestEnv) {
+pub(crate) fn start_nested_vm_group(env: TestEnv) {
     let logger = env.logger();
     info!(logger, "Setup nested VMs ...");
 
@@ -312,7 +329,7 @@ pub async fn wait_for_guest_version(
     logger: &Logger,
     timeout: Duration,
     backoff: Duration,
-) -> Result<String> {
+) -> Result<ReplicaVersion> {
     retry_with_msg_async_quiet!(
         "Waiting until the guest returns a version",
         logger,
@@ -321,16 +338,13 @@ pub async fn wait_for_guest_version(
         || async {
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
-                .unwrap_or("unavailable".to_string());
-            if current_version != "unavailable" {
-                info!(
-                    logger,
-                    "SUCCESS: Guest reported version '{}'", current_version
-                );
-                Ok(current_version)
-            } else {
-                bail!("FAIL: Guest version is still unavailable")
-            }
+                .context("Unable to check GuestOS version")?;
+            info!(
+                logger,
+                "SUCCESS: Guest reported version '{}'", current_version
+            );
+
+            Ok(current_version)
         }
     )
     .await
@@ -340,7 +354,7 @@ pub async fn wait_for_guest_version(
 pub async fn wait_for_expected_guest_version(
     client: &Client,
     guest_ipv6: &Ipv6Addr,
-    expected_version: &str,
+    expected_version: &ReplicaVersion,
     logger: &Logger,
     timeout: Duration,
     backoff: Duration,
@@ -356,16 +370,16 @@ pub async fn wait_for_expected_guest_version(
         || async {
             let current_version = check_guestos_version(client, guest_ipv6)
                 .await
-                .unwrap_or("unavailable".to_string());
-            if current_version == expected_version {
-                info!(
-                    logger,
-                    "SUCCESS: Guest is now on expected version '{}'", current_version
-                );
-                Ok(())
-            } else {
+                .context("Unable to check GuestOS version")?;
+            if &current_version != expected_version {
                 bail!("FAIL: Guest is still on version '{}'", current_version)
             }
+            info!(
+                logger,
+                "SUCCESS: Guest is now on expected version '{}'", current_version
+            );
+
+            Ok(())
         }
     )
     .await

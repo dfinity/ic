@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Nat};
 use dfn_protobuf::ProtoBuf;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -38,6 +38,7 @@ pub mod account_identifier;
 pub mod protobuf;
 mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::icrc1::account::Subaccount as Icrc1Subaccount;
 pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
 /// Note that the Ledger can be deployed with a
@@ -1296,6 +1297,13 @@ pub struct Allowance {
 /// The allowances vector returned by the `get_allowances` endpoint.
 pub type Allowances = Vec<Allowance>;
 
+/// The arguments for the `remove_approval` endpoint.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RemoveApprovalArgs {
+    pub from_subaccount: Option<Icrc1Subaccount>,
+    pub spender: AccountIdBlob,
+    pub fee: Option<Nat>,
+}
 #[cfg(test)]
 mod test {
     use ic_stable_structures::storable::Storable;

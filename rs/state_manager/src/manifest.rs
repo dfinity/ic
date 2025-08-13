@@ -740,6 +740,7 @@ fn dirty_pages_to_dirty_chunks(
     checkpoint: &CheckpointLayout<ReadOnly>,
     files: &[FileWithSize],
     max_chunk_size: u32,
+    thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<BTreeMap<PathBuf, BitVec>, CheckpointError> {
     debug_assert!(uses_chunk_size(
         &manifest_delta.base_manifest,
@@ -762,37 +763,47 @@ fn dirty_pages_to_dirty_chunks(
         debug_assert!(false);
         return Ok(dirty_chunks);
     }
-    for FileWithSize(path, size_bytes) in files.iter() {
-        use std::os::unix::fs::MetadataExt;
-        let new_path = checkpoint.raw_path().join(path);
-        let old_path = manifest_delta.base_checkpoint.raw_path().join(path);
-        if !old_path.exists() {
-            continue;
-        }
-        let new_metadata = new_path.metadata();
-        let old_metadata = old_path.metadata();
-        if new_metadata.is_err() || old_metadata.is_err() {
-            error!(
-                log,
-                "Failed to get metadata for an existing path. {} -> {:#?}, {} -> {:#?}",
-                &old_path.display(),
-                &old_metadata,
-                &new_path.display(),
-                &new_metadata
-            );
-            debug_assert!(false);
-            continue;
-        }
-        let new_metadata = new_metadata.unwrap();
-        let old_metadata = old_metadata.unwrap();
-        if new_metadata.ino() == old_metadata.ino() && new_metadata.dev() == old_metadata.dev() {
-            let num_chunks = count_chunks(*size_bytes, max_chunk_size);
-            let chunks_bitmap = BitVec::from_elem(num_chunks, false);
-            let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
-            // Check that for hardlinked files there are no dirty pages.
-            debug_assert!(_prev_chunk.is_none());
-        }
+    let path_to_num_chunks_for_same_files = parallel_map(
+        thread_pool,
+        files.iter(),
+        |FileWithSize(path, size_bytes)| {
+            use std::os::unix::fs::MetadataExt;
+            let new_path = checkpoint.raw_path().join(path);
+            let old_path = manifest_delta.base_checkpoint.raw_path().join(path);
+            if !old_path.exists() {
+                return None;
+            }
+            let new_metadata = new_path.metadata();
+            let old_metadata = old_path.metadata();
+            if new_metadata.is_err() || old_metadata.is_err() {
+                error!(
+                    log,
+                    "Failed to get metadata for an existing path. {} -> {:#?}, {} -> {:#?}",
+                    &old_path.display(),
+                    &old_metadata,
+                    &new_path.display(),
+                    &new_metadata
+                );
+                debug_assert!(false);
+                return None;
+            }
+            let new_metadata = new_metadata.unwrap();
+            let old_metadata = old_metadata.unwrap();
+            if new_metadata.ino() == old_metadata.ino() && new_metadata.dev() == old_metadata.dev()
+            {
+                return Some(FileWithSize(path.clone(), *size_bytes));
+            }
+            None
+        },
+    );
+    for FileWithSize(path, size_bytes) in path_to_num_chunks_for_same_files.into_iter().flatten() {
+        let num_chunks = count_chunks(size_bytes, max_chunk_size);
+        let chunks_bitmap = BitVec::from_elem(num_chunks, false);
+        let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
+        // Check that for hardlinked files there are no dirty pages.
+        debug_assert!(_prev_chunk.is_none());
     }
+
     Ok(dirty_chunks)
 }
 
@@ -848,6 +859,7 @@ pub fn compute_manifest(
                     checkpoint,
                     &files,
                     max_chunk_size,
+                    thread_pool,
                 )?;
                 hash_plan(
                     &manifest_delta.base_manifest,

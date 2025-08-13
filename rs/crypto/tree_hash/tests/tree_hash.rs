@@ -2503,33 +2503,44 @@ fn labeled_tree_lookup_lower_bound() {
 
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"b"[..]),
-        Some((&Label::from("b"), &b_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("b"), &b_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"c"[..]),
-        Some((&Label::from("b"), &b_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("b"), &b_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..], &b"a"[..]], &b"a"[..]),
-        None
+        LookupLowerBoundStatus::LabelNotFound
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"d"[..]),
-        Some((&Label::from("c"), &c_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("c"), &c_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"c"[..]),
-        Some((&Label::from("c"), &c_leaf))
+        LookupLowerBoundStatus::Found(&Label::from("c"), &c_leaf)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"b"[..]),
-        Some((&Label::from("a"), &a_subtree))
+        LookupLowerBoundStatus::Found(&Label::from("a"), &a_subtree)
     );
     assert_eq!(
         lookup_lower_bound(&t, &[&b"sig"[..]], &b"a"[..]),
-        Some((&Label::from("a"), &a_subtree))
+        LookupLowerBoundStatus::Found(&Label::from("a"), &a_subtree)
     );
-    assert_eq!(lookup_lower_bound(&t, &[&b"sig"[..]], &b"0"[..]), None);
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..]], &b"0"[..]),
+        LookupLowerBoundStatus::LabelNotFound
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"missing"[..]], &b"0"[..]),
+        LookupLowerBoundStatus::PrefixNotFound
+    );
+    assert_eq!(
+        lookup_lower_bound(&t, &[&b"sig"[..], &b"c"[..]], &b"0"[..]),
+        LookupLowerBoundStatus::PrefixNotFound
+    );
 }
 
 #[test]
@@ -3370,6 +3381,9 @@ fn filtered_mixed_hash_tree() {
     let digest = mixed_hash_tree.digest();
     assert_eq!(*witness_generator.hash_tree().digest(), digest);
 
+    let filter_builder = mixed_hash_tree.filter_builder();
+    assert_eq!(filter_builder.digest(), &digest);
+
     let partial_tree = sparse_labeled_tree_from_paths(&[
         Path::from(vec![
             "label_a".into(),
@@ -3380,7 +3394,7 @@ fn filtered_mixed_hash_tree() {
     ])
     .unwrap();
 
-    let filtered_hash_tree = mixed_hash_tree.filtered(&partial_tree).unwrap();
+    let filtered_hash_tree = filter_builder.filtered(&partial_tree).unwrap();
 
     assert_eq!(digest, filtered_hash_tree.digest());
 
@@ -3407,7 +3421,7 @@ fn filtered_mixed_hash_tree() {
     .unwrap();
 
     assert_eq!(
-        mixed_hash_tree.filtered(&too_long_partial_tree),
+        filter_builder.filtered(&too_long_partial_tree),
         Err(MixedHashTreeFilterError::PathTooLong)
     );
 }

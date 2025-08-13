@@ -11,7 +11,7 @@ use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry, node::NodeRegistry, node_operator::ConnectionEndpoint,
@@ -301,8 +301,7 @@ async fn try_fetch_delegation_from_nns(
         format!("Timed out while connecting to the nns node after {CONNECTION_TIMEOUT:?}")
     })??;
 
-    // any effective canister id can be used when invoking read_state here
-    let uri = "/api/v2/canister/aaaaa-aa/read_state";
+    let uri = format!("/api/v2/subnet/{nns_subnet_id}/read_state");
 
     info!(
         log,
@@ -354,12 +353,12 @@ async fn try_fetch_delegation_from_nns(
         }
     };
 
-    debug!(log, "Response from nns subnet: {:?}", raw_response);
-
-    let response: HttpReadStateResponse = serde_cbor::from_slice(&raw_response)?;
+    let response: HttpReadStateResponse = serde_cbor::from_slice(&raw_response).map_err(|err| {
+        format!("Failed to decode the read state response: {err}. Raw response: {raw_response:?}")
+    })?;
 
     let parsed_delegation: Certificate = serde_cbor::from_slice(&response.certificate)
-        .map_err(|e| format!("failed to parse delegation certificate: {}", e))?;
+        .map_err(|e| format!("Failed to parse delegation certificate: {}", e))?;
 
     let labeled_tree = LabeledTree::try_from(parsed_delegation.tree.clone())
         .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;

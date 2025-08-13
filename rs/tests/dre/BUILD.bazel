@@ -23,6 +23,7 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/dre/utils:os_qualification_utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:tokio",
     ],

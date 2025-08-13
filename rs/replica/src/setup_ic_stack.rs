@@ -37,7 +37,7 @@ use ic_types::{
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{
-    mpsc::{channel, UnboundedSender},
+    mpsc::{channel, Sender},
     watch,
 };
 use tokio_util::sync::CancellationToken;
@@ -76,7 +76,7 @@ pub fn construct_ic_stack(
     // TODO: remove next three return values since they are used only in tests
     Arc<dyn StateReader<State = ReplicatedState>>,
     QueryExecutionService,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {
