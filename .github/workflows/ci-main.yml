@@ -131,6 +131,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
+          SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
           RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -146,6 +147,10 @@ jobs:
                 fi_tests_nightly
                 nns_tests_nightly
             )
+
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+              EXCLUDED_TEST_TAGS+=(long_test)
+            fi
 
             # Prepend tags with '-' and join them with commas for Bazel
             TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
@@ -163,12 +168,12 @@ jobs:
                 bazel_args+=( --keep_going )
             fi
 
-            if [[ "$RELEASE_BUILD" == "true" ]]; then
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
 
-            if [[ "$RUN_ON_DIFF_ONLY" == "true" ]]; then
+            if [[ "$RUN_ON_DIFF_ONLY" == 'true' ]]; then
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT
 

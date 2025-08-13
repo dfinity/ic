@@ -160,6 +160,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
+          SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
           RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -175,6 +176,10 @@ jobs:
                 fi_tests_nightly
                 nns_tests_nightly
             )
+
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+              EXCLUDED_TEST_TAGS+=(long_test)
+            fi
 
             # Prepend tags with '-' and join them with commas for Bazel
             TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
