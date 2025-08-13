@@ -616,7 +616,6 @@ fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
     // these values are hard-coded in the PocketIC server implementation
     // including steps how they were obtained
     let icp_exchange_rate = get_icp_exchange_rate(pic);
-    assert_eq!(icp_exchange_rate.timestamp_seconds, 1_751_617_980);
     assert_eq!(icp_exchange_rate.xdr_permyriad_per_icp, 35_200);
 
     // check authorized (application) subnets

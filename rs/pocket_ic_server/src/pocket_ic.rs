@@ -60,7 +60,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::NetworkEconomics;
+use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -93,7 +93,7 @@ use ic_types::{
 };
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
-use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Tokens};
+use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount, Tokens};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
@@ -115,7 +115,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use strum::IntoEnumIterator;
 use tempfile::{NamedTempFile, TempDir};
@@ -141,6 +141,8 @@ const CYCLES_LEDGER_INDEX_CANISTER_WASM: &[u8] =
 const GOVERNANCE_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("GOVERNANCE_TEST_CANISTER_WASM_PATH"));
 const ROOT_CANISTER_WASM: &[u8] = include_bytes!(env!("ROOT_CANISTER_WASM_PATH"));
+
+const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
@@ -1000,6 +1002,16 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, CYCLES_MINTING_CANISTER_ID);
 
             // Install the CMC.
+            let cycles_ledger_canister_id = if self
+                .icp_features
+                .as_ref()
+                .map(|icp_features| icp_features.cycles_token)
+                .unwrap_or_default()
+            {
+                Some(CYCLES_LEDGER_CANISTER_ID)
+            } else {
+                None
+            };
             let cmc_init_payload = Some(CyclesCanisterInitPayload {
                 ledger_canister_id: Some(LEDGER_CANISTER_ID),
                 governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
@@ -1009,7 +1021,7 @@ impl PocketIcSubnets {
                 )),
                 last_purged_notification: None,
                 exchange_rate_canister: None,
-                cycles_ledger_canister_id: None,
+                cycles_ledger_canister_id,
             });
             nns_subnet
                 .state_machine
@@ -1028,7 +1040,14 @@ impl PocketIcSubnets {
             //       xdr_permyriad_per_icp = 35_200 : nat64;
             //       timestamp_seconds = 1_751_617_980 : nat64;
             //     };
-            let timestamp_seconds = 1_751_617_980;
+            // We use the PocketIC time (instead of the actual time at which the rate was obtained by the above call)
+            // because CMC does not expect rates in the future w.r.t. the PocketIC time.
+            let timestamp_seconds = nns_subnet
+                .state_machine
+                .time()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
             let xdr_permyriad_per_icp = 35_200;
             let update_icp_xdr_conversion_rate_payload = UpdateIcpXdrConversionRatePayload {
                 data_source: "PocketIC".to_string(),
@@ -1393,10 +1412,38 @@ impl PocketIcSubnets {
             );
             assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
 
-            // Install the governance canister.
+            // The following fixed principal has a high ICP balance in test environments.
+            let rich_principal = Principal::from_text(
+                "hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe",
+            )
+            .unwrap();
+
+            // Install the governance canister with a tiny initial neuron to satisfy the governance canister invariants.
+            let mut governance_init_payload_builder = GovernanceCanisterInitPayloadBuilder::new();
+            let neuron_id = governance_init_payload_builder.new_neuron_id();
+            let current_timestamp_seconds = nns_subnet
+                .state_machine
+                .time()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let initial_neuron = Neuron {
+                id: Some(neuron_id.into()),
+                controller: Some(PrincipalId(rich_principal)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(183 * 86400)), // 183 days so that it contributes to the total voting power
+                cached_neuron_stake_e8s: 100_000_000,                                   // 1 ICP
+                created_timestamp_seconds: current_timestamp_seconds,
+                aging_since_timestamp_seconds: 0,
+                account: DEFAULT_SUBACCOUNT.into(),
+                not_for_profit: false,
+                voting_power_refreshed_timestamp_seconds: Some(current_timestamp_seconds),
+                ..Default::default()
+            };
             let network_economics = NetworkEconomics::with_mainnet_values();
             let governance_init_payload = GovernanceCanisterInitPayloadBuilder::new()
                 .with_network_economics(network_economics)
+                .with_genesis_timestamp_seconds(current_timestamp_seconds)
+                .with_additional_neurons(vec![initial_neuron])
                 .build();
             nns_subnet
                 .state_machine
