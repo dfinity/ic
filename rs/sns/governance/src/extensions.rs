@@ -830,10 +830,7 @@ fn construct_treasury_manager_deposit_payload(
 }
 
 /// Returns `arg_blob` in the Ok result.
-fn construct_treasury_manager_withdraw_payload(
-    _context: ExtensionContext,
-    _value: Precise,
-) -> Result<Vec<u8>, String> {
+fn construct_treasury_manager_withdraw_payload(_value: Precise) -> Result<Vec<u8>, String> {
     let arg = WithdrawRequest {
         withdraw_accounts: None,
     };
@@ -1100,17 +1097,15 @@ async fn execute_treasury_manager_withdraw(
     extension_canister_id: CanisterId,
     arg: ValidatedWithdrawOperationArg,
 ) -> Result<(), GovernanceError> {
-    let context = governance.extension_context().await?;
-    let arg_blob =
-        construct_treasury_manager_withdraw_payload(context, arg.original).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Failed to construct treasury manager withdraw payload: {}",
-                    err
-                ),
-            )
-        })?;
+    let arg_blob = construct_treasury_manager_withdraw_payload(arg.original).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "Failed to construct treasury manager withdraw payload: {}",
+                err
+            ),
+        )
+    })?;
 
     let balances = governance
         .env

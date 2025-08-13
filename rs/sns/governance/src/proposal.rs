@@ -1500,30 +1500,25 @@ pub async fn validate_and_render_execute_nervous_system_function(
 }
 
 async fn validate_and_render_execute_extension_operation(
-    governance: &crate::governance::Governance,
-    operation: &ExecuteExtensionOperation,
+    _governance: &crate::governance::Governance,
+    _operation: &ExecuteExtensionOperation,
 ) -> Result<String, String> {
-    // DO NOT MERGE
-    todo!()
+    let ValidatedExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        arg,
+    } = validate_execute_extension_operation(env, context, operation.clone())
+        .await
+        .map_err(|err| err.error_message)?;
 
-    // let context = ...
+    Ok(format!(
+        r"# Proposal to execute extension operation:
 
-    //     let ValidatedExecuteExtensionOperation {
-    //         extension_canister_id,
-    //         operation_name,
-    //         arg,
-    //     } = validate_execute_extension_operation(env, context, operation.clone())
-    //         .await
-    //         .map_err(|err| err.error_message)?;
-
-    //     Ok(format!(
-    //         r"# Proposal to execute extension operation:
-
-    // * Extension canister ID: `{extension_canister_id}`
-    // * Operation name: `{operation_name}`
-    // * Operation argument: `{arg}`
-    // #"
-    //     ))
+    * Extension canister ID: `{extension_canister_id}`
+    * Operation name: `{operation_name}`
+    * Operation argument: `{arg}`
+    #"
+    ))
 }
 
 async fn validate_and_render_register_extension(
