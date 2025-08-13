@@ -250,7 +250,7 @@ jobs:
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
-        if: needs.config.outputs.release-build == 'true' && secrets.CLOUD_CREDENTIALS_CONTENT != ''
+        if: needs.config.outputs.release-build == 'true' && ${{ secrets.CLOUD_CREDENTIALS_CONTENT }} != ''
         with:
           name: Bazel Test All
           # with --check_up_to_date Bazel will error out if the artifacts
