@@ -119,8 +119,6 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                 native_functions: vec![
                     TRANSFER_SNS_TREASURY_FUNDS,
                     MINT_SNS_TOKENS,
-                    // TODO[NNS1-4002]. Support extensions in different topics.
-                    EXECUTE_EXTENSION_OPERATION,
                 ],
             },
             is_critical: true,
@@ -213,6 +211,13 @@ impl Governance {
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
             return Ok((Some(topic), topic.proposal_criticality()));
         };
+        // Although it is a native action, this has to be handled differently
+        // TODO[NNS1-4002]. Topic should depend on the topic of the extension that is being called.
+        if let pb::proposal::Action::ExecuteExtensionOperation(_) = action {
+            let topic = pb::Topic::TreasuryAssetManagement;
+            let criticality = topic.proposal_criticality();
+            return Ok((Some(topic), criticality));
+        }
 
         let action_code = u64::from(action);
 
@@ -373,12 +378,6 @@ impl pb::Topic {
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
-        // Check if the action is to execute an extension operation.
-        // TODO[NNS1-4002]. Topic should depend on the topic of the extension that is being called.
-        if let pb::proposal::Action::ExecuteExtensionOperation(_) = action {
-            return Some(pb::Topic::TreasuryAssetManagement);
-        }
-
         // Check if the topic comes from the extension spec.
         if let pb::proposal::Action::RegisterExtension(pb::RegisterExtension {
             chunked_canister_wasm:

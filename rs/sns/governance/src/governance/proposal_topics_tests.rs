@@ -1,7 +1,7 @@
 use crate::governance::test_helpers::basic_governance_proto;
 use crate::governance::ValidGovernanceProto;
 use crate::governance::{test_helpers::DoNothingLedger, Governance};
-use crate::pb::v1::{self as pb, nervous_system_function};
+use crate::pb::v1::{self as pb, nervous_system_function, ExecuteExtensionOperation};
 use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_canisters::cmc::FakeCmc;
@@ -187,7 +187,11 @@ fn test_all_topics() {
         ),
         // TODO[NNS1-4002]. Criticality should depend on the topic of the extension.
         (
-            pb::proposal::Action::ExecuteExtensionOperation(Default::default()),
+            pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
+                extension_canister_id: None,
+                operation_name: Some("deposit".to_string()),
+                operation_arg: None,
+            }),
             Ok((
                 Some(pb::Topic::TreasuryAssetManagement),
                 ProposalCriticality::Critical,
