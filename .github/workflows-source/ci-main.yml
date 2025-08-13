@@ -13,7 +13,11 @@ on:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
-
+    secrets:
+      CLOUD_CREDENTIALS_CONTENT:
+        required: false
+      GPG_PASSPHRASE:
+        required: false
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
@@ -250,7 +254,7 @@ jobs:
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
-        if: needs.config.outputs.release-build == 'true' && ${{ secrets.CLOUD_CREDENTIALS_CONTENT }} != ''
+        if: needs.config.outputs.release-build == 'true' && secrets.CLOUD_CREDENTIALS_CONTENT != ''
         with:
           name: Bazel Test All
           # with --check_up_to_date Bazel will error out if the artifacts
