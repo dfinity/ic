@@ -14,11 +14,11 @@ copy_ssh_keys() {
 }
 
 if /opt/ic/bin/sev_active; then
-  ENABLE_TEE="true"
+    ENABLE_TEE="true"
 elif [ $? -eq 1 ]; then
-  ENABLE_TEE="false"
+    ENABLE_TEE="false"
 else
-  exit 1
+    exit 1
 fi
 
 for ACCOUNT in backup readonly admin; do
