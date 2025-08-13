@@ -34,10 +34,17 @@ type AddBlockResult = variant {
     Err : text;
 };
 
+type StandardRecord = record { url : text; name : text };
+
 service : {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
 
+    icrc1_supported_standards : () -> (vec StandardRecord) query;
+
     // Query endpoint to retrieve blocks (ICRC-3 compatible)
     icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
+
+    icrc10_supported_standards : () -> (vec StandardRecord) query;
+
 }

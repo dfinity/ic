@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
+ic-icrc1 = { path = "../.." }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 

@@ -1,5 +1,6 @@
 use candid::{candid_method, Nat};
 use ic_cdk::{query, update};
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc3_test_ledger::AddBlockResult;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc3::blocks::{BlockWithId, GetBlocksRequest, GetBlocksResult};
@@ -30,6 +31,28 @@ pub fn add_block(block: ICRC3Value) -> AddBlockResult {
             Ok(Nat::from(block_id))
         })
     })
+}
+
+#[query(name = "icrc1_supported_standards")]
+#[candid_method(query, rename = "icrc1_supported_standards")]
+fn supported_standards() -> Vec<StandardRecord> {
+    let standards = vec![
+        StandardRecord {
+            name: "ICRC-3".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
+        },
+        StandardRecord {
+            name: "ICRC-10".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
+        },
+    ];
+    standards
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc10_supported_standards() -> Vec<StandardRecord> {
+    supported_standards()
 }
 
 /// Get blocks from the ledger (ICRC-3 compatible)

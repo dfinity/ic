@@ -28,6 +28,7 @@ rust_canister(
         # Keep sorted.
         ":icrc3_test_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/icrc1",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:num-traits",

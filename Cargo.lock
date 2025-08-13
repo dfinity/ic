@@ -10152,6 +10152,7 @@ dependencies = [
  "candid_parser",
  "ic-base-types",
  "ic-cdk 0.17.2",
+ "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-icrc1-test-utils",
  "ic-ledger-suite-state-machine-tests",

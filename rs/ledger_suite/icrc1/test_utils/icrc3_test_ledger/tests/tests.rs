@@ -35,10 +35,10 @@ fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
 fn add_block(
     env: &StateMachine,
     canister_id: CanisterId,
-    block: ICRC3Value,
+    block: &ICRC3Value,
 ) -> Result<Nat, String> {
     let result = Decode!(
-        &env.execute_ingress(canister_id, "add_block", Encode!(&block).unwrap())
+        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
             .expect("failed to add block")
             .bytes(),
         AddBlockResult
@@ -73,16 +73,16 @@ fn test_basic_add_and_get_blocks() {
     let block3 = burn_block(3, TEST_USER_1, 50_000, 4000, None);
 
     // Add blocks to the ledger
-    let result0 = add_block(&env, canister_id, block0.clone()).expect("Failed to add block 0");
+    let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
     assert_eq!(result0, Nat::from(0u64));
 
-    let result1 = add_block(&env, canister_id, block1.clone()).expect("Failed to add block 1");
+    let result1 = add_block(&env, canister_id, &block1).expect("Failed to add block 1");
     assert_eq!(result1, Nat::from(1u64));
 
-    let result2 = add_block(&env, canister_id, block2.clone()).expect("Failed to add block 2");
+    let result2 = add_block(&env, canister_id, &block2).expect("Failed to add block 2");
     assert_eq!(result2, Nat::from(2u64));
 
-    let result3 = add_block(&env, canister_id, block3.clone()).expect("Failed to add block 3");
+    let result3 = add_block(&env, canister_id, &block3).expect("Failed to add block 3");
     assert_eq!(result3, Nat::from(3u64));
 
     // Test retrieving blocks
@@ -121,7 +121,7 @@ fn test_get_blocks_with_different_ranges() {
     let mut added_blocks = Vec::new();
     for i in 0..5 {
         let block = transfer_block(i, TEST_USER_1, TEST_USER_2, 1000 + i * 100, 1000 + i * 1000);
-        add_block(&env, canister_id, block.clone()).expect("Failed to add block");
+        add_block(&env, canister_id, &block).expect("Failed to add block");
         added_blocks.push(block);
     }
 
@@ -172,7 +172,7 @@ fn test_get_blocks_with_multiple_requests() {
     // Add 5 blocks
     for i in 0..5 {
         let block = transfer_block(i, TEST_USER_1, TEST_USER_2, 1000 + i * 100, 1000 + i * 1000);
-        add_block(&env, canister_id, block).expect("Failed to add block");
+        add_block(&env, canister_id, &block).expect("Failed to add block");
     }
 
     // Test multiple requests in a single call
@@ -210,7 +210,7 @@ fn test_get_blocks_empty_request() {
 
     // Add a block
     let block = mint_block(0, TEST_USER_1, 1_000_000, 1000);
-    add_block(&env, canister_id, block).expect("Failed to add block");
+    add_block(&env, canister_id, &block).expect("Failed to add block");
 
     // Test empty request with blocks present
     let result = icrc3_get_blocks(&env, canister_id, vec![]);
@@ -224,7 +224,7 @@ fn test_get_blocks_zero_length() {
 
     // Add a block
     let block = mint_block(0, TEST_USER_1, 1_000_000, 1000);
-    add_block(&env, canister_id, block).expect("Failed to add block");
+    add_block(&env, canister_id, &block).expect("Failed to add block");
 
     // Test zero-length request
     let result = icrc3_get_blocks(
@@ -271,8 +271,7 @@ fn test_add_complex_block() {
     let complex_block = ICRC3Value::Map(block_map);
 
     // Add the complex block
-    let result =
-        add_block(&env, canister_id, complex_block.clone()).expect("Failed to add complex block");
+    let result = add_block(&env, canister_id, &complex_block).expect("Failed to add complex block");
     assert_eq!(result, Nat::from(0u64));
 
     // Retrieve and verify the complex block
