@@ -1267,3 +1267,93 @@ mod metrics {
         }))
     }
 }
+
+mod burn_block_fees {
+    use super::*;
+    use crate::common::{test_ledger_wasm, STARTING_CYCLES_PER_CANISTER};
+    use ic_icrc1_test_utils::icrc3::{burn_block, mint_block};
+    use ic_icrc3_test_ledger::AddBlockResult;
+    use ic_types::time::GENESIS;
+    use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+
+    #[test]
+    fn should_take_burn_block_fee_into_account() {
+        const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+
+        const MINT_AMOUNT: u64 = 10_000_000;
+        const BURN_AMOUNT: u64 = 100_000;
+        const BURN_FEE: u64 = 10_000;
+
+        let env = StateMachine::new();
+
+        let ledger_id = env
+            .install_canister_with_cycles(
+                test_ledger_wasm(),
+                Encode!(&()).unwrap(),
+                None,
+                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            )
+            .unwrap();
+
+        let mint = mint_block(
+            0,
+            TEST_USER_1,
+            MINT_AMOUNT,
+            GENESIS.as_nanos_since_unix_epoch(),
+        );
+
+        let mut expected_balance = MINT_AMOUNT;
+
+        let burn = burn_block(
+            1,
+            TEST_USER_1,
+            BURN_AMOUNT,
+            GENESIS.as_nanos_since_unix_epoch(),
+            Some(BURN_FEE),
+        );
+
+        expected_balance -= BURN_AMOUNT + BURN_FEE;
+
+        assert_eq!(
+            Nat::from(0u64),
+            add_block(&env, ledger_id, &mint)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+
+        assert_eq!(
+            Nat::from(1u64),
+            add_block(&env, ledger_id, &burn)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let actual_balance =
+            icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER_1)));
+
+        // Verify that the burn fee was taken into account.
+        assert_eq!(
+            actual_balance, expected_balance,
+            "Actual balance does not match expected balance after burn block ({} vs {})",
+            actual_balance, expected_balance
+        );
+    }
+
+    fn add_block(
+        env: &StateMachine,
+        canister_id: CanisterId,
+        block: &ICRC3Value,
+    ) -> Result<Nat, String> {
+        let result = Decode!(
+            &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
+                .expect("failed to add block")
+                .bytes(),
+            AddBlockResult
+        )
+        .expect("failed to decode add_block response");
+
+        result
+    }
+}

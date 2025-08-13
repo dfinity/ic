@@ -121,6 +121,18 @@ pub fn ledger_wasm() -> Vec<u8> {
     })
 }
 
+pub fn test_ledger_wasm() -> Vec<u8> {
+    let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
+        "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
+    );
+    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
+            ledger_wasm_path, e
+        )
+    })
+}
+
 #[cfg(feature = "icrc3_disabled")]
 pub fn ledger_get_blocks(
     env: &StateMachine,
