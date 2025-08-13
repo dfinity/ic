@@ -78,16 +78,16 @@ fn test_basic_add_and_get_blocks() {
 
     // Create some test blocks
     let block0 = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
         .build();
     let block1 = BlockBuilder::new(1, 2000)
-        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000))
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
         .build();
     let block2 = BlockBuilder::new(2, 3000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(500_000))
+        .mint(TEST_ACCOUNT_1, Tokens::from(500_000u64))
         .build();
     let block3 = BlockBuilder::new(3, 4000)
-        .burn(TEST_ACCOUNT_1, Tokens::from(50_000))
+        .burn(TEST_ACCOUNT_1, Tokens::from(50_000u64))
         .build();
 
     // Add blocks to the ledger
@@ -139,7 +139,11 @@ fn test_get_blocks_with_different_ranges() {
     let mut added_blocks = Vec::new();
     for i in 0..5 {
         let block = BlockBuilder::new(i, 1000 + i * 1000)
-            .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(1000 + i * 100))
+            .transfer(
+                TEST_ACCOUNT_1,
+                TEST_ACCOUNT_2,
+                Tokens::from(1000u64 + i * 100u64),
+            )
             .build();
         add_block(&env, canister_id, &block).expect("Failed to add block");
         added_blocks.push(block);
@@ -192,7 +196,11 @@ fn test_get_blocks_with_multiple_requests() {
     // Add 5 blocks
     for i in 0..5 {
         let block = BlockBuilder::new(i, 1000 + i * 1000)
-            .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(1000 + i * 100))
+            .transfer(
+                TEST_ACCOUNT_1,
+                TEST_ACCOUNT_2,
+                Tokens::from(1000u64 + i * 100u64),
+            )
             .build();
         add_block(&env, canister_id, &block).expect("Failed to add block");
     }
@@ -232,7 +240,7 @@ fn test_get_blocks_empty_request() {
 
     // Add a block
     let block = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
         .build();
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
@@ -248,7 +256,7 @@ fn test_get_blocks_zero_length() {
 
     // Add a block
     let block = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
         .build();
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
