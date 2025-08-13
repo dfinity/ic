@@ -7,10 +7,15 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
+use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::Network;
+use ic_ckbtc_minter::{
+    build_unsigned_transaction_from_inputs, sign_transaction, ECDSAPublicKey, Network,
+    SignTransactionError,
+};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
@@ -60,13 +65,6 @@ async fn should_migrate_events_for(file: impl GetEventsFile) -> CkBtcMinterState
 }
 
 #[tokio::test]
-async fn should_migrate_events_for_mainnet() {
-    let state = should_migrate_events_for(Mainnet).await;
-    assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 20_209_150_152);
-}
-
-#[tokio::test]
 async fn should_migrate_events_for_testnet() {
     let state = should_migrate_events_for(Testnet).await;
     assert_eq!(state.btc_network, Network::Testnet);
@@ -84,7 +82,81 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 20_209_150_152);
+    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+}
+
+#[tokio::test]
+async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+
+    let state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
+        .expect("Failed to replay events");
+
+    assert_eq!(state.btc_network, Network::Mainnet);
+    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+
+    let tx_id = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
+
+    let submitted_tx = {
+        let mut txs: Vec<_> = state
+            .submitted_transactions
+            .iter()
+            .filter(|tx| tx.txid.to_string() == tx_id)
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs.pop().unwrap()
+    };
+
+    assert_eq!(submitted_tx.requests.len(), 43);
+    assert_eq!(
+        submitted_tx
+            .requests
+            .iter()
+            .map(|req| req.amount)
+            .sum::<u64>(),
+        3_316_317_017_u64 //33 BTC!
+    );
+    assert_eq!(submitted_tx.used_utxos.len(), 1_799);
+    assert_eq!(submitted_tx.fee_per_vbyte, Some(7_486));
+
+    let outputs = submitted_tx
+        .requests
+        .iter()
+        .map(|req| (req.address.clone(), req.amount))
+        .collect();
+    let input_utxos = &submitted_tx.used_utxos;
+    let main_address = BitcoinAddress::parse(
+        "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
+        Network::Mainnet,
+    )
+    .unwrap();
+    let tx_fee_per_vbyte = submitted_tx.fee_per_vbyte.unwrap();
+    let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
+        input_utxos,
+        outputs,
+        main_address.clone(),
+        tx_fee_per_vbyte,
+    )
+    .unwrap();
+
+    let sign_tx_error = sign_transaction(
+        "does not matter".to_string(),
+        &ECDSAPublicKey {
+            public_key: vec![],
+            chain_code: vec![],
+        },
+        &BTreeMap::default(),
+        unsigned_tx,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        sign_tx_error,
+        SignTransactionError::TooManyInputs {
+            num_inputs: 1799,
+            max_num_inputs: 1000
+        }
+    )
 }
 
 #[tokio::test]
@@ -136,9 +208,8 @@ async fn should_not_grow_number_of_useless_events() {
     }
 
     let (total_event_count, useless_events_indexes) = test(Mainnet);
-    assert_eq!(total_event_count, 443_137);
-    assert_eq!(useless_events_indexes.len(), 409_141);
-    assert_eq!(useless_events_indexes.last(), Some(&411_301_usize));
+    assert_eq!(total_event_count, 551_739);
+    assert_eq!(useless_events_indexes.len(), 0);
 
     let (total_event_count, useless_events_indexes) = test(Testnet);
     assert_eq!(total_event_count, 46_815);
