@@ -382,7 +382,6 @@ impl ValidatedRegisterExtension {
 
                 governance
                     .deposit_treasury_manager(
-                        context,
                         extension_canister_id,
                         treasury_allocation_sns_e8s,
                         treasury_allocation_icp_e8s,
@@ -531,91 +530,8 @@ impl Governance {
         Ok(())
     }
 
-    async fn construct_treasury_manager_deposit_allowances(
-        &self,
-        value: Precise,
-    ) -> Result<(Vec<Allowance>, u64, u64), GovernanceError> {
-        // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
-        let treasury_sns_subaccount = self.sns_treasury_subaccount();
-        let treasury_icp_subaccount = self.icp_treasury_subaccount();
-
-        let sns_token_symbol = get_sns_token_symbol(&*self.env, self.ledger.canister_id()).await?;
-
-        let (allowances, sns_amount_e8s, icp_amount_e8s) =
-            treasury_manager::construct_deposit_allowances(
-                value,
-                Asset::Token {
-                    symbol: sns_token_symbol,
-                    ledger_canister_id: self.ledger.canister_id().get().0,
-                    ledger_fee_decimals: Nat::from(self.transaction_fee_e8s_or_panic()),
-                },
-                Asset::Token {
-                    symbol: "ICP".to_string(),
-                    ledger_canister_id: self.nns_ledger.canister_id().get().0,
-                    ledger_fee_decimals: Nat::from(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
-                },
-                sns_treasury_manager::Account {
-                    owner: self.env.canister_id().get().0,
-                    subaccount: treasury_sns_subaccount,
-                },
-                sns_treasury_manager::Account {
-                    owner: self.env.canister_id().get().0,
-                    subaccount: treasury_icp_subaccount,
-                },
-            )
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Error extracting initial allowances: {}", err),
-                )
-            })?;
-
-        Ok((allowances, sns_amount_e8s, icp_amount_e8s))
-    }
-
-    /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
-    pub async fn construct_treasury_manager_init_payload(
-        &self,
-        value: Precise,
-    ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
-        let (allowances, sns_amount_e8s, icp_amount_e8s) = self
-            .construct_treasury_manager_deposit_allowances(value)
-            .await?;
-
-        let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
-        let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Error encoding TreasuryManagerArg: {}", err),
-            )
-        })?;
-
-        Ok((arg, sns_amount_e8s, icp_amount_e8s))
-    }
-
-    /// Returns `(arg_blob, sns_token_amount_e8s, icp_token_amount_e8s)` in the Ok result.
-    pub async fn construct_treasury_manager_deposit_payload(
-        &self,
-        value: Precise,
-    ) -> Result<(Vec<u8>, u64, u64), GovernanceError> {
-        let (allowances, sns_amount_e8s, icp_amount_e8s) = self
-            .construct_treasury_manager_deposit_allowances(value)
-            .await?;
-
-        let arg = DepositRequest { allowances };
-        let arg: Vec<u8> = candid::encode_one(&arg).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Error encoding DepositRequest: {}", err),
-            )
-        })?;
-
-        Ok((arg, sns_amount_e8s, icp_amount_e8s))
-    }
-
     pub async fn deposit_treasury_manager(
         &self,
-        context: ExtensionContext,
         treasury_manager_canister_id: CanisterId,
         sns_amount_e8s: u64,
         icp_amount_e8s: u64,
@@ -1129,7 +1045,6 @@ async fn execute_treasury_manager_deposit(
     // 1. Transfer funds from treasury to treasury manager
     governance
         .deposit_treasury_manager(
-            context.clone(),
             extension_canister_id,
             treasury_allocation_sns_e8s,
             treasury_allocation_icp_e8s,
@@ -1404,7 +1319,6 @@ mod tests {
     use ic_ledger_core::Tokens;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
     use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
-    use ic_nns_constants::LEDGER_CANISTER_ID;
     use maplit::btreemap;
 
     /// Common function to create a basic GovernanceProto for tests
@@ -1428,7 +1342,6 @@ mod tests {
     /// Creates a Governance instance with default ledger mocks for basic testing
     fn setup_gov_for_tests(extension_registered: bool) -> Governance {
         let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(123)));
-        let root_canister_id = CanisterId::from_u64(1000);
         let governance_proto = create_test_governance_proto();
         let extension_canister_id = CanisterId::from_u64(2000);
 
@@ -1544,14 +1457,8 @@ mod tests {
             operation_name: Some("withdraw".to_string()),
             operation_arg: Some(ExtensionOperationArg { value: None }),
         };
-        let (governance, execute_operation) = setup_env_for_test(true, "withdraw");
-
         // Test with withdraw operation - should succeed (since test mode supports withdraw)
         let result = validate_execute_extension_operation(&governance, execute_operation).await;
-        let (env, context, execute_operation) = setup_env_for_test(true, "withdraw");
-
-        // Test with withdraw operation - should succeed (since test mode supports withdraw)
-        let result = validate_execute_extension_operation(&env, context, execute_operation).await;
 
         result.unwrap();
     }
@@ -1601,10 +1508,6 @@ mod tests {
 
         // Test with invalid operation name - should fail
         let result = validate_execute_extension_operation(&governance, execute_operation).await;
-        let (env, context, execute_operation) = setup_env_for_test(true, "invalid_operation");
-
-        // Test with invalid operation name - should fail
-        let result = validate_execute_extension_operation(&env, context, execute_operation).await;
 
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
