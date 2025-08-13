@@ -4,9 +4,14 @@ package state.canister_state_bits.v1;
 import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
-import "state/v1/metadata.proto";
 import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
+
+enum SnapshotSource {
+  SNAPSHOT_SOURCE_UNSPECIFIED = 0;
+  SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER = 1;
+  SNAPSHOT_SOURCE_UPLOADED_MANUALLY = 2;
+}
 
 message CallContext {
   message Ingress {
@@ -272,6 +277,7 @@ message CanisterLoadSnapshot {
   uint64 canister_version = 1;
   uint64 taken_at_timestamp = 2;
   bytes snapshot_id = 3;
+  SnapshotSource source = 4;
 }
 
 message CanisterControllers {
