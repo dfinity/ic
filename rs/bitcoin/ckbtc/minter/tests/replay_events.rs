@@ -270,9 +270,7 @@ trait GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        Decode!(&decompressed_buffer, GetEventsResult)
-            .expect("Failed to decode events")
-            .into()
+        Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
     }
 }
 
