@@ -17,7 +17,7 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 ## Motivation
 
 Upgrade the ckBTC minter to ensure that a transaction signed by the minter does not use too many inputs.
-Otherwise, the resulting transaction may be *non-standard* as the resulting transaction size may be above 100kB,
+Otherwise, the resulting transaction may be *non-standard* as the resulting transaction size may be above 100k vbytes,
 which implies that the transaction will not be relayed by Bitcoin nodes and this transaction will be effectively stuck.
 This is currently the case for transaction `87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30`.
 
