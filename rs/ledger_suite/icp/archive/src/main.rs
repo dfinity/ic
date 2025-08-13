@@ -5,6 +5,7 @@ use ic_cdk::{
         call::{arg_data_raw, reply, reply_raw},
         caller, print,
     },
+    futures::{in_executor_context, in_query_executor_context},
     post_upgrade, query,
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -266,36 +267,38 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
 
 #[export_name = "canister_query get_block_pb"]
 fn get_block_() {
-    ic_cdk::setup();
-    let arg: BlockIndex =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
-    let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let arg: BlockIndex =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
+        let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[export_name = "canister_init"]
 fn main() {
-    ic_cdk::setup();
-    let bytes = arg_data_raw();
-    let (archive_canister_id, block_height_offset, opt_max_size) =
-        Decode!(&bytes, ic_base_types::CanisterId, u64, Option<u64>)
-            .expect("failed to decode init arguments");
-    init(archive_canister_id, block_height_offset, opt_max_size);
+    in_executor_context(|| {
+        let bytes = arg_data_raw();
+        let (archive_canister_id, block_height_offset, opt_max_size) =
+            Decode!(&bytes, ic_base_types::CanisterId, u64, Option<u64>)
+                .expect("failed to decode init arguments");
+        init(archive_canister_id, block_height_offset, opt_max_size);
+    })
 }
 
 #[export_name = "canister_update remaining_capacity"]
 fn remaining_capacity_() {
-    ic_cdk::setup();
-    reply((remaining_capacity(),))
+    in_executor_context(|| reply((remaining_capacity(),)))
 }
 
 #[export_name = "canister_update append_blocks"]
 fn append_blocks_() {
-    ic_cdk::setup();
-    let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
-        .expect("failed to decode append_blocks argument");
-    append_blocks(blocks);
-    reply(());
+    in_executor_context(|| {
+        let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
+            .expect("failed to decode append_blocks argument");
+        append_blocks(blocks);
+        reply(());
+    })
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -306,53 +309,55 @@ fn append_blocks_() {
 /// 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    ic_cdk::setup();
-    let IterBlocksArgs { start, length } =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
-    let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
-        caller(),
-    )));
-    let blocks_len = blocks_len() as usize;
-    let start = start.min(blocks_len);
-    let end = std::cmp::min(start + length, blocks_len);
-    let mut blocks = vec![];
-    for index in start..end {
-        blocks.push(get_block_stable(index as u64).unwrap());
-    }
-    let res_proto =
-        to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
-    reply_raw(&res_proto)
+    in_query_executor_context(|| {
+        let IterBlocksArgs { start, length } =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+        let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
+            caller(),
+        )));
+        let blocks_len = blocks_len() as usize;
+        let start = start.min(blocks_len);
+        let end = std::cmp::min(start + length, blocks_len);
+        let mut blocks = vec![];
+        for index in start..end {
+            blocks.push(get_block_stable(index as u64).unwrap());
+        }
+        let res_proto = to_proto_bytes(IterBlocksRes(blocks))
+            .expect("failed to encode iter_blocks_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    ic_cdk::setup();
-    let GetBlocksArgs { start, length } =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
-    let from_offset = block_height_offset();
-    let length = length
-        .min(usize::MAX as u64)
-        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
-    let local_blocks_range = from_offset..from_offset + blocks_len();
-    let requested_range = start..start + length;
-    if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-        let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+    in_query_executor_context(|| {
+        let GetBlocksArgs { start, length } =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
+        let from_offset = block_height_offset();
+        let length = length
+            .min(usize::MAX as u64)
+            .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
+        let local_blocks_range = from_offset..from_offset + blocks_len();
+        let requested_range = start..start + length;
+        if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+            let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
                 requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
-        let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
+            let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
+            reply_raw(&res_proto);
+            return;
+        }
+        let mut blocks = vec![];
+        let offset_requested_range =
+            requested_range.start - from_offset..requested_range.end - from_offset;
+        for index in offset_requested_range {
+            blocks.push(get_block_stable(index).unwrap());
+        }
+        let res_proto = to_proto_bytes(GetBlocksRes(Ok(blocks)))
+            .expect("failed to encode get_blocks_pb response");
         reply_raw(&res_proto);
-        return;
-    }
-    let mut blocks = vec![];
-    let offset_requested_range =
-        requested_range.start - from_offset..requested_range.end - from_offset;
-    for index in offset_requested_range {
-        blocks.push(get_block_stable(index).unwrap());
-    }
-    let res_proto =
-        to_proto_bytes(GetBlocksRes(Ok(blocks))).expect("failed to encode get_blocks_pb response");
-    reply_raw(&res_proto);
+    })
 }
 
 #[candid_method(query, rename = "get_blocks")]
@@ -368,10 +373,11 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks"]
 fn get_blocks_candid_() {
-    ic_cdk::setup();
-    let args =
-        Decode!(&arg_data_raw(), GetBlocksArgs).expect("failed to decode get_blocks argument");
-    reply((get_blocks(args),));
+    in_query_executor_context(|| {
+        let args =
+            Decode!(&arg_data_raw(), GetBlocksArgs).expect("failed to decode get_blocks argument");
+        reply((get_blocks(args),));
+    })
 }
 
 #[post_upgrade]
@@ -499,16 +505,18 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_encoded_blocks"]
 fn get_encoded_blocks_blocks_() {
-    ic_cdk::setup();
-    let args = Decode!(&arg_data_raw(), GetBlocksArgs)
-        .expect("failed to decode get_encoded_blocks argument");
-    reply((get_encoded_blocks(args),));
+    in_query_executor_context(|| {
+        let args = Decode!(&arg_data_raw(), GetBlocksArgs)
+            .expect("failed to decode get_encoded_blocks argument");
+        reply((get_encoded_blocks(args),));
+    })
 }
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
-    ic_cdk::setup();
-    reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));
+    in_query_executor_context(|| {
+        reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));
+    })
 }
 
 #[test]

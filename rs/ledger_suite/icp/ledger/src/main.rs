@@ -16,6 +16,7 @@ use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
+use ic_cdk::futures::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
@@ -772,17 +773,17 @@ fn canister_init(arg: LedgerCanisterPayload) {
 #[cfg(not(feature = "canbench-rs"))]
 #[export_name = "canister_init"]
 fn main() {
-    ic_cdk::setup();
-    let bytes = arg_data_raw();
-    // We support the old init argument for backward
-    // compatibility. If decoding the bytes as the new
-    // init arguments fails then we fallback to the old
-    // init arguments.
-    match Decode!(&bytes, LedgerCanisterPayload) {
-        Ok(arg) => canister_init(arg),
-        Err(new_err) => {
-            // fallback to old init
-            match Decode!(&bytes, InitArgs) {
+    in_executor_context(|| {
+        let bytes = arg_data_raw();
+        // We support the old init argument for backward
+        // compatibility. If decoding the bytes as the new
+        // init arguments fails then we fallback to the old
+        // init arguments.
+        match Decode!(&bytes, LedgerCanisterPayload) {
+            Ok(arg) => canister_init(arg),
+            Err(new_err) => {
+                // fallback to old init
+                match Decode!(&bytes, InitArgs) {
                     Ok(arg) => init(
                         arg.minting_account,
                         arg.icrc1_minting_account,
@@ -799,8 +800,9 @@ fn main() {
                     Err(old_err) =>
                     trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
                 }
+            }
         }
-    }
+    })
 }
 
 #[cfg(feature = "canbench-rs")]
@@ -926,24 +928,24 @@ impl LedgerAccess for Access {
 /// Canister endpoints
 #[export_name = "canister_update send_pb"]
 fn send_() {
-    ic_cdk::spawn(async move {
-        ic_cdk::setup();
+    in_executor_context(|| {
+        ic_cdk::futures::spawn_017_compat(async {
+            let SendArgs {
+                memo,
+                amount,
+                fee,
+                from_subaccount,
+                to,
+                created_at_time,
+            } = from_proto_bytes(arg_data_raw()).expect("failed to decode send_pb argument");
 
-        let SendArgs {
-            memo,
-            amount,
-            fee,
-            from_subaccount,
-            to,
-            created_at_time,
-        } = from_proto_bytes(arg_data_raw()).expect("failed to decode send_pb argument");
+            let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
+                .await
+                .unwrap_or_else(|e| trap(&e.to_string()));
 
-        let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
-            .await
-            .unwrap_or_else(|e| trap(&e.to_string()));
-
-        let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
-        reply_raw(&res_proto)
+            let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
+            reply_raw(&res_proto)
+        })
     })
 }
 
@@ -1115,21 +1117,24 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
-    ic_cdk::setup();
-    let arg: BlockArg =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
-    let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
-        .expect("failed to encode block_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let arg: BlockArg =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
+        let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
+            .expect("failed to encode block_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
-    ic_cdk::setup();
-    let _: protobuf::TipOfChainRequest =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
-    let res = to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let _: protobuf::TipOfChainRequest =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
+        let res =
+            to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[query(name = "tip_of_chain")]
@@ -1140,41 +1145,43 @@ fn tip_of_chain_candid() -> TipOfChainRes {
 
 #[export_name = "canister_query get_archive_index_pb"]
 fn get_archive_index_() {
-    ic_cdk::setup();
-    let state = LEDGER.read().unwrap();
-    let entries = match &state
-        .blockchain
-        .archive
-        .try_read()
-        .expect("Failed to get lock on archive")
-        .as_ref()
-    {
-        None => vec![],
-        Some(archive) => archive
-            .index()
-            .into_iter()
-            .map(
-                |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
-                    height_from,
-                    height_to,
-                    canister_id: Some(canister_id.get()),
-                },
-            )
-            .collect(),
-    };
-    let res = to_proto_bytes(protobuf::ArchiveIndexResponse { entries })
-        .expect("failed to encode get_archive_index_pb response");
-    reply_raw(&res);
+    in_query_executor_context(|| {
+        let state = LEDGER.read().unwrap();
+        let entries = match &state
+            .blockchain
+            .archive
+            .try_read()
+            .expect("Failed to get lock on archive")
+            .as_ref()
+        {
+            None => vec![],
+            Some(archive) => archive
+                .index()
+                .into_iter()
+                .map(
+                    |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
+                        height_from,
+                        height_to,
+                        canister_id: Some(canister_id.get()),
+                    },
+                )
+                .collect(),
+        };
+        let res = to_proto_bytes(protobuf::ArchiveIndexResponse { entries })
+            .expect("failed to encode get_archive_index_pb response");
+        reply_raw(&res);
+    })
 }
 
 #[export_name = "canister_query account_balance_pb"]
 fn account_balance_() {
-    ic_cdk::setup();
-    let args: AccountBalanceArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode account_balance_pb argument");
-    let res = tokens_into_proto(account_balance(args.account));
-    let res_proto = to_proto_bytes(res).expect("failed to encode account_balance_pb response");
-    reply_raw(&res_proto)
+    in_query_executor_context(|| {
+        let args: AccountBalanceArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode account_balance_pb argument");
+        let res = tokens_into_proto(account_balance(args.account));
+        let res_proto = to_proto_bytes(res).expect("failed to encode account_balance_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 #[query(name = "account_balance")]
@@ -1206,22 +1213,24 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
 
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
-    ic_cdk::setup();
-    let args: TransferFeeArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode transfer_fee_pb argument");
-    let fee = transfer_fee(args);
-    let res = to_proto_bytes(fee).expect("failed to encpde transfer_fee_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let args: TransferFeeArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode transfer_fee_pb argument");
+        let fee = transfer_fee(args);
+        let res = to_proto_bytes(fee).expect("failed to encpde transfer_fee_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    ic_cdk::setup();
-    let _: TotalSupplyArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode total_supply_pb args");
-    let res = tokens_into_proto(total_supply());
-    let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
-    reply_raw(&res_proto)
+    in_query_executor_context(|| {
+        let _: TotalSupplyArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode total_supply_pb args");
+        let res = tokens_into_proto(total_supply());
+        let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -1231,46 +1240,48 @@ fn total_supply_() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    ic_cdk::setup();
-    let args: IterBlocksArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+    in_query_executor_context(|| {
+        let args: IterBlocksArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
 
-    let length = std::cmp::min(
-        args.length,
-        max_blocks_per_request(&PrincipalId::from(caller())),
-    ) as u64;
-    let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
-    let start = archived_len + args.start as u64;
-    let end = start + length;
-    let blocks = LEDGER.read().unwrap().blockchain.get_blocks(start..end);
-    let res =
-        to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
-    reply_raw(&res)
+        let length = std::cmp::min(
+            args.length,
+            max_blocks_per_request(&PrincipalId::from(caller())),
+        ) as u64;
+        let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
+        let start = archived_len + args.start as u64;
+        let end = start + length;
+        let blocks = LEDGER.read().unwrap().blockchain.get_blocks(start..end);
+        let res = to_proto_bytes(IterBlocksRes(blocks))
+            .expect("failed to encode iter_blocks_pb response");
+        reply_raw(&res)
+    })
 }
 
 /// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    ic_cdk::setup();
-    let args: GetBlocksArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
+    in_query_executor_context(|| {
+        let args: GetBlocksArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
 
-    let length = std::cmp::min(
-        args.length,
-        max_blocks_per_request(&PrincipalId::from(caller())) as u64,
-    );
-    let blockchain = &LEDGER.read().unwrap().blockchain;
-    let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
-    let requested_range = args.start..args.start + length;
-    let res = if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-        GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
+        let length = std::cmp::min(
+            args.length,
+            max_blocks_per_request(&PrincipalId::from(caller())) as u64,
+        );
+        let blockchain = &LEDGER.read().unwrap().blockchain;
+        let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
+        let requested_range = args.start..args.start + length;
+        let res = if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+            GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
             requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)))
-    } else {
-        GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
-    };
-    let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
-    reply_raw(&res_proto)
+        } else {
+            GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
+        };
+        let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
+        reply_raw(&res_proto)
+    })
 }
 
 #[query]
@@ -1336,13 +1347,14 @@ fn archives() -> Archives {
 
 #[export_name = "canister_query get_nodes"]
 fn get_nodes_() {
-    ic_cdk::setup();
-    let result = archives()
-        .archives
-        .iter()
-        .map(|archive| archive.canister_id)
-        .collect::<Vec<CanisterId>>();
-    ic_cdk::api::call::reply((result,));
+    in_query_executor_context(|| {
+        let result = archives()
+            .archives
+            .iter()
+            .map(|archive| archive.canister_id)
+            .collect::<Vec<CanisterId>>();
+        ic_cdk::api::call::reply((result,));
+    })
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
