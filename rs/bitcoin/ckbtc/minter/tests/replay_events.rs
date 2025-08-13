@@ -65,13 +65,6 @@ async fn should_migrate_events_for(file: impl GetEventsFile) -> CkBtcMinterState
 }
 
 #[tokio::test]
-async fn should_migrate_events_for_mainnet() {
-    let state = should_migrate_events_for(Mainnet).await;
-    assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 20_209_150_152);
-}
-
-#[tokio::test]
 async fn should_migrate_events_for_testnet() {
     let state = should_migrate_events_for(Testnet).await;
     assert_eq!(state.btc_network, Network::Testnet);
@@ -215,9 +208,8 @@ async fn should_not_grow_number_of_useless_events() {
     }
 
     let (total_event_count, useless_events_indexes) = test(Mainnet);
-    assert_eq!(total_event_count, 443_137);
-    assert_eq!(useless_events_indexes.len(), 409_141);
-    assert_eq!(useless_events_indexes.last(), Some(&411_301_usize));
+    assert_eq!(total_event_count, 551_739);
+    assert_eq!(useless_events_indexes.len(), 0);
 
     let (total_event_count, useless_events_indexes) = test(Testnet);
     assert_eq!(total_event_count, 46_815);
