@@ -413,11 +413,7 @@ pub struct ValidatedExecuteExtensionOperation {
 }
 
 impl ValidatedExecuteExtensionOperation {
-    pub async fn execute(
-        self,
-        governance: &Governance,
-        context: ExtensionContext,
-    ) -> Result<(), GovernanceError> {
+    pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
         let Self {
             operation_name: _,
             extension_canister_id,
@@ -426,12 +422,10 @@ impl ValidatedExecuteExtensionOperation {
 
         match arg {
             ValidatedOperationArg::TreasuryManagerDeposit(arg) => {
-                execute_treasury_manager_deposit(governance, context, extension_canister_id, arg)
-                    .await
+                execute_treasury_manager_deposit(governance, extension_canister_id, arg).await
             }
             ValidatedOperationArg::TreasuryManagerWithdraw(arg) => {
-                execute_treasury_manager_withdraw(governance, context, extension_canister_id, arg)
-                    .await
+                execute_treasury_manager_withdraw(governance, extension_canister_id, arg).await
             }
         }
     }
@@ -451,7 +445,7 @@ impl Governance {
     fn icp_treasury_subaccount(&self) -> Option<[u8; 32]> {
         None
     }
-    pub async fn extension_context(&self) -> Result<ExtensionContext, GovernanceError> {
+    async fn extension_context(&self) -> Result<ExtensionContext, GovernanceError> {
         let sns_ledger_canister_id = self.ledger.canister_id();
 
         let sns_token_symbol = get_sns_token_symbol(&*self.env, sns_ledger_canister_id).await?;
@@ -1032,7 +1026,6 @@ pub(crate) async fn validate_execute_extension_operation(
 /// Execute a treasury manager deposit operation
 async fn execute_treasury_manager_deposit(
     governance: &Governance,
-    context: ExtensionContext,
     extension_canister_id: CanisterId,
     arg: ValidatedDepositOperationArg,
 ) -> Result<(), GovernanceError> {
@@ -1051,6 +1044,7 @@ async fn execute_treasury_manager_deposit(
         )
         .await?;
 
+    let context = governance.extension_context().await?;
     let arg_blob =
         construct_treasury_manager_deposit_payload(context, original).map_err(|err| {
             GovernanceError::new_with_message(
@@ -1103,10 +1097,10 @@ async fn execute_treasury_manager_deposit(
 /// Execute a treasury manager withdraw operation
 async fn execute_treasury_manager_withdraw(
     governance: &Governance,
-    context: ExtensionContext,
     extension_canister_id: CanisterId,
     arg: ValidatedWithdrawOperationArg,
 ) -> Result<(), GovernanceError> {
+    let context = governance.extension_context().await?;
     let arg_blob =
         construct_treasury_manager_withdraw_payload(context, arg.original).map_err(|err| {
             GovernanceError::new_with_message(

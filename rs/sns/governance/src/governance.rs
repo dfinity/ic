@@ -2552,9 +2552,7 @@ impl Governance {
             validate_execute_extension_operation(self, execute_extension_operation).await?;
 
         // Execute the validated operation
-        validated_operation
-            .execute(self, self.extension_context().await.unwrap())
-            .await?;
+        validated_operation.execute(self).await?;
 
         Ok(())
     }
