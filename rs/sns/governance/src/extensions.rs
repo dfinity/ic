@@ -1211,7 +1211,7 @@ impl RenderablePayload for ValidatedDepositOperationArg {
         format!(
             r#"### Treasury Deposit
 
-**SNS Tokens:** {} e8s
+**SNS Tokens:** {} e8s  
 **ICP Tokens:** {} e8s
 
 {raw_payload}"#,
@@ -1517,8 +1517,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_deposit_operation() {
-        // Use setup that configures mock ledgers to return balances
-        let governance = setup_gov_for_tests(true);
+        // Use setup that configures mock ledgers to return balances and root responses
+        let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
 
         // Test valid deposit operation
         let valid_arg = ExtensionOperationArg {
@@ -1625,6 +1625,108 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_validate_register_extension_treasury_manager_init() {
+        // Test that validate_register_extension (init path) validates treasury manager init
+        // the same way as validate_deposit_operation validates deposits
+        let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Build a helper to invoke validate_register_extension with a given precise value
+        let mk_register_extension = |value: Option<Precise>| RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![
+                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0,
+                ],
+                store_canister_id: Some(CanisterId::from_u64(2000).get()),
+                chunk_hashes_list: vec![],
+            }),
+            extension_init: Some(ExtensionInit { value }),
+        };
+
+        // Success case: valid arguments should succeed
+        let valid_arg = ExtensionOperationArg {
+            value: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                        "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                    },
+                })),
+            }),
+        };
+        let init_ok = mk_register_extension(valid_arg.value.clone());
+        validate_register_extension(&governance, init_ok)
+            .await
+            .unwrap();
+
+        // Structural validation failure: missing SNS allocation
+        let missing_sns_init = mk_register_extension(Some(Precise {
+            value: Some(precise::Value::Map(PreciseMap {
+                map: btreemap! {
+                    "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                },
+            })),
+        }));
+        let err = validate_register_extension(&governance, missing_sns_init)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+
+        // Structural validation failure: missing ICP allocation
+        let missing_icp_init = mk_register_extension(Some(Precise {
+            value: Some(precise::Value::Map(PreciseMap {
+                map: btreemap! {
+                    "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                },
+            })),
+        }));
+        let err = validate_register_extension(&governance, missing_icp_init)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("treasury_allocation_icp_e8s must be a Nat value"));
+
+        // Structural validation failure: wrong type
+        let wrong_type_init = mk_register_extension(Some(Precise {
+            value: Some(precise::Value::Map(PreciseMap {
+                map: btreemap! {
+                    "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Text("not a number".to_string())) },
+                    "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                },
+            })),
+        }));
+        let err = validate_register_extension(&governance, wrong_type_init)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+
+        // Structural validation failure: no arguments
+        let no_args_init = mk_register_extension(None);
+        let err = validate_register_extension(&governance, no_args_init)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("Deposit operation arguments must be provided"));
+
+        // Structural validation failure: not a map
+        let not_map_init = mk_register_extension(Some(Precise {
+            value: Some(precise::Value::Text("not a map".to_string())),
+        }));
+        let err = validate_register_extension(&governance, not_map_init)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("Deposit operation arguments must be a PreciseMap"));
+    }
+
+    #[tokio::test]
     async fn test_validate_withdraw_operation() {
         let governance = setup_gov_for_tests(true);
 
@@ -1675,7 +1777,6 @@ mod tests {
                 account.owner == governance_canister_id.get().0
                     && account.subaccount == Some(sns_subaccount)
             })
-            .times(1)
             .returning(move |_| Ok(Tokens::from_e8s(sns_balance)));
 
         // Configure ICP ledger mock
@@ -1684,7 +1785,6 @@ mod tests {
             .withf(move |account: &Account| {
                 account.owner == governance_canister_id.get().0 && account.subaccount.is_none()
             })
-            .times(1)
             .returning(move |_| Ok(Tokens::from_e8s(icp_balance)));
 
         Governance::new(
