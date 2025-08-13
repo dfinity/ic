@@ -150,16 +150,64 @@ impl ExtensionOperationSpec {
 
 /// Validates treasury manager init arguments
 fn validate_treasury_manager_init(
-    _governance: &Governance,
+    governance: &Governance,
     init: ExtensionInit,
 ) -> BoxFuture<Result<ValidatedExtensionInit, String>> {
     Box::pin(async move {
         let ExtensionInit { value } = init;
-
-        let arg = ValidatedDepositOperationArg::try_from(value)?;
-
-        Ok(ValidatedExtensionInit::TreasuryManager(arg))
+        validate_deposit_operation_impl(governance, value)
+            .await
+            .map(ValidatedExtensionInit::TreasuryManager)
     })
+}
+
+async fn validate_deposit_operation_impl(
+    governance: &Governance,
+    value: Option<Precise>,
+) -> Result<ValidatedDepositOperationArg, String> {
+    let structurally_valid = ValidatedDepositOperationArg::try_from(value)?;
+
+    let sns_subaccount = governance.sns_treasury_subaccount();
+    let icp_subaccount = governance.icp_treasury_subaccount();
+
+    // Fail if either is asking for more than 50% of current balance.  The balance could have changed
+    // since the proposal was created, and we don't assume that the proposal should work
+    let sns_balance = governance
+        .ledger
+        .account_balance(Account {
+            owner: governance.env.canister_id().get().0,
+            subaccount: sns_subaccount,
+        })
+        .await
+        .map_err(|e| format!("Failed to get SNS treasury balance: {:?}", e))?;
+    let icp_balance = governance
+        .nns_ledger
+        .account_balance(Account {
+            owner: governance.env.canister_id().get().0,
+            subaccount: icp_subaccount,
+        })
+        .await
+        .map_err(|e| format!("Failed to get ICP treasury balance: {:?}", e))?;
+
+    let icp_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_icp_e8s);
+    let sns_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_sns_e8s);
+
+    // Unwrap is safe, only fails if divisor is zero, which we don't do.
+    if sns_requested > sns_balance.checked_div(2).unwrap() {
+        return Err(format!(
+            "SNS treasury deposit request of {} exceeds 50% of current SNS Token balance of {}",
+            sns_requested, sns_balance
+        ));
+    }
+
+    if icp_requested > icp_balance.checked_div(2).unwrap() {
+        return Err(format!(
+            "ICP treasury deposit request of {} exceeds 50% of current ICP balance of {}",
+            icp_requested, icp_balance
+        ));
+    }
+
+    Ok(structurally_valid)
 }
 
 /// Validates deposit operation arguments
@@ -169,51 +217,9 @@ fn validate_deposit_operation(
 ) -> BoxFuture<Result<ValidatedOperationArg, String>> {
     Box::pin(async move {
         let ExtensionOperationArg { value } = arg;
-        let structurally_valid = ValidatedDepositOperationArg::try_from(value)?;
-
-        let sns_subaccount = governance.sns_treasury_subaccount();
-        let icp_subaccount = governance.icp_treasury_subaccount();
-
-        // Fail if either is asking for more than 50% of current balance.  The balance could have changed
-        // since the proposal was created, and we don't assume that the proposal should work
-        let sns_balance = governance
-            .ledger
-            .account_balance(Account {
-                owner: governance.env.canister_id().get().0,
-                subaccount: sns_subaccount,
-            })
+        validate_deposit_operation_impl(governance, value)
             .await
-            .map_err(|e| format!("Failed to get SNS treasury balance: {:?}", e))?;
-        let icp_balance = governance
-            .nns_ledger
-            .account_balance(Account {
-                owner: governance.env.canister_id().get().0,
-                subaccount: icp_subaccount,
-            })
-            .await
-            .map_err(|e| format!("Failed to get ICP treasury balance: {:?}", e))?;
-
-        let icp_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_icp_e8s);
-        let sns_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_sns_e8s);
-
-        // Unwrap is safe, only fails if divisor is zero, which we don't do.
-        if sns_requested > sns_balance.checked_div(2).unwrap() {
-            return Err(format!(
-                "SNS treasury deposit request of {} exceeds 50% of current SNS Token balance of {}",
-                sns_requested, sns_balance
-            ));
-        }
-
-        if icp_requested > icp_balance.checked_div(2).unwrap() {
-            return Err(format!(
-                "ICP treasury deposit request of {} exceeds 50% of current ICP balance of {}",
-                icp_requested, icp_balance
-            ));
-        }
-
-        Ok(ValidatedOperationArg::TreasuryManagerDeposit(
-            structurally_valid,
-        ))
+            .map(ValidatedOperationArg::TreasuryManagerDeposit)
     })
 }
 
