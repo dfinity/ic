@@ -60,7 +60,7 @@ impl Display for ExtensionType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ValidatedExtensionInit {
     TreasuryManager(ValidatedDepositOperationArg),
     // Future: other extension type init arguments would go here
@@ -349,6 +349,7 @@ impl Display for ExtensionSpec {
     }
 }
 
+#[derive(Debug)]
 pub struct ValidatedRegisterExtension {
     pub wasm: Wasm,
     pub extension_canister_id: CanisterId,
@@ -1622,6 +1623,126 @@ mod tests {
             .await
             .unwrap_err();
         assert!(result.contains("Deposit operation arguments must be a PreciseMap"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_structural_validation() {
+        // Test structural validation of RegisterExtension before treasury manager specific validation
+        let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Test missing chunked_canister_wasm
+        let missing_wasm = RegisterExtension {
+            chunked_canister_wasm: None,
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                            "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                        },
+                    })),
+                }),
+            }),
+        };
+        let err = validate_register_extension(&governance, missing_wasm)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("chunked_canister_wasm is required"));
+
+        // Test missing store_canister_id
+        let missing_store_id = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![1; 32], // 32 bytes
+                store_canister_id: None,
+                chunk_hashes_list: vec![],
+            }),
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                            "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                        },
+                    })),
+                }),
+            }),
+        };
+        let err = validate_register_extension(&governance, missing_store_id)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("chunked_canister_wasm.store_canister_id is required"));
+
+        // Test invalid store_canister_id (not a valid principal)
+        let invalid_store_id = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![1; 32],
+                store_canister_id: Some(PrincipalId::new_user_test_id(0)), // Invalid canister ID
+                chunk_hashes_list: vec![],
+            }),
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                            "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                        },
+                    })),
+                }),
+            }),
+        };
+        let err = validate_register_extension(&governance, invalid_store_id)
+            .await
+            .unwrap_err();
+        assert!(err.error_message.contains("Invalid store_canister_id"));
+
+        // Test invalid wasm module hash length
+        let invalid_hash_length = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![1; 16], // Wrong length (should be 32)
+                store_canister_id: Some(CanisterId::from_u64(2000).get()),
+                chunk_hashes_list: vec![],
+            }),
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                                    "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                                    "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                        },
+                    })),
+                }),
+            }),
+        };
+        let err = validate_register_extension(&governance, invalid_hash_length)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("Invalid wasm module hash length"));
+
+        // Test missing extension_init
+        let missing_init = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![1; 32],
+                store_canister_id: Some(CanisterId::from_u64(2000).get()),
+                chunk_hashes_list: vec![],
+            }),
+            extension_init: None,
+        };
+        let err = validate_register_extension(&governance, missing_init)
+            .await
+            .unwrap_err();
+        assert!(err
+            .error_message
+            .contains("RegisterExtension.extension_init is required"));
+
+        // Test wasm not in whitelist (in non-test mode this would fail)
+        // Since we're in test mode, this will succeed, so we can't test the whitelist rejection here
+        // That would need to be tested in an integration test or with special test setup
     }
 
     #[tokio::test]
