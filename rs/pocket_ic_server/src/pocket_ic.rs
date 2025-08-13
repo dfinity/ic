@@ -158,6 +158,8 @@ const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
+const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
+
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 
