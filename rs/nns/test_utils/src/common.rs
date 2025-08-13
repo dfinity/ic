@@ -38,6 +38,11 @@ pub struct NnsInitPayloads {
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
     pub index: ic_icp_index::InitArg,
+
+    // Optional canister(s). Unlike others above, these are of type
+    // Option<${CANISTER}InitPayload>. When an optional canister is enabled,
+    // these fields contain Some (otherwise, they contain None).
+    pub subnet_rental: Option<()>,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -51,6 +56,7 @@ pub struct NnsInitPayloadsBuilder {
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
     pub index: ic_icp_index::InitArg,
+    pub subnet_rental: SubnetRentalCanisterInitPayloadBuilder,
 }
 
 #[allow(clippy::new_without_default)]
@@ -78,6 +84,7 @@ impl NnsInitPayloadsBuilder {
             index: ic_icp_index::InitArg {
                 ledger_id: LEDGER_CANISTER_ID.get().into(),
             },
+            subnet_rental: SubnetRentalCanisterInitPayloadBuilder::new(),
         }
     }
 
@@ -222,6 +229,11 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(&mut self) -> &mut Self {
+        self.subnet_rental.enable();
+        self
+    }
+
     pub fn build(&mut self) -> NnsInitPayloads {
         assert!(!self
             .ledger
@@ -260,6 +272,76 @@ impl NnsInitPayloadsBuilder {
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
             index: self.index.clone(),
+            subnet_rental: self.subnet_rental.build(),
+        }
+    }
+}
+
+// DO NOT MERGE - Move to new file, perhaps, named mock_exchange_rate_canister_helpers.rs, per gtc_helpers.rs.
+use xrc_mock::{ExchangeRate, XrcMockInitPayload};
+pub struct MockExchangeRateCanisterInitPayloadBuilder {
+    payload: Option<XrcMockInitPayload>,
+}
+
+impl MockExchangeRateCanisterInitPayloadBuilder {
+    pub fn new() -> Self {
+        Self {
+            payload: None,
+        }
+    }
+
+    pub fn enable(&mut self) -> &mut Self {
+        let exchange_rate = ExchangeRate {
+            rate: 1,
+            base_asset: None,
+            quote_asset: None,
+            metadata: None,
+        };
+
+        let payload = XrcMockInitPayload {
+            response: xrc_mock::Response::ExchangeRate(exchange_rate),
+        };
+
+        // Setting payload to Some is the most important thing that happens in
+        // this method, because if payload is left as None, then it means not to
+        // create the canister.
+        self.payload = Some(payload);
+
+        self
+    }
+
+    pub fn build(&mut self) -> Option<XrcMockInitPayload> {
+        self.payload.clone()
+    }
+}
+
+// DO NOT MERGE - Move to new file...
+/// The Subnet Rental canister does not actually have an init argument.
+/// Therefore, it might seem strange that we have a builder for it. The reason
+/// this exists is that Subnet Rental canister is optional. You have to call
+/// with_subnet_rental_canister in order for it to be created during NNS
+/// creation.
+pub struct SubnetRentalCanisterInitPayloadBuilder {
+    enabled: bool
+}
+
+impl SubnetRentalCanisterInitPayloadBuilder {
+    pub fn new() -> Self {
+        Self {
+            enabled: false,
+        }
+    }
+
+    pub fn enable(&mut self) -> &mut Self {
+        self.enabled = true;
+        self
+    }
+
+    pub fn build(&mut self) -> Option<()> {
+        if self.enabled {
+            return Some(());
+        } else {
+            None
         }
     }
 }

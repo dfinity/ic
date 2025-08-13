@@ -60,6 +60,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
+ic-xrc-types = "1.0.0"
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lifeline = { path = "../handlers/lifeline/impl" }
@@ -72,3 +73,4 @@ rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }
+xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
