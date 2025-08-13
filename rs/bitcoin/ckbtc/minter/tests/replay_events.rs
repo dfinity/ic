@@ -84,7 +84,7 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 20_209_150_152);
+    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
 }
 
 #[tokio::test]
