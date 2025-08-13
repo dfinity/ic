@@ -1,5 +1,6 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::extensions::validate_extension_wasm;
+use crate::extensions::validate_execute_extension_operation;
+use crate::extensions::{validate_extension_wasm, ValidatedExecuteExtensionOperation};
 use crate::pb::v1::{
     AdvanceSnsTargetVersion, ExecuteExtensionOperation, RegisterExtension,
     SetTopicsForCustomProposals, Topic,
@@ -1500,24 +1501,24 @@ pub async fn validate_and_render_execute_nervous_system_function(
 }
 
 async fn validate_and_render_execute_extension_operation(
-    _governance: &crate::governance::Governance,
-    _operation: &ExecuteExtensionOperation,
+    governance: &crate::governance::Governance,
+    execute: &ExecuteExtensionOperation,
 ) -> Result<String, String> {
     let ValidatedExecuteExtensionOperation {
         extension_canister_id,
         operation_name,
         arg,
-    } = validate_execute_extension_operation(env, context, operation.clone())
+    } = validate_execute_extension_operation(governance, execute.clone())
         .await
         .map_err(|err| err.error_message)?;
 
     Ok(format!(
         r"# Proposal to execute extension operation:
 
-    * Extension canister ID: `{extension_canister_id}`
-    * Operation name: `{operation_name}`
-    * Operation argument: `{arg}`
-    #"
+* Extension canister ID: `{extension_canister_id}`
+* Operation name: `{operation_name}`
+* Operation argument: `{arg}`
+#"
     ))
 }
 
@@ -1604,7 +1605,7 @@ async fn validate_and_render_register_extension(
 
 ## Extension Configuration
 
-The extension will be deployed and configured according to the parameters provided above.",
+The extension will be deployed and configured according to the provided parameters.",
     ))
 }
 
