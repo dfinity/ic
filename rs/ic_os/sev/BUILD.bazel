@@ -47,7 +47,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + [":sev"],
+    deps = [":sev"],
 )
 
 rust_test(
