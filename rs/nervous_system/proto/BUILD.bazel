@@ -41,10 +41,6 @@ rust_library(
     crate_name = "ic_nervous_system_proto",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
-    visibility = [
-        "//rs/nervous_system:default_visibility",
-        "//rs/pocket_ic_server:__subpackages__",
-    ],
     deps = DEPENDENCIES,
 )
 
