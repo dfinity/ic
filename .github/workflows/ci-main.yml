@@ -168,12 +168,12 @@ jobs:
                 bazel_args+=( --keep_going )
             fi
 
-            if [[ "$RELEASE_BUILD" == "true" ]]; then
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
 
-            if [[ "$RUN_ON_DIFF_ONLY" == "true" ]]; then
+            if [[ "$RUN_ON_DIFF_ONLY" == 'true' ]]; then
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT
 
