@@ -54,6 +54,7 @@ ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nervous-system-proto = { path = "../nervous_system/proto" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance-api = { path = "../nns/governance/api" }
