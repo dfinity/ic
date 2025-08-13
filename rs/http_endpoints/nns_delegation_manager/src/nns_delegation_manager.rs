@@ -415,6 +415,7 @@ async fn try_fetch_delegation_from_nns(
     Ok(NNSDelegationBuilder::new(
         parsed_delegation,
         labeled_tree,
+        response.certificate,
         subnet_id,
     ))
 }

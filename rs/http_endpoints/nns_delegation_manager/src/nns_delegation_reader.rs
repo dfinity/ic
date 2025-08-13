@@ -19,17 +19,19 @@ enum CanisterRangesFilter {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub(crate) struct NNSDelegationBuilderPriv {
+struct NNSDelegationBuilderPriv {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,
     full_filter_builder: FilterBuilder,
     subnet_id: SubnetId,
+    original_delegation: CertificateDelegation,
 }
 
 impl NNSDelegationBuilderPriv {
     fn new(
         full_certificate: Certificate,
         full_labeled_tree: LabeledTree<Vec<u8>>,
+        raw_certificate: Blob,
         subnet_id: SubnetId,
     ) -> Self {
         Self {
@@ -37,6 +39,18 @@ impl NNSDelegationBuilderPriv {
             full_certificate,
             full_labeled_tree,
             subnet_id,
+            original_delegation: CertificateDelegation {
+                subnet_id: Blob(subnet_id.get().to_vec()),
+                certificate: raw_certificate,
+            },
+        }
+    }
+
+    fn build_or_original(&self, filter: CanisterRangesFilter) -> CertificateDelegation {
+        match self.try_build(filter) {
+            Ok(delegation) => delegation,
+            // FIXME(kpop): log something
+            Err(_) => self.original_delegation.clone(),
         }
     }
 
@@ -123,15 +137,19 @@ impl NNSDelegationBuilder {
     pub(crate) fn new(
         full_certificate: Certificate,
         full_labeled_tree: LabeledTree<Vec<u8>>,
+        raw_certificate: Blob,
         subnet_id: SubnetId,
     ) -> Self {
-        let builder = NNSDelegationBuilderPriv::new(full_certificate, full_labeled_tree, subnet_id);
-        let precomputed_delegation_without_canister_ranges = builder
-            .try_build(CanisterRangesFilter::None)
-            .expect("FIXME");
-        let precomputed_delegation_with_flat_canister_ranges = builder
-            .try_build(CanisterRangesFilter::Flat)
-            .expect("FIXME");
+        let builder = NNSDelegationBuilderPriv::new(
+            full_certificate,
+            full_labeled_tree,
+            raw_certificate,
+            subnet_id,
+        );
+        let precomputed_delegation_without_canister_ranges =
+            builder.build_or_original(CanisterRangesFilter::None);
+        let precomputed_delegation_with_flat_canister_ranges =
+            builder.build_or_original(CanisterRangesFilter::Flat);
 
         Self {
             builder,
@@ -140,17 +158,14 @@ impl NNSDelegationBuilder {
         }
     }
 
-    fn with_tree_canister_ranges(
-        &self,
-        canister_id: CanisterId,
-    ) -> Result<CertificateDelegation, String> {
+    fn with_tree_canister_ranges(&self, canister_id: CanisterId) -> CertificateDelegation {
         self.builder
-            .try_build(CanisterRangesFilter::Tree(canister_id))
+            .build_or_original(CanisterRangesFilter::Tree(canister_id))
     }
 }
 
 #[derive(Clone)]
-// TODO(CON-1487): Consider caching the delegations.
+// TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
 }
@@ -182,7 +197,7 @@ impl NNSDelegationReader {
     pub fn get_delegation_with_tree_canister_ranges(
         &self,
         canister_id: CanisterId,
-    ) -> Option<Result<CertificateDelegation, String>> {
+    ) -> Option<CertificateDelegation> {
         self.receiver
             .borrow()
             .as_ref()
@@ -198,6 +213,7 @@ impl NNSDelegationReader {
             NNSDelegationBuilder::new(
                 certificate.clone(),
                 LabeledTree::try_from(certificate.tree.clone()).unwrap(),
+                Blob(vec![]),
                 subnet_id,
             )
         });
