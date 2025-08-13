@@ -88,6 +88,41 @@ async fn should_replay_events_for_mainnet() {
 }
 
 #[tokio::test]
+async fn analyze_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+
+    let state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
+        .expect("Failed to replay events");
+
+    assert_eq!(state.btc_network, Network::Mainnet);
+    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+
+    let tx_id = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
+
+    let submitted_transaction = {
+        let mut txs: Vec<_> = state
+            .submitted_transactions
+            .iter()
+            .filter(|tx| tx.txid.to_string() == tx_id)
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs.pop().unwrap()
+    };
+
+    assert_eq!(submitted_transaction.requests.len(), 43);
+    assert_eq!(
+        submitted_transaction
+            .requests
+            .iter()
+            .map(|req| req.amount)
+            .sum::<u64>(),
+        33_16_317_017_u64 //33 BTC!
+    );
+    assert_eq!(submitted_transaction.used_utxos.len(), 1_799);
+    assert_eq!(submitted_transaction.fee_per_vbyte, Some(7_486));
+}
+
+#[tokio::test]
 async fn should_replay_events_for_testnet() {
     Testnet.retrieve_and_store_events_if_env().await;
 
