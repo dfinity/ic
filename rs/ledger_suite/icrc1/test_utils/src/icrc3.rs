@@ -92,6 +92,7 @@ pub fn burn_block<F: Into<Vec<u8>>>(
     amount: u64,
     timestamp: u64,
     fee: Option<u64>,
+    fee_col_block: Option<u64>,
 ) -> ICRC3Value {
     let mut block_map = BTreeMap::new();
 
@@ -112,6 +113,13 @@ pub fn burn_block<F: Into<Vec<u8>>>(
 
     if let Some(fee) = fee {
         block_map.insert("fee".to_string(), ICRC3Value::Nat(Nat::from(fee)));
+    }
+
+    if let Some(fee_col_block) = fee_col_block {
+        block_map.insert(
+            "fee_col_block".to_string(),
+            ICRC3Value::Nat(Nat::from(fee_col_block)),
+        );
     }
 
     // Add parent hash for blocks after the first
