@@ -1049,7 +1049,7 @@ pub fn build_unsigned_transaction(
     }
 }
 
-fn build_unsigned_transaction_from_inputs(
+pub fn build_unsigned_transaction_from_inputs(
     input_utxos: &[Utxo],
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
