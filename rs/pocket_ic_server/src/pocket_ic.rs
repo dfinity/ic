@@ -54,12 +54,19 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
+use ic_nervous_system_proto::pb::v1::{Decimal, Percentage};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
+use ic_nns_governance_api::{
+    NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
+    VotingPowerEconomics,
+};
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
+use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
     are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
@@ -135,6 +142,9 @@ const ICP_INDEX_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_INDEX_CANISTER_W
 const CYCLES_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("CYCLES_LEDGER_CANISTER_WASM_PATH"));
 const CYCLES_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH"));
+const GOVERNANCE_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("GOVERNANCE_TEST_CANISTER_WASM_PATH"));
+const ROOT_CANISTER_WASM: &[u8] = include_bytes!(env!("ROOT_CANISTER_WASM_PATH"));
 
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
@@ -851,6 +861,7 @@ impl PocketIcSubnets {
                 cycles_minting,
                 icp_token,
                 cycles_token,
+                nns_governance,
             } = icp_features;
             if registry {
                 self.update_registry();
@@ -863,6 +874,9 @@ impl PocketIcSubnets {
             }
             if cycles_token {
                 self.deploy_cycles_token();
+            }
+            if nns_governance {
+                self.deploy_nns_governance();
             }
         }
 
@@ -1337,6 +1351,184 @@ impl PocketIcSubnets {
                     CanisterInstallMode::Install,
                     CYCLES_LEDGER_INDEX_CANISTER_WASM.to_vec(),
                     Encode!(&cycles_ledger_index_arg).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_nns_governance(&self) {
+        let nns_subnet = self
+            .nns_subnet
+            .clone()
+            .expect("The NNS subnet is supposed to already exist if the `nns_governance` ICP feature is specified.");
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(GOVERNANCE_CANISTER_ID)
+        {
+            // Create the governance canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"rrkah-fqaaa-aaaaa-aaaaq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (4_294_967_296 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(4_294_967_296_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(GOVERNANCE_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
+
+            // Install the governance canister.
+            // The economics parameters have been obtained by calling:
+            // `dfx canister call rrkah-fqaaa-aaaaa-aaaaq-cai get_network_economics_parameters --ic`:
+            //   record {
+            //     neuron_minimum_stake_e8s = 100_000_000 : nat64;
+            //     voting_power_economics = opt record {
+            //       start_reducing_voting_power_after_seconds = opt (15_778_800 : nat64);
+            //       neuron_minimum_dissolve_delay_to_vote_seconds = opt (15_778_800 : nat64);
+            //       clear_following_after_seconds = opt (2_629_800 : nat64);
+            //     };
+            //     max_proposals_to_keep_per_topic = 100 : nat32;
+            //     neuron_management_fee_per_proposal_e8s = 1_000_000 : nat64;
+            //     reject_cost_e8s = 2_500_000_000 : nat64;
+            //     transaction_fee_e8s = 10_000 : nat64;
+            //     neuron_spawn_dissolve_delay_seconds = 604_800 : nat64;
+            //     minimum_icp_xdr_rate = 100 : nat64;
+            //     maximum_node_provider_rewards_e8s = 10_000_000_000_000 : nat64;
+            //     neurons_fund_economics = opt record {
+            //       maximum_icp_xdr_rate = opt record {
+            //         basis_points = opt (1_000_000 : nat64);
+            //       };
+            //       neurons_fund_matched_funding_curve_coefficients = opt record {
+            //         contribution_threshold_xdr = opt record {
+            //           human_readable = opt "75_000.0";
+            //         };
+            //         one_third_participation_milestone_xdr = opt record {
+            //           human_readable = opt "225_000.0";
+            //         };
+            //         full_participation_milestone_xdr = opt record {
+            //           human_readable = opt "375_000.0";
+            //         };
+            //       };
+            //       max_theoretical_neurons_fund_participation_amount_xdr = opt record {
+            //         human_readable = opt "750_000.0";
+            //       };
+            //       minimum_icp_xdr_rate = opt record { basis_points = opt (10_000 : nat64) };
+            //     };
+            //   }
+            let economics = NetworkEconomics {
+                neuron_minimum_stake_e8s: 100_000_000,
+                voting_power_economics: Some(VotingPowerEconomics {
+                    start_reducing_voting_power_after_seconds: Some(15_778_800),
+                    neuron_minimum_dissolve_delay_to_vote_seconds: Some(15_778_800),
+                    clear_following_after_seconds: Some(2_629_800),
+                }),
+                max_proposals_to_keep_per_topic: 100,
+                neuron_management_fee_per_proposal_e8s: 1_000_000,
+                reject_cost_e8s: 2_500_000_000,
+                transaction_fee_e8s: 10_000,
+                neuron_spawn_dissolve_delay_seconds: 604_800,
+                minimum_icp_xdr_rate: 100,
+                maximum_node_provider_rewards_e8s: 10_000_000_000_000,
+                neurons_fund_economics: Some(NeuronsFundEconomics {
+                    maximum_icp_xdr_rate: Some(Percentage {
+                        basis_points: Some(1_000_000),
+                    }),
+                    neurons_fund_matched_funding_curve_coefficients: Some(
+                        NeuronsFundMatchedFundingCurveCoefficients {
+                            contribution_threshold_xdr: Some(Decimal {
+                                human_readable: Some("75_000.0".to_string()),
+                            }),
+                            one_third_participation_milestone_xdr: Some(Decimal {
+                                human_readable: Some("225_000.0".to_string()),
+                            }),
+                            full_participation_milestone_xdr: Some(Decimal {
+                                human_readable: Some("375_000.0".to_string()),
+                            }),
+                        },
+                    ),
+                    max_theoretical_neurons_fund_participation_amount_xdr: Some(Decimal {
+                        human_readable: Some("750_000.0".to_string()),
+                    }),
+                    minimum_icp_xdr_rate: Some(Percentage {
+                        basis_points: Some(10_000),
+                    }),
+                }),
+            };
+            let governance_init_payload = GovernanceCanisterInitPayloadBuilder::new()
+                .with_network_economics(economics)
+                .build();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    GOVERNANCE_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&governance_init_payload).unwrap(),
+                )
+                .unwrap();
+        }
+
+        if !nns_subnet.state_machine.canister_exists(ROOT_CANISTER_ID) {
+            // Create the root canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"r7inp-6aaaa-aaaaa-aaabq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "rno2w-sqaaa-aaaaa-aaacq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (1_073_741_824 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![LIFELINE_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(1_073_741_824_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(ROOT_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, ROOT_CANISTER_ID);
+
+            // Install the root canister.
+            let root_canister_init_payload = RootCanisterInitPayloadBuilder::new().build();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    ROOT_CANISTER_WASM.to_vec(),
+                    Encode!(&root_canister_init_payload).unwrap(),
                 )
                 .unwrap();
         }

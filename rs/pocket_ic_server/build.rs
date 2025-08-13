@@ -42,6 +42,8 @@ struct Dashboard<'a> {{
         "ICP_INDEX",
         "CYCLES_LEDGER",
         "CYCLES_LEDGER_INDEX",
+        "GOVERNANCE_TEST",
+        "ROOT",
     ] {
         let env_var_name = format!("{}_CANISTER_WASM_PATH", canister_name);
         if std::env::var(&env_var_name).is_err() {

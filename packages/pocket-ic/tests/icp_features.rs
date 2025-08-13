@@ -1,5 +1,6 @@
-use candid::{CandidType, Nat, Principal};
-use icrc_ledger_types::icrc1::account::Subaccount;
+use candid::{CandidType, Encode, Nat, Principal};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, SubnetSpec};
 use pocket_ic::{
     start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
@@ -7,6 +8,7 @@ use pocket_ic::{
 };
 use reqwest::StatusCode;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -21,6 +23,367 @@ fn test_canister_wasm() -> Vec<u8> {
 #[test]
 fn with_all_icp_features() {
     let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+}
+
+#[test]
+fn test_nns_governance() {
+    #[derive(CandidType)]
+    struct ClaimOrRefreshNeuronFromAccount {
+        controller: Option<Principal>,
+        memo: u64,
+    }
+
+    #[derive(CandidType, Deserialize, Debug)]
+    struct GovernanceError {
+        error_message: String,
+        error_type: i32,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct NeuronId {
+        id: u64,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    enum NeuronResult {
+        NeuronId(NeuronId),
+        Error(GovernanceError),
+    }
+
+    impl NeuronResult {
+        fn id(self) -> NeuronId {
+            match self {
+                NeuronResult::NeuronId(neuron_id) => neuron_id,
+                NeuronResult::Error(governance_error) => {
+                    panic!("Unexpected error: {:?}", governance_error)
+                }
+            }
+        }
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct ClaimOrRefreshNeuronFromAccountResponse {
+        result: Option<NeuronResult>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct NeuronInfo {
+        stake_e8s: u64,
+    }
+
+    #[derive(CandidType, Deserialize, Debug)]
+    struct ProposalId {
+        id: u64,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct BallotInfo {
+        vote: u32,
+        proposal_id: Option<ProposalId>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, PartialEq, Clone)]
+    enum DissolveState {
+        DissolveDelaySeconds(u64),
+        WhenDissolvedTimestampSeconds(u64),
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct Followees {
+        followees: Vec<NeuronId>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct NeuronStakeTransfer {
+        to_subaccount: Vec<u8>,
+        neuron_stake_e8s: u64,
+        from: Option<Principal>,
+        memo: u64,
+        from_subaccount: Vec<u8>,
+        transfer_timestamp: u64,
+        block_height: u64,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct KnownNeuronData {
+        name: String,
+        description: Option<String>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct GovernanceAccount {
+        owner: Option<Principal>,
+        subaccount: Option<Vec<u8>>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct GovernanceAccountIdentifier {
+        hash: Vec<u8>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct MaturityDisbursement {
+        amount_e8s: Option<u64>,
+        timestamp_of_disbursement_seconds: Option<u64>,
+        finalize_disbursement_timestamp_seconds: Option<u64>,
+        account_to_disburse_to: Option<GovernanceAccount>,
+        account_identifier_to_disburse_to: Option<GovernanceAccountIdentifier>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct Neuron {
+        id: Option<NeuronId>,
+        staked_maturity_e8s_equivalent: Option<u64>,
+        controller: Option<Principal>,
+        recent_ballots: Vec<BallotInfo>,
+        kyc_verified: bool,
+        neuron_type: Option<i32>,
+        not_for_profit: bool,
+        maturity_e8s_equivalent: u64,
+        cached_neuron_stake_e8s: u64,
+        created_timestamp_seconds: u64,
+        auto_stake_maturity: Option<bool>,
+        aging_since_timestamp_seconds: u64,
+        hot_keys: Vec<Principal>,
+        account: Vec<u8>,
+        joined_community_fund_timestamp_seconds: Option<u64>,
+        dissolve_state: Option<DissolveState>,
+        followees: Vec<(i32, Followees)>,
+        neuron_fees_e8s: u64,
+        visibility: Option<i32>,
+        transfer: Option<NeuronStakeTransfer>,
+        known_neuron_data: Option<KnownNeuronData>,
+        spawn_at_timestamp_seconds: Option<u64>,
+        voting_power_refreshed_timestamp_seconds: Option<u64>,
+        deciding_voting_power: Option<u64>,
+        potential_voting_power: Option<u64>,
+        maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,
+    }
+
+    #[derive(CandidType)]
+    struct InstallCodeRequest {
+        arg: Option<Vec<u8>>,
+        wasm_module: Option<Vec<u8>>,
+        skip_stopping_before_installing: Option<bool>,
+        canister_id: Option<Principal>,
+        install_mode: Option<i32>,
+    }
+
+    #[derive(CandidType)]
+    enum ProposalActionRequest {
+        InstallCode(InstallCodeRequest),
+    }
+
+    #[derive(CandidType)]
+    struct MakeProposalRequest {
+        url: String,
+        title: Option<String>,
+        action: Option<ProposalActionRequest>,
+        summary: String,
+    }
+
+    #[derive(CandidType)]
+    enum ManageNeuronCommandRequest {
+        MakeProposal(MakeProposalRequest),
+    }
+
+    #[derive(CandidType)]
+    struct ManageNeuronRequest {
+        id: Option<NeuronId>,
+        command: Option<ManageNeuronCommandRequest>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug)]
+    struct MakeProposalResponse {
+        message: Option<String>,
+        proposal_id: Option<ProposalId>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug)]
+    enum CommandResponse {
+        MakeProposal(MakeProposalResponse),
+        Error(GovernanceError),
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct ManageNeuronResponse {
+        command: Option<CommandResponse>,
+    }
+
+    fn compute_neuron_domain_subaccount_bytes(
+        controller: Principal,
+        domain: &[u8],
+        nonce: u64,
+    ) -> [u8; 32] {
+        let domain_length: [u8; 1] = [domain.len() as u8];
+        let mut hasher = Sha256::new();
+        hasher.update(domain_length);
+        hasher.update(domain);
+        hasher.update(controller.as_slice());
+        hasher.update(nonce.to_be_bytes());
+        hasher.finalize().to_vec().try_into().unwrap()
+    }
+
+    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    let user_id = Principal::from_slice(&[42; 29]); // arbitrary test user id
+    let icp_ledger_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+    let governance_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let root_canister_id = Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap();
+
+    // The following fixed principal has a high ICP balance in test environments.
+    let rich_principal =
+        Principal::from_text("hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe")
+            .unwrap();
+
+    // Transfer the neuron stake of 1 ICP from the "rich" principal to the corresponding NNS governance subaccount.
+    let nonce = 42_u64;
+    let neuron_subaccount = compute_neuron_domain_subaccount_bytes(user_id, b"neuron-stake", nonce);
+    let neuron_account = Account {
+        owner: governance_id,
+        subaccount: Some(neuron_subaccount),
+    };
+    let fee: Nat = 10_000_u64.into();
+    let memo: Memo = nonce.into();
+    let neuron_stake_e8s: Nat = 100_000_000_u64.into(); // 1 ICP
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to: neuron_account,
+        fee: Some(fee),
+        created_at_time: None,
+        memo: Some(memo),
+        amount: neuron_stake_e8s.clone(),
+    };
+    update_candid_as::<_, (Result<Nat, TransferError>,)>(
+        &pic,
+        icp_ledger_id,
+        rich_principal,
+        "icrc1_transfer",
+        (transfer_arg,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+
+    // Claim the neuron.
+    let claim_neuron_arg = ClaimOrRefreshNeuronFromAccount {
+        controller: Some(user_id),
+        memo: nonce,
+    };
+    let neuron_id = update_candid_as::<_, (ClaimOrRefreshNeuronFromAccountResponse,)>(
+        &pic,
+        governance_id,
+        user_id,
+        "claim_or_refresh_neuron_from_account",
+        (claim_neuron_arg,),
+    )
+    .unwrap()
+    .0
+    .result
+    .unwrap()
+    .id();
+
+    // Check neuron info.
+    let mut neuron = update_candid_as::<_, (Result<Neuron, GovernanceError>,)>(
+        &pic,
+        governance_id,
+        user_id,
+        "get_full_neuron",
+        (neuron_id.id,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+    assert_eq!(neuron.cached_neuron_stake_e8s, neuron_stake_e8s);
+    assert_eq!(
+        neuron.dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(604800))
+    ); // the default dissolve delay is 7 days
+
+    // Force update the neuron stake (without actually staking any ICP) and dissolve delay (test feature).
+    let new_neuron_stake_e8s = 2_500_000_000; // 25 ICP are required to submit a proposal later
+    neuron.cached_neuron_stake_e8s = new_neuron_stake_e8s;
+    let new_dissolve_state = Some(DissolveState::DissolveDelaySeconds(183 * 86400)); // need a minimum dissolve delay of 6 months to submit a proposal later
+    neuron.dissolve_state = new_dissolve_state.clone();
+    let res = update_candid_as::<_, (Option<GovernanceError>,)>(
+        &pic,
+        governance_id,
+        user_id,
+        "update_neuron",
+        (neuron,),
+    )
+    .unwrap()
+    .0;
+    assert!(res.is_none());
+
+    // Check neuron info again and ensure the neuron has been updated.
+    let updated_neuron = update_candid_as::<_, (Result<Neuron, GovernanceError>,)>(
+        &pic,
+        governance_id,
+        user_id,
+        "get_full_neuron",
+        (neuron_id.id,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+    assert_eq!(updated_neuron.cached_neuron_stake_e8s, new_neuron_stake_e8s);
+    assert_eq!(updated_neuron.dissolve_state, new_dissolve_state);
+
+    // Create a new canister controller by NNS (root).
+    let canister_id = pic.create_canister();
+    pic.set_controllers(
+        canister_id,
+        None,
+        vec![Principal::anonymous(), root_canister_id],
+    )
+    .unwrap();
+
+    // The canister is initially empty.
+    let status = pic.canister_status(canister_id, None).unwrap();
+    assert_eq!(status.module_hash, None);
+
+    // Make proposal to install the canister controlled by NNS (root).
+    let install_code = InstallCodeRequest {
+        arg: Some(Encode!(&()).unwrap()),
+        wasm_module: Some(test_canister_wasm()),
+        skip_stopping_before_installing: None,
+        canister_id: Some(canister_id),
+        install_mode: Some(1), // Install
+    };
+    let proposal_action = ProposalActionRequest::InstallCode(install_code);
+    let proposal = MakeProposalRequest {
+        url: "https://forum.dfinity.org".to_string(),
+        title: Some("My test canister upgrade proposal.".to_string()),
+        action: Some(proposal_action),
+        summary: "".to_string(),
+    };
+    let command = ManageNeuronCommandRequest::MakeProposal(proposal);
+    let manage_neuron_request = ManageNeuronRequest {
+        id: Some(neuron_id),
+        command: Some(command),
+    };
+    update_candid_as::<_, (ManageNeuronResponse,)>(
+        &pic,
+        governance_id,
+        user_id,
+        "manage_neuron",
+        (manage_neuron_request,),
+    )
+    .unwrap()
+    .0
+    .command
+    .unwrap();
+
+    // Execute a few rounds to make sure the proposal has been successfully executed.
+    for _ in 0..10 {
+        pic.tick();
+    }
+
+    // The canister has been successfully installed.
+    let status = pic.canister_status(canister_id, None).unwrap();
+    let test_canister_wasm_sha256 = Sha256::digest(test_canister_wasm()).to_vec();
+    assert_eq!(status.module_hash, Some(test_canister_wasm_sha256));
 }
 
 #[test]
