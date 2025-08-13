@@ -1630,19 +1630,34 @@ mod tests {
         // Test structural validation of RegisterExtension before treasury manager specific validation
         let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
 
-        // Test missing chunked_canister_wasm
-        let missing_wasm = RegisterExtension {
-            chunked_canister_wasm: None,
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
-                            "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
-                        },
-                    })),
+        fn valid_register_extension() -> RegisterExtension {
+            RegisterExtension {
+                chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                    wasm_module_hash: vec![
+                        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0, 0,
+                    ],
+                    store_canister_id: None,
+                    chunk_hashes_list: vec![],
                 }),
-            }),
+                extension_init: Some(ExtensionInit {
+                    value: Some(Precise {
+                        value: Some(precise::Value::Map(PreciseMap {
+                            map: btreemap! {
+                                "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
+                                "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
+                            },
+                        })),
+                    }),
+                }),
+            }
+        }
+
+        // Test missing chunked_canister_wasm
+        let missing_wasm = {
+            let mut register_extension = valid_register_extension();
+            register_extension.chunked_canister_wasm = None;
+            register_extension
         };
         let err = validate_register_extension(&governance, missing_wasm)
             .await
@@ -1656,22 +1671,14 @@ mod tests {
         );
 
         // Test missing store_canister_id
-        let missing_store_id = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![1; 32], // 32 bytes
-                store_canister_id: None,
-                chunk_hashes_list: vec![],
-            }),
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
-                            "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
-                        },
-                    })),
-                }),
-            }),
+        let missing_store_id = {
+            let mut register_extension = valid_register_extension();
+            register_extension
+                .chunked_canister_wasm
+                .as_mut()
+                .unwrap()
+                .store_canister_id = None;
+            register_extension
         };
         let err = validate_register_extension(&governance, missing_store_id)
             .await
@@ -1685,22 +1692,14 @@ mod tests {
         );
 
         // Test invalid store_canister_id (not a valid principal)
-        let invalid_store_id = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![1; 32],
-                store_canister_id: Some(PrincipalId::new_user_test_id(0)), // Invalid canister ID
-                chunk_hashes_list: vec![],
-            }),
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
-                            "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
-                        },
-                    })),
-                }),
-            }),
+        let invalid_store_id = {
+            let mut register_extension = valid_register_extension();
+            register_extension
+                .chunked_canister_wasm
+                .as_mut()
+                .unwrap()
+                .store_canister_id = Some(PrincipalId::new_user_test_id(0)); // Invalid canister ID
+            register_extension
         };
         let err = validate_register_extension(&governance, invalid_store_id)
             .await
@@ -1714,22 +1713,14 @@ mod tests {
         );
 
         // Test invalid wasm module hash length
-        let invalid_hash_length = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![1; 16], // Wrong length (should be 32)
-                store_canister_id: Some(CanisterId::from_u64(2000).get()),
-                chunk_hashes_list: vec![],
-            }),
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                                    "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
-                                    "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
-                        },
-                    })),
-                }),
-            }),
+        let invalid_hash_length = {
+            let mut register_extension = valid_register_extension();
+            register_extension
+                .chunked_canister_wasm
+                .as_mut()
+                .unwrap()
+                .wasm_module_hash = vec![1; 16]; // Wrong length (should be 32)
+            register_extension
         };
         let err = validate_register_extension(&governance, invalid_hash_length)
             .await
@@ -1743,17 +1734,10 @@ mod tests {
         );
 
         // Test missing extension_init
-        let missing_init = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                // Use the allowed test hash so we reach the init validation
-                wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ],
-                store_canister_id: Some(CanisterId::from_u64(2000).get()),
-                chunk_hashes_list: vec![],
-            }),
-            extension_init: None,
+        let missing_init = {
+            let mut register_extension = valid_register_extension();
+            register_extension.extension_init = None;
+            register_extension
         };
         let err = validate_register_extension(&governance, missing_init)
             .await
