@@ -7,6 +7,7 @@ use crate::{
     page_map::{Buffer, PageAllocatorFileDescriptor},
     CanisterState, NumWasmPages, PageMap,
 };
+use either::Either;
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
     Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
@@ -133,8 +134,17 @@ impl CanisterSnapshots {
     }
 
     /// Returns a reference of the canister snapshot identified by `snapshot_id`.
-    pub fn get(&self, snapshot_id: SnapshotId) -> Option<&Arc<CanisterSnapshot>> {
-        self.snapshots.get(&snapshot_id)
+    pub fn get(
+        &self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<&Arc<CanisterSnapshotImpl<()>>, &Arc<CanisterSnapshotImpl<Mutable>>>> {
+        match self.snapshots.get(&snapshot_id) {
+            Some(x) => Some(Either::Left(x)),
+            None => match self.partial_snapshots.get(&snapshot_id) {
+                Some(x) => Some(Either::Right(x)),
+                None => None,
+            },
+        }
     }
 
     /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.

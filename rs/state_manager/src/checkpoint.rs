@@ -248,18 +248,24 @@ impl PageMapType {
             PageMapType::WasmChunkStore(id) => state
                 .canister_state(id)
                 .map(|can| can.system_state.wasm_chunk_store.page_map()),
-            PageMapType::SnapshotWasmMemory(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| &snap.execution_snapshot().wasm_memory.page_map),
-            PageMapType::SnapshotStableMemory(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| &snap.execution_snapshot().stable_memory.page_map),
-            PageMapType::SnapshotWasmChunkStore(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| snap.chunk_store().page_map()),
+            PageMapType::SnapshotWasmMemory(id) => state.canister_snapshots.get(*id).map(|s| {
+                s.either(
+                    |snap| &snap.execution_snapshot_impl().wasm_memory.page_map,
+                    |snap| &snap.execution_snapshot_impl().wasm_memory.page_map,
+                )
+            }),
+            PageMapType::SnapshotStableMemory(id) => state.canister_snapshots.get(*id).map(|s| {
+                s.either(
+                    |snap| &snap.execution_snapshot_impl().stable_memory.page_map,
+                    |snap| &snap.execution_snapshot_impl().stable_memory.page_map,
+                )
+            }),
+            PageMapType::SnapshotWasmChunkStore(id) => state.canister_snapshots.get(*id).map(|s| {
+                s.either(
+                    |snap| snap.chunk_store().page_map(),
+                    |snap| snap.chunk_store().page_map(),
+                )
+            }),
         }
     }
 }
@@ -617,7 +623,7 @@ impl CheckpointLoader {
             return Err("Snapshot ids mismatch".to_string());
         }
         maybe_parallel_map(thread_pool, ref_snapshot_ids.iter(), |snapshot_id| {
-            load_snapshot_from_checkpoint(
+            let loaded_snapshot = load_snapshot_from_checkpoint(
                 &self.checkpoint_layout,
                 snapshot_id,
                 Arc::clone(&self.fd_factory),
@@ -628,12 +634,18 @@ impl CheckpointLoader {
                     snapshot_id, err
                 )
             })?
-            .0
-            .validate_eq(
-                ref_canister_snapshots
-                    .get(**snapshot_id)
-                    .expect("Failed to lookup snapshot in ref state"),
-            )
+            .0;
+            let ref_snapshot = ref_canister_snapshots
+                .get(**snapshot_id)
+                .expect("Failed to lookup snapshot in ref state");
+            match (loaded_snapshot, ref_snapshot) {
+                (Either::Left(a), Either::Left(b)) => a.validate_eq(b),
+                (Either::Right(a), Either::Right(b)) => a.validate_eq(b),
+                _ => Err(format!(
+                    "Failed to load canister snapshot {} for validation. Mismatched mutability.",
+                    snapshot_id
+                )),
+            }
         })
         .into_iter()
         .try_for_each(identity)

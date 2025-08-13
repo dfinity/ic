@@ -12806,6 +12806,7 @@ dependencies = [
  "criterion",
  "criterion-time",
  "cvt",
+ "either",
  "ic-base-types",
  "ic-btc-interface",
  "ic-btc-replica-types",

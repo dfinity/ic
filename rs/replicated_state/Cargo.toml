@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 bit-vec = "0.6.3"
 cvt = "0.1.1"
+either = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }

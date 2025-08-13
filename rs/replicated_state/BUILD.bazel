@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/utils/validate_eq",
     "@crate_index//:bit-vec",
     "@crate_index//:cvt",
+    "@crate_index//:either",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
