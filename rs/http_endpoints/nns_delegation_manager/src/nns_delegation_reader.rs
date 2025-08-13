@@ -1,5 +1,6 @@
 use ic_crypto_tree_hash::{
-    lookup_lower_bound, sparse_labeled_tree_from_paths, LabeledTree, Path, TooLongPathError,
+    lookup_lower_bound, sparse_labeled_tree_from_paths, FilterBuilder, LabeledTree,
+    LookupLowerBoundStatus, Path,
 };
 use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation},
@@ -7,13 +8,115 @@ use ic_types::{
 };
 use tokio::sync::watch;
 
+#[derive(Clone, Copy)]
+enum CanisterRangesFilter {
+    /// Keep only the `/subnet/<subnet_id>/canister_ranges` leaf.
+    Flat,
+    /// Keep only the `/canister_ranges/subnet_id/canister_id_label` leaf.
+    Tree(CanisterId),
+    /// Discard both ranges.
+    None,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) struct NNSDelegationBuilderPriv {
+    full_certificate: Certificate,
+    full_labeled_tree: LabeledTree<Vec<u8>>,
+    full_filter_builder: FilterBuilder,
+    subnet_id: SubnetId,
+}
+
+impl NNSDelegationBuilderPriv {
+    fn new(
+        full_certificate: Certificate,
+        full_labeled_tree: LabeledTree<Vec<u8>>,
+        subnet_id: SubnetId,
+    ) -> Self {
+        Self {
+            full_filter_builder: full_certificate.tree.filter_builder(),
+            full_certificate,
+            full_labeled_tree,
+            subnet_id,
+        }
+    }
+
+    fn try_build(&self, filter: CanisterRangesFilter) -> Result<CertificateDelegation, String> {
+        let mut paths = vec![
+            Path::new(vec![
+                b"subnet".into(),
+                self.subnet_id.get().into(),
+                b"public_key".into(),
+            ]),
+            Path::new(vec![b"time".into()]),
+        ];
+
+        match filter {
+            // Don't include any paths.
+            CanisterRangesFilter::None => {}
+            // Additionally include `/subnet/<subnet_id>/canister_ranges`
+            CanisterRangesFilter::Flat => {
+                paths.push(Path::new(vec![
+                    b"subnet".into(),
+                    self.subnet_id.get().into(),
+                    b"canister_ranges".into(),
+                ]));
+            }
+            // Additionally include `/canister_ranges/<subnet_id>/<canister_id_label>`
+            CanisterRangesFilter::Tree(canister_id) => {
+                let label = match lookup_lower_bound(
+                    &self.full_labeled_tree,
+                    &[b"canister_ranges".as_ref(), &self.subnet_id.get().to_vec()],
+                    &canister_id.get().to_vec(),
+                ) {
+                    LookupLowerBoundStatus::Found(label, _labeled_subtree) => label,
+                    LookupLowerBoundStatus::PrefixNotFound
+                    | LookupLowerBoundStatus::LabelNotFound => {
+                        // The canister id is not assigned to the subnet according to the NNS delegation.
+                        // This could mean that the routing table has changed but we haven't refreshed the
+                        // NNS delegation just yet.
+                        // In that case, we return the delegation without canister ranges.
+                        return Err(String::from("Not found"));
+                    }
+                };
+
+                paths.push(Path::new(vec![
+                    b"canister_ranges".into(),
+                    self.subnet_id.get().into(),
+                    label.clone(),
+                ]));
+            }
+        }
+
+        let tree = sparse_labeled_tree_from_paths(&paths).map_err(|err| {
+            format!("Failed to build labeled tree from paths ({paths:?}): {err:?}")
+        })?;
+
+        let filtered_tree = self
+            .full_filter_builder
+            .filtered(&tree)
+            .map_err(|err| format!("Failed to filter tree: {err:?}"))?;
+
+        let certificate = Certificate {
+            tree: filtered_tree,
+            signature: self.full_certificate.signature.clone(),
+            delegation: self.full_certificate.delegation.clone(),
+        };
+
+        Ok(CertificateDelegation {
+            subnet_id: Blob(self.subnet_id.get().to_vec()),
+            certificate: Blob(
+                serde_cbor::ser::to_vec(&certificate)
+                    .map_err(|err| format!("Failed to serialize certificate: {err}"))?,
+            ),
+        })
+    }
+}
+
 #[derive(Clone, Eq, PartialEq)]
 pub(crate) struct NNSDelegationBuilder {
-    delegation_with_flat_canister_ranges: CertificateDelegation,
-    delegation_without_canister_ranges: CertificateDelegation,
-    certificate_with_tree_canister_ranges: Certificate,
-    labeled_tree_with_both_canister_ranges_formats: LabeledTree<Vec<u8>>,
-    subnet_id: SubnetId,
+    builder: NNSDelegationBuilderPriv,
+    precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
+    precomputed_delegation_without_canister_ranges: CertificateDelegation,
 }
 
 impl NNSDelegationBuilder {
@@ -22,139 +125,27 @@ impl NNSDelegationBuilder {
         full_labeled_tree: LabeledTree<Vec<u8>>,
         subnet_id: SubnetId,
     ) -> Self {
-        let flat_certificate = Self::prune_state_tree(
-            &full_certificate,
-            vec![Path::new(vec![
-                b"subnet".into(),
-                subnet_id.get().into(),
-                b"canister_ranges".into(),
-            ])],
-            subnet_id,
-        )
-        .expect("FIXME");
-
-        let certification_without_ranges =
-            Self::prune_state_tree(&full_certificate, vec![], subnet_id).expect("FIXME");
-
-        let tree_certificate = Self::prune_state_tree(
-            &full_certificate,
-            vec![Path::new(vec![
-                b"canister_ranges".into(),
-                subnet_id.get().into(),
-            ])],
-            subnet_id,
-        )
-        .expect("FIXME");
+        let builder = NNSDelegationBuilderPriv::new(full_certificate, full_labeled_tree, subnet_id);
+        let precomputed_delegation_without_canister_ranges = builder
+            .try_build(CanisterRangesFilter::None)
+            .expect("FIXME");
+        let precomputed_delegation_with_flat_canister_ranges = builder
+            .try_build(CanisterRangesFilter::Flat)
+            .expect("FIXME");
 
         Self {
-            subnet_id,
-            delegation_with_flat_canister_ranges: Self::create_certificate_delegation(
-                flat_certificate,
-                subnet_id,
-            )
-            .expect("FIXME"),
-            delegation_without_canister_ranges: Self::create_certificate_delegation(
-                certification_without_ranges,
-                subnet_id,
-            )
-            .expect("FIXME"),
-            certificate_with_tree_canister_ranges: tree_certificate,
-            labeled_tree_with_both_canister_ranges_formats: full_labeled_tree,
+            builder,
+            precomputed_delegation_with_flat_canister_ranges,
+            precomputed_delegation_without_canister_ranges,
         }
     }
 
-    fn with_tree_canister_ranges(&self, canister_id: CanisterId) -> CertificateDelegation {
-        // Find the leaf in which canister id *could* belong to.
-        // Note: even if the function does return `Some` it is not guaranteed, that the leaf
-        // actually contains the canister id.
-        let Some((label, _subtree)) = lookup_lower_bound(
-            &self.labeled_tree_with_both_canister_ranges_formats,
-            &[&b"canister_ranges".to_vec(), &self.subnet_id.get().to_vec()],
-            &canister_id.get().to_vec(),
-        ) else {
-            // The canister id is not assigned to the subnet according to the NNS delegation.
-            // This could mean that the routing table has changed but we haven't refreshed the
-            // NNS delegation just yet.
-            // In that case, we return the delegation without canister ranges.
-            return self.delegation_without_canister_ranges.clone();
-        };
-
-        let certificate = match Self::prune_state_tree(
-            &self.certificate_with_tree_canister_ranges,
-            vec![Path::new(vec![
-                b"canister_ranges".into(),
-                self.subnet_id.get().into(),
-                label.clone(),
-            ])],
-            self.subnet_id,
-        ) {
-            Ok(certificate) => certificate,
-            Err(_err) => {
-                // FIXME(kpop): return a full delegation instead.
-                // FIXME(kpop): log an error
-                return self.delegation_without_canister_ranges.clone();
-            }
-        };
-
-        match Self::create_certificate_delegation(certificate, self.subnet_id) {
-            Ok(delegation) => delegation,
-            Err(_err) => {
-                // FIXME(kpop): return a full delegation instead.
-                // FIXME(kpop): log an error
-                self.delegation_without_canister_ranges.clone()
-            }
-        }
-    }
-
-    fn create_certificate_delegation(
-        certificate: Certificate,
-        subnet_id: SubnetId,
+    fn with_tree_canister_ranges(
+        &self,
+        canister_id: CanisterId,
     ) -> Result<CertificateDelegation, String> {
-        Ok(CertificateDelegation {
-            subnet_id: Blob(subnet_id.get().to_vec()),
-            // FIXME(kpop):
-            certificate: Blob(
-                serde_cbor::ser::to_vec(&certificate)
-                    .map_err(|err| format!("Failed to serialize certificate: {err}"))?,
-            ),
-        })
-    }
-
-    fn prune_state_tree(
-        certificate: &Certificate,
-        additional_path: Vec<Path>,
-        subnet_id: SubnetId,
-    ) -> Result<Certificate, String> {
-        let paths = Self::paths(additional_path, subnet_id)?;
-        let filtered_tree = certificate
-            .tree
-            .filtered(&paths)
-            .map_err(|err| format!("Failed to filter tree: {err:?}"))?;
-
-        Ok(Certificate {
-            tree: filtered_tree,
-            signature: certificate.signature.clone(),
-            delegation: certificate.delegation.clone(),
-        })
-    }
-
-    fn paths(
-        mut additional_paths: Vec<Path>,
-        subnet_id: SubnetId,
-    ) -> Result<LabeledTree<()>, String> {
-        let mut paths = vec![
-            Path::new(vec![
-                b"subnet".into(),
-                subnet_id.get().into(),
-                b"public_key".into(),
-            ]),
-            Path::new(vec![b"time".into()]),
-        ];
-
-        paths.append(&mut additional_paths);
-
-        sparse_labeled_tree_from_paths(&paths)
-            .map_err(|err| format!("Failed to build labeled tree from paths ({paths:?}): {err:?}"))
+        self.builder
+            .try_build(CanisterRangesFilter::Tree(canister_id))
     }
 }
 
@@ -173,23 +164,25 @@ impl NNSDelegationReader {
     /// i.e. the state tree in the delegation will have the /subnet/{subnet_id}/canister_ranges path
     /// and the /canister_ranges/{subnet_id} subtree will be pruned out.
     pub fn get_delegation_with_flat_canister_ranges(&self) -> Option<CertificateDelegation> {
-        self.receiver
-            .borrow()
-            .as_ref()
-            .map(|builder| builder.delegation_with_flat_canister_ranges.clone())
+        self.receiver.borrow().as_ref().map(|builder| {
+            builder
+                .precomputed_delegation_with_flat_canister_ranges
+                .clone()
+        })
     }
 
     pub fn get_delegation_without_canister_ranges(&self) -> Option<CertificateDelegation> {
-        self.receiver
-            .borrow()
-            .as_ref()
-            .map(|builder| builder.delegation_without_canister_ranges.clone())
+        self.receiver.borrow().as_ref().map(|builder| {
+            builder
+                .precomputed_delegation_without_canister_ranges
+                .clone()
+        })
     }
 
     pub fn get_delegation_with_tree_canister_ranges(
         &self,
         canister_id: CanisterId,
-    ) -> Option<CertificateDelegation> {
+    ) -> Option<Result<CertificateDelegation, String>> {
         self.receiver
             .borrow()
             .as_ref()

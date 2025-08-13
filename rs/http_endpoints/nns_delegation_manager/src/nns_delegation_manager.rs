@@ -130,7 +130,7 @@ impl DelegationManager {
         )
         .await;
 
-        if let Some(delegation) = delegation.as_ref() {
+        if let Some(_delegation) = delegation.as_ref() {
             //self.metrics
             //    .delegation_size
             //    .observe(delegation.certificate.len() as f64);

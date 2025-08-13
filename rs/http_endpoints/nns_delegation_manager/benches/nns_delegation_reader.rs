@@ -71,7 +71,11 @@ fn get_delegation_with_tree_canister_ranges(criterion: &mut Criterion) {
             format!("{canister_id_ranges_count}_canister_id_ranges"),
             |bencher| {
                 bencher.iter(|| {
-                    black_box(reader.get_delegation_with_tree_canister_ranges(CanisterId::from(42)))
+                    black_box(
+                        reader
+                            .get_delegation_with_tree_canister_ranges(CanisterId::from(42))
+                            .unwrap(),
+                    )
                 });
             },
         );
