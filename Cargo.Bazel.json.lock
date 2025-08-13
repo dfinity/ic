@@ -1,5 +1,5 @@
 {
-  "checksum": "0226cb7056b5408a8ddd49db57221ec0df7ff722951786559da47455ade1ad70",
+  "checksum": "31309448f35f5fdc66d87ba9301e2b81a8e75d798cf079b1123a3d8c6ee2090c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21970,6 +21970,10 @@
             {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
+            },
+            {
+              "id": "raw-cpuid 11.5.0",
+              "target": "raw_cpuid"
             },
             {
               "id": "rayon 1.10.0",
@@ -60788,13 +60792,13 @@
             ],
             "cfg(target_arch = \"x86\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
             "cfg(target_arch = \"x86_64\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
@@ -63009,14 +63013,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "raw-cpuid 11.1.0": {
+    "raw-cpuid 11.5.0": {
       "name": "raw-cpuid",
-      "version": "11.1.0",
+      "version": "11.5.0",
       "package_url": "https://github.com/gz/rust-cpuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/raw-cpuid/11.1.0/download",
-          "sha256": "cb9ee317cfe3fbd54b36a511efc1edd42e216903c9cd575e686dd68a2ba90d8d"
+          "url": "https://static.crates.io/crates/raw-cpuid/11.5.0/download",
+          "sha256": "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
         }
       },
       "targets": [
@@ -63048,7 +63052,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "11.1.0"
+        "version": "11.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -95972,6 +95976,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
+    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
