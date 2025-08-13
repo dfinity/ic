@@ -1,6 +1,8 @@
 use ic_types::consensus::idkg::{
-    common::TranscriptOperationError, ecdsa::PreSignatureQuadrupleError,
-    schnorr::PreSignatureTranscriptError, TranscriptParamsError,
+    common::{BuildSignatureInputsError, TranscriptOperationError},
+    ecdsa::PreSignatureQuadrupleError,
+    schnorr::PreSignatureTranscriptError,
+    TranscriptParamsError,
 };
 
 use crate::crypto::ErrorReproducibility;
@@ -42,6 +44,20 @@ impl ErrorReproducibility for TranscriptOperationError {
             TranscriptOperationError::ReshareOfUnmasked(_) => true,
             TranscriptOperationError::UnmaskedTimesMasked1(_) => true,
             TranscriptOperationError::UnmaskedTimesMasked2(_) => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for BuildSignatureInputsError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            BuildSignatureInputsError::ContextIncomplete => true,
+            BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError(err) => {
+                err.is_reproducible()
+            }
+            BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(err) => {
+                err.is_reproducible()
+            }
         }
     }
 }
