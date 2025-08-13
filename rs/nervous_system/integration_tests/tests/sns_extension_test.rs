@@ -145,6 +145,8 @@ async fn test_treasury_manager() {
         ledger_fee_decimals: Nat::from(ICP_FEE),
     };
 
+    // These numbers just happen to be what is going on in deploy_sns() above.  They're not particularly
+    // special in any way.
     let initial_icp_balance_e8s = 650_000 * E8 - ICP_FEE;
     let initial_sns_balance_e8s = 400 * E8;
 
@@ -162,7 +164,8 @@ async fn test_treasury_manager() {
     let initial_treasury_allocation_sns_e8s = 300 * E8;
 
     let topup_treasury_allocation_icp_e8s = 50 * E8;
-    let topup_treasury_allocation_sns_e8s = 50 * E8;
+    // This cannot be 50, b/c there will be slightly less than 100 left at the point where this is called.
+    let topup_treasury_allocation_sns_e8s = 49 * E8;
 
     fn make_deposit_allowances(
         treasury_allocation_icp_e8s: u64,

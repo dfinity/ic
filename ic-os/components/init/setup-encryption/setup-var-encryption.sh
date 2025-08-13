@@ -17,23 +17,6 @@ function transfer_log_state() {
     else
         echo "Failed to copy previous journal files"
     fi
-
-    # Now, copy filebeat state files such that it resumes
-    # shipping logs from correct place.
-    for FILE in meta.json registry; do
-        if [ -f "/mnt/var_old/lib/filebeat/${FILE}" ]; then
-            if cp -v "/mnt/var_old/lib/filebeat/${FILE}" "/mnt/var_new/lib/filebeat/${FILE}"; then
-                chown filebeat.filebeat "/mnt/var_new/lib/filebeat/${FILE}"
-                chmod 600 "/mnt/var_new/lib/filebeat/${FILE}"
-                chcon system_u:object_r:filebeat_var_lib_t:s0 "/mnt/var_new/lib/filebeat/${FILE}"
-            else
-                echo "Failed to copy filebeat state file: ${FILE}"
-            fi
-        else
-            echo "Missing filebeat state file: ${FILE}"
-        fi
-    done
-    ls -lZ "/mnt/var_new/lib/filebeat"
 }
 
 VAR_PARTITION="$1"

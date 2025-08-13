@@ -40,8 +40,8 @@ Transport is devided into two logical parts - sending and receiving.
 
 For the sending side, transport exposes the `+rpc+` API call. 
 
-Transport uses https://docs.rs/anyhow/latest/anyhow/struct.Error.html[anyhow::Error] instead of https://docs.rs/thiserror/latest/thiserror/derive.Error.html[thiserror::Error] as the error type 
-because the errors are transient and it is expected that the user retries on failure.
+Transport uses a custom opaque error type because the errors are transient and it is expected that the user retries on failure.
+We avoid using https://docs.rs/anyhow/latest/anyhow/struct.Error.html[anyhow::Error], due to it's expensive generation of backtraces.
 
 How do you make sure there are only transient errors? For example, how do you ruled out
 
@@ -50,7 +50,7 @@ How do you make sure there are only transient errors? For example, how do you ru
 
 [source, rust]
 ----
-    async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error>;
+    async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, P2PError>;
 ----
 
 The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. 
