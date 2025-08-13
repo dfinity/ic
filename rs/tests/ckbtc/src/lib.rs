@@ -106,6 +106,13 @@ impl TokenType {
             TokenType::Dogecoin => 18332,
         }
     }
+
+    fn config_mapping(&self) -> &str {
+        match self {
+            TokenType::Bitcoin => "/tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf",
+            TokenType::Dogecoin => "/tmp/dogecoin.conf:/node/dogecoin-core/configs/config.conf",
+        }
+    }
 }
 
 fn ckbtc_config(env: TestEnv, token: TokenType) {
@@ -173,6 +180,7 @@ fn setup_bitcoind_uvm(env: &TestEnv, token: TokenType) -> Ipv6Addr {
     let rpc_port = token.rpc_port();
     let config_name = token.config_name();
     let image_name = token.image_name();
+    let config_mapping = token.config_mapping();
 
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
@@ -206,13 +214,16 @@ BITCOIND_RPC_AUTH='{BITCOIND_RPC_AUTH}'
 cat >/tmp/{config_name} <<END
     regtest=1
     debug=1
+    rpcallowip=0.0.0.0/0
     whitelist=::/0
     fallbackfee=0.0002
+    rpcuser={BITCOIND_RPC_USER}
+    rpcpasswd={BITCOIND_RPC_PASSWORD}
     rpcauth=$BITCOIND_RPC_AUTH
 END
 docker load -i /config/{image_name}.tar
 docker run  --name={image_name}-node -d \
-  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={rpc_port} -v /tmp:/bitcoin/.bitcoin \
+  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={rpc_port} -v {config_mapping} \
   -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {rpc_port}:{rpc_port} \
   {image_name}:image
 
