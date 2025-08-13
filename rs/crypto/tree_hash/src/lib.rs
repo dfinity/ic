@@ -634,7 +634,7 @@ impl MixedHashTree {
         LookupStatus::Found(t)
     }
 
-    /// Construct a FilterBuilder, which allows to repeatedly construct filtered tree.
+    /// Construct a [`FilterBuilder`], which allows to repeatedly construct filtered tree.
     pub fn filter_builder(&self) -> FilterBuilder {
         match self {
             MixedHashTree::Empty => FilterBuilder::Empty(empty_subtree_hash()),
@@ -658,8 +658,8 @@ impl MixedHashTree {
     }
 }
 
-/// A MixedHashTree with additional digests at every node. Used as a builder for constructing
-/// further filtered down MixedHashTree.
+/// A [`MixedHashTree`] with additional digests at every node. Used as a builder for constructing
+/// further filtered down [`MixedHashTree`].
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FilterBuilder {
     Empty(Digest),
@@ -698,7 +698,7 @@ impl FilterBuilder {
         }
     }
 
-    /// Returns a MixedHashTree with everything pruned except the paths in `filter`.
+    /// Returns a [`MixedHashTree`] with everything pruned except the paths in `filter`.
     pub fn filtered(
         &self,
         filter: &LabeledTree<()>,
