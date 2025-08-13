@@ -341,6 +341,20 @@ impl IDkgPreSignerImpl {
             }
         }
 
+        // build the map of support shares
+        let mut valid_supports: BTreeMap<_, BTreeSet<NodeId>> = BTreeMap::new();
+        for (_, support) in idkg_pool.validated().dealing_support() {
+            let key = (
+                support.transcript_id,
+                support.dealer_id,
+                support.dealing_hash,
+            );
+            valid_supports
+                .entry(key)
+                .or_default()
+                .insert(support.sig_share.signer.clone());
+        }
+
         let mut source_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.source_subnet_xnet_transcripts() {
             source_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
@@ -351,7 +365,7 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        let mut validated_dealing_supports = BTreeSet::new();
+        // let mut validated_dealing_supports = BTreeSet::new();
         let mut ret = Vec::new();
         for (id, support) in idkg_pool.unvalidated().dealing_support() {
             // Dedup dealing support by (transcript_id, dealer_id, signer_id)
@@ -359,9 +373,11 @@ impl IDkgPreSignerImpl {
             let key = (
                 support.transcript_id,
                 support.dealer_id,
-                support.sig_share.signer,
+                support.dealing_hash.clone(),
             );
-            if validated_dealing_supports.contains(&key) {
+            let this_dealing_supports = valid_supports.entry(key).or_default();
+            if this_dealing_supports.contains(&support.sig_share.signer) {
+                // if validated_dealing_supports.contains(&key) {
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
@@ -413,7 +429,9 @@ impl IDkgPreSignerImpl {
                         }
                     };
 
-                    if !transcript_params
+                    if this_dealing_supports.len() >= transcript_params.verification_threshold().get() as usize {
+                        ret.push(IDkgChangeAction::RemoveUnvalidated(id));
+                    } else if !transcript_params
                         .receivers()
                         .contains(support.sig_share.signer)
                     {
@@ -426,20 +444,7 @@ impl IDkgPreSignerImpl {
                         ))
                     } else if let Some(signed_dealing) = valid_dealings.get(&support.dealing_hash) {
                         let dealing = signed_dealing.idkg_dealing();
-                        if self.has_node_issued_dealing_support(
-                            idkg_pool,
-                            &signed_dealing.idkg_dealing().transcript_id,
-                            &signed_dealing.dealer_id(),
-                            &support.sig_share.signer,
-                            &support.dealing_hash,
-                        ) {
-                            // The node already sent a valid support for this dealing
-                            self.metrics.pre_sign_errors_inc("duplicate_support");
-                            ret.push(IDkgChangeAction::HandleInvalid(
-                                id,
-                                format!("Duplicate support: {}", support),
-                            ))
-                        } else if support.transcript_id != dealing.transcript_id
+                        if support.transcript_id != dealing.transcript_id
                             || support.dealer_id != signed_dealing.dealer_id()
                         {
                             // Meta data mismatch
@@ -457,6 +462,7 @@ impl IDkgPreSignerImpl {
                                 ),
                             ))
                         } else {
+                            let signer = support.sig_share.signer.clone();
                             let action = self.crypto_verify_dealing_support(
                                 id,
                                 &transcript_params,
@@ -465,7 +471,7 @@ impl IDkgPreSignerImpl {
                                 idkg_pool.stats(),
                             );
                             if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
-                                validated_dealing_supports.insert(key);
+                                this_dealing_supports.insert(signer);
                             }
                             ret.append(&mut action.into_iter().collect());
                         }
