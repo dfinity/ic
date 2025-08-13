@@ -104,7 +104,7 @@ impl PeerManager {
         let mut subnet_nodes = HashMap::new();
 
         // Iterate from `min(consensus_registry_version, latest_local_registry_version)` to
-        // `max(consensus_registry_version, latest_local_registry_version)`.
+        // `latest_local_registry_version`.
         // The `consensus_registry_version` is extracted from the latest CUP seen.
         // The `latest_local_registry_version` is the latest registry version known to this node.
         // In almost any case `latest_local_registry_version >= consensus_registry_version` but
