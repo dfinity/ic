@@ -1236,7 +1236,7 @@ async fn execute_treasury_manager_withdraw(
 
     log!(
         INFO,
-        "TreasuryManager.deposit succeeded with response: {:?}",
+        "TreasuryManager.withdraw succeeded with response: {:?}",
         balances
     );
 
