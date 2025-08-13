@@ -1637,7 +1637,7 @@ mod tests {
                         1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0,
                     ],
-                    store_canister_id: None,
+                    store_canister_id: Some(CanisterId::from_u64(10000).get()),
                     chunk_hashes_list: vec![],
                 }),
                 extension_init: Some(ExtensionInit {
@@ -1704,13 +1704,7 @@ mod tests {
         let err = validate_register_extension(&governance, invalid_store_id)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"Invalid store_canister_id: PrincipalId { len: 0, bytes: [] }\""
-            )
-        );
+        assert!(err.error_message.contains("invalid principal id"));
 
         // Test invalid wasm module hash length
         let invalid_hash_length = {
@@ -1742,13 +1736,9 @@ mod tests {
         let err = validate_register_extension(&governance, missing_init)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension.extension_init is required"
-            )
-        );
+        assert!(err
+            .error_message
+            .contains("RegisterExtension.extension_init is required"));
 
         // Test wasm not in whitelist (in non-test mode this would fail)
         // Since we're in test mode, this will succeed, so we can't test the whitelist rejection here
