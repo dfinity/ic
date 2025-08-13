@@ -67,9 +67,9 @@ fn test_basic_add_and_get_blocks() {
     let (env, canister_id) = setup_icrc3_test_ledger();
 
     // Create some test blocks
-    let block0 = mint_block(0, TEST_USER_1, 1_000_000, 1000);
+    let block0 = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
     let block1 = transfer_block(1, TEST_USER_1, TEST_USER_2, 100_000, 2000);
-    let block2 = mint_block(2, TEST_USER_1, 500_000, 3000);
+    let block2 = mint_block(2, TEST_USER_1, 500_000, 3000, None::<PrincipalId>);
     let block3 = burn_block(3, TEST_USER_1, 50_000, 4000, None);
 
     // Add blocks to the ledger
@@ -209,7 +209,7 @@ fn test_get_blocks_empty_request() {
     assert_eq!(result.log_length, Nat::from(0u64));
 
     // Add a block
-    let block = mint_block(0, TEST_USER_1, 1_000_000, 1000);
+    let block = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
     // Test empty request with blocks present
@@ -223,7 +223,7 @@ fn test_get_blocks_zero_length() {
     let (env, canister_id) = setup_icrc3_test_ledger();
 
     // Add a block
-    let block = mint_block(0, TEST_USER_1, 1_000_000, 1000);
+    let block = mint_block(0, TEST_USER_1, 1_000_000, 1000, None::<PrincipalId>);
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
     // Test zero-length request

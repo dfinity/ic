@@ -43,11 +43,12 @@ pub fn transfer_block<F: Into<Vec<u8>>, T: Into<Vec<u8>>>(
     ICRC3Value::Map(block_map)
 }
 
-pub fn mint_block<T: Into<Vec<u8>>>(
+pub fn mint_block<T: Into<Vec<u8>>, F: Into<Vec<u8>>>(
     block_id: u64,
     to: T,
     amount: u64,
     timestamp: u64,
+    fee_collector: Option<F>,
 ) -> ICRC3Value {
     let mut block_map = BTreeMap::new();
 
@@ -65,6 +66,13 @@ pub fn mint_block<T: Into<Vec<u8>>>(
     tx_map.insert("amt".to_string(), ICRC3Value::Nat(Nat::from(amount)));
 
     block_map.insert("tx".to_string(), ICRC3Value::Map(tx_map));
+
+    if let Some(fee_collector) = fee_collector {
+        block_map.insert(
+            "fee_col".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(fee_collector)),
+        );
+    }
 
     // Add parent hash for blocks after the first
     if block_id > 0 {
