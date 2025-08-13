@@ -908,7 +908,7 @@ pub async fn sign_transaction(
     if num_inputs > MAX_NUM_INPUTS {
         return Err(SignTransactionError::TooManyInputs {
             max_num_inputs: MAX_NUM_INPUTS,
-            num_inputs: num_inputs,
+            num_inputs,
         });
     }
 

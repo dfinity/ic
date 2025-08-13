@@ -116,7 +116,7 @@ async fn analyze_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f6
             .iter()
             .map(|req| req.amount)
             .sum::<u64>(),
-        33_16_317_017_u64 //33 BTC!
+        3_316_317_017_u64 //33 BTC!
     );
     assert_eq!(submitted_transaction.used_utxos.len(), 1_799);
     assert_eq!(submitted_transaction.fee_per_vbyte, Some(7_486));
