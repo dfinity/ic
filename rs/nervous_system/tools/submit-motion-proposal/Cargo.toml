@@ -1,0 +1,30 @@
+[package]
+name = "ic-nervous-system-submit-motion-proposal"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "submit-motion-proposal"
+path = "src/main.rs"
+
+[dependencies]
+# Remeber: Sort alphabetically. Follow existing groups.
+
+# Workspace-based.
+candid = { workspace = true }
+clap = { workspace = true }
+ic-agent = { workspace = true }
+ic-certification = { workspace = true }
+ic-identity-hsm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+
+# Path-based.
+ic-nns-common = { path = "../../../nns/common" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }

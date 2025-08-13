@@ -58,6 +58,7 @@ ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-nervous-system-timestamp = { path = "../../nervous_system/timestamp" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance-api = { path = "./api" }

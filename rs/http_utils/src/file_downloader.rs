@@ -240,7 +240,10 @@ impl FileDownloader {
             );
             Ok(None)
         } else {
-            Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
+            Err(FileDownloadError::NonSuccessResponse(
+                Method::GET,
+                Box::new(response),
+            ))
         }
     }
 
@@ -356,7 +359,7 @@ pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadR
     } else {
         Err(FileDownloadError::untar_error(
             tar_path,
-            io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
+            io::Error::other("Unrecognized file type"),
         ))
     }
 }
@@ -373,7 +376,7 @@ pub enum FileDownloadError {
     ReqwestError(reqwest::Error),
 
     /// A non-success HTTP response was received from the given URI
-    NonSuccessResponse(http::Method, Response),
+    NonSuccessResponse(http::Method, Box<Response>),
 
     /// A file's computed hash did not match the expected hash
     FileHashMismatchError {

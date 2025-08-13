@@ -4,6 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:hex-literal",
     "@crate_index//:hmac",
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
@@ -23,7 +25,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:bip32",
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:hex",
-    "@crate_index//:hex-literal",
     "@crate_index//:wycheproof",
 ]
 

@@ -1029,6 +1029,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
+        ready_for_migration: bool,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
@@ -1042,6 +1043,8 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect::<Vec<PrincipalId>>();
+
+        let version = canister.system_state.canister_version;
 
         let canister_memory_usage = canister.memory_usage();
         let canister_wasm_memory_usage = canister.wasm_memory_usage();
@@ -1063,6 +1066,8 @@ impl CanisterManager {
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
+            ready_for_migration,
+            version,
             canister
                 .execution_state
                 .as_ref()
@@ -2122,7 +2127,7 @@ impl CanisterManager {
             };
 
             // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
-            if snapshot.source() == SnapshotSource::MetadataUpload
+            if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved)
                 && !globals_match(
                     &new_execution_state.exported_globals,
                     &execution_snapshot.exported_globals,
@@ -2158,7 +2163,7 @@ impl CanisterManager {
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
         // Otherwise, the snapshot is invalid.
-        if snapshot.source() == SnapshotSource::MetadataUpload {
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
             let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
             let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
             if !snapshot_hook_status
@@ -2220,6 +2225,7 @@ impl CanisterManager {
                 snapshot.canister_version(),
                 snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                snapshot.source(),
             ),
         );
         state
@@ -2591,7 +2597,7 @@ impl CanisterManager {
             self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload {
+        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 

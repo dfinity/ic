@@ -1,12 +1,13 @@
 use crate::{
-    convert::{self, from_arg, to_model_account_identifier},
+    convert::{self, from_account_or_account_identifier, from_arg, to_model_account_identifier},
     errors::ApiError,
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
     request_handler::{verify_network_id, RosettaRequestHandler},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
-        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, RequestType,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+        StopDissolve,
     },
 };
 use rosetta_core::objects::ObjectMap;
@@ -77,6 +78,9 @@ impl RosettaRequestHandler {
                 }
                 RequestType::Disburse { neuron_index } => {
                     disburse(&mut requests, arg, from, neuron_index)?
+                }
+                RequestType::DisburseMaturity { neuron_index } => {
+                    disburse_maturity(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::AddHotKey { neuron_index } => {
                     add_hotkey(&mut requests, arg, from, neuron_index)?
@@ -323,6 +327,42 @@ fn disburse(
                     })
                     .map(Some)
             })?,
+            neuron_index,
+        }));
+    } else {
+        return Err(ApiError::internal_error(
+            "Incompatible manage_neuron command".to_string(),
+        ));
+    };
+    Ok(())
+}
+
+/// Handle DISBURSE_MATURITY.
+fn disburse_maturity(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    })?;
+    if let ManageNeuron {
+        command:
+            Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
+                to_account,
+                percentage_to_disburse,
+                to_account_identifier,
+            })),
+        ..
+    } = manage
+    {
+        let recipient = from_account_or_account_identifier(to_account, to_account_identifier)?;
+
+        requests.push(Request::DisburseMaturity(DisburseMaturity {
+            account: from,
+            percentage_to_disburse,
+            recipient,
             neuron_index,
         }));
     } else {

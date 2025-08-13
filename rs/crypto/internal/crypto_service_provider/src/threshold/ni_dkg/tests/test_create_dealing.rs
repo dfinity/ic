@@ -199,7 +199,7 @@ impl StateWithConfig {
         let incorrect_indices: Vec<NodeIndex> = (0..map.len() as NodeIndex * 2)
             .filter(|index| *index != missing_index)
             .choose_multiple(rng, map.len());
-        let values = map.iter().map(|(_, value)| (*value).clone());
+        let values = map.values().map(|value| (*value).clone());
         incorrect_indices.into_iter().zip(values).collect()
     }
 }

@@ -141,8 +141,7 @@ impl PartitionProvider for GptPartitionProvider {
         let partition = self
             .gpt
             .partitions()
-            .iter()
-            .map(|(_, partition)| partition)
+            .values()
             .find(|partition| partition.part_guid == partition_uuid)
             .with_context(|| format!("Could not find partition {partition_uuid}"))?;
 
