@@ -2667,12 +2667,8 @@ impl Governance {
             ));
         }
 
-        let validated_operation = validate_execute_extension_operation(
-            &*self.env,
-            self.proto.root_canister_id_or_panic(),
-            execute_extension_operation,
-        )
-        .await?;
+        let validated_operation =
+            validate_execute_extension_operation(self, execute_extension_operation).await?;
 
         // Execute the validated operation
         validated_operation.execute(self).await
@@ -3548,7 +3544,7 @@ impl Governance {
         }
 
         let reserved_canisters = self.reserved_canister_targets();
-        validate_and_render_proposal(proposal, &*self.env, &self.proto, reserved_canisters)
+        validate_and_render_proposal(self, proposal, reserved_canisters)
             .await
             .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }
