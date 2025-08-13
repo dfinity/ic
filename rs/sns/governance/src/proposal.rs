@@ -302,9 +302,8 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
 /// Takes in the GovernanceProto as to be able to validate against the current
 /// state of governance.
 pub(crate) async fn validate_and_render_proposal(
+    governance: &crate::governance::Governance,
     proposal: &Proposal,
-    env: &dyn Environment,
-    governance_proto: &Governance,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<(String, Option<ActionAuxiliaryPb>), String> {
     let mut defects = Vec::new();
@@ -338,13 +337,7 @@ pub(crate) async fn validate_and_render_proposal(
     ));
 
     // Even if we already found defects, still validate as to return all the errors found.
-    match validate_and_render_action(
-        &proposal.action,
-        env,
-        governance_proto,
-        reserved_canister_targets,
-    )
-    .await
+    match validate_and_render_action(&proposal.action, governance, reserved_canister_targets).await
     {
         Err(err) => {
             defects.push(err);
@@ -375,10 +368,11 @@ pub(crate) async fn validate_and_render_proposal(
 /// proposal action.
 pub(crate) async fn validate_and_render_action(
     action: &Option<proposal::Action>,
-    env: &dyn Environment,
-    governance_proto: &Governance,
+    governance: &crate::governance::Governance,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<(String, ActionAuxiliary), String> {
+    let env = &*governance.env;
+    let governance_proto = &governance.proto;
     let current_parameters = governance_proto
         .parameters
         .as_ref()
@@ -449,7 +443,7 @@ pub(crate) async fn validate_and_render_action(
                 .await
         }
         proposal::Action::ExecuteExtensionOperation(execute) => {
-            validate_and_render_execute_extension_operation(env, execute, root_canister_id).await
+            validate_and_render_execute_extension_operation(governance, execute).await
         }
         proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
@@ -1507,27 +1501,16 @@ pub async fn validate_and_render_execute_nervous_system_function(
 }
 
 async fn validate_and_render_execute_extension_operation(
-    env: &dyn Environment,
+    governance: &crate::governance::Governance,
     execute: &ExecuteExtensionOperation,
-    root_canister_id: CanisterId,
 ) -> Result<String, String> {
     let ValidatedExecuteExtensionOperation {
         extension_canister_id,
         operation_name,
         operation_arg,
-    } = execute.clone().try_into()?;
-
-    validate_execute_extension_operation(
-        env,
-        root_canister_id,
-        extension_canister_id,
-        operation_name.clone(),
-        &operation_arg,
-    )
-    .await
-    .map_err(|err| err.error_message)?;
-
-    let operation_arg = format!("{:#?}", operation_arg);
+    } = validate_execute_extension_operation(governance, execute.clone())
+        .await
+        .map_err(|err| err.error_message)?;
 
     Ok(format!(
         r"# Proposal to execute extension operation:
@@ -2832,7 +2815,9 @@ mod set_topics_for_custom_proposals;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::governance::ValidGovernanceProto;
     use crate::{
+        governance::Governance,
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
@@ -2849,8 +2834,10 @@ mod tests {
     use candid::Encode;
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
+
     use ic_crypto_sha2::Sha256;
     use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
+    use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
     use ic_nervous_system_clients::canister_status::{
         CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
     };
@@ -2860,6 +2847,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashset};
+
     use std::convert::TryFrom;
 
     pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();
@@ -2872,8 +2860,6 @@ mod tests {
         static ref SNS_GOVERNANCE_CANISTER_ID: CanisterId = canister_test_id(501);
         static ref SNS_LEDGER_CANISTER_ID: CanisterId = canister_test_id(502);
         static ref SNS_SWAP_CANISTER_ID: CanisterId = canister_test_id(503);
-        static ref FAKE_ENV: Box<dyn Environment> =
-            Box::new(NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)));
     }
 
     fn governance_proto_for_proposal_tests(deployed_version: Option<Version>) -> GovernanceProto {
@@ -2882,7 +2868,12 @@ mod tests {
             ledger_canister_id: Some(PrincipalId::from(*SNS_LEDGER_CANISTER_ID)),
             swap_canister_id: Some(PrincipalId::from(*SNS_SWAP_CANISTER_ID)),
 
-            sns_metadata: None,
+            sns_metadata: Some(SnsMetadata {
+                logo: None,
+                url: Some("https://example.com".to_string()),
+                name: Some("Example".to_string()),
+                description: Some("Very descriptive description".to_string()),
+            }),
             sns_initialization_parameters: "".to_string(),
             parameters: Some(DEFAULT_PARAMS.clone()),
             id_to_nervous_system_functions: EMPTY_FUNCTIONS.clone(),
@@ -2906,30 +2897,42 @@ mod tests {
         }
     }
 
+    fn governance_for_tests_with_env(
+        governance_proto: GovernanceProto,
+        env: NativeEnvironment,
+    ) -> Governance {
+        Governance::new(
+            ValidGovernanceProto::try_from(governance_proto)
+                .expect("Failed validating governance proto"),
+            Box::new(env),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockCMC::default()),
+        )
+    }
+
     fn validate_default_proposal(proposal: &Proposal) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_proposal(
-            proposal,
-            &**FAKE_ENV,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .map(|(rendering, _action_auxiliary)| rendering)
+        let governance = governance_for_tests_with_env(
+            governance_proto,
+            NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)),
+        );
+        validate_and_render_proposal(&governance, proposal, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .map(|(rendering, _action_auxiliary)| rendering)
     }
 
     fn validate_default_action(action: &Option<proposal::Action>) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_action(
-            action,
-            &**FAKE_ENV,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .map(|(rendering, _action_auxiliary)| rendering)
+        let governance = governance_for_tests_with_env(
+            governance_proto,
+            NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)),
+        );
+        validate_and_render_action(action, &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .map(|(rendering, _action_auxiliary)| rendering)
     }
 
     fn basic_principal_id() -> PrincipalId {
@@ -3984,16 +3987,13 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
     fn upgrade_sns_to_next_version_renders_correctly() {
         let (env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
+        let governance = governance_for_tests_with_env(governance_proto, env);
         // Same id as setup_env_for_upgrade_sns_proposals
-        let (actual_text, _) = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+        let (actual_text, _) =
+            validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+                .now_or_never()
+                .unwrap()
+                .unwrap();
 
         let expected_text = r"# Proposal to upgrade SNS Root to next version:
 
@@ -4052,15 +4052,11 @@ Version {
             .unwrap(),
             Ok(Encode!(&GetNextSnsVersionResponse { next_version: None }).unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let governance = governance_for_tests_with_env(governance_proto, env);
+        let err = validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         let target_string = "There is no next version found for the current SNS version: Version {";
         assert!(
@@ -4113,15 +4109,11 @@ Version {
             })
             .unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let governance = governance_for_tests_with_env(governance_proto, env);
+        let err = validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         assert!(err.contains(
             "There is more than one upgrade possible for UpgradeSnsToNextVersion Action.  \
@@ -4154,15 +4146,11 @@ Version {
             .unwrap(),
             Ok(Encode!(&canisters_summary_response).unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let governance = governance_for_tests_with_env(governance_proto, env);
+        let err = validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         assert!(err.contains("Did not receive Root CanisterId from list_sns_canisters call"))
     }

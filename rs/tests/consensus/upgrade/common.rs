@@ -17,6 +17,7 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
+use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -29,7 +30,7 @@ use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{block_on, MessageCanister},
 };
-use ic_types::SubnetId;
+use ic_types::{ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
@@ -40,7 +41,7 @@ const ALLOWED_FAILURES: usize = 1;
 pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
-pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
     let target_version = get_guestos_update_img_version().expect("target IC version");
@@ -48,14 +49,17 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     // Bless target version
     let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
+    let guest_launch_measurements = get_guestos_launch_measurements().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &target_version,
         &logger,
-        &sha256,
+        sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed target version");
+
     target_version
 }
 
@@ -95,9 +99,10 @@ pub fn get_chain_key_canister_and_public_key<'a>(
 pub fn upgrade(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
-    upgrade_version: &str,
+    upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
+    assert_graceful_orchestrator_tasks_exits: bool,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -162,7 +167,14 @@ pub fn upgrade(
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
-    upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
+    upgrade_to(
+        nns_node,
+        subnet_id,
+        &subnet_node,
+        upgrade_version,
+        assert_graceful_orchestrator_tasks_exits,
+        &logger,
+    );
 
     info!(logger, "Stopping redundant nodes ...");
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
@@ -237,7 +249,8 @@ fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
+    assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
     info!(
@@ -246,9 +259,21 @@ fn upgrade_to(
     );
     block_on(deploy_guestos_to_all_subnet_nodes(
         nns_node,
-        &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
+        target_version,
         subnet_id,
     ));
+
+    if assert_graceful_orchestrator_tasks_exits {
+        info!(
+            logger,
+            "Checking if the node {} has produced a log \
+            indicating that the orchestrator has gracefully shut down the tasks",
+            subnet_node.get_ip_addr(),
+        );
+        block_on(assert_orchestrator_stopped_gracefully(subnet_node.clone()));
+        info!(logger, "The orchestrator shut down the tasks gracefully");
+    }
+
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
@@ -280,4 +305,16 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
+}
+
+async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
+    const MESSAGE: &str = r"Orchestrator shut down gracefully";
+
+    let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
+
+    let ssh_session = node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+
+    execute_bash_command(&ssh_session, script).expect("Didn't find the appropriate log entry");
 }

@@ -192,11 +192,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     }
 
     fn global_timer_set(&self, timestamp: u64) {
-        // SAFETY: setting the global timer is always safe; it does not
-        // mutate any canister memory.
-        unsafe {
-            ic0::global_timer_set(timestamp as i64);
-        }
+        ic0::global_timer_set(timestamp);
     }
 
     async fn create_canister(

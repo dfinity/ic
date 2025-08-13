@@ -10,9 +10,13 @@ use prometheus::{
     Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 
-use crate::metrics::{
-    cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
+use crate::{
+    metrics::{
+        cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
+        memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets,
+        ScopedMetrics,
+    },
+    scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -114,6 +118,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     pub(super) pre_signature_stash_size: IntGaugeVec,
+    pub(super) threshold_signature_scheme_mismatch: IntCounter,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
     pub(super) canister_snapshots_memory_usage: IntGauge,
@@ -295,6 +300,7 @@ impl SchedulerMetrics {
                 "Number of pre-signatures currently stored in the pre-signature stash, by key ID.",
                 &["key_id"],
             ),
+            threshold_signature_scheme_mismatch: metrics_registry.error_counter(THRESHOLD_SIGNATURE_SCHEME_MISMATCH),
             input_queue_messages: metrics_registry.int_gauge_vec(
                 "execution_input_queue_messages",
                 "Count of messages currently enqueued in input queues, by message kind.",
