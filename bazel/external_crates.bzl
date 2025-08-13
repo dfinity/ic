@@ -529,7 +529,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.4.0",
+                version = "^2.0.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
