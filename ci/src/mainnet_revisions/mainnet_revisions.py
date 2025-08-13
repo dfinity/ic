@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import logging
 import pathlib
@@ -7,6 +8,8 @@ import subprocess
 import urllib.request
 from enum import Enum
 from typing import List
+import tempfile
+import os
 
 MAINNET_ICOS_REVISIONS_FILE = "mainnet-icos-revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
@@ -18,6 +21,55 @@ SAVED_VERSIONS_CANISTERS_FILE = "mainnet-canister-revisions.json"
 class Command(Enum):
     ICOS = 1
     CANISTERS = 2
+
+
+def base_download_url(git_commit_id, variant, update, test, dev=True):
+    """Construct the base download URL for ICOS images."""
+    component = ("update-img" if update else "disk-img") + ("-dev" if dev else "")
+    test_suffix = "-test" if test else ""
+    return f"https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test_suffix}/"
+
+
+def download_and_hash_image(url, logger):
+    """Download an image from the given URL and return its SHA256 hash."""
+    logger.info(f"Downloading image from: {url}")
+
+    try:
+        with urllib.request.urlopen(url, timeout=300) as response:
+            sha256_hash = hashlib.sha256()
+
+            chunk_size = 8192
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                sha256_hash.update(chunk)
+
+            hash_hex = sha256_hash.hexdigest()
+            logger.info(f"Successfully downloaded and hashed image: {hash_hex}")
+            return hash_hex
+
+    except Exception as e:
+        logger.error(f"Failed to download image from {url}: {e}")
+        raise
+
+
+def get_image_hash_for_version(version, variant, is_dev=True, logger=None):
+    """Get the SHA256 hash of an update image for a given version and variant."""
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    base_url = base_download_url(
+        git_commit_id=version,
+        variant=variant,
+        update=True,
+        test=False,
+        dev=is_dev
+    )
+
+    image_url = base_url + "update-img.tar.zst"
+
+    return download_and_hash_image(image_url, logger)
 
 
 def sync_main_branch_and_checkout_branch(
@@ -107,8 +159,8 @@ def commit_and_create_pr(
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
-def get_subnet_replica_version_info(subnet_id: str) -> (str, str):
-    """Use the dashboard to pull the latest version info for the given subnet."""
+def get_subnet_replica_version_info(subnet_id: str, logger: logging.Logger) -> (str, str):
+    """Use the dashboard to pull the latest version info for the given subnet and calculate image hash."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}", headers={"user-agent": "python"}
     )
@@ -134,13 +186,16 @@ def get_subnet_replica_version_info(subnet_id: str) -> (str, str):
     with urllib.request.urlopen(req, timeout=30) as request:
         proposal = json.loads(request.read().decode())
         version = proposal["payload"]["replica_version_to_elect"]
-        hash = proposal["payload"]["release_package_sha256_hex"]
+
+        # TODO(NODE-1682): Currently only the application subnet uses dev images
+        is_dev = subnet_id == app_subnet_id
+        hash = get_image_hash_for_version(version, "guest-os", is_dev, logger)
 
         return (version, hash)
 
 
-def get_latest_hostos_version_info() -> (str, str):
-    """Use the dashboard to pull the version info for the most recent HostOS version."""
+def get_latest_hostos_version_info(logger: logging.Logger) -> (str, str):
+    """Use the dashboard to pull the version info for the most recent HostOS version and calculate image hash."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedHostosVersions",
         headers={"user-agent": "python"},
@@ -153,15 +208,16 @@ def get_latest_hostos_version_info() -> (str, str):
         latest_elect_proposal = next(v for v in sorted_proposals if v["payload"]["hostos_version_to_elect"])
 
         version = latest_elect_proposal["payload"]["hostos_version_to_elect"]
-        hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
+
+        hash = get_image_hash_for_version(version, "host-os", is_dev=True, logger=logger)
 
         return (version, hash)
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
     """Fetch and update the saved subnet version and hash."""
-    (version, hash) = get_subnet_replica_version_info(subnet)
-    logger.info("Current subnet (%s) revision: %s hash: %s", subnet, version, hash)
+    (version, hash) = get_subnet_replica_version_info(subnet, logger)
+    logger.info("Current subnet (%s) revision: %s calculated hash: %s", subnet, version, hash)
 
     full_path = repo_root / file_path
     # Check if the subnet revision is already up-to-date.
@@ -171,20 +227,26 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
     subnet_infos = guestos_info.get("subnets", {})
     subnet_info = subnet_infos.get(subnet, {})
     existing_version = subnet_info.get("version", "")
-    if existing_version == version:
-        logger.info("Subnet revision already updated to version %s. Skipping update.", version)
+
+    # TODO(NODE-1682): Use the correct field name based on whether it's a dev image or not
+    is_dev = subnet == app_subnet_id
+    field_name = "update_img_hash_dev" if is_dev else "update_img_hash"
+    existing_hash = subnet_info.get(field_name, "")
+
+    if existing_version == version and existing_hash == hash:
+        logger.info("Subnet revision already updated to version %s with hash %s. Skipping update.", version, hash)
         return
 
-    data["guestos"]["subnets"][subnet] = {"version": version, "update_img_hash": hash}
+    data["guestos"]["subnets"][subnet] = {"version": version, field_name: hash}
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    logger.info("Updated subnet %s revision to version %s with image hash %s", subnet, version, hash)
+    logger.info("Updated subnet %s revision to version %s with calculated image hash %s", subnet, version, hash)
 
 
 def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     """Fetch and update the saved HostOS version and hash."""
-    (version, hash) = get_latest_hostos_version_info()
-    logger.info("Latest HostOS revision: %s hash: %s", version, hash)
+    (version, hash) = get_latest_hostos_version_info(logger)
+    logger.info("Latest HostOS revision: %s calculated hash: %s", version, hash)
 
     full_path = repo_root / file_path
     # Check if the hostos revision is already up-to-date.
@@ -193,14 +255,16 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
     hostos_info = data.get("hostos", {})
     latest_release = hostos_info.get("latest_release", {})
     existing_version = latest_release.get("version", "")
-    if existing_version == version:
-        logger.info("Hostos revision already updated to version %s. Skipping update.", version)
+    existing_hash = latest_release.get("update_img_hash_dev", "")
+
+    if existing_version == version and existing_hash == hash:
+        logger.info("Hostos revision already updated to version %s with hash %s. Skipping update.", version, hash)
         return
 
-    data["hostos"] = {"latest_release": {"version": version, "update_img_hash": hash}}
+    data["hostos"] = {"latest_release": {"version": version, "update_img_hash_dev": hash}}
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    logger.info("Updated hostos revision to version %s with image hash %s", version, hash)
+    logger.info("Updated hostos revision to version %s with calculated image hash %s", version, hash)
 
 
 def update_mainnet_icos_revisions_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
