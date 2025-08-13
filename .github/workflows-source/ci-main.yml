@@ -188,16 +188,77 @@ jobs:
               BAZEL_EXTRA_ARGS+=( --keep_going )
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
-      - name: Run Bazel Test All
-        uses: ./.github/actions/bazel-test-all/
+
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
+        env:
+          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
-          execlogs-artifact-name: execlogs-bazel-test-all
-          diff-only: ${{ needs.config.outputs.diff_only }}
-          stamp-build: ${{ needs.config.outputs.release-build }}
-          upload-artifacts: ${{ needs.config.outputs.release-build }}
-          extra-bazel-args: ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test-all
+          run: |
+            set -euo pipefail
+
+            diff_only='${{ needs.config.outputs.diff_only }}'
+            stamp_build='${{ needs.config.outputs.release-build }}'
+
+            bazel_args=(
+                --config=flaky_retry # auto retry eg systests
+            )
+
+            if [[ $stamp_build == "true" ]]; then
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
+            fi
+
+            if [[ $diff_only == "true" ]]; then
+                target_pattern_file=$(mktemp)
+                trap "rm $target_pattern_file" INT TERM EXIT
+
+                merge_base_sha='${{ github.event.pull_request.base.sha }}'
+                branch_head_sha='${{ github.event.pull_request.head.sha }}'
+
+                # we can't use HEAD as a fallback for branch_head_sha because that is
+                # the merge commit which contains the changes of the current HEAD of master
+                # XXX: the logic was ported from a legacy script though ranges like `HEAD..`
+                # may not make much sense
+                commit_range="${merge_base_sha:-HEAD}..${branch_head_sha:-}"
+                # get bazel targets that changed in the commit range and take the union with
+                # the targets that are expected to be built.
+                comm -12 \
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh test "$commit_range" | sort) \
+                  <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+
+                # if bazel targets is empty we don't need to run any tests
+                if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+                  echo "No bazel targets to build"
+                  exit 0
+                fi
+
+                # If there are targets to build, pass them as a file to avoid bash & the OS
+                # complaining about the argument list being too long.
+                bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            else
+                bazel_args+=( //... )
+            fi
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            bazel test ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }} "${bazel_args[@]}"
+
+      - name: Upload to S3
+        uses: ./.github/actions/upload-artifacts
+        if: needs.config.outputs.release-build == 'true' && secrets.CLOUD_CREDENTIALS_CONTENT != ''
+        with:
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
