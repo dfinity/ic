@@ -566,7 +566,12 @@ struct IcpXdrConversionRate {
     xdr_permyriad_per_icp: u64,
 }
 
-fn get_icp_exchange_rate(pic: &PocketIc) -> IcpXdrConversionRate {
+enum ExchangeRateMode {
+    Recent,
+    Average,
+}
+
+fn get_icp_exchange_rate(pic: &PocketIc, mode: ExchangeRateMode) -> IcpXdrConversionRate {
     #[derive(CandidType, Deserialize)]
     struct IcpXdrConversionRateResponse {
         data: IcpXdrConversionRate,
@@ -575,15 +580,14 @@ fn get_icp_exchange_rate(pic: &PocketIc) -> IcpXdrConversionRate {
     }
 
     let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
-    update_candid::<_, (IcpXdrConversionRateResponse,)>(
-        pic,
-        cmc_id,
-        "get_icp_xdr_conversion_rate",
-        (),
-    )
-    .unwrap()
-    .0
-    .data
+    let method_name = match mode {
+        ExchangeRateMode::Recent => "get_icp_xdr_conversion_rate",
+        ExchangeRateMode::Average => "get_average_icp_xdr_conversion_rate",
+    };
+    update_candid::<_, (IcpXdrConversionRateResponse,)>(pic, cmc_id, method_name, ())
+        .unwrap()
+        .0
+        .data
 }
 
 fn get_authorized_subnets(pic: &PocketIc) -> Vec<Principal> {
@@ -613,10 +617,19 @@ fn get_subnet_types(pic: &PocketIc) -> BTreeMap<String, Vec<Principal>> {
 
 fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
     // check XDR exchange rate
-    // these values are hard-coded in the PocketIC server implementation
-    // including steps how they were obtained
-    let icp_exchange_rate = get_icp_exchange_rate(pic);
-    assert_eq!(icp_exchange_rate.xdr_permyriad_per_icp, 35_200);
+    // the value is hard-coded in the PocketIC server implementation
+    // including steps how it was obtained
+    let hardcoded_icp_exchange_rate = 35_200;
+    let icp_exchange_rate = get_icp_exchange_rate(pic, ExchangeRateMode::Recent);
+    assert_eq!(
+        icp_exchange_rate.xdr_permyriad_per_icp,
+        hardcoded_icp_exchange_rate
+    );
+    let average_icp_exchange_rate = get_icp_exchange_rate(pic, ExchangeRateMode::Average);
+    assert_eq!(
+        average_icp_exchange_rate.xdr_permyriad_per_icp,
+        hardcoded_icp_exchange_rate
+    );
 
     // check authorized (application) subnets
     let mut authorized_subnets = get_authorized_subnets(pic);

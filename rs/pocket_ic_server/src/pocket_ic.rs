@@ -9,7 +9,7 @@ use bitcoin::Network;
 use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload, SetAuthorizedSubnetworkListArgs,
-    SubnetListWithType, UpdateSubnetTypeArgs,
+    SubnetListWithType, UpdateSubnetTypeArgs, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
 };
 use futures::future::BoxFuture;
 use futures::FutureExt;
@@ -152,6 +152,19 @@ const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+
+fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
+    // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
+    if icp_features
+        .as_ref()
+        .map(|icp_features| icp_features.cycles_minting)
+        .unwrap_or_default()
+    {
+        UNIX_EPOCH + Duration::from_secs(DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1)
+    } else {
+        GENESIS.into()
+    }
+}
 
 /// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
@@ -634,11 +647,7 @@ impl PocketIcSubnets {
     }
 
     fn time(&self) -> SystemTime {
-        self.subnets
-            .get_all()
-            .first()
-            .map(|subnet| subnet.state_machine.time())
-            .unwrap_or(GENESIS.into())
+        self.subnets.get_all().first().unwrap().state_machine.time()
     }
 
     fn create_subnet(
@@ -816,7 +825,7 @@ impl PocketIcSubnets {
 
         // All subnets must have the same time and time can only advance =>
         // set the time to the maximum time in the latest state across all subnets.
-        let mut time: SystemTime = GENESIS.into();
+        let mut time: SystemTime = default_timestamp(&self.icp_features);
         for subnet in self.subnets.get_all() {
             time = max(time, subnet.state_machine.get_state_time().into());
         }
