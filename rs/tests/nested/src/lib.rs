@@ -27,11 +27,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url},
 };
 use ic_types::hostos_version::HostosVersion;
-use registry_canister::mutations::{
-    do_add_nodes_to_subnet::AddNodesToSubnetPayload,
-    do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
-    do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
-};
+use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use reqwest::Client;
 
 use slog::info;
@@ -55,80 +51,6 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
 
 const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
-
-/// Submit a proposal to update unassigned nodes config to the deployed nested-node version
-/// Returns the updated topology after the proposal is executed
-async fn update_unassigned_nodes_to_deployed_version(
-    topology: &TopologySnapshot,
-    logger: &slog::Logger,
-) -> TopologySnapshot {
-    let deployed_version = get_setupos_img_version().expect("Failed to find deployed version");
-    info!(
-        logger,
-        "Submitting proposals to update unassigned nodes to deployed nested-node version '{}'",
-        deployed_version
-    );
-
-    let nns_subnet = topology.root_subnet();
-    let nns_node = nns_subnet.nodes().next().unwrap();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-
-    // First, bless the version
-    info!(logger, "Blessing version '{}'", deployed_version);
-    let bless_payload = ReviseElectedGuestosVersionsPayload {
-        replica_version_to_elect: Some(deployed_version.to_string()),
-        release_package_sha256_hex: Some(
-            get_setupos_img_sha256().expect("Failed to get deployed version hash"),
-        ),
-        release_package_urls: vec![get_setupos_img_url()
-            .expect("Failed to get deployed version URL")
-            .to_string()],
-        replica_versions_to_unelect: vec![],
-        guest_launch_measurements: None,
-    };
-
-    let bless_proposal_id = submit_external_proposal_with_test_id(
-        &governance,
-        NnsFunction::ReviseElectedGuestosVersions,
-        bless_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance, bless_proposal_id).await;
-    info!(
-        logger,
-        "Version '{}' blessed successfully", deployed_version
-    );
-
-    // Then, deploy the blessed version to unassigned nodes
-    let deploy_payload = DeployGuestosToAllUnassignedNodesPayload {
-        elected_replica_version: deployed_version.to_string(),
-    };
-
-    let deploy_proposal_id = submit_external_proposal_with_test_id(
-        &governance,
-        NnsFunction::DeployGuestosToAllUnassignedNodes,
-        deploy_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance, deploy_proposal_id).await;
-
-    info!(
-        logger,
-        "Proposal to deploy GuestOS to all unassigned nodes executed successfully"
-    );
-
-    // Get the updated topology after the proposal execution
-    topology
-        .block_for_newer_registry_version_within_duration(
-            Duration::from_secs(60),
-            Duration::from_secs(2),
-        )
-        .await
-        .expect("Failed to get updated topology after proposal execution")
-}
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
 fn setup_ic_infrastructure(env: &TestEnv) {
@@ -262,11 +184,6 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     start_nested_vm_group(env.clone());
 
-    let updated_topology = block_on(update_unassigned_nodes_to_deployed_version(
-        &initial_topology,
-        &logger,
-    ));
-
     info!(logger, "Waiting for all four nodes to join ...");
 
     // Wait for all four nodes to register by repeatedly waiting for registry updates
@@ -279,7 +196,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         || {
             // Wait for a newer registry version to be available
             let new_topology = block_on(
-                updated_topology.block_for_newer_registry_version_within_duration(
+                initial_topology.block_for_newer_registry_version_within_duration(
                     Duration::from_secs(60), // Shorter timeout for each individual check
                     Duration::from_secs(2),
                 ),
@@ -535,15 +452,9 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm_group(env.clone());
-
-    let updated_topology = block_on(update_unassigned_nodes_to_deployed_version(
-        &initial_topology,
-        &logger,
-    ));
-
     info!(logger, "Waiting for node to join ...");
     let new_topology = block_on(
-        updated_topology.block_for_newer_registry_version_within_duration(
+        initial_topology.block_for_newer_registry_version_within_duration(
             NODE_REGISTRATION_TIMEOUT,
             NODE_REGISTRATION_BACKOFF,
         ),
@@ -766,15 +677,9 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm_group(env.clone());
-
-    let updated_topology = block_on(update_unassigned_nodes_to_deployed_version(
-        &initial_topology,
-        &logger,
-    ));
-
     info!(logger, "Waiting for node to join ...");
     block_on(
-        updated_topology.block_for_newer_registry_version_within_duration(
+        initial_topology.block_for_newer_registry_version_within_duration(
             NODE_REGISTRATION_TIMEOUT,
             NODE_REGISTRATION_BACKOFF,
         ),
