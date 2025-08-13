@@ -170,7 +170,7 @@ async fn should_replay_events_for_testnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Testnet);
-    assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
+    assert_eq!(state.get_total_btc_managed(), 24_902_022_759);
 }
 
 // This test is ignored because it takes too long to run,
@@ -372,8 +372,8 @@ impl GetEventsFile for Mainnet {
 }
 
 impl GetEventsFile for Testnet {
-    type EventType = EventType;
-    type ResultType = GetEventsWithoutTimestampsResult;
+    type EventType = Event;
+    type ResultType = GetEventsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("ml52i-qqaaa-aaaar-qaaba-cai").unwrap()
     }
@@ -382,27 +382,10 @@ impl GetEventsFile for Testnet {
     }
 }
 
-// TODO XC-261: Remove
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct GetEventsWithoutTimestampsResult {
-    pub events: Vec<EventType>,
-    pub total_event_count: u64,
-}
-
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
     pub events: Vec<Event>,
     pub total_event_count: u64,
-}
-
-// TODO XC-261: Remove
-impl From<GetEventsWithoutTimestampsResult> for GetEventsResult {
-    fn from(value: GetEventsWithoutTimestampsResult) -> Self {
-        Self {
-            events: value.events.into_iter().map(Event::from).collect(),
-            total_event_count: value.total_event_count,
-        }
-    }
 }
 
 /// This struct is used to skip the check invariants when replaying the events
