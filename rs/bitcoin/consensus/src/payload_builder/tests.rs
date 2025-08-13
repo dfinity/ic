@@ -117,6 +117,8 @@ fn bitcoin_payload_builder_test(
             &MetricsRegistry::new(),
             Box::new(bitcoin_mainnet_adapter_client),
             Box::new(bitcoin_testnet_adapter_client),
+            Box::new(MockBitcoinAdapterClient::new()),
+            Box::new(MockBitcoinAdapterClient::new()),
             subnet_test_id(0),
             Arc::new(registry_client),
             Config::default(),

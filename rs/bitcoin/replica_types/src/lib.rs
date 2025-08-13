@@ -5,7 +5,8 @@
 //! only for serialization/deserialization of the ReplicatedState.
 
 use candid::CandidType;
-use ic_btc_interface::Network;
+use ic_btc_interface::Network as BtcNetwork;
+use ic_btc_interface::Network as DogeNetwork;
 use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
@@ -16,26 +17,83 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
 
-fn from_btc_network(network: Network) -> v1::Network {
-    match network {
-        Network::Testnet => v1::Network::Testnet,
-        Network::Mainnet => v1::Network::Mainnet,
-        Network::Regtest => v1::Network::Regtest,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Network {
+    Bitcoin(BtcNetwork),
+    Dogecoin(DogeNetwork),
+}
+
+impl From<Network> for v1::Network {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin(network) => match network {
+                BtcNetwork::Mainnet => v1::Network::Mainnet,
+                BtcNetwork::Testnet => v1::Network::Testnet,
+                BtcNetwork::Regtest => v1::Network::Regtest,
+            },
+            Network::Dogecoin(network) => match network {
+                BtcNetwork::Mainnet => v1::Network::DogecoinMainnet,
+                BtcNetwork::Testnet => v1::Network::DogecoinTestnet,
+                BtcNetwork::Regtest => v1::Network::DogecoinRegtest,
+            },
+        }
     }
 }
 
-fn to_btc_network(network: i32) -> Result<Network, ProxyDecodeError> {
+impl From<Network> for i32 {
+    fn from(network: Network) -> Self {
+        v1::Network::from(network).into()
+    }
+}
+
+impl TryFrom<v1::Network> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: v1::Network) -> Result<Self, Self::Error> {
+        match network {
+            v1::Network::Testnet => Ok(Network::Bitcoin(BtcNetwork::Testnet)),
+            v1::Network::Mainnet => Ok(Network::Bitcoin(BtcNetwork::Mainnet)),
+            v1::Network::Regtest => Ok(Network::Bitcoin(BtcNetwork::Regtest)),
+            v1::Network::DogecoinMainnet => Ok(Network::Dogecoin(DogeNetwork::Mainnet)),
+            v1::Network::DogecoinTestnet => Ok(Network::Dogecoin(DogeNetwork::Testnet)),
+            v1::Network::DogecoinRegtest => Ok(Network::Dogecoin(DogeNetwork::Regtest)),
+            _ => Err(ProxyDecodeError::MissingField("network")),
+        }
+    }
+}
+
+impl TryFrom<i32> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: i32) -> Result<Self, Self::Error> {
+        Network::try_from(
+            v1::Network::try_from(network).map_err(|_| {
+                ProxyDecodeError::Other("Failed to decode network enum".to_string())
+            })?,
+        )
+    }
+}
+
+fn from_btc_network(network: BtcNetwork) -> v1::Network {
+    match network {
+        BtcNetwork::Testnet => v1::Network::Testnet,
+        BtcNetwork::Mainnet => v1::Network::Mainnet,
+        BtcNetwork::Regtest => v1::Network::Regtest,
+    }
+}
+
+fn to_btc_network(network: i32) -> Result<BtcNetwork, ProxyDecodeError> {
     match v1::Network::try_from(network) {
-        Ok(v1::Network::Testnet) => Ok(Network::Testnet),
-        Ok(v1::Network::Mainnet) => Ok(Network::Mainnet),
-        Ok(v1::Network::Regtest) => Ok(Network::Regtest),
+        Ok(v1::Network::Testnet) => Ok(BtcNetwork::Testnet),
+        Ok(v1::Network::Mainnet) => Ok(BtcNetwork::Mainnet),
+        Ok(v1::Network::Regtest) => Ok(BtcNetwork::Regtest),
         _ => Err(ProxyDecodeError::MissingField("network")),
     }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendTransactionRequest {
-    pub network: Network,
+    pub network: BtcNetwork,
     #[serde(with = "serde_bytes")]
     pub transaction: Vec<u8>,
 }
@@ -74,7 +132,7 @@ impl BitcoinAdapterRequestWrapper {
     }
 
     /// Returns which bitcoin network the request is for.
-    pub fn network(&self) -> Network {
+    pub fn network(&self) -> BtcNetwork {
         match self {
             BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
                 network,
@@ -650,7 +708,7 @@ pub enum GetSuccessorsRequest {
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetSuccessorsRequestInitial {
-    pub network: Network,
+    pub network: BtcNetwork,
     pub anchor: BlockHash,
     pub processed_block_hashes: Vec<BlockHash>,
 }
