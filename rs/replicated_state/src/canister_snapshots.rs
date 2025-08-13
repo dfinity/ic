@@ -19,7 +19,7 @@ use ic_types::{
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use ic_wasm_types::{CanisterModule, CanisterModuleImpl, Mutable};
+use ic_wasm_types::{CanisterModuleImpl, Mutable, SnapshotMutability};
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -382,7 +382,7 @@ pub type MutableExecutionStateSnapshot = ExecutionStateSnapshotImpl<Mutable>;
 
 /// Contains all information related to a canister's execution state.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct ExecutionStateSnapshotImpl<T> {
+pub struct ExecutionStateSnapshotImpl<T: SnapshotMutability> {
     /// The raw canister module.
     #[validate_eq(Ignore)]
     pub wasm_binary: CanisterModuleImpl<T>,
@@ -414,7 +414,7 @@ pub type PartialCanisterSnapshot = CanisterSnapshotImpl<Mutable>;
 
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct CanisterSnapshotImpl<T> {
+pub struct CanisterSnapshotImpl<T: SnapshotMutability> {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
     /// Whether this snapshot was created from the canister or uploaded manually.
@@ -437,27 +437,27 @@ pub struct CanisterSnapshotImpl<T> {
 /// Impl specific to immutable snapshots.
 impl CanisterSnapshot {
     // TODO
-    pub fn new(
-        canister_id: CanisterId,
-        source: SnapshotSource,
-        taken_at_timestamp: Time,
-        canister_version: u64,
-        certified_data: Vec<u8>,
-        chunk_store: WasmChunkStore,
-        execution_snapshot: ExecutionStateSnapshot,
-        size: NumBytes,
-    ) -> CanisterSnapshot {
-        Self {
-            canister_id,
-            source,
-            taken_at_timestamp,
-            canister_version,
-            certified_data,
-            chunk_store,
-            execution_snapshot,
-            size,
-        }
-    }
+    // pub fn new(
+    //     canister_id: CanisterId,
+    //     source: SnapshotSource,
+    //     taken_at_timestamp: Time,
+    //     canister_version: u64,
+    //     certified_data: Vec<u8>,
+    //     chunk_store: WasmChunkStore,
+    //     execution_snapshot: ExecutionStateSnapshot,
+    //     size: NumBytes,
+    // ) -> CanisterSnapshot {
+    //     Self {
+    //         canister_id,
+    //         source,
+    //         taken_at_timestamp,
+    //         canister_version,
+    //         certified_data,
+    //         chunk_store,
+    //         execution_snapshot,
+    //         size,
+    //     }
+    // }
 
     /// Creates a snapshot from a canister.
     ///
@@ -499,10 +499,6 @@ impl CanisterSnapshot {
 
     pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
         &self.execution_snapshot
-    }
-
-    pub fn canister_module(&self) -> &CanisterModule {
-        &self.execution_snapshot.wasm_binary
     }
 }
 
@@ -589,7 +585,29 @@ impl PartialCanisterSnapshot {
 }
 
 /// Impl for both immutable and partial snapshots.
-impl<T> CanisterSnapshotImpl<T> {
+impl<T: SnapshotMutability> CanisterSnapshotImpl<T> {
+    pub fn new(
+        canister_id: CanisterId,
+        source: SnapshotSource,
+        taken_at_timestamp: Time,
+        canister_version: u64,
+        certified_data: Vec<u8>,
+        chunk_store: WasmChunkStore,
+        execution_snapshot: ExecutionStateSnapshotImpl<T>,
+        size: NumBytes,
+    ) -> CanisterSnapshotImpl<T> {
+        Self {
+            canister_id,
+            source,
+            taken_at_timestamp,
+            canister_version,
+            certified_data,
+            chunk_store,
+            execution_snapshot,
+            size,
+        }
+    }
+
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }

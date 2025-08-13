@@ -4,8 +4,8 @@ use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
-    CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
-    PartialCanisterSnapshot,
+    CanisterSnapshot, CanisterSnapshotImpl, CanisterSnapshots, ExecutionStateSnapshot,
+    ExecutionStateSnapshotImpl, PageMemory, PartialCanisterSnapshot,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
@@ -24,6 +24,7 @@ use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
+use ic_wasm_types::{CanisterModuleImpl, Mutable};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::{identity, TryFrom};
 use std::sync::Arc;
@@ -564,7 +565,6 @@ impl CheckpointLoader {
             .with_label_values(&["canister_snapshots"])
             .start_timer();
 
-        let mut canister_snapshots = BTreeMap::new();
         let snapshot_ids = self.checkpoint_layout.snapshot_ids()?;
         let results = maybe_parallel_map(thread_pool, snapshot_ids.iter(), |snapshot_id| {
             (
@@ -576,15 +576,27 @@ impl CheckpointLoader {
                 ),
             )
         });
+        let mut canister_snapshots = BTreeMap::new();
+        let mut partial_canister_snapshots = BTreeMap::new();
 
         for (snapshot_id, canister_snapshot) in results.into_iter() {
             let (canister_snapshot, durations) = canister_snapshot?;
-            canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+            match canister_snapshot {
+                Either::Left(canister_snapshot) => {
+                    canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+                }
+                Either::Right(canister_snapshot) => {
+                    partial_canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+                }
+            }
 
             durations.apply(&self.metrics);
         }
 
-        Ok(CanisterSnapshots::new(canister_snapshots, BTreeMap::new())) // TODO
+        Ok(CanisterSnapshots::new(
+            canister_snapshots,
+            partial_canister_snapshots,
+        ))
     }
 
     fn validate_eq_canister_snapshots(
@@ -955,48 +967,74 @@ pub fn load_snapshot(
     })?;
     durations.insert("canister_snapshot_bits", starting_time.elapsed());
 
-    let execution_snapshot: ExecutionStateSnapshot = {
-        let starting_time = Instant::now();
-        let wasm_memory_layout = snapshot_layout.vmemory_0();
-        let wasm_memory = PageMemory {
-            page_map: PageMap::open(
-                Box::new(wasm_memory_layout),
-                height,
-                Arc::clone(&fd_factory),
-            )?,
-            size: canister_snapshot_bits.wasm_memory_size,
+    let starting_time = Instant::now();
+    let wasm_binary: Either<CanisterModuleImpl<()>, CanisterModuleImpl<Mutable>> =
+        match canister_snapshot_bits.is_partial {
+            true => {
+                let wasm_binary = snapshot_layout
+                    .wasm()
+                    .lazy_load_with_module_hash::<Mutable>(
+                        canister_snapshot_bits.binary_hash,
+                        None,
+                    )?;
+                Either::Right(wasm_binary)
+            }
+            false => {
+                let wasm_binary = snapshot_layout
+                    .wasm()
+                    .lazy_load_with_module_hash::<()>(canister_snapshot_bits.binary_hash, None)?;
+                Either::Left(wasm_binary)
+            }
         };
-        durations.insert("snapshot_wasm_memory", starting_time.elapsed());
+    durations.insert("snapshot_canister_module", starting_time.elapsed());
 
-        let starting_time = Instant::now();
-        let stable_memory_layout = snapshot_layout.stable_memory();
-        let stable_memory = PageMemory {
-            page_map: PageMap::open(
-                Box::new(stable_memory_layout),
-                height,
-                Arc::clone(&fd_factory),
-            )?,
-            size: canister_snapshot_bits.stable_memory_size,
-        };
-        durations.insert("snapshot_stable_memory", starting_time.elapsed());
+    let starting_time = Instant::now();
+    let wasm_memory_layout = snapshot_layout.vmemory_0();
+    let wasm_memory = PageMemory {
+        page_map: PageMap::open(
+            Box::new(wasm_memory_layout),
+            height,
+            Arc::clone(&fd_factory),
+        )?,
+        size: canister_snapshot_bits.wasm_memory_size,
+    };
+    durations.insert("snapshot_wasm_memory", starting_time.elapsed());
 
-        let starting_time = Instant::now();
-        let wasm_binary = snapshot_layout
-            .wasm()
-            .lazy_load_with_module_hash(canister_snapshot_bits.binary_hash, None)?;
-        durations.insert("snapshot_canister_module", starting_time.elapsed());
+    let starting_time = Instant::now();
+    let stable_memory_layout = snapshot_layout.stable_memory();
+    let stable_memory = PageMemory {
+        page_map: PageMap::open(
+            Box::new(stable_memory_layout),
+            height,
+            Arc::clone(&fd_factory),
+        )?,
+        size: canister_snapshot_bits.stable_memory_size,
+    };
+    durations.insert("snapshot_stable_memory", starting_time.elapsed());
+    let exported_globals = canister_snapshot_bits.exported_globals.clone();
+    let global_timer = canister_snapshot_bits.global_timer;
+    let on_low_wasm_memory_hook_status = canister_snapshot_bits.on_low_wasm_memory_hook_status;
 
-        let exported_globals = canister_snapshot_bits.exported_globals.clone();
-        let global_timer = canister_snapshot_bits.global_timer;
-        let on_low_wasm_memory_hook_status = canister_snapshot_bits.on_low_wasm_memory_hook_status;
-        ExecutionStateSnapshot {
+    // this duplication is necessary because Rust closures cannot be generic, i.e.,
+    // x.map_left(f).map_right(f) does not typecheck, and the alternative
+    // x.map_left(f).map_right(g) would mean cloning state to create f and g.
+    let execution_snapshot = match wasm_binary {
+        Either::Left(wasm_binary) => Either::Left(ExecutionStateSnapshotImpl {
             wasm_binary,
             exported_globals,
             stable_memory,
             wasm_memory,
             global_timer,
             on_low_wasm_memory_hook_status,
-        }
+        }),
+        Either::Right(wasm_binary) => Either::Right(ExecutionStateSnapshotImpl {
+            wasm_binary,
+            exported_globals,
+            stable_memory,
+            wasm_memory,
+            global_timer,
+            on_low_wasm_memory_hook_status,
+        }),
     };
 
     let starting_time = Instant::now();
@@ -1012,16 +1050,29 @@ pub fn load_snapshot(
     );
     durations.insert("snapshot_wasm_chunk_store", starting_time.elapsed());
 
-    let canister_snapshot = CanisterSnapshot::new(
-        canister_snapshot_bits.canister_id,
-        canister_snapshot_bits.source,
-        canister_snapshot_bits.taken_at_timestamp,
-        canister_snapshot_bits.canister_version,
-        canister_snapshot_bits.certified_data.clone(),
-        wasm_chunk_store,
-        execution_snapshot,
-        canister_snapshot_bits.total_size,
-    );
+    // duplication: see above
+    let canister_snapshot = match execution_snapshot {
+        Either::Left(execution_snapshot) => Either::Left(CanisterSnapshotImpl::new(
+            canister_snapshot_bits.canister_id,
+            canister_snapshot_bits.source,
+            canister_snapshot_bits.taken_at_timestamp,
+            canister_snapshot_bits.canister_version,
+            canister_snapshot_bits.certified_data.clone(),
+            wasm_chunk_store,
+            execution_snapshot,
+            canister_snapshot_bits.total_size,
+        )),
+        Either::Right(execution_snapshot) => Either::Right(CanisterSnapshotImpl::new(
+            canister_snapshot_bits.canister_id,
+            canister_snapshot_bits.source,
+            canister_snapshot_bits.taken_at_timestamp,
+            canister_snapshot_bits.canister_version,
+            canister_snapshot_bits.certified_data.clone(),
+            wasm_chunk_store,
+            execution_snapshot,
+            canister_snapshot_bits.total_size,
+        )),
+    };
 
     let metrics = LoadCanisterMetrics { durations };
 
@@ -1032,7 +1083,13 @@ fn load_snapshot_from_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
+) -> Result<
+    (
+        Either<CanisterSnapshot, PartialCanisterSnapshot>,
+        LoadCanisterMetrics,
+    ),
+    CheckpointError,
+> {
     let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
     load_snapshot(
         &snapshot_layout,

@@ -55,11 +55,28 @@ pub enum ModuleLoadingStatus {
     FileNotLoaded,
 }
 
+/// Marker trait for `CanisterModuleImpl<.>` and `CanisterSnapshotImpl<.>`
+/// which have immutable and mutable versions.
+pub trait SnapshotMutability {
+    fn is_partial(&self) -> bool {
+        false
+    }
+}
+
+/// Used as a marker for the immutable `CanisterSnapshotImpl<.>` and related types.
+impl SnapshotMutability for () {}
+
 /// Marker type for `CanisterModuleImpl` and `CanisterSnapshotImpl`
 /// which have default (immutable) versions and, if parametrized with
 /// this type, mutable versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Mutable;
+
+impl SnapshotMutability for Mutable {
+    fn is_partial(&self) -> bool {
+        true
+    }
+}
 
 /// Immutable `CanisterModule`.
 pub type CanisterModule = CanisterModuleImpl<()>;
@@ -75,7 +92,7 @@ pub type MutableCanisterModule = CanisterModuleImpl<Mutable>;
 // We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
 // writing it to a file when creating checkpoints.
 #[derive(Clone, ValidateEq)]
-pub struct CanisterModuleImpl<T> {
+pub struct CanisterModuleImpl<T: SnapshotMutability> {
     // The Wasm binary.
     #[validate_eq(Ignore)]
     module: ModuleStorage,
@@ -85,7 +102,7 @@ pub struct CanisterModuleImpl<T> {
     _t: std::marker::PhantomData<T>,
 }
 
-impl<T> CanisterModuleImpl<T> {
+impl<T: SnapshotMutability> CanisterModuleImpl<T> {
     pub fn new(bytes: Vec<u8>) -> Self {
         let module = ModuleStorage::Memory(Arc::new(bytes));
         let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
@@ -188,7 +205,7 @@ impl CanisterModuleImpl<Mutable> {
     }
 }
 
-impl<T> fmt::Debug for CanisterModuleImpl<T> {
+impl<T: SnapshotMutability> fmt::Debug for CanisterModuleImpl<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "CanisterModule{{{}}}",
@@ -197,15 +214,15 @@ impl<T> fmt::Debug for CanisterModuleImpl<T> {
     }
 }
 
-impl<T> PartialEq for CanisterModuleImpl<T> {
+impl<T: SnapshotMutability> PartialEq for CanisterModuleImpl<T> {
     fn eq(&self, other: &Self) -> bool {
         self.module_hash() == other.module_hash()
     }
 }
 
-impl<T> Eq for CanisterModuleImpl<T> {}
+impl<T: SnapshotMutability> Eq for CanisterModuleImpl<T> {}
 
-impl<T> std::hash::Hash for CanisterModuleImpl<T> {
+impl<T: SnapshotMutability> std::hash::Hash for CanisterModuleImpl<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state)
     }

@@ -26,7 +26,9 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, CanisterModuleImpl, MemoryMappableWasmFile, WasmHash};
+use ic_wasm_types::{
+    CanisterModule, CanisterModuleImpl, MemoryMappableWasmFile, SnapshotMutability, WasmHash,
+};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom};
@@ -2550,22 +2552,22 @@ where
     /// passing it into the function avoids fetching the file's metadata, which can
     /// be a relatively expensive operation when dealing with a large number of files.
     /// This is similar to providing the `module_hash` upfront to avoid recomputing it.
-    pub fn lazy_load_with_module_hash<Mutability>(
+    pub fn lazy_load_with_module_hash<Mut: SnapshotMutability>(
         self,
         module_hash: WasmHash,
         len: Option<usize>,
-    ) -> Result<CanisterModuleImpl<Mutability>, LayoutError>
+    ) -> Result<CanisterModuleImpl<Mut>, LayoutError>
     where
         T: Send + Sync + 'static,
     {
         let path = self.path.clone();
-        CanisterModuleImpl::<Mutability>::new_from_file(Box::new(self), module_hash, len).map_err(
-            |err| LayoutError::IoError {
+        CanisterModuleImpl::<Mut>::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
+            LayoutError::IoError {
                 path,
                 message: "Failed to load wasm file lazily".to_string(),
                 io_err: err,
-            },
-        )
+            }
+        })
     }
 
     /// Hardlink the (readonly) file from `src` to `dst`.

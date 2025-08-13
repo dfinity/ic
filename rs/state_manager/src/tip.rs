@@ -39,7 +39,7 @@ use ic_state_layout::{
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
-use ic_wasm_types::{CanisterModule, ModuleLoadingStatus, Mutable};
+use ic_wasm_types::{CanisterModule, ModuleLoadingStatus, Mutable, SnapshotMutability};
 use prometheus::HistogramTimer;
 use std::collections::BTreeSet;
 use std::convert::identity;
@@ -1357,9 +1357,9 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
     Ok(())
 }
 
-fn serialize_snapshot_protos_to_checkpoint_readwrite(
+fn serialize_snapshot_protos_to_checkpoint_readwrite<T: SnapshotMutability>(
     snapshot_id: &SnapshotId,
-    canister_snapshot: &CanisterSnapshot,
+    canister_snapshot: &CanisterSnapshotImpl<T>,
     checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     let snapshot_layout = checkpoint_readwrite.snapshot(snapshot_id)?;
@@ -1371,7 +1371,10 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
             canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
-            binary_hash: canister_snapshot.canister_module().module_hash().into(),
+            binary_hash: canister_snapshot
+                .canister_module_impl()
+                .module_hash()
+                .into(),
             certified_data: canister_snapshot.certified_data().clone(),
             wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
             stable_memory_size: canister_snapshot.stable_memory().size,
@@ -1379,10 +1382,11 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
             total_size: canister_snapshot.size(),
             exported_globals: canister_snapshot.exported_globals().clone(),
             source: canister_snapshot.source(),
-            global_timer: canister_snapshot.execution_snapshot().global_timer,
+            global_timer: canister_snapshot.execution_snapshot_impl().global_timer,
             on_low_wasm_memory_hook_status: canister_snapshot
-                .execution_snapshot()
+                .execution_snapshot_impl()
                 .on_low_wasm_memory_hook_status,
+            is_partial: T::is_partial(),
         }
         .into(),
     )?;
