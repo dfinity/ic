@@ -29,7 +29,6 @@ LIB_DEPENDENCIES = [
     "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/nervous_system/proto",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
