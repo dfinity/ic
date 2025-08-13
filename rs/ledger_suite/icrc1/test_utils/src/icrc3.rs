@@ -70,7 +70,7 @@ pub fn mint_block<T: Into<Vec<u8>>, F: Into<Vec<u8>>>(
     if let Some(fee_collector) = fee_collector {
         block_map.insert(
             "fee_col".to_string(),
-            ICRC3Value::Blob(ByteBuf::from(fee_collector)),
+            ICRC3Value::Array(vec![ICRC3Value::Blob(ByteBuf::from(fee_collector))]),
         );
     }
 
