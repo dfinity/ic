@@ -3,18 +3,21 @@
 #
 # Why?
 # On PRs not tagged with CI_ALL_BAZEL_TARGETS, which is the default,
-# we only test bazel targets which have modified inputs.
+# CI only tests bazel targets which have modified inputs
+# and excludes tests tagged as 'long_test'.
 #
 # This is problematic for targets that don't explicitly depend
-# on modified inputs like //pre-commit:shfmt-check for example
-# which implicitly depends on the whole workspace.
+# on modified inputs like the shell format check //pre-commit:shfmt-check
+# for example which implicitly depends on the whole workspace.
 #
-# To still test these targets this file can specify which bazel
-# targets to explicitly test based on which files were modified.
+# Furthermore, from experience we know that modifications to certain
+# files or directories have a high risk of breaking certain long_tests.
+# In those cases folks have traditionally labelled their PRs with CI_ALL_BAZEL_TARGETS
+# to run *all* long_tests. This however is often overkill and often forgotten.
 #
-# Furthermore the targets specified here won't be filtered out
-# based on whether they're tagged as a `long_test`. So this file
-# can additionally be used to test certain long_tests for certain modifications.
+# To address both issues this file can specify which bazel
+# targets to explicitly test based on which files were modified
+# disregarding whether they're long_tests.
 #
 # How?
 # The syntax is similar but not the same as gitignore
