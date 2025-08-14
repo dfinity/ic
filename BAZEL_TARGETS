@@ -26,7 +26,7 @@
 # * A line starting with # serves as a comment.
 #   Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
 # * A pattern is separated by whitespace from its set of targets which are whitespace separated.
-# * Patterns don't support spaces in them. This might be added later if desired.
+# * Patterns and targets don't support spaces in them. This might be added later if desired.
 # * Targets can span multiple lines for readability.
 #   So the targets on a line starting with whitespace
 #   are considered part of the previous set of targets.
