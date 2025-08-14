@@ -7,12 +7,75 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
+use ic_btc_interface::Txid;
 use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::{build_unsigned_transaction_from_inputs, BuildTxError, Network};
+use ic_ckbtc_minter::{
+    build_unsigned_transaction_from_inputs, resubmit_transactions, BuildTxError, ECDSAPublicKey,
+    Network,
+};
+use icrc_ledger_types::icrc1::account::Account;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::{Arc, RwLock};
+
+pub mod mock {
+    use async_trait::async_trait;
+    use candid::Principal;
+    use ic_btc_checker::CheckTransactionResponse;
+    use ic_btc_interface::Utxo;
+    use ic_ckbtc_minter::management::CallError;
+    use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
+    use ic_ckbtc_minter::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network};
+    use ic_management_canister_types_private::DerivationPath;
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+    use mockall::mock;
+
+    mock! {
+        #[derive(Debug)]
+        pub CanisterRuntime {}
+
+        #[async_trait]
+        impl CanisterRuntime for CanisterRuntime {
+            fn caller(&self) -> Principal;
+            fn id(&self) -> Principal;
+            fn time(&self) -> u64;
+            fn global_timer_set(&self, timestamp: u64);
+            async fn bitcoin_get_utxos(&self, request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
+            async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
+            async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
+            async fn sign_with_ecdsa(&self, key_name: String, derivation_path: DerivationPath, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+        }
+    }
+}
+
+const FAKE_SEC1_SIG: [u8; 64] = [
+    0x8A, 0x2F, 0x47, 0x1B, 0x9C, 0xF4, 0x31, 0x6E, 0xA3, 0x55, 0x17, 0xD1, 0x4A, 0xF2, 0x66, 0xCD,
+    0x9B, 0x7E, 0xC2, 0x6D, 0x48, 0x1C, 0x3E, 0xA7, 0xFA, 0x1D, 0x22, 0x4B, 0x8E, 0x5F, 0x72, 0x81,
+    0x6E, 0x19, 0xC4, 0xF8, 0x92, 0x57, 0x01, 0x3A, 0x5C, 0xAA, 0xDE, 0x12, 0x8B, 0x64, 0x9E, 0xC1,
+    0x7D, 0xF5, 0x93, 0x54, 0x21, 0x0E, 0x8A, 0xC6, 0x3B, 0x1D, 0x4A, 0x2C, 0x77, 0x98, 0xF0, 0xEB,
+];
+
+pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
+    const PUBLIC_KEY: [u8; 33] = [
+        3, 148, 123, 81, 208, 34, 99, 144, 214, 13, 193, 18, 89, 94, 30, 185, 101, 191, 164, 124,
+        208, 174, 236, 190, 3, 16, 230, 196, 9, 252, 191, 110, 127,
+    ];
+    const CHAIN_CODE: [u8; 32] = [
+        75, 34, 9, 207, 130, 169, 36, 138, 73, 80, 39, 225, 249, 154, 160, 111, 145, 197, 192, 53,
+        148, 5, 62, 21, 47, 232, 104, 195, 249, 32, 160, 189,
+    ];
+    ECDSAPublicKey {
+        public_key: PUBLIC_KEY.to_vec(),
+        chain_code: CHAIN_CODE.to_vec(),
+    }
+}
 
 fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
     let mut count = 0;
@@ -141,7 +204,48 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
             num_inputs: 1799,
             max_num_inputs: 1000
         }
+    );
+
+    let tx_id = Txid::from_str(tx_id).unwrap();
+    let min_amount = 50_000;
+    let mut transactions = BTreeMap::new();
+    transactions.insert(tx_id, submitted_tx.clone());
+    let mut runtime = mock::MockCanisterRuntime::new();
+    let replaced = RefCell::new(vec![]);
+    let transactions_sent: Arc<RwLock<Vec<Vec<u8>>>> = Arc::new(RwLock::new(vec![]));
+    runtime.expect_time().return_const(0u64);
+    runtime
+        .expect_sign_with_ecdsa()
+        .return_const(Ok(FAKE_SEC1_SIG.to_vec()));
+    let sent_clone = transactions_sent.clone();
+    runtime.expect_send_transaction().returning(move |tx, _| {
+        let mut arr = sent_clone.write().unwrap();
+        arr.push(tx.serialize());
+        Ok(())
+    });
+    resubmit_transactions(
+        "mock_key",
+        123,
+        main_address,
+        mock_ecdsa_public_key(),
+        Network::Mainnet,
+        min_amount,
+        transactions,
+        |_| {
+            Some(Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            })
+        },
+        |old_txid, new_tx| replaced.borrow_mut().push((old_txid, new_tx)),
+        &runtime,
     )
+    .await;
+    let replaced = replaced.borrow();
+    assert_eq!(replaced.len(), 1);
+    assert_eq!(replaced[0].0, tx_id);
+    let sent = transactions_sent.read().unwrap();
+    assert_eq!(sent.len(), 1);
 }
 
 #[tokio::test]

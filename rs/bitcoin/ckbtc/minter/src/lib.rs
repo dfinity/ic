@@ -679,7 +679,7 @@ pub async fn resubmit_transactions<
     main_address: BitcoinAddress,
     ecdsa_public_key: ECDSAPublicKey,
     btc_network: Network,
-    _retrieve_btc_min_amount: u64,
+    retrieve_btc_min_amount: u64,
     transactions: BTreeMap<Txid, state::SubmittedBtcTransaction>,
     lookup_outpoint_account: F,
     replace_transaction: G,
@@ -700,13 +700,34 @@ pub async fn resubmit_transactions<
             .iter()
             .map(|req| (req.address.clone(), req.amount))
             .collect();
-        let input_utxos = submitted_tx.used_utxos;
-        let (unsigned_tx, change_output) = match build_unsigned_transaction_from_inputs(
+        let mut input_utxos = submitted_tx.used_utxos;
+        let build_result = build_unsigned_transaction_from_inputs(
             &input_utxos,
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
-        ) {
+        )
+        .or_else(|err| {
+            if let BuildTxError::TooManyInputs { .. } = err {
+                log!(
+                    P0,
+                    "[finalize_requests]: transaction {} has too many inputs, and will be cancelled",
+                    &submitted_tx.txid,
+                );
+                let mut inputs = input_utxos.clone().into_iter().collect::<BTreeSet<_>>();
+                input_utxos = utxos_selection(retrieve_btc_min_amount, &mut inputs, 0);
+                let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
+                build_unsigned_transaction_from_inputs(
+                    &input_utxos,
+                    outputs,
+                    main_address.clone(),
+                    fee_per_vbyte, // Use normal fee
+                )
+            } else {
+                Err(err)
+            }
+        });
+        let (unsigned_tx, change_output) = match build_result {
             Ok(tx) => tx,
             // If it's impossible to build a new transaction, the fees probably became too high.
             // Let's ignore this transaction and wait for fees to go down.
