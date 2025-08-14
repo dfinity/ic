@@ -1,0 +1,29 @@
+# On PRs not tagged with CI_ALL_BAZEL_TARGETS, which is the default,
+# we only test bazel targets which have modified inputs.
+#
+# This is problematic for targets that don't explicitly depend
+# on modified inputs like //pre-commit:shfmt-check for example
+# which implicitly depends on the whole workspace.
+#
+# To still test these targets this file can specify which bazel
+# targets to explicitly test based on modified files.
+#
+# Furthermore the targets specified here won't be filtered out
+# based on whether they're tagged as a `long_test`. So this file
+# can additionally be used to test certain long_tests for certain file changes.
+#
+# The file patterns use globbing semantics. See:
+# https://docs.python.org/3/library/fnmatch.html
+
+*.sh                                //pre-commit:shfmt-check
+*.py                                //pre-commit:ruff-lint
+*.hs                                //pre-commit:ormolu-lint
+*.proto                             //pre-commit:protobuf-format-check
+                                    //pre-commit:buf-breaking
+
+# Run most nested tests for any ic-os/ or rs/ic_os/ changes:
+*ic[-_]os/*                         //rs/tests/nested:guestos_upgrade_smoke_test
+                                    //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
+                                    //rs/tests/nested:hostos_upgrade_smoke_test
+                                    //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
+                                    //rs/tests/nested:registration
