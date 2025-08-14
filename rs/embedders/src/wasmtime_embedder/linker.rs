@@ -4,7 +4,7 @@ use crate::{
         convert_backtrace,
         system_api::SystemApiImpl,
         system_api_complexity::{overhead, overhead_native},
-        StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+        StoreData, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
     },
     InternalErrorCode,
 };
@@ -1111,10 +1111,24 @@ pub fn syscalls<
                   additional_pages: i64,
                   stable_memory_api: i32| {
                 charge_for_cpu(&mut caller, overhead_native::STABLE_GROW)?;
+                let exported_stable_memory = caller
+                    .get_export(STABLE_MEMORY_NAME)
+                    .and_then(|ext| ext.into_memory())
+                    .ok_or_else(|| {
+                        process_err(
+                            &mut caller,
+                            HypervisorError::CalledTrap {
+                                message: "Failed to access exported stable memory".to_string(),
+                                backtrace: None,
+                            },
+                        )
+                    })?;
+                let max_size = exported_stable_memory.ty(&mut caller).maximum().unwrap();
                 with_system_api(&mut caller, |s| {
                     match s.try_grow_stable_memory(
                         current_size as u64,
                         additional_pages as u64,
+                        max_size,
                         stable_memory_api
                             .try_into()
                             .map_err(|()| HypervisorError::Trapped {
