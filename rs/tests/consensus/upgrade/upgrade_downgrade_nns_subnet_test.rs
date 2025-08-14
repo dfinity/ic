@@ -48,7 +48,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
-    let initial_version = get_guestos_img_version().expect("Failed to find initial version");
+    let initial_version = get_guestos_img_version();
     upgrade(
         &env,
         &nns_node,
