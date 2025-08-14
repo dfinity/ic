@@ -73,7 +73,7 @@ def main():
     # git commit range taking several factors into account:
     query = (
         ("//..." + (" except attr(tags, long_test, //...)" if args.skip_long_tests else ""))
-        if args.commit_range
+        if args.commit_range is None
         else diff_only_query(args.command, args.commit_range, args.skip_long_tests)
     )
 
