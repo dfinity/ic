@@ -429,9 +429,8 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     // Recovery verification:
     //      * TODO: for all nodes: wait for:
-    //          * recovery-engine to complete
-    //          * node to resume as healthy
-    //      * TODO: see NNS healthy (maybe this must wait for the nodes to re-upgrade (as nodes should upgrade to guestos-dev version contained in the registry local store)
+    //          * Nodes to upgrade to the guestos-dev version contained in the registry local store
+    //      * TODO: see NNS healthy
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
