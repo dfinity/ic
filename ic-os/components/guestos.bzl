@@ -23,10 +23,15 @@ component_files = {
 
     # ic
     Label("ic/ic-btc-adapter/generate-btc-adapter-config.sh"): "/opt/ic/bin/generate-btc-adapter-config.sh",
+    Label("ic/ic-btc-adapter/generate-doge-adapter-config.sh"): "/opt/ic/bin/generate-doge-adapter-config.sh",
     Label("ic/ic-btc-adapter/ic-btc-mainnet-adapter.service"): "/etc/systemd/system/ic-btc-mainnet-adapter.service",
     Label("ic/ic-btc-adapter/ic-btc-mainnet-adapter.socket"): "/etc/systemd/system/ic-btc-mainnet-adapter.socket",
     Label("ic/ic-btc-adapter/ic-btc-testnet-adapter.service"): "/etc/systemd/system/ic-btc-testnet-adapter.service",
     Label("ic/ic-btc-adapter/ic-btc-testnet-adapter.socket"): "/etc/systemd/system/ic-btc-testnet-adapter.socket",
+    Label("ic/ic-btc-adapter/ic-doge-mainnet-adapter.service"): "/etc/systemd/system/ic-doge-mainnet-adapter.service",
+    Label("ic/ic-btc-adapter/ic-doge-mainnet-adapter.socket"): "/etc/systemd/system/ic-doge-mainnet-adapter.socket",
+    Label("ic/ic-btc-adapter/ic-doge-testnet-adapter.service"): "/etc/systemd/system/ic-doge-testnet-adapter.service",
+    Label("ic/ic-btc-adapter/ic-doge-testnet-adapter.socket"): "/etc/systemd/system/ic-doge-testnet-adapter.socket",
     Label("ic/setup-permissions/setup-permissions.sh"): "/opt/ic/bin/setup-permissions.sh",
     Label("ic/setup-permissions/setup-permissions.service"): "/etc/systemd/system/setup-permissions.service",
     Label("ic/setup-permissions/erestorecon.sh"): "/opt/ic/bin/erestorecon.sh",
