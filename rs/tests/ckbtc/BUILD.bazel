@@ -37,6 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:bitcoin",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
+    "@crate_index//:dogecoincore-rpc",
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
@@ -235,6 +236,24 @@ system_test_nns(
 
 system_test(
     name = "adapter_basics_test",
+    env = MESSAGE_CANISTER_ENV | {
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    tags = [],
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        MESSAGE_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test(
+    name = "dogecoin_adapter_basics_test",
     env = MESSAGE_CANISTER_ENV | {
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
