@@ -13,9 +13,10 @@ use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::{
     build_unsigned_transaction_from_inputs, sign_transaction, ECDSAPublicKey, Network,
-    SignTransactionError,
+    SignTransactionError, MIN_RELAY_FEE_PER_VBYTE,
 };
-use std::collections::BTreeMap;
+use maplit::btreeset;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
@@ -82,7 +83,64 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
+}
+
+#[tokio::test]
+async fn find_transactions_with_large_utxos() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+    let state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
+        .expect("Failed to replay events");
+
+    assert_eq!(state.stuck_transactions.len(), 1);
+    let submitted_tx_0 = state.stuck_transactions.first().unwrap();
+    assert_eq!(
+        submitted_tx_0.txid.to_string(),
+        "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30"
+    );
+    assert_eq!(submitted_tx_0.submitted_at, 1_755_022_419_795_766_424);
+
+    assert_eq!(state.replacement_txid.len(), 1);
+    let resubmitted_tx_id = state.replacement_txid.get(&submitted_tx_0.txid).unwrap();
+    let submitted_tx_1 = {
+        let mut txs: Vec<_> = state
+            .submitted_transactions
+            .iter()
+            .filter(|tx| tx.txid == *resubmitted_tx_id)
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs.pop().unwrap()
+    };
+    assert_eq!(
+        submitted_tx_1.txid.to_string(),
+        "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
+    );
+    assert_eq!(submitted_tx_1.submitted_at, 1_755_116_484_667_101_556);
+
+    assert_eq!(submitted_tx_0.used_utxos, submitted_tx_1.used_utxos);
+    assert_eq!(
+        submitted_tx_0.fee_per_vbyte.unwrap() + MIN_RELAY_FEE_PER_VBYTE,
+        submitted_tx_1.fee_per_vbyte.unwrap()
+    );
+    assert_eq!(submitted_tx_0.requests, submitted_tx_1.requests);
+
+    let block_indexes: BTreeSet<_> = submitted_tx_0
+        .requests
+        .iter()
+        .map(|req| req.block_index)
+        .collect();
+    assert_eq!(block_indexes.len(), submitted_tx_0.requests.len());
+
+    let principals: BTreeSet<_> = submitted_tx_0
+        .requests
+        .iter()
+        .map(|req| req.reimbursement_account.unwrap())
+        .map(|account| account.owner)
+        .collect();
+    assert_eq!(
+        principals,
+        btreeset! {Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap()}
+    );
 }
 
 #[tokio::test]
@@ -107,6 +165,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         txs.pop().unwrap()
     };
 
+    assert_eq!(submitted_tx.submitted_at, 1_755_022_419_795_766_424);
     assert_eq!(submitted_tx.requests.len(), 43);
     assert_eq!(
         submitted_tx
