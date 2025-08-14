@@ -32,7 +32,7 @@ jobs:
         uses: Mattraks/delete-workflow-runs@39f0bbed25d76b34de5594dceab824811479e5de # v2.0.6
         with:
           token: ${{ github.token }}
-          repository: ${{ github.repository }}
+          repository: dfinity/public-workflows
           retain_days: 90
           keep_minimum_runs: 0
           delete_workflow_pattern: "repo_policies_ruleset"
