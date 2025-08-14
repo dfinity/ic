@@ -41,20 +41,18 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     # See: https://git-scm.com/docs/gitignore#_pattern_format
     # - A line starting with # serves as a comment. (discard it entirely).
     # - Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
-    nocomment_lines = []
+    content_lines = []
     for line in lines:
-        if line.startswith("#"):
+        # Filter out comments and blank lines:
+        if line.startswith("#") or len(line) == 0 or line.isspace():
             continue
         if line.startswith("\\#"):
-            nocomment_lines.append(line[1:])  # drop the escaping backslash
+            content_lines.append(line[1:])  # drop the escaping backslash
         else:
-            nocomment_lines.append(line)
-
-    # Filter out empty or pure whitespace lines:
-    nonempty_lines = [line for line in nocomment_lines if line and not line.isspace()]
+            content_lines.append(line)
 
     explicit_targets = []
-    for line in nonempty_lines:
+    for line in content_lines:
         # Indented lines are considered part of the previous list of targets.
         if len(line) > 0 and line[0].isspace():
             if len(explicit_targets) == 0:
