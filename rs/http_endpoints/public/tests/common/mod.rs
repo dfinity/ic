@@ -23,7 +23,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
@@ -470,10 +470,11 @@ impl HttpEndpointBuilder {
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
-        let nns_delegation_reader = NNSDelegationReader::new_for_test_only(
-            self.delegation_from_nns.map(|_delegation| todo!()),
-            subnet_id,
-        );
+        let builder = self.delegation_from_nns.map(|delegation| {
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+        });
+        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
+        let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 

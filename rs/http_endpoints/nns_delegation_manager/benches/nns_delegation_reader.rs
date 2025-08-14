@@ -1,10 +1,15 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
+use ic_crypto_tree_hash::LabeledTree;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_delegation_manager_test_utils::create_fake_certificate_delegation;
 use ic_test_utilities_types::ids::SUBNET_0;
-use ic_types::CanisterId;
+use ic_types::{
+    messages::{Blob, Certificate},
+    CanisterId,
+};
+use tokio::sync::watch;
 
 fn get_delegation_with_flat_canister_ranges(criterion: &mut Criterion) {
     get_delegation_bench(
@@ -41,9 +46,18 @@ fn get_delegation_bench(
         let canister_id_ranges = (0..canister_id_ranges_count)
             .map(|i| (CanisterId::from(2 * i), CanisterId::from(2 * i + 1)))
             .collect();
-        let (certificate, _root_public_key) =
+        let (delegation, _root_public_key) =
             create_fake_certificate_delegation(&canister_id_ranges, SUBNET_0);
-        let reader = NNSDelegationReader::new_for_test_only(Some(certificate), SUBNET_0);
+        let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
+        let builder = NNSDelegationBuilder::new(
+            certificate.clone(),
+            LabeledTree::try_from(certificate.tree.clone()).unwrap(),
+            Blob(vec![]),
+            SUBNET_0,
+        );
+        let (_sender, receiver) = watch::channel(Some(builder));
+
+        let reader = NNSDelegationReader::new(receiver);
 
         group.bench_function(
             format!("{canister_id_ranges_count}_canister_id_ranges"),
@@ -62,7 +76,8 @@ fn get_delegation_on_nns(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("get_delegation_on_nns");
 
     // On NNS there is no delegation
-    let reader = NNSDelegationReader::new_for_test_only(None, SUBNET_0);
+    let (_, rx) = watch::channel(None);
+    let reader = NNSDelegationReader::new(rx);
 
     group.bench_function(format!("tree"), |bencher| {
         bencher.iter(|| {

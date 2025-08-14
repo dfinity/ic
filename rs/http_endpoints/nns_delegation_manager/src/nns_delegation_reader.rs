@@ -8,8 +8,6 @@ use ic_types::{
 };
 use tokio::sync::watch;
 
-use crate::metrics::DelegationManagerMetrics;
-
 #[derive(Clone, Copy)]
 /// Filter for the canister ranges in the NNS delegation.
 pub enum CanisterRangesFilter {
@@ -44,7 +42,7 @@ impl NNSDelegationReader {
             .map(|builder| builder.build_or_original(canister_ranges_filter))
     }
 
-    pub(crate) fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
+    pub fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
         Self { receiver }
     }
 
@@ -54,19 +52,33 @@ impl NNSDelegationReader {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(crate) struct NNSDelegationBuilder {
+pub struct NNSDelegationBuilder {
     builder: NNSDelegationBuilderPriv,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
     precomputed_delegation_without_canister_ranges: CertificateDelegation,
 }
 
 impl NNSDelegationBuilder {
-    pub(crate) fn new(
+    pub fn try_new(raw_certificate: Blob, subnet_id: SubnetId) -> Result<Self, String> {
+        let full_certificate: Certificate = serde_cbor::from_slice(&raw_certificate)
+            .map_err(|e| format!("Failed to parse delegation certificate: {}", e))?;
+
+        let full_labeled_tree = LabeledTree::try_from(full_certificate.tree.clone())
+            .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;
+
+        Ok(Self::new(
+            full_certificate,
+            full_labeled_tree,
+            raw_certificate,
+            subnet_id,
+        ))
+    }
+
+    pub fn new(
         full_certificate: Certificate,
         full_labeled_tree: LabeledTree<Vec<u8>>,
         raw_certificate: Blob,
         subnet_id: SubnetId,
-        metrics: &DelegationManagerMetrics,
     ) -> Self {
         let builder = NNSDelegationBuilderPriv::new(
             full_certificate,
@@ -78,27 +90,6 @@ impl NNSDelegationBuilder {
             builder.build_or_original(CanisterRangesFilter::None);
         let precomputed_delegation_with_flat_canister_ranges =
             builder.build_or_original(CanisterRangesFilter::Flat);
-
-        metrics
-            .delegation_size
-            .with_label_values(&["both_canister_ranges"])
-            .observe(builder.original_delegation.certificate.len() as f64);
-        metrics
-            .delegation_size
-            .with_label_values(&["no_canister_ranges"])
-            .observe(
-                precomputed_delegation_without_canister_ranges
-                    .certificate
-                    .len() as f64,
-            );
-        metrics
-            .delegation_size
-            .with_label_values(&["flat_canister_ranges"])
-            .observe(
-                precomputed_delegation_with_flat_canister_ranges
-                    .certificate
-                    .len() as f64,
-            );
 
         Self {
             builder,
@@ -233,28 +224,6 @@ impl NNSDelegationBuilderPriv {
     }
 }
 
-impl NNSDelegationReader {
-    /// DON'T USE IN PRODUCTION!!!
-    pub fn new_for_test_only(
-        delegation: Option<CertificateDelegation>,
-        subnet_id: SubnetId,
-    ) -> Self {
-        let builder = delegation.map(|delegation| {
-            let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
-            NNSDelegationBuilder::new(
-                certificate.clone(),
-                LabeledTree::try_from(certificate.tree.clone()).unwrap(),
-                Blob(vec![]),
-                subnet_id,
-                &DelegationManagerMetrics::new(&ic_metrics::MetricsRegistry::new()),
-            )
-        });
-        let (_sender, receiver) = watch::channel(builder);
-
-        Self { receiver }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,6 +241,18 @@ mod tests {
         lookup_path(&labeled_tree, path).is_some()
     }
 
+    pub fn create_reader(
+        delegation: Option<CertificateDelegation>,
+        subnet_id: SubnetId,
+    ) -> NNSDelegationReader {
+        let builder = delegation.map(|delegation| {
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+        });
+        let (_sender, receiver) = watch::channel(builder);
+
+        NNSDelegationReader { receiver }
+    }
+
     #[test]
     fn no_ranges_test() {
         let (full_delegation, root_public_key) = create_fake_certificate_delegation(
@@ -281,7 +262,7 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = NNSDelegationReader::new_for_test_only(Some(full_delegation), SUBNET_0);
+        let reader = create_reader(Some(full_delegation), SUBNET_0);
 
         let delegation = reader
             .get_delegation(CanisterRangesFilter::None)
@@ -317,7 +298,7 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = NNSDelegationReader::new_for_test_only(Some(full_delegation), SUBNET_0);
+        let reader = create_reader(Some(full_delegation), SUBNET_0);
 
         let delegation = reader
             .get_delegation(CanisterRangesFilter::Flat)
@@ -357,7 +338,7 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = NNSDelegationReader::new_for_test_only(Some(full_delegation), SUBNET_0);
+        let reader = create_reader(Some(full_delegation), SUBNET_0);
 
         let delegation = reader
             .get_delegation(CanisterRangesFilter::Tree(CanisterId::from(150)))
