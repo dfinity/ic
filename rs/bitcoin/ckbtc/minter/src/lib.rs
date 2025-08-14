@@ -658,7 +658,7 @@ async fn finalize_requests() {
         btc_network,
         state::read_state(|s| s.retrieve_btc_min_amount),
         maybe_finalized_transactions,
-        |outpoint| state::read_state(|s| s.outpoint_account.get(&outpoint).cloned()),
+        |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
         |old_txid, new_tx| {
             state::mutate_state(|s| {
                 state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
