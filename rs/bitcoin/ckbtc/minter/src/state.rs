@@ -639,13 +639,7 @@ impl CkBtcMinterState {
                     mint_block_index: reimbursement.mint_block_index,
                 }),
                 Err(err) => match err {
-                    ReimbursedError::Quarantined => {
-                        // Hack to avoid Candid breaking change in ReimbursementReason
-                        // which is in the return type of `retrieve_btc_status_v2`.
-                        // At this point the reimbursement will actually not occur automatically
-                        // and may need manual intervention.
-                        RetrieveBtcStatusV2::Unknown
-                    }
+                    ReimbursedError::Quarantined => RetrieveBtcStatusV2::Unknown,
                 },
             };
         }
