@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests;
+use crate::reimbursement::reimburse_withdrawals;
 use crate::{estimate_fee_per_vbyte, finalize_requests, submit_pending_requests, CanisterRuntime};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
@@ -142,6 +143,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
 
             submit_pending_requests().await;
             finalize_requests().await;
+            reimburse_withdrawals().await;
         }
         TaskType::RefreshFeePercentiles => {
             const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);

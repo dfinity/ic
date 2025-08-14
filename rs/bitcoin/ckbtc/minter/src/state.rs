@@ -18,6 +18,7 @@ pub mod invariants;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
+use crate::reimbursement::{ReimburseWithdrawalTask, ReimbursedWithdrawal};
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
@@ -401,10 +402,18 @@ pub struct CkBtcMinterState {
     /// Map from burn block index to the the reimbursed request.
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
 
-    /// Map from burn block index to the the reimbursed withdrawal request.
+    /// Map from burn block index to the pending reimbursed withdrawal request.
+    ///
+    /// # Requirement
+    ///
+    /// A withdrawal request should only be reimbursed,
+    /// when it is certain that no Bitcoin transactions for that withdrawal will ever make it. That means,
+    /// 1. Either, the minter never issued a Bitcoin transaction including that withdrawal request;
+    /// 2. Or, it's guaranteed that such a transaction is no longer valid because some of its UTXOs
+    ///    have been used by another transaction that is considered finalized in the mean time.
     pub pending_withdrawal_reimbursements: BTreeMap<LedgerBurnIndex, ReimburseWithdrawalTask>,
 
-    /// Map from burn block index to the the reimbursed withdrawal request.
+    /// Map from burn block index to the reimbursed withdrawal request.
     pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawal>,
 
     /// Cache of get_utxos call results
@@ -433,38 +442,6 @@ pub enum ReimbursementReason {
         kyt_fee: u64,
     },
     CallFailed,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
-pub struct ReimburseWithdrawalTask {
-    pub account: Account,
-    pub amount: u64,
-    pub reason: WithdrawalReimbursementReason,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
-pub struct ReimbursedWithdrawal {
-    pub account: Account,
-    pub amount: u64,
-    pub reason: WithdrawalReimbursementReason,
-    pub mint_block_index: LedgerMintIndex,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
-pub enum WithdrawalReimbursementReason {
-    InvalidTransaction(InvalidTransactionError),
-    // CancelledByUser TODO XC-451: user should be able to cancel own withdrawals
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
-pub enum InvalidTransactionError {
-    /// The transaction contains too many inputs.
-    /// If such a transaction where signed, there is a risk that the resulting transaction will have a size
-    /// over 100k vbytes and therefore be *non-standard*.
-    TooManyInputs {
-        num_inputs: usize,
-        max_num_inputs: usize,
-    },
 }
 
 impl CkBtcMinterState {
