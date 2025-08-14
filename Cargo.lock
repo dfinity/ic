@@ -9162,7 +9162,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "candid",
  "curve25519-dalek",
@@ -13114,7 +13114,7 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256k1"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bip32 0.5.3",
  "bitcoin 0.28.2",
