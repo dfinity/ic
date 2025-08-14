@@ -175,6 +175,7 @@ rust_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:flate2",

@@ -32,11 +32,10 @@ pub mod signature;
 pub mod state;
 pub mod storage;
 pub mod tasks;
+pub mod test_fixtures;
 pub mod tx;
 pub mod updates;
 
-#[cfg(test)]
-pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
