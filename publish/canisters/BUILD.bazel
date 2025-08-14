@@ -51,6 +51,9 @@ CANISTERS = {
     # Node Rewards
     "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
     "node-rewards-canister-test.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister-test",
+
+    # Helpful in advanced testing scenarios, e.g., to emulate a broken 3rd party canister.
+    "universal_canister.wasm.gz": "//rs/universal_canister/impl:universal_canister",
 }
 
 COMPRESSED_CANISTERS = {

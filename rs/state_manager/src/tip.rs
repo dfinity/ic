@@ -73,6 +73,7 @@ pub(crate) struct PageMapToFlush {
 }
 
 /// Request for the Tip directory handling thread.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
     /// Sends the created checkpoint and the ReplicatedState switched to the
@@ -1249,7 +1250,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
             last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
-            call_context_manager: canister_state.system_state.call_context_manager().cloned(),
             compute_allocation: canister_state.scheduler_state.compute_allocation,
             priority_credit: canister_state.scheduler_state.priority_credit,
             long_execution_mode: canister_state.scheduler_state.long_execution_mode,

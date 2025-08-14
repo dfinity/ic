@@ -4,12 +4,11 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::storage::clear_registry_store;
-use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
+use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
+use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
-use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -23,10 +22,13 @@ thread_local! {
             Arc::new(RegistryCanister::new()));
         Arc::new(store)
     };
-    static CANISTER: RefCell<NodeRewardsCanister<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>>> = {
-        RefCell::new(NodeRewardsCanister::new(REGISTRY_STORE.with(|store| {
+    static CANISTER: RefCell<NodeRewardsCanister> = {
+        let registry_store = REGISTRY_STORE.with(|store| {
             store.clone()
-        })))
+        });
+        let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
+
+        RefCell::new(NodeRewardsCanister::new(registry_store, metrics_manager))
     };
 }
 
@@ -40,40 +42,43 @@ fn pre_upgrade() {}
 
 #[post_upgrade]
 fn post_upgrade() {
-    // TODO: After this has been deployed, delete.
-    clear_registry_store();
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-        spawn(async move {
-            let store = REGISTRY_STORE.with(|s| s.clone());
-            store
-                .sync_registry_stored()
-                .await
-                .expect("Could not sync registry store!");
-        });
-    });
-    //
     schedule_timers();
-}
-
-fn schedule_timers() {
-    schedule_registry_sync();
 }
 
 // The frequency of regular registry syncs.  This is set to 1 hour to avoid
 // making too many requests.  Before meaningful calculations are made, however, the
 // registry data should be updated.
-const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
+const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 
-fn schedule_registry_sync() {
-    ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
+fn schedule_timers() {
+    ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
         spawn(async move {
-            let store = REGISTRY_STORE.with(|s| s.clone());
-            // panicking here is okay because we are using an interval instead of a timer that
-            // has to reschedule itself.
-            store
-                .sync_registry_stored()
-                .await
-                .expect("Could not sync registry store!");
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
+            let mut instruction_counter = telemetry::InstructionCounter::default();
+            instruction_counter.lap();
+            let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(&CANISTER).await;
+            let registry_sync_instructions = instruction_counter.lap();
+
+            let mut metrics_sync_instructions: u64 = 0;
+            match registry_sync_result {
+                Ok(_) => {
+                    instruction_counter.lap();
+                    NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
+                    metrics_sync_instructions = instruction_counter.lap();
+                    ic_cdk::println!("Successfully synced subnets metrics and local registry");
+                }
+                Err(e) => {
+                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
+                }
+            }
+
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+                m.record_last_sync_instructions(
+                    instruction_counter.sum(),
+                    registry_sync_instructions,
+                    metrics_sync_instructions,
+                )
+            });
         });
     });
 }

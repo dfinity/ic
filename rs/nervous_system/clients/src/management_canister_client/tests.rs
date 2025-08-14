@@ -126,6 +126,7 @@ async fn test_limit_outstanding_calls() {
             request_payload_bytes_total: zero.clone(),
             response_payload_bytes_total: zero.clone(),
         },
+        memory_metrics: Default::default(),
     };
 
     // Step 2: Call code under test.

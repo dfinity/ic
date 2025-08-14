@@ -1,3 +1,8 @@
+use crate::metrics::MetricsManager;
+use crate::registry_querier::RegistryQuerier;
+use crate::storage::VM;
+use ic_base_types::SubnetId;
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
@@ -12,6 +17,8 @@ use ic_registry_keys::{
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::RegistryVersion;
 use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -21,19 +28,33 @@ mod test;
 /// This struct represents the API for the canister.  API methods should be implemented in
 /// main.rs and defer the important work to the methods in this struct, essentially passing
 /// through arguments and responses with almost no logic.
-pub struct NodeRewardsCanister<T: CanisterRegistryClient> {
-    registry_client: Arc<T>,
+pub struct NodeRewardsCanister {
+    registry_client: Arc<dyn CanisterRegistryClient>,
+    metrics_manager: Rc<MetricsManager<VM>>,
+    last_metrics_update: RegistryVersion,
 }
 
 /// Internal methods
-impl<T: CanisterRegistryClient> NodeRewardsCanister<T> {
-    pub fn new(registry_client: Arc<T>) -> Self {
-        Self { registry_client }
+impl NodeRewardsCanister {
+    pub fn new(
+        registry_client: Arc<dyn CanisterRegistryClient>,
+        metrics_manager: Rc<MetricsManager<VM>>,
+    ) -> Self {
+        Self {
+            last_metrics_update: registry_client.get_latest_version(),
+            registry_client,
+            metrics_manager,
+        }
     }
 
     /// Gets Arc reference to RegistryClient
-    pub fn get_registry_client(&self) -> Arc<T> {
+    pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
         self.registry_client.clone()
+    }
+
+    /// Gets Arc reference to MetricsManager
+    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
+        self.metrics_manager.clone()
     }
 
     // Test only methods
@@ -42,12 +63,54 @@ impl<T: CanisterRegistryClient> NodeRewardsCanister<T> {
             .get_value(key.as_ref(), self.registry_client.get_latest_version())
             .map_err(|e| format!("Failed to get registry value: {:?}", e))
     }
+
+    pub async fn schedule_registry_sync(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+    ) -> Result<RegistryVersion, String> {
+        let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
+
+        registry_client.sync_registry_stored().await
+    }
+
+    pub async fn schedule_metrics_sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
+        let (registry_client, metrics_manager, pre_sync_version) = canister.with(|canister| {
+            (
+                canister.borrow().get_registry_client(),
+                canister.borrow().get_metrics_manager(),
+                canister.borrow().last_metrics_update,
+            )
+        });
+        let post_sync_version = registry_client.get_latest_version();
+        let registry_querier = RegistryQuerier::new(registry_client.clone());
+
+        let mut subnets_list: HashSet<SubnetId> = HashSet::default();
+        let mut version = if pre_sync_version == ZERO_REGISTRY_VERSION {
+            // If the pre-sync version is 0, we consider all subnets from the post-sync version
+            post_sync_version
+        } else {
+            pre_sync_version
+        };
+        while version <= post_sync_version {
+            subnets_list.extend(registry_querier.subnets_list(version));
+
+            // Increment the version to sync the next one
+            version = version.increment();
+        }
+
+        metrics_manager
+            .update_subnets_metrics(subnets_list.into_iter().collect())
+            .await;
+        metrics_manager.retry_failed_subnets().await;
+        canister.with_borrow_mut(|canister| {
+            canister.last_metrics_update = post_sync_version;
+        });
+    }
 }
 
 // Exposed API Methods
-impl<T: CanisterRegistryClient> NodeRewardsCanister<T> {
+impl NodeRewardsCanister {
     pub async fn get_node_providers_monthly_xdr_rewards(
-        canister: &'static LocalKey<RefCell<NodeRewardsCanister<T>>>,
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersMonthlyXdrRewardsRequest,
     ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
         let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
@@ -71,8 +134,8 @@ impl<T: CanisterRegistryClient> NodeRewardsCanister<T> {
             },
         };
 
-        async fn inner_get_node_providers_monthly_xdr_rewards<T: CanisterRegistryClient>(
-            registry_client: Arc<T>,
+        async fn inner_get_node_providers_monthly_xdr_rewards(
+            registry_client: Arc<dyn CanisterRegistryClient>,
             request: GetNodeProvidersMonthlyXdrRewardsRequest,
         ) -> Result<(RewardsPerNodeProvider, RegistryVersion), String> {
             registry_client.sync_registry_stored().await.map_err(|e| {
@@ -88,22 +151,22 @@ impl<T: CanisterRegistryClient> NodeRewardsCanister<T> {
                 .map(RegistryVersion::new)
                 .unwrap_or_else(|| registry_client.get_latest_version());
 
-            let rewards_table = get_decoded_value::<NodeRewardsTable, T>(
-                &registry_client,
+            let rewards_table = get_decoded_value::<NodeRewardsTable>(
+                &*registry_client,
                 NODE_REWARDS_TABLE_KEY,
                 version,
             )
             .map_err(|e| format!("Could not find NodeRewardsTable: {e:?}"))?
             .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?;
 
-            let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord, T>(
-                &registry_client,
+            let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord>(
+                &*registry_client,
                 NODE_OPERATOR_RECORD_KEY_PREFIX,
                 version,
             )?;
 
-            let data_centers = decoded_key_value_pairs_for_prefix::<DataCenterRecord, T>(
-                &registry_client,
+            let data_centers = decoded_key_value_pairs_for_prefix::<DataCenterRecord>(
+                &*registry_client,
                 DATA_CENTER_KEY_PREFIX,
                 version,
             )?
@@ -119,8 +182,8 @@ impl<T: CanisterRegistryClient> NodeRewardsCanister<T> {
 /// Get the key value pairs for a given prefix from the registry.
 ///
 /// NOTE: This function strips the prefix, so node_operator_xyz becomes xyz.
-fn decoded_key_value_pairs_for_prefix<T: prost::Message + Default, S: CanisterRegistryClient>(
-    registry_client: &S,
+fn decoded_key_value_pairs_for_prefix<T: prost::Message + Default>(
+    registry_client: &dyn CanisterRegistryClient,
     key_prefix: &str,
     version: RegistryVersion,
 ) -> Result<Vec<(String, T)>, String> {

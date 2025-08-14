@@ -497,6 +497,16 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
     }
 }
 
+/// Builds the SnsWasm for the governance canister (with test-only features).
+pub fn build_governance_test_sns_wasm() -> SnsWasm {
+    let governance_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &["test"]);
+    SnsWasm {
+        wasm: governance_wasm.bytes(),
+        canister_type: SnsCanisterType::Governance.into(),
+        ..SnsWasm::default()
+    }
+}
+
 /// Builds the mainnet SnsWasm for the Swap Canister
 pub fn build_mainnet_swap_sns_wasm() -> SnsWasm {
     let swap_wasm = Project::cargo_bin_maybe_from_env("mainnet-sns-swap-canister", &[]);

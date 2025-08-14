@@ -22,10 +22,12 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status, expect_canister_did_not_reply, get_reply, ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -824,7 +826,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee(test.subnet_size())
+                .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
                 .get())
             / one_gib
     );
@@ -2376,7 +2378,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         ONE_GIB - memory_after_create + canister_history_memory as i64
     );
     let result = test.ingress(id, "test_without_trap", vec![]);
-    assert_empty_reply(result);
+    expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
     let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
     let memory = test.subnet_available_memory();

@@ -1004,6 +1004,7 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
                 .collect(),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
             idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }),
         ..empty_subnet_update()
     };
@@ -1072,6 +1073,7 @@ pub async fn create_new_subnet_with_keys(
             .collect(),
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
+        max_parallel_pre_signature_transcripts_in_creation: None,
     };
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(
         SubnetType::Application,

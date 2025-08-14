@@ -31,7 +31,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::{
-    batch::QueryStats,
+    batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
@@ -59,6 +59,7 @@ pub(super) enum QueryResponse {
 /// The result of execution of a query or a response callback.
 /// The execution either produces a response or returns a possibly empty set of
 /// outgoing calls with the new canister state and the call origin.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum ExecutionResult {
     Response(QueryResponse),
     Calls(CanisterState, CallOrigin, VecDeque<Arc<Request>>),
@@ -216,10 +217,6 @@ impl<'a> QueryContext<'a> {
         match query.source {
             QuerySource::System => {
                 if let WasmMethod::CompositeQuery(_) = &method {
-                    info!(
-                        self.log,
-                        "Running composite canister http transform on canister {}.", query.receiver
-                    );
                     return Err(UserError::new(
                         ErrorCode::CompositeQueryCalledInReplicatedMode,
                         "Composite query cannot be used as transform in canister http outcalls.",
@@ -390,7 +387,7 @@ impl<'a> QueryContext<'a> {
                 );
             }
         }
-
+        let cost_schedule = self.get_cost_schedule();
         let subnet_size = self
             .network_topology
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
@@ -402,6 +399,7 @@ impl<'a> QueryContext<'a> {
             canister.message_memory_usage(),
             canister.scheduler_state.compute_allocation,
             subnet_size,
+            self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
         ) > canister.system_state.balance()
         {
@@ -433,6 +431,7 @@ impl<'a> QueryContext<'a> {
                 self.hypervisor,
                 &mut self.round_limits,
                 self.query_critical_error,
+                cost_schedule,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -640,6 +639,8 @@ impl<'a> QueryContext<'a> {
             ),
         };
 
+        let cost_schedule = self.get_cost_schedule();
+
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -654,6 +655,7 @@ impl<'a> QueryContext<'a> {
             self.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
+            cost_schedule,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -738,6 +740,7 @@ impl<'a> QueryContext<'a> {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
+        let cost_schedule = self.get_cost_schedule();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
@@ -757,6 +760,7 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
+                cost_schedule,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
@@ -1103,5 +1107,9 @@ impl<'a> QueryContext<'a> {
     /// Returns a number of transient errors.
     pub fn transient_errors(&self) -> usize {
         self.transient_errors
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.state.get_ref().metadata.cost_schedule
     }
 }

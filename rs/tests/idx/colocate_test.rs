@@ -237,6 +237,12 @@ fn setup(env: TestEnv) {
     let forward_ssh_agent =
         env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
 
+    let logs_flag = if env::var("VECTOR_VM_PATH").is_err() {
+        "--no-logs".to_string()
+    } else {
+        "".to_string()
+    };
+
     let prepare_docker_script = &format!(
         r#"
 set -e
@@ -281,6 +287,7 @@ docker run --name {COLOCATE_CONTAINER_NAME} --network host \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
     --group-base-name {colocated_test} \
+    {logs_flag} \
     run
 EOF
 chmod +x /home/admin/run

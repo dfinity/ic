@@ -67,9 +67,7 @@ impl BoundaryNodeManager {
         Self {
             registry,
             _metrics: metrics,
-            process: Arc::new(Mutex::new(ProcessManager::new(
-                logger.clone().inner_logger.root,
-            ))),
+            process: Arc::new(Mutex::new(ProcessManager::new(logger.clone()))),
             ic_binary_dir,
             crypto_config,
             version,

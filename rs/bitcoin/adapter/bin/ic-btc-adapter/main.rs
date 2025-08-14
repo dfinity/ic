@@ -50,5 +50,5 @@ pub async fn main() {
         &tokio::runtime::Handle::current(),
         config,
     );
-    shutdown_signal(log.inner_logger.root.clone()).await;
+    shutdown_signal(log.clone()).await;
 }

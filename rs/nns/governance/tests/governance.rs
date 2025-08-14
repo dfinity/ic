@@ -15,7 +15,9 @@ use fixtures::{account, new_motion_proposal, principal, NNSBuilder, NeuronBuilde
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
+};
 use ic_nervous_system_common::{
     ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
     ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -1989,7 +1991,7 @@ fn test_enforce_private_neuron() {
             },
             full_neurons: vec![full_neuron],
             total_pages_available: Some(1),
-        },
+        }
     );
 }
 
@@ -7160,7 +7162,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal to add NP.")
         .command
         .unwrap()
     {
@@ -7185,7 +7187,7 @@ fn test_manage_and_reward_node_providers() {
     );
 
     // Adding the same node provider again should fail.
-    let pid = match gov
+    assert!(gov
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
@@ -7208,18 +7210,10 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
-        .command
+        .err()
         .unwrap()
-    {
-        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        _ => panic!("Invalid response"),
-    };
-
-    assert_eq!(
-        gov.get_proposal_data(pid).unwrap().status(),
-        ProposalStatus::Failed
-    );
+        .error_message
+        .contains("cannot add already existing Node Provider"));
 
     // Rewarding the node provider to the default account should now work.
     let pid = match gov
@@ -7546,7 +7540,7 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Adding any of the same node providers again should fail
     for np_pid in np_pid_vec {
-        let prop_id = match gov
+        assert!(gov
             .manage_neuron(
                 &voter_pid,
                 &ManageNeuron {
@@ -7569,19 +7563,10 @@ fn test_manage_and_reward_multiple_node_providers() {
             )
             .now_or_never()
             .unwrap()
-            .panic_if_error("Couldn't submit proposal.")
-            .command
+            .err()
             .unwrap()
-        {
-            manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            _ => panic!("Invalid response"),
-        };
-
-        // The proposal should have failed
-        assert_eq!(
-            gov.get_proposal_data(prop_id).unwrap().status(),
-            ProposalStatus::Failed
-        );
+            .error_message
+            .contains("cannot add already existing Node Provider"));
     }
 
     let to_subaccount = Subaccount({
@@ -11700,6 +11685,7 @@ lazy_static! {
                     268693, // idle_cycles_burned_per_day
                     (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
                     123478, // wasm_memory_threshold
+                    MemoryMetricsFromManagementCanister::default(), // memory_metrics
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {

@@ -274,6 +274,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
             &msg,
             effective_canister_id,
             subnet_size,
+            state.metadata.cost_schedule,
         );
 
         let ingress = Ingress::from((msg, effective_canister_id));
@@ -303,6 +304,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                     compute_allocation,
                     cost,
                     subnet_size,
+                    state.metadata.cost_schedule,
                     reveal_top_up,
                 ) {
                     return Err(IngressInductionError::CanisterOutOfCycles(err));
