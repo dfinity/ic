@@ -5,14 +5,13 @@
 # This script is invoked from .github/actions/bazel-test-all/action.yaml and ci/scripts/run-build-ic.sh
 # to print to stdout which Bazel targets should be built or tested.
 #
-# If the environment variable RUN_ON_DIFF_ONLY is set to "true" only bazel targets will be returned
-# that have input files which are modified within the git range $MERGE_BASE_SHA..$BRANCH_HEAD_SHA.
+# If --commit_range is passed only bazel targets will be included that have modified inputs within the specified git range.
 #
-# If the environment variable SKIP_LONG_TESTS is set to "true", tests tagged with 'long_test' will be excluded.
+# If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
-#   $ SKIP_LONG_TESTS="true" RUN_ON_DIFF_ONLY="true" MERGE_BASE_SHA="master" BRANCH_HEAD_SHA="HEAD" ci/bazel-scripts/targets.py test
-#   bazel query --keep_going '((kind(".*_test", rdeps(//..., set()))) except attr(tags, long_test, //...)) except attr(tags, manual, //...)'
+#   ci/bazel-scripts/targets.py --skip_long_tests --commit_range=master..HEAD test
+#   bazel query --keep_going '((kind(".*_test", //...)) except attr(tags, long_test, //...)) except attr(tags, manual, //...)'
 
 import argparse
 import fnmatch
@@ -65,22 +64,19 @@ def diff_only_query(command: str, commit_range: str, except_long_tests: str) -> 
 def main():
     parser = argparse.ArgumentParser(description="Return bazel targets which should be build/tested")
     parser.add_argument("command", choices=["build", "test"], help="Bazel command to generate targets for")
+    parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
+    parser.add_argument("--commit_range", help="Only include targets with modified inputs in the given git commit range. For example: 'master..HEAD'")
     args = parser.parse_args()
 
-    SKIP_LONG_TESTS = os.environ.get("SKIP_LONG_TESTS", "false") == "true"
-    RUN_ON_DIFF_ONLY = os.environ.get("RUN_ON_DIFF_ONLY", "false") == "true"
-
     # Can be added to a query to exclude long tests if requested:
-    except_long_tests = " except attr(tags, long_test, //...)" if SKIP_LONG_TESTS else ""
+    except_long_tests = " except attr(tags, long_test, //...)" if args.skip_long_tests else ""
 
-    if RUN_ON_DIFF_ONLY:
-        MERGE_BASE_SHA = os.environ.get("MERGE_BASE_SHA", "HEAD")
-        BRANCH_HEAD_SHA = os.environ.get("BRANCH_HEAD_SHA", "")
-        query = diff_only_query(args.command, f"{MERGE_BASE_SHA}..{BRANCH_HEAD_SHA}", except_long_tests)
-    else:
+    if args.commit_range is None:
         # If no commit range is specified, form a query to return all targets
         # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified):
         query = f"(//...){except_long_tests}"
+    else:
+        query = diff_only_query(args.command, args.commit_range, except_long_tests)
 
     # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
     query = f"({query}) except attr(tags, manual, //...)"
