@@ -1217,8 +1217,25 @@ impl CkBtcMinterState {
         ledger_burn_index: LedgerBurnIndex,
         reimburse_deposit_task: ReimburseWithdrawalTask,
     ) {
-        // TODO XC-449 perform other checks?
-        // Also see schedule_deposit_reimbursement above
+        self.pending_retrieve_btc_requests
+            .retain(|req| req.block_index != ledger_burn_index);
+
+        for submitted_tx in self
+            .submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+        {
+            if submitted_tx
+                .requests
+                .iter()
+                .any(|req| req.block_index == ledger_burn_index)
+            {
+                panic!(
+                    "BUG: Cannot reimburse withdrawal request {} since there is a submitted transaction for that withdrawal: {:?}",
+                    ledger_burn_index,
+                    submitted_tx);
+            }
+        }
         self.pending_withdrawal_reimbursements
             .insert(ledger_burn_index, reimburse_deposit_task);
     }
