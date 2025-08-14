@@ -368,7 +368,7 @@ impl TargetCanister {
                 path: PathBuf::from("canister/prod/canister_ids.json"),
             },
             TargetCanister::CyclesIndex => DownloadableFile::Remote {
-                url: "https://raw.githubusercontent.com/dfinity/cycles-ledger/refs/heads/main/canister_ids.json".to_string()
+                url: "https://raw.githubusercontent.com/dfinity/cycles-ledger/6aaf0cb2bf96fe6a9b117cc9c7aa832574c6427a/canister_ids.json".to_string()
             },
         }
     }
