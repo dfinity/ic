@@ -60,7 +60,7 @@ pub enum MintMemo<'a> {
     ReimburseWithdrawal {
         #[n(0)]
         /// The id corresponding to the withdrawal request,
-        /// corresponds to the ledger burn index.
+        /// which corresponds to the ledger burn index.
         withdrawal_id: LedgerBurnIndex,
     },
 }

@@ -45,7 +45,7 @@ pub enum WithdrawalReimbursementReason {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum InvalidTransactionError {
     /// The transaction contains too many inputs.
-    /// If such a transaction where signed, there is a risk that the resulting transaction will have a size
+    /// If such a transaction were signed, there is a risk that the resulting transaction will have a size of
     /// over 100k vbytes and therefore be *non-standard*.
     TooManyInputs {
         num_inputs: usize,
@@ -100,7 +100,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
                 error_count += 1;
             }
         }
-        // Defuse the guard. Note that In case of a panic in the callback (either before or after this point)
+        // Defuse the guard. Note that in case of a panic in the callback (either before or after this point)
         // the defuse will not be effective (due to state rollback), and the guard that was
         // setup before the `mint_ckbtc` async call will be invoked.
         scopeguard::ScopeGuard::into_inner(prevent_double_minting_guard);

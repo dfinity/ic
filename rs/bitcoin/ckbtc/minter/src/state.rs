@@ -409,11 +409,11 @@ pub struct CkBtcMinterState {
     ///
     /// # Requirement
     ///
-    /// A withdrawal request should only be reimbursed,
+    /// A withdrawal request should only be reimbursed
     /// when it is certain that no Bitcoin transactions for that withdrawal will ever make it. That means,
-    /// 1. Either, the minter never issued a Bitcoin transaction including that withdrawal request;
-    /// 2. Or, it's guaranteed that such a transaction is no longer valid because some of its UTXOs
-    ///    have been used by another transaction that is considered finalized in the mean time.
+    /// 1. Either the minter never issued a Bitcoin transaction including that withdrawal request;
+    /// 2. Or it's guaranteed that such a transaction is no longer valid because some of its UTXOs
+    ///    have been used by another transaction that is considered finalized in the meantime.
     pub pending_withdrawal_reimbursements: BTreeMap<LedgerBurnIndex, ReimburseWithdrawalTask>,
 
     /// Map from burn block index to the reimbursed withdrawal request.

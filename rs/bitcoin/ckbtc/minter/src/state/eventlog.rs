@@ -222,7 +222,7 @@ mod event {
             burn_block_index: u64,
         },
 
-        /// The minter unexpectedly panic while processing a reimbursement.
+        /// The minter unexpectedly panicked while processing a reimbursement.
         /// The reimbursement is quarantined to prevent any double minting and
         /// will not be processed without further manual intervention.
         #[serde(rename = "quarantined_withdrawal_reimbursement")]
