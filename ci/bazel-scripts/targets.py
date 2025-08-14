@@ -44,12 +44,10 @@ def diff_only_query(command: str, commit_range: str, except_long_tests: str) -> 
         # in case this happens which we check for below.
         query = "rdeps(//..., set({targets}))".format(targets=" ".join(modified_files))
 
-    # Only include test targets if the bazel command is 'test'.
-    # This ensures `.github/actions/bazel-test-all/action.yaml exits early
-    # to not execute `bazel test` in case there are no targets.
-    # It would fail with the following error otherwise:
-    # ERROR: No test targets were found, yet testing was requested
-    # This could happen for PRs that only modify files that are not depended upon by any test.
+    # The targets returned by this script will be passed to `bazel test` by the caller (in case there are any).
+    # We have to ensure that the targets include at least one test otherwise `bazel test` will error with:
+    #   ERROR: No test targets were found, yet testing was requested
+    # So we filter the targets for tests to ensure it's either empty or contains at least one test.
     if command == "test":
         query = f'kind(".*_test", {query})'
 
