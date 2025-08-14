@@ -206,6 +206,36 @@ async fn upload_events(events: Vec<Event>) {
     }
 }
 
+#[cfg(feature = "self_check")]
+#[update]
+async fn reimburse_pending_withdrawal(ledger_burn_index: u64) {
+    use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
+    let pending_withdrawal_request = ic_ckbtc_minter::state::read_state(|s| {
+        let requests: Vec<_> = s
+            .pending_retrieve_btc_requests
+            .iter()
+            .filter(|req| req.block_index == ledger_burn_index)
+            .collect();
+        assert_eq!(requests.len(), 1);
+        requests[0].clone()
+    });
+    ic_ckbtc_minter::state::mutate_state(|s| {
+        ic_ckbtc_minter::state::audit::reimburse_withdrawal(
+            s,
+            ledger_burn_index,
+            pending_withdrawal_request.amount,
+            pending_withdrawal_request.reimbursement_account.unwrap(),
+            WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: 2000,
+                    max_num_inputs: 1000,
+                },
+            ),
+            &IC_CANISTER_RUNTIME,
+        )
+    })
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
