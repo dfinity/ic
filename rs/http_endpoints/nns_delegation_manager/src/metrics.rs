@@ -1,4 +1,4 @@
-use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 
 #[derive(Clone)]
