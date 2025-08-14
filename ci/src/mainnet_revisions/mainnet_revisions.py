@@ -8,8 +8,6 @@ import subprocess
 import urllib.request
 from enum import Enum
 from typing import List
-import tempfile
-import os
 
 MAINNET_ICOS_REVISIONS_FILE = "mainnet-icos-revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
@@ -28,6 +26,7 @@ def base_download_url(git_commit_id, variant, update, test, dev=True):
     component = ("update-img" if update else "disk-img") + ("-dev" if dev else "")
     test_suffix = "-test" if test else ""
     return f"https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test_suffix}/"
+
 
 # NOTE: We must download and hash the update dev image ourselves because public proposals only include hashes for the production images
 def download_and_hash_image(url, logger):
@@ -56,13 +55,7 @@ def download_and_hash_image(url, logger):
 
 def get_image_hash_for_version(version, variant, logger, is_dev=True):
     """Get the SHA256 hash of an update image for a given version and variant."""
-    base_url = base_download_url(
-        git_commit_id=version,
-        variant=variant,
-        update=True,
-        test=False,
-        dev=is_dev
-    )
+    base_url = base_download_url(git_commit_id=version, variant=variant, update=True, test=False, dev=is_dev)
 
     image_url = base_url + "update-img.tar.zst"
 
