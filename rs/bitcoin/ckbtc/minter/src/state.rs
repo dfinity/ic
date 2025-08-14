@@ -270,6 +270,12 @@ pub struct CheckedUtxo {
 #[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
 
+/// Type alias for a ledger burn block index
+pub type LedgerBurnIndex = u64;
+
+/// Type alias for a ledger mint block index
+pub type LedgerMintIndex = u64;
+
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
@@ -395,6 +401,12 @@ pub struct CkBtcMinterState {
     /// Map from burn block index to the the reimbursed request.
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
 
+    /// Map from burn block index to the the reimbursed withdrawal request.
+    pub pending_withdrawal_reimbursements: BTreeMap<LedgerBurnIndex, ReimburseWithdrawalTask>,
+
+    /// Map from burn block index to the the reimbursed withdrawal request.
+    pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawal>,
+
     /// Cache of get_utxos call results
     pub get_utxos_cache: GetUtxosCache,
 }
@@ -421,6 +433,38 @@ pub enum ReimbursementReason {
         kyt_fee: u64,
     },
     CallFailed,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
+pub struct ReimburseWithdrawalTask {
+    pub account: Account,
+    pub amount: u64,
+    pub reason: WithdrawalReimbursementReason,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
+pub struct ReimbursedWithdrawal {
+    pub account: Account,
+    pub amount: u64,
+    pub reason: WithdrawalReimbursementReason,
+    pub mint_block_index: LedgerMintIndex,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+pub enum WithdrawalReimbursementReason {
+    InvalidTransaction(InvalidTransactionError),
+    // CancelledByUser TODO XC-451: user should be able to cancel own withdrawals
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+pub enum InvalidTransactionError {
+    /// The transaction contains too many inputs.
+    /// If such a transaction where signed, there is a risk that the resulting transaction will have a size
+    /// over 100k vbytes and therefore be *non-standard*.
+    TooManyInputs {
+        num_inputs: usize,
+        max_num_inputs: usize,
+    },
 }
 
 impl CkBtcMinterState {
@@ -1568,6 +1612,8 @@ impl From<InitArgs> for CkBtcMinterState {
             get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
                 args.get_utxos_cache_expiration_seconds.unwrap_or_default(),
             )),
+            pending_withdrawal_reimbursements: Default::default(),
+            reimbursed_withdrawals: Default::default(),
         }
     }
 }
