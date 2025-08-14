@@ -38,6 +38,7 @@ pub enum ReimbursedError {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum WithdrawalReimbursementReason {
+    #[serde(rename = "invalid_transaction")]
     InvalidTransaction(InvalidTransactionError),
 }
 
@@ -46,6 +47,7 @@ pub enum InvalidTransactionError {
     /// The transaction contains too many inputs.
     /// If such a transaction were signed, there is a risk that the resulting transaction will have a size of
     /// over 100k vbytes and therefore be *non-standard*.
+    #[serde(rename = "too_many_inputs")]
     TooManyInputs {
         num_inputs: usize,
         max_num_inputs: usize,
