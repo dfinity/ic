@@ -210,6 +210,7 @@ def system_test(
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
         colocated_test_driver_vm_forward_ssh_agent = False,
+        uses_branch_version = False,
         uses_guestos_img = True,
         uses_guestos_mainnet_img = False,
         uses_guestos_recovery_dev_img = False,
@@ -250,6 +251,7 @@ def system_test(
       colocated_test_driver_vm_forward_ssh_agent: forward the SSH agent to the colocated test-driver VM.
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
+      uses_branch_version: the test uses the current branch version.txt
       uses_guestos_img: the test uses the branch GuestOS image
       uses_guestos_mainnet_img: the test uses the mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
@@ -294,14 +296,14 @@ def system_test(
         test_driver_target = bin_name
 
     # Environment variable names to targets (targets are resolved)
+    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps = {}
+
+    if uses_branch_version:
+        _env_deps["ENV_DEPS__IC_VERSION_FILE"] = "//bazel:version.txt"
 
     _guestos = "//ic-os/guestos/envs/dev:"
     _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"
-
-    # Always add version.txt for now as all test use it even that they don't declare they use dev image.
-    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
     if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
