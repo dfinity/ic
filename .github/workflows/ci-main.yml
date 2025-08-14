@@ -177,7 +177,7 @@ jobs:
             if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
               commit_range_arg="--commit_range=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
             fi
-            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "$commit_range_arg" "$skip_long_test_arg" > "$target_pattern_file"
+            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "$commit_range_arg" "$skip_long_test_arg" >"$target_pattern_file"
             # if bazel targets is empty we don't need to run any tests
             if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
               echo "No bazel targets to build"
