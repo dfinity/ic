@@ -217,7 +217,6 @@ fn validate_and_instrument(
     let instrumentation_output = instrument(
         module,
         config.cost_to_compile_wasm_instruction,
-        config.feature_flags.write_barrier,
         config.metering_type,
         config.dirty_page_overhead,
         max_wasm_memory_size,

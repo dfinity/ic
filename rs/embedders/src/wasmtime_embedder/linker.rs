@@ -4,7 +4,7 @@ use crate::{
         convert_backtrace,
         system_api::SystemApiImpl,
         system_api_complexity::{overhead, overhead_native},
-        StoreData, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+        StoreData, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
     },
     InternalErrorCode,
 };
@@ -100,40 +100,6 @@ fn store_value(
     global
         .set(caller, Val::I64(val))
         .map_err(|e| unexpected_err(format!("Failed to set global: {}", e)))
-}
-
-/// Updates heap bytemap marking which pages have been written to dst and size
-/// need to have valid values (need to pass checks performed by the function
-/// that actually writes to the heap)
-#[inline(always)]
-fn mark_writes_on_bytemap(
-    caller: &mut Caller<'_, StoreData>,
-    dst: usize,
-    size: usize,
-) -> Result<(), anyhow::Error> {
-    if size < 1 {
-        return Ok(());
-    }
-    let bitmap_mem = match caller.get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME) {
-        Some(wasmtime::Extern::Memory(mem)) => mem,
-        _ => {
-            return Err(process_err(
-                caller,
-                HypervisorError::ToolchainContractViolation {
-                    error: "Failed to access heap bitmap".to_string(),
-                },
-            ))
-        }
-    };
-
-    let bitmap = bitmap_mem.data_mut(caller);
-    let mut i = dst / PAGE_SIZE;
-    let end = (dst + size - 1) / PAGE_SIZE + 1;
-    while i < end {
-        bitmap[i] = 1;
-        i += 1;
-    }
-    Ok(())
 }
 
 /// Charge for system api call that doesn't involve touching memory
@@ -363,11 +329,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -408,11 +370,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst, offset, size, mem)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -440,11 +398,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -533,11 +487,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -565,11 +515,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -617,11 +563,7 @@ pub fn syscalls<
                     with_memory_and_system_api(&mut caller, |system_api, memory| {
                         system_api.ic0_env_var_name_copy(index, dst, offset, size, memory)
                     })?;
-                    if feature_flags.write_barrier == FlagStatus::Enabled {
-                        mark_writes_on_bytemap(&mut caller, dst, size)
-                    } else {
-                        Ok(())
-                    }
+                    Ok(())
                 }
             })
             .unwrap();
@@ -688,11 +630,7 @@ pub fn syscalls<
                         system_api
                             .ic0_env_var_value_copy(name_src, name_size, dst, offset, size, memory)
                     })?;
-                    if feature_flags.write_barrier == FlagStatus::Enabled {
-                        mark_writes_on_bytemap(&mut caller, dst, size)
-                    } else {
-                        Ok(())
-                    }
+                    Ok(())
                 }
             })
             .unwrap();
@@ -847,11 +785,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.stable_read_without_bounds_checks(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -914,11 +848,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_cycle_balance128(dst, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, 16)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -931,11 +861,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_liquid_cycle_balance128(dst, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, 16)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -957,11 +883,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, 16)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -983,11 +905,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, 16)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -1013,11 +931,7 @@ pub fn syscalls<
                         memory,
                     )
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, 16)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -1061,11 +975,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_subnet_self_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -1176,11 +1086,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_root_key_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
@@ -1252,11 +1158,7 @@ pub fn syscalls<
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
                 })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst, size)
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         })
         .unwrap();
