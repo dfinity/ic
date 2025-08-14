@@ -3,7 +3,10 @@ use crate::{
     consensus::idkg::{ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError},
     crypto::{
         canister_threshold_sig::{
-            error::IDkgParamsValidationError,
+            error::{
+                IDkgParamsValidationError, ThresholdEcdsaSigInputsCreationError,
+                ThresholdSchnorrSigInputsCreationError,
+            },
             idkg::{
                 IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
                 IDkgTranscriptType,
@@ -1111,6 +1114,28 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
             Msg::Schnorr(x) => PreSignatureRef::Schnorr(x.try_into()?),
             Msg::Ecdsa(x) => PreSignatureRef::Ecdsa(x.try_into()?),
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum BuildSignatureInputsError {
+    /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
+    ContextIncomplete,
+    /// The tECDSA signature inputs could not be created because the context is malformed
+    ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
+    /// The tSchnorr signature inputs could not be created because the context is malformed
+    ThresholdSchnorrSigInputsCreationError(ThresholdSchnorrSigInputsCreationError),
+}
+
+impl BuildSignatureInputsError {
+    /// Fatal errors indicate a problem in the construction of payloads,
+    /// request contexts, or the match between both.
+    pub fn is_fatal(&self) -> bool {
+        match self {
+            BuildSignatureInputsError::ContextIncomplete => false,
+            BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError(_) => true,
+            BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(_) => true,
+        }
     }
 }
 
