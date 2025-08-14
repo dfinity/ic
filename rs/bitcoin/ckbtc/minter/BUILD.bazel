@@ -175,14 +175,20 @@ rust_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/bitcoin/checker:btc_checker_lib",
+        "//rs/types/management_canister_types",
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-stable-structures",
+        "@crate_index//:mockall",
         "@crate_index//:serde",
         "@crate_index//:tokio",
     ],
+    proc_macro_deps = LIB_PROC_MACRO_DEPS,
 )
 
 # integration tests defined in ckbtc minter tests/
