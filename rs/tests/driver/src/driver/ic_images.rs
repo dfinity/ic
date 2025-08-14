@@ -2,7 +2,7 @@
 
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_types::ReplicaVersion;
+use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
 use url::Url;
 
 /// Pull the version of the initial GuestOS image from the environment.
@@ -112,13 +112,11 @@ pub fn get_setupos_img_sha256() -> String {
 }
 
 /// Pull the version of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_version() -> ReplicaVersion {
+pub fn get_hostos_update_img_version() -> HostosVersion {
     let env = "ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION";
 
-    ReplicaVersion::try_from(
-        std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")),
-    )
-    .expect("Invalid ReplicaVersion")
+    HostosVersion::try_from(std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
+        .expect("Invalid HostosVersion")
 }
 
 /// Pull the URL of the target HostOS update image from the environment.

@@ -26,7 +26,6 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::{block_on, runtime_from_url},
 };
-use ic_types::hostos_version::HostosVersion;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use reqwest::Client;
 
@@ -440,8 +439,6 @@ pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
     let target_version = get_hostos_update_img_version();
-    let target_version =
-        HostosVersion::try_from(target_version.to_string()).expect("Invalid target hostos version");
 
     let update_image_url = get_hostos_update_img_url();
     info!(logger, "HostOS update image URL: '{}'", update_image_url);
