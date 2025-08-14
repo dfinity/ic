@@ -19,7 +19,8 @@ use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::reimbursement::{
-    ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal, ReimbursedWithdrawalResult,
+    InvalidTransactionError, ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal,
+    ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
 };
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
@@ -603,12 +604,50 @@ impl CkBtcMinterState {
     }
 
     pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
+        // Hack to avoid Candid breaking change in ReimbursementReason
+        // which is in the return type of `retrieve_btc_status_v2`
+        fn map_reimbursement_reason(reason: &WithdrawalReimbursementReason) -> ReimbursementReason {
+            match reason {
+                WithdrawalReimbursementReason::InvalidTransaction(
+                    InvalidTransactionError::TooManyInputs { .. },
+                ) => ReimbursementReason::CallFailed,
+            }
+        }
+
         if let Some(reimbursement) = self.pending_reimbursements.get(&block_index) {
             return RetrieveBtcStatusV2::WillReimburse(reimbursement.clone());
         }
 
+        if let Some(reimbursement) = self.pending_withdrawal_reimbursements.get(&block_index) {
+            return RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
+                account: reimbursement.account,
+                amount: reimbursement.amount,
+                reason: map_reimbursement_reason(&reimbursement.reason),
+            });
+        }
+
         if let Some(reimbursement) = self.reimbursed_transactions.get(&block_index) {
             return RetrieveBtcStatusV2::Reimbursed(reimbursement.clone());
+        }
+
+        if let Some(maybe_reimbursed) = self.reimbursed_withdrawals.get(&block_index) {
+            return match maybe_reimbursed {
+                Ok(reimbursement) => RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
+                    account: reimbursement.account,
+                    amount: reimbursement.amount,
+                    reason: map_reimbursement_reason(&reimbursement.reason),
+                    mint_block_index: reimbursement.mint_block_index,
+                }),
+                Err(err) => match err {
+                    ReimbursedError::Quarantined => {
+                        // Hack to avoid Candid breaking change in ReimbursementReason
+                        // which is in the return type of `retrieve_btc_status_v2`.
+                        // At this point the reimbursement will actually not occur automatically
+                        // and may need manual intervention.
+                        RetrieveBtcStatusV2::Unknown
+                    }
+                },
+            };
         }
 
         let status_v2: RetrieveBtcStatusV2 = self.retrieve_btc_status(block_index).into();
@@ -1407,6 +1446,11 @@ impl CkBtcMinterState {
         burn_index: LedgerBurnIndex,
         mint_index: LedgerMintIndex,
     ) {
+        assert_ne!(
+            burn_index, mint_index,
+            "BUG: mint index cannot be the same as the burn index"
+        );
+
         let reimbursement = self
             .pending_withdrawal_reimbursements
             .remove(&burn_index)

@@ -303,3 +303,95 @@ mod suspended_utxos {
         vec![SuspendedReason::Quarantined, SuspendedReason::ValueTooSmall]
     }
 }
+
+mod withdrawal_reimbursement {
+    use crate::reimbursement::{
+        InvalidTransactionError, ReimburseWithdrawalTask, WithdrawalReimbursementReason,
+    };
+    use crate::state::{CkBtcMinterState, RetrieveBtcStatus, RetrieveBtcStatusV2};
+    use crate::test_fixtures::{init_args, ledger_account};
+    use assert_matches::assert_matches;
+    use icrc_ledger_types::icrc1::account::Account;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn should_quarantine_withdrawal_reimbursement() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let ledger_burn_index = 1;
+        let amount_to_reimburse = 1_000;
+        let ledger_account = ledger_account();
+        state.schedule_withdrawal_reimbursement(
+            ledger_burn_index,
+            reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+        );
+
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_matches!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::WillReimburse(reimbursement) if
+            reimbursement.account == ledger_account &&
+            reimbursement.amount == amount_to_reimburse
+        );
+
+        state.quarantine_withdrawal_reimbursement(ledger_burn_index);
+
+        assert_eq!(state.pending_withdrawal_reimbursements, BTreeMap::default());
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_eq!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::Unknown
+        );
+    }
+
+    #[test]
+    fn should_complete_withdrawal_reimbursement() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let ledger_burn_index = 1;
+        let amount_to_reimburse = 1_000;
+        let ledger_account = ledger_account();
+        state.schedule_withdrawal_reimbursement(
+            ledger_burn_index,
+            reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+        );
+
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_matches!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::WillReimburse(reimbursement) if
+            reimbursement.account == ledger_account &&
+            reimbursement.amount == amount_to_reimburse
+        );
+
+        let ledger_mint_index = 3;
+        state.reimburse_withdrawal_completed(ledger_burn_index, ledger_mint_index);
+
+        assert_eq!(state.pending_withdrawal_reimbursements, BTreeMap::default());
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_matches!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::Reimbursed(reimbursement) if
+            reimbursement.account == ledger_account &&
+            reimbursement.amount == amount_to_reimburse
+        );
+    }
+
+    fn assert_status_v1_unknown(state: &CkBtcMinterState, ledger_burn_index: u64) {
+        assert_eq!(
+            state.retrieve_btc_status(ledger_burn_index),
+            RetrieveBtcStatus::Unknown
+        );
+    }
+
+    fn reimburse_withdrawal_task(account: Account, amount: u64) -> ReimburseWithdrawalTask {
+        ReimburseWithdrawalTask {
+            account,
+            amount,
+            reason: WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: 2000,
+                    max_num_inputs: 1000,
+                },
+            ),
+        }
+    }
+}
