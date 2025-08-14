@@ -292,11 +292,6 @@ fn test_change_subnet_membership_duplicate_nodes() {
 
             let subnet_2 = subnet_2.unwrap();
 
-            // In order to correctly allow the subnet handler to call
-            // change_subnet_membership, we must first create canisters to get
-            // their IDs, and only then install them. This way, we pass the
-            // initial payload to the registry so it would allow mutation by the
-            // subnet handler.
             let registry = set_up_registry_canister(
                 &runtime,
                 RegistryCanisterInitPayloadBuilder::new()
@@ -323,6 +318,9 @@ fn test_change_subnet_membership_duplicate_nodes() {
                 subnet_nodes.insert(subnet_id, principals);
             }
 
+            // This payload attempts to add a node from subnet 1
+            // to subnet 2, while it is still a member of subnet 1.
+            // It should fail because of the invariant checks.
             let payload = ChangeSubnetMembershipPayload {
                 subnet_id: subnet_2.get(),
                 node_ids_add: vec![NodeId::new(
@@ -342,7 +340,6 @@ fn test_change_subnet_membership_duplicate_nodes() {
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
-            // Expect that this will fail because the call is using a node that is already in a different canister.
             assert!(
                 !forward_call_via_universal_canister(
                     &fake_governance_canister,
@@ -359,9 +356,11 @@ fn test_change_subnet_membership_duplicate_nodes() {
                 .unwrap()
                 .iter()
                 .take(2)
-                .map(|n| NodeId::new(n.clone()))
+                .map(|n| NodeId::new(*n))
                 .collect();
 
+            // This payload removes two nodes from the subnet 1 in order to later
+            // add them to subnet 2.
             let payload = ChangeSubnetMembershipPayload {
                 subnet_id: subnet_1.get(),
                 node_ids_remove: nodes_to_remove.clone(),
@@ -379,6 +378,7 @@ fn test_change_subnet_membership_duplicate_nodes() {
                 .await
             );
 
+            // This payload adds the two removed nodes from subnet 1.
             let payload = ChangeSubnetMembershipPayload {
                 subnet_id: subnet_2.get(),
                 node_ids_add: nodes_to_remove.clone(),
@@ -399,7 +399,7 @@ fn test_change_subnet_membership_duplicate_nodes() {
             for (id, expected_num_nodes) in [(subnet_1, 1), (subnet_2, 3)] {
                 let subnet_record = get_value_or_panic::<SubnetRecord>(
                     &registry,
-                    make_subnet_record_key(id.clone()).as_bytes(),
+                    make_subnet_record_key(id).as_bytes(),
                 )
                 .await;
 
