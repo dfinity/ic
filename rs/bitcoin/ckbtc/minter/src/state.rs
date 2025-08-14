@@ -733,7 +733,7 @@ impl CkBtcMinterState {
         {
             self.stuck_transactions.swap_remove(pos)
         } else {
-            ic_cdk::trap(&format!(
+            ic_cdk::trap(format!(
                 "Attempted to finalized a non-existent transaction {}",
                 txid
             ));

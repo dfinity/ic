@@ -52,14 +52,14 @@ impl Storable for ArchiveState {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         })
     }
 
@@ -132,7 +132,7 @@ fn max_memory_size_bytes() -> u64 {
 
 fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
     if max_memory_size_bytes < total_block_size() {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "Cannot set max_memory_size_bytes to {}, because it is lower than total_block_size {}.",
             max_memory_size_bytes,
             total_block_size()
@@ -206,7 +206,7 @@ fn blocks_len() -> u64 {
 fn append_block(block: &EncodedBlock) {
     BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
         Ok(_) => {}
-        Err(e) => ic_cdk::trap(&format!(
+        Err(e) => ic_cdk::trap(format!(
             "Could not append block to stable block log: {:?}",
             e
         )),

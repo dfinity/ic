@@ -476,13 +476,13 @@ fn init_timers_fn() {
 
     set_timer_interval(interval, || {
         if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
-            trap(&format!("failed to run expire: {err}"));
+            trap(format!("failed to run expire: {err}"));
         }
     });
 
     set_timer_interval(interval, || {
         if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
-            trap(&format!("failed to run retry: {err}"));
+            trap(format!("failed to run retry: {err}"));
         }
     });
 
@@ -575,20 +575,20 @@ fn pre_upgrade_fn() {
 
         TASKS.with(|tasks| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_TASKS)), tasks) {
-                trap(&format!("failed to persist tasks: {err}"));
+                trap(format!("failed to persist tasks: {err}"));
             }
         });
 
         EXPIRATIONS.with(|exps| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS)), exps)
             {
-                trap(&format!("failed to persist expirations: {err}"));
+                trap(format!("failed to persist expirations: {err}"));
             }
         });
 
         RETRIES.with(|retries| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_RETRIES)), retries) {
-                trap(&format!("failed to persist retries: {err}"));
+                trap(format!("failed to persist retries: {err}"));
             }
         });
     });
@@ -602,21 +602,21 @@ fn post_upgrade_fn() {
         TASKS.with(|tasks| {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_TASKS))) {
                 Ok(v) => *tasks.borrow_mut() = v,
-                Err(err) => trap(&format!("failed to load tasks: {err}")),
+                Err(err) => trap(format!("failed to load tasks: {err}")),
             };
         });
 
         EXPIRATIONS.with(|exps| {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS))) {
                 Ok(v) => *exps.borrow_mut() = v,
-                Err(err) => trap(&format!("failed to load expirations: {err}")),
+                Err(err) => trap(format!("failed to load expirations: {err}")),
             };
         });
 
         RETRIES.with(|retries| {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_RETRIES))) {
                 Ok(v) => *retries.borrow_mut() = v,
-                Err(err) => trap(&format!("failed to load retries: {err}")),
+                Err(err) => trap(format!("failed to load retries: {err}")),
             };
         });
     });
@@ -960,7 +960,7 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         let enc = TextEncoder::new();
 
         if let Err(err) = enc.encode(&mfs, &mut buffer) {
-            trap(&format!("failed to encode metrics: {err}"));
+            trap(format!("failed to encode metrics: {err}"));
         };
 
         buffer

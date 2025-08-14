@@ -132,7 +132,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
     Block::<Tokens>::decode(EncodedBlock::from(bytes))
-        .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
+        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {}: {}", txid, e)))
         .into()
 }
 
@@ -191,7 +191,7 @@ fn post_upgrade() {
 fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     let max_memory_size_bytes = with_archive_opts(|opts| {
         if ic_cdk::api::msg_caller() != opts.ledger_id {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "only {} can append blocks to this archive",
                 opts.ledger_id
             ));
@@ -234,7 +234,7 @@ fn get_transaction(index: BlockIndex) -> Option<Transaction> {
 fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
     let offset = with_archive_opts(|opts| {
         if start < opts.block_index_offset {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "requested index {} is less than the minimal index {} this archive serves",
                 start, opts.block_index_offset
             ));

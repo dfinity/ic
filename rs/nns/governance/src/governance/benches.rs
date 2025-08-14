@@ -746,7 +746,7 @@ fn list_proposals() -> BenchResult {
 /// embedders crate.
 #[export_name = "canister_update update_empty"]
 fn update_empty() {
-    ic_cdk::api::msg_reply(&[]);
+    ic_cdk::api::msg_reply([]);
 }
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
@@ -754,5 +754,5 @@ fn update_empty() {
 #[export_name = "canister_query go"]
 fn go() {
     let _ = list_neurons_stable();
-    ic_cdk::api::msg_reply(&[]);
+    ic_cdk::api::msg_reply([]);
 }

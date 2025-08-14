@@ -19,13 +19,13 @@ pub fn init_cert_tree() {
         let value: Vec<u8> = Vec::new();
         tree.insert(LEFT_GUARD.into(), Sha256::digest(&value).into());
         tree.insert(RIGHT_GUARD.into(), Sha256::digest(&value).into());
-        certified_data_set(&labeled_hash(LABEL_DOMAINS, &tree.root_hash()));
+        certified_data_set(labeled_hash(LABEL_DOMAINS, &tree.root_hash()));
     });
 }
 
 pub fn set_root_hash() {
     let root_hash = CERT_TREE.with(|tree| labeled_hash(LABEL_DOMAINS, &tree.borrow().root_hash()));
-    certified_data_set(&root_hash);
+    certified_data_set(root_hash);
 }
 
 pub fn remove_cert(key: BoundedString<64>) {

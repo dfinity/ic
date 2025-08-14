@@ -176,7 +176,7 @@ impl State {
     pub fn minter_address(&self) -> Option<Address> {
         let pubkey = PublicKey::deserialize_sec1(&self.ecdsa_public_key.as_ref()?.public_key)
             .unwrap_or_else(|e| {
-                ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+                ic_cdk::trap(format!("failed to decode minter's public key: {:?}", e))
             });
         Some(ecdsa_public_key_to_address(&pubkey))
     }
@@ -617,7 +617,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
 
     fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {
         PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
-            ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+            ic_cdk::trap(format!("failed to decode minter's public key: {:?}", e))
         })
     }
 
@@ -639,7 +639,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     })
     .await
     .unwrap_or_else(|(error_code, message)| {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "failed to get minter's public key: {} (error code = {:?})",
             message, error_code,
         ))

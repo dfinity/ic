@@ -678,7 +678,7 @@ fn execute_transfer_not_async(
 
         match memo.as_ref() {
             Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "the memo field size of {} bytes is above the allowed limit of {} bytes",
                     memo.0.len(),
                     ledger.max_memo_length()

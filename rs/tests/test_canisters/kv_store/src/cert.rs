@@ -35,7 +35,7 @@ pub fn put(key: &str, value: &str) {
         labeled_hash(b"http_assets", &tree.root_hash())
     });
 
-    certified_data_set(&root_hash);
+    certified_data_set(root_hash);
 }
 
 pub fn pre_upgrade() -> Vec<(String, ICHash)> {

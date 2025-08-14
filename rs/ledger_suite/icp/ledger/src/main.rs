@@ -929,7 +929,7 @@ fn send_() {
 
             let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
                 .await
-                .unwrap_or_else(|e| trap(&e.to_string()));
+                .unwrap_or_else(|e| trap(e.to_string()));
 
             let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
             reply_raw(&res_proto)
@@ -945,7 +945,7 @@ fn send_() {
 #[update]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
     transfer(TransferArgs::from(arg)).await.unwrap_or_else(|e| {
-        trap(&e.to_string());
+        trap(e.to_string());
     })
 }
 
@@ -981,7 +981,7 @@ fn notify_() {
 #[update]
 async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
-        trap(&format!("Invalid account identifier: {}", e));
+        trap(format!("Invalid account identifier: {}", e));
     });
     send(
         arg.memo,
@@ -1172,7 +1172,7 @@ fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     match BinaryAccountBalanceArgs::try_from(arg) {
         Ok(arg) => {
             let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
-                trap(&format!("Invalid account identifier: {}", e));
+                trap(format!("Invalid account identifier: {}", e));
             });
             account_balance(account)
         }
@@ -1650,7 +1650,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
         created_at_time: None,
     };
     let spender = AccountIdentifier::from_address(args.spender).unwrap_or_else(|e| {
-        trap(&format!("Invalid account identifier: {}", e));
+        trap(format!("Invalid account identifier: {}", e));
     });
     let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;
 

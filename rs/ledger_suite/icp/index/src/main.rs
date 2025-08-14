@@ -116,14 +116,14 @@ impl Storable for State {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         })
     }
 
@@ -145,7 +145,7 @@ impl Storable for AccountIdentifierDataType {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         if bytes.len() != 1 {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "Expected a single byte for AccountDataType but found {}",
                 bytes.len()
             ));
@@ -153,7 +153,7 @@ impl Storable for AccountIdentifierDataType {
         if bytes[0] == 0x00 {
             Self::Balance
         } else {
-            ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
+            ic_cdk::api::trap(format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
 
@@ -178,7 +178,7 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
             borrowed.set(state)
         })
         .unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         });
 }
 
@@ -441,7 +441,7 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
 fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if balance < amount {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
+            ic_cdk::trap(format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
         balance - amount
@@ -451,7 +451,7 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
 fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
+            ic_cdk::trap(format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
         balance + amount
@@ -613,7 +613,7 @@ fn get_account_identifier_transactions(
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                ic_cdk::api::trap(&format!(
+                ic_cdk::api::trap(format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",
                     id
                 ));
@@ -621,7 +621,7 @@ fn get_account_identifier_transactions(
         });
         let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
-                ic_cdk::api::trap(&format!(
+                ic_cdk::api::trap(format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
             }));
         let transaction_with_idx = SettledTransactionWithId {

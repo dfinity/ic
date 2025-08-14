@@ -70,10 +70,10 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
     let address = Address::from_str(args.address.trim())
-        .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid Bitcoin address: {}", err)))
+        .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {}", err)))
         .require_network(btc_network.clone().into())
         .unwrap_or_else(|err| {
-            ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
+            ic_cdk::trap(format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
     match config.check_mode {
@@ -170,7 +170,7 @@ fn init(arg: Option<CheckArg>) {
                 init_arg.check_mode,
                 init_arg.num_subnet_nodes,
             )
-            .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
+            .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err))),
         ),
         _ => {
             ic_cdk::trap("cannot init canister state without init args");
@@ -193,7 +193,7 @@ fn post_upgrade(arg: Option<CheckArg>) {
                 .unwrap_or(old_config.check_mode);
             let config =
                 Config::new_and_validate(old_config.btc_network(), check_mode, num_subnet_nodes)
-                    .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
+                    .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err)));
             set_config(config);
         }
         Some(CheckArg::InitArg(_)) => {

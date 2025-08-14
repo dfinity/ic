@@ -18,7 +18,7 @@ mod dashboard;
 #[query]
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("Invalid ERC-20 contract: {:?}", e)));
     let token_id = TokenId::from(contract);
     read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
