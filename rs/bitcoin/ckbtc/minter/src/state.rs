@@ -1173,6 +1173,17 @@ impl CkBtcMinterState {
             .insert(burn_block_index, reimburse_deposit_task);
     }
 
+    pub fn schedule_withdrawal_reimbursement(
+        &mut self,
+        ledger_burn_index: LedgerBurnIndex,
+        reimburse_deposit_task: ReimburseWithdrawalTask,
+    ) {
+        // TODO XC-449 perform other checks?
+        // Also see schedule_deposit_reimbursement above
+        self.pending_withdrawal_reimbursements
+            .insert(ledger_burn_index, reimburse_deposit_task);
+    }
+
     /// Checks whether the internal state of the minter matches the other state
     /// semantically (the state holds the same data, but maybe in a slightly
     /// different form).
@@ -1408,7 +1419,7 @@ impl CkBtcMinterState {
         let reimbursed = ReimbursedWithdrawal {
             account: reimbursement.account,
             amount: reimbursement.amount,
-            reason: reimbursement.reason,
+            reason: reimbursement.reason.clone(),
             mint_block_index: mint_index,
         };
         assert_eq!(

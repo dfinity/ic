@@ -36,13 +36,13 @@ pub enum ReimbursedError {
     Quarantined,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum WithdrawalReimbursementReason {
     InvalidTransaction(InvalidTransactionError),
     // CancelledByUser TODO XC-451: user should be able to cancel own withdrawals
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum InvalidTransactionError {
     /// The transaction contains too many inputs.
     /// If such a transaction where signed, there is a risk that the resulting transaction will have a size

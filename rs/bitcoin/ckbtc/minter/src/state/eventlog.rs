@@ -1,5 +1,6 @@
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
+use crate::reimbursement::ReimburseWithdrawalTask;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
@@ -26,6 +27,7 @@ pub struct GetEventsArg {
 #[allow(deprecated)]
 mod event {
     use super::*;
+    use crate::reimbursement::WithdrawalReimbursementReason;
     use crate::state::SuspendedReason;
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
@@ -206,6 +208,19 @@ mod event {
         /// Indicates an UTXO is checked to be clean and pre-mint
         #[serde(rename = "checked_utxo_mint_unknown")]
         CheckedUtxoMintUnknown { account: Account, utxo: Utxo },
+
+        /// Indicates a reimbursement.
+        #[serde(rename = "schedule_withdrawal_reimbursement")]
+        ScheduleWithdrawalReimbursement {
+            /// The beneficiary.
+            account: Account,
+            /// The token amount to reimburse.
+            amount: u64,
+            /// The reason of the reimbursement.
+            reason: WithdrawalReimbursementReason,
+            /// The corresponding burn block on the ledger.
+            burn_block_index: u64,
+        },
 
         /// The minter unexpectedly panic while processing a reimbursement.
         /// The reimbursement is quarantined to prevent any double minting and
@@ -465,6 +480,19 @@ pub fn replay<I: CheckInvariants>(
             EventType::CheckedUtxoMintUnknown { utxo, account } => {
                 state.mark_utxo_checked_mint_unknown(utxo, &account);
             }
+            EventType::ScheduleWithdrawalReimbursement {
+                account,
+                amount,
+                reason,
+                burn_block_index,
+            } => state.schedule_withdrawal_reimbursement(
+                burn_block_index,
+                ReimburseWithdrawalTask {
+                    account,
+                    amount,
+                    reason,
+                },
+            ),
             EventType::QuarantinedWithdrawalReimbursement { burn_block_index } => {
                 state.quarantine_withdrawal_reimbursement(burn_block_index);
             }
