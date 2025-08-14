@@ -133,6 +133,12 @@ jobs:
           run: |
             set -euo pipefail
 
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            SKIP_LONG_TESTS='${{ needs.config.outputs.skip_long_tests }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
             # Determine which tests to skip
             EXCLUDED_TEST_TAGS=(
                 system_test_large
@@ -141,12 +147,6 @@ jobs:
                 fi_tests_nightly
                 nns_tests_nightly
             )
-
-            skip_long_test_arg=""
-            if [[ '${{ needs.config.outputs.skip_long_tests }} == 'true' ]]; then
-              EXCLUDED_TEST_TAGS+=(long_test)
-              skip_long_test_arg="--skip_long"
-            fi
 
             # Prepend tags with '-' and join them with commas for Bazel
             TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
@@ -164,7 +164,7 @@ jobs:
                 bazel_args+=( --keep_going )
             fi
 
-            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -173,11 +173,15 @@ jobs:
             # complaining about the argument list being too long.
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
-            commit_range_arg=""
-            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
-              commit_range_arg="--commit_range=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+            skip_long_tests_arg=""
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+              skip_long_tests_arg="--skip_long_tests"
             fi
-            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "$commit_range_arg" "$skip_long_test_arg" >"$target_pattern_file"
+            commit_range_arg=""
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              commit_range_arg="--commit_range=$BASE_SHA..$HEAD_SHA"
+            fi
+            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "$commit_range_arg" "$skip_long_tests_arg" >"$target_pattern_file"
             # if bazel targets is empty we don't need to run any tests
             if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
               echo "No bazel targets to build"
@@ -451,16 +455,21 @@ jobs:
           run: |
             set -euo pipefail
 
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
             cd "$CI_PROJECT_DIR"
 
             # run full release build on "protected" branches
-            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
                 ci/container/build-ic.sh -i -c -b
                 exit 0
             fi
 
             # run full non-release build if not asked to diff
-            if ! [ '${{ needs.config.outputs.diff_only }}' == 'true' ]; then
+            if ! [ "$DIFF_ONLY" == 'true' ]; then
                 ci/container/build-ic.sh -i -c -b --no-release
                 exit 0
             fi
@@ -469,8 +478,8 @@ jobs:
             targets=$(mktemp)
             trap "rm $targets" INT TERM EXIT
             commit_range_arg=""
-            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
-              commit_range_arg="--commit_range=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              commit_range_arg="--commit_range=$BASE_SHA..$HEAD_SHA"
             fi
             ci/bazel-scripts/targets.py build "$commit_range_arg" >"$targets"
 
