@@ -22,13 +22,15 @@
 # * A blank line matches no files, so it can serve as a separator for readability.
 # * A line starting with # serves as a comment.
 #   Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
-# * A pattern is separated by whitespace from its targets.
+# * A pattern is separated by whitespace from its set of targets which are whitespace separated.
 # * Patterns don't support spaces in them. This might be added later if desired.
-# * Unlike gitignore, patterns use globbing semantics:
-#   https://docs.python.org/3/library/fnmatch.html
 # * Targets can span multiple lines for readability.
 #   So the targets on a line starting with whitespace
-#   are considered part of the previous list of targets.
+#   are considered part of the previous set of targets.
+# * Unlike gitignore, patterns use simple globbing semantics:
+#   https://docs.python.org/3/library/fnmatch.html
+#   So there's no negation of patterns or special directory handling
+#   like gitignore wildmatch patterns.
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint

@@ -51,7 +51,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
             nocomment_lines.append(line)
 
     # Filter out empty or pure whitespace lines:
-    nonempty_lines = [ line for line in nocomment_lines if line and not line.isspace()]
+    nonempty_lines = [line for line in nocomment_lines if line and not line.isspace()]
 
     explicit_targets = []
     for line in nonempty_lines:
@@ -92,8 +92,6 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
     modified_files = subprocess.run(
         ["git", "diff", "--name-only", commit_range], check=True, capture_output=True, text=True
     ).stdout.splitlines()
-
-    print(modified_files)
 
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
