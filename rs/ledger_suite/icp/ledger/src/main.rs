@@ -786,7 +786,7 @@ fn main() {
                         arg.feature_flags,
                     ),
                     Err(old_err) =>
-                    trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
+                    trap(format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
                 }
             }
         }
