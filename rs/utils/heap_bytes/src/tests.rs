@@ -722,3 +722,28 @@ fn example_struct() {
         size_of::<CustomHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
     );
 }
+
+#[test]
+fn example_struct_with_function() {
+    fn vec_approx(v: &[String]) -> usize {
+        size_of_val(v) + 17
+    }
+
+    #[derive(HeapBytes)]
+    struct CustomHeapBytes {
+        s: String,
+        /// The vector's heap size is approximated using a constant-time function.
+        #[heap_bytes(with = vec_approx)]
+        v: Vec<String>,
+    }
+
+    let s = CustomHeapBytes {
+        s: "1".to_string(),
+        v: vec!["123".to_string(), "12345".to_string()],
+    };
+    assert_eq!(s.heap_bytes(), 1 + 2 * size_of::<Vec<String>>() + 17);
+    assert_eq!(
+        s.total_bytes(),
+        size_of::<CustomHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
+    );
+}

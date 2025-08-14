@@ -22,6 +22,9 @@ pub trait HeapBytes {
     }
 
     /// Returns the total size of the object in bytes.
+    ///
+    /// The default implementation should suit most types, so typically
+    /// only the `heap_bytes` function needs to be implemented for a new type.
     fn total_bytes(&self) -> usize {
         size_of_val(self) + self.heap_bytes()
     }
@@ -53,7 +56,7 @@ impl HeapBytes for String {
 impl<T: HeapBytes, const N: usize> HeapBytes for [T; N] {
     /// Calculates the precise heap size by summing the heap usage of all elements.
     ///
-    /// WARNING: This performs a full scan of the array and is `O(N)`.
+    /// WARNING: This performs a full scan of the array and is `O(n)`.
     fn heap_bytes(&self) -> usize {
         self.iter().map(HeapBytes::heap_bytes).sum()
     }
@@ -62,7 +65,7 @@ impl<T: HeapBytes, const N: usize> HeapBytes for [T; N] {
 impl<T: HeapBytes> HeapBytes for Vec<T> {
     /// Calculates the precise heap size by summing the heap usage of all elements.
     ///
-    /// WARNING: This performs a full scan of the vector and is `O(N)`.
+    /// WARNING: This performs a full scan of the vector and is `O(n)`.
     fn heap_bytes(&self) -> usize {
         let self_heap_bytes = self.len() * size_of::<T>();
         let elements_heap_bytes: usize = self.iter().map(HeapBytes::heap_bytes).sum();
@@ -73,7 +76,7 @@ impl<T: HeapBytes> HeapBytes for Vec<T> {
 impl<K: HeapBytes, V: HeapBytes> HeapBytes for BTreeMap<K, V> {
     /// Calculates the precise heap size by summing the heap usage of all elements.
     ///
-    /// WARNING: This performs a full scan of the map and is `O(N)`.
+    /// WARNING: This performs a full scan of the map and is `O(n)`.
     fn heap_bytes(&self) -> usize {
         let self_heap_bytes = self.len() * (size_of::<K>() + size_of::<V>());
         let elements_heap_bytes: usize = self
