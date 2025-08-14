@@ -1,4 +1,4 @@
-//! Peer Manage.get()r
+//! Peer Manager
 //!
 //! The peer manager component periodically checks the registry
 //! and determines the subnet membership according to the latest
