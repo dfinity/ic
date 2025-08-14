@@ -8,7 +8,15 @@ The following steps outline the recommended approach to introduce a new Manageme
    - additionally, make sure you update the [Candid interface](https://github.com/dfinity/portal/blob/master/docs/references/_attachments/ic.did) of the Management Canister accordingly;
    - furthermore, make sure to provide motivation for the new API or changes you're making and how it would benefit the ICP protocol.
 
-2. The public Management Canister [types](https://crates.io/crates/ic-management-canister-types) need to be updated. Inform *@eng-sdk* of the work required.
+2. The public Management Canister [types](https://crates.io/crates/ic-management-canister-types) need to be updated. Inform *@eng-sdk* of the work required. 
+
+---
+
+**NOTE**
+The public API of the Management Canister is defined in Candid. Candid is designed to allow services to evolve and has rules to make that possible. Here are some tips to help you not paint yourself into a corner and accidently create a non-evolvable API: 
+- If you have an enum (Candid: variant) in the response of any API method, and one of its variants (Candid: tags) is the unit type, this variant cannot evolve. The reason is that by default, the Rust definition `enum { A } ` is interpreted as Candid `variant { A }` which implicitly means `variant { A : null; }`. `null` cannot be specialized into any `T`, so you cannot attach more data later (Why is this counterintuitive? Because Candid records can evolve to have more data. `null` cannot.). If you want to create non-evolvable variants, this is fine. Otherwise, you can be more explicit in your definitions: `variant { A : reserved; }` _is_ evolvable as a response, because `reserved` can be specialized to any `T`. In order to achieve this explicitly in Rust, use `enum { A(candid::Reserved) }`. 
+
+---
 
 3. The [Rust CDK](https://github.com/dfinity/cdk-rs) needs to be updated. Inform *@eng-sdk* of the work required.
 
