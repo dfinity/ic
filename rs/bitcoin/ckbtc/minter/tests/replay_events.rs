@@ -11,11 +11,7 @@ use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::{
-    build_unsigned_transaction_from_inputs, sign_transaction, ECDSAPublicKey, Network,
-    SignTransactionError,
-};
-use std::collections::BTreeMap;
+use ic_ckbtc_minter::{build_unsigned_transaction_from_inputs, BuildTxError, Network};
 use std::path::PathBuf;
 
 fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
@@ -131,28 +127,17 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     )
     .unwrap();
     let tx_fee_per_vbyte = submitted_tx.fee_per_vbyte.unwrap();
-    let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
+    let build_tx_error = build_unsigned_transaction_from_inputs(
         input_utxos,
         outputs,
         main_address.clone(),
         tx_fee_per_vbyte,
     )
-    .unwrap();
-
-    let sign_tx_error = sign_transaction(
-        "does not matter".to_string(),
-        &ECDSAPublicKey {
-            public_key: vec![],
-            chain_code: vec![],
-        },
-        &BTreeMap::default(),
-        unsigned_tx,
-    )
-    .await
     .unwrap_err();
+
     assert_eq!(
-        sign_tx_error,
-        SignTransactionError::TooManyInputs {
+        build_tx_error,
+        BuildTxError::TooManyInputs {
             num_inputs: 1799,
             max_num_inputs: 1000
         }
