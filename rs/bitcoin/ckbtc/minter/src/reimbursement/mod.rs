@@ -1,5 +1,5 @@
-use crate::state;
 use crate::state::LedgerMintIndex;
+use crate::{state, CanisterRuntime};
 use candid::{CandidType, Deserialize};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -19,6 +19,17 @@ pub struct ReimbursedWithdrawal {
     pub mint_block_index: LedgerMintIndex,
 }
 
+pub type ReimbursedWithdrawalResult = Result<ReimbursedWithdrawal, ReimbursedError>;
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ReimbursedError {
+    /// Whether reimbursement was minted or not is unknown,
+    /// most likely because there was an unexpected panic in the callback.
+    /// The reimbursement request is quarantined to avoid any double minting and
+    /// will not be further processed without manual intervention.
+    Quarantined,
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum WithdrawalReimbursementReason {
     InvalidTransaction(InvalidTransactionError),
@@ -36,10 +47,19 @@ pub enum InvalidTransactionError {
     },
 }
 
-/// Reimburse withdrawals that were canceled.
-pub async fn reimburse_withdrawals() {
+/// Reimburse withdrawals that were cancelled.
+pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
     if state::read_state(|s| s.pending_withdrawal_reimbursements.is_empty()) {
         return;
     }
-    todo!()
+    let pending_reimbursements = state::read_state(|s| s.pending_withdrawal_reimbursements.clone());
+    for (index, pending_reimbursement) in pending_reimbursements {
+        // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
+        // this reimbursement request will not be processed again.
+        let prevent_double_minting_guard = scopeguard::guard(index.clone(), |index| {
+            state::mutate_state(|s| {
+                state::audit::quarantine_withdrawal_reimbursement(s, index, runtime)
+            });
+        });
+    }
 }

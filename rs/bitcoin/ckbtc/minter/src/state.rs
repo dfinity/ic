@@ -18,7 +18,9 @@ pub mod invariants;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
-use crate::reimbursement::{ReimburseWithdrawalTask, ReimbursedWithdrawal};
+use crate::reimbursement::{
+    ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal, ReimbursedWithdrawalResult,
+};
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
@@ -414,7 +416,7 @@ pub struct CkBtcMinterState {
     pub pending_withdrawal_reimbursements: BTreeMap<LedgerBurnIndex, ReimburseWithdrawalTask>,
 
     /// Map from burn block index to the reimbursed withdrawal request.
-    pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawal>,
+    pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawalResult>,
 
     /// Cache of get_utxos call results
     pub get_utxos_cache: GetUtxosCache,
@@ -1377,6 +1379,15 @@ impl CkBtcMinterState {
             Network::Testnet => 1_000,
             Network::Regtest => 0,
         }
+    }
+
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn quarantine_withdrawal_reimbursement(&mut self, burn_index: LedgerBurnIndex) {
+        self.pending_withdrawal_reimbursements.remove(&burn_index);
+        self.reimbursed_withdrawals
+            .insert(burn_index, Err(ReimbursedError::Quarantined));
     }
 }
 

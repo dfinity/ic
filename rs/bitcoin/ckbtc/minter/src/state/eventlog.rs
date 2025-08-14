@@ -206,6 +206,15 @@ mod event {
         /// Indicates an UTXO is checked to be clean and pre-mint
         #[serde(rename = "checked_utxo_mint_unknown")]
         CheckedUtxoMintUnknown { account: Account, utxo: Utxo },
+
+        /// The minter unexpectedly panic while processing a reimbursement.
+        /// The reimbursement is quarantined to prevent any double minting and
+        /// will not be processed without further manual intervention.
+        #[serde(rename = "quarantined_withdrawal_reimbursement")]
+        QuarantinedWithdrawalReimbursement {
+            /// The burn block on the ledger for that withdrawal that should have been reimbursed
+            burn_block_index: u64,
+        },
     }
 }
 
@@ -447,6 +456,9 @@ pub fn replay<I: CheckInvariants>(
             }
             EventType::CheckedUtxoMintUnknown { utxo, account } => {
                 state.mark_utxo_checked_mint_unknown(utxo, &account);
+            }
+            EventType::QuarantinedWithdrawalReimbursement { burn_block_index } => {
+                state.quarantine_withdrawal_reimbursement(burn_block_index);
             }
         }
     }

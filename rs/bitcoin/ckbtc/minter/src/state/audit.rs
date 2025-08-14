@@ -1,7 +1,7 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus,
+    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex,
     RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
 };
 use crate::state::invariants::CheckInvariantsImpl;
@@ -227,4 +227,16 @@ pub fn distributed_kyt_fee<R: CanisterRuntime>(
         runtime,
     );
     state.distribute_kyt_fee(kyt_provider, amount)
+}
+
+pub fn quarantine_withdrawal_reimbursement<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    burn_block_index: LedgerBurnIndex,
+    runtime: &R,
+) {
+    record_event(
+        EventType::QuarantinedWithdrawalReimbursement { burn_block_index },
+        runtime,
+    );
+    state.quarantine_withdrawal_reimbursement(burn_block_index)
 }
