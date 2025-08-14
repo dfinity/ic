@@ -287,8 +287,9 @@ pub trait ConsensusPool {
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
 
-    /// Return the block chain between the given start/end.
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain>;
+    /// Return the block chain between the given [start_height, end.height()], ends inclusive.
+    /// Implementors may panic if start_height > end.height().
+    fn build_block_chain(&self, start_height: Height, end: &Block) -> Arc<dyn ConsensusBlockChain>;
 
     /// Return the first instant at which a block with the given hash was inserted
     /// into the validated pool. Returns None if no timestamp was found.
@@ -476,17 +477,25 @@ impl<'a> ChainIterator<'a> {
                 _ => (),
             }
         }
-        self.consensus_pool
+
+        for proposal in self
+            .consensus_pool
             .validated()
             .block_proposal()
             .get_by_height(parent_height)
-            .find_map(|proposal| {
-                if proposal.content.get_hash() == parent_hash {
-                    Some(proposal.content.into_inner())
-                } else {
-                    None
-                }
-            })
+        {
+            if proposal.content.get_hash() == parent_hash {
+                return Some(proposal.content.into_inner());
+            }
+        }
+
+        let cup = self.consensus_pool.validated().highest_catch_up_package();
+        let (hash, cup_block) = cup.content.block.decompose();
+        if cup_block.height == parent_height && hash == *parent_hash {
+            Some(cup_block)
+        } else {
+            None
+        }
     }
 }
 

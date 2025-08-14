@@ -188,22 +188,10 @@ impl TestConsensusPool {
                 ))
             }),
         ));
-
-        let cup_contents = registry_client
-            .get_cup_contents(subnet_id, registry_client.get_latest_version())
-            .expect("Failed to retreive the DKG transcripts from registry");
-        let summary = get_dkg_summary_from_cup_contents(
-            cup_contents.value.expect("Missing CUP contents"),
-            subnet_id,
-            &*registry_client,
-            cup_contents.version,
-        )
-        .expect("Failed to get DKG summary from CUP contents");
-
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&ic_test_utilities_consensus::make_genesis(summary)).into(),
+            (&Self::make_genesis_cup(&*registry_client, subnet_id)).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -218,6 +206,20 @@ impl TestConsensusPool {
             dkg_payload_builder,
             membership,
         }
+    }
+
+    pub fn make_genesis_cup(registry: &dyn RegistryClient, subnet_id: SubnetId) -> CatchUpPackage {
+        let cup_contents = registry
+            .get_cup_contents(subnet_id, registry.get_latest_version())
+            .expect("Failed to retreive the DKG transcripts from registry");
+        let summary = get_dkg_summary_from_cup_contents(
+            cup_contents.value.expect("Missing CUP contents"),
+            subnet_id,
+            registry,
+            cup_contents.version,
+        )
+        .expect("Failed to get DKG summary from CUP contents");
+        ic_test_utilities_consensus::make_genesis(summary)
     }
 
     /// Utility function to determine the identity of the block maker with the
@@ -839,8 +841,8 @@ impl ConsensusPool for TestConsensusPool {
         self.pool.as_block_cache()
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        self.pool.build_block_chain(start, end)
+    fn build_block_chain(&self, start_height: Height, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+        self.pool.build_block_chain(start_height, end)
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {

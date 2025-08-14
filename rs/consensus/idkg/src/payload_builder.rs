@@ -228,7 +228,7 @@ pub fn create_summary_payload(
 
     let block_reader = block_chain_reader(
         pool_reader,
-        &prev_summary_block,
+        prev_summary_block.height(),
         parent_block,
         idkg_payload_metrics,
         log,
@@ -487,7 +487,7 @@ pub fn create_data_payload(
     // finalized chain.
     let block_reader = block_chain_reader(
         pool_reader,
-        &summary_block,
+        summary_block.height(),
         parent_block,
         Some(idkg_payload_metrics),
         log,
@@ -1425,7 +1425,7 @@ mod tests {
             }
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
+                pool_reader.get_highest_finalized_summary_block().height(),
                 &parent_block,
                 None,
                 &no_op_logger(),
@@ -1657,7 +1657,7 @@ mod tests {
             summary.single_key_transcript_mut().current = Some(current_key_transcript);
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
+                pool_reader.get_highest_finalized_summary_block().height(),
                 &parent_block,
                 None,
                 &no_op_logger(),

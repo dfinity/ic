@@ -120,6 +120,7 @@ fn compute_bouncer(
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::FakeContent;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -197,7 +198,12 @@ mod tests {
     #[test]
     fn test_bouncer_function() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies {
+                mut pool,
+                registry,
+                replica_config,
+                ..
+            } = dependencies(pool_config, 1);
             pool.advance_round_normal_operation_n(2);
 
             let expected_batch_height = Height::from(1);
@@ -230,6 +236,10 @@ mod tests {
             dup_notarization.signature.signers = vec![node_test_id(42)];
             // Move block back to unvalidated after attribute is computed
             pool.purge_validated_below(block.clone());
+            pool.insert_validated(
+                TestConsensusPool::make_genesis_cup(registry.as_ref(), replica_config.subnet_id)
+                    .into_message(),
+            );
             pool.insert_unvalidated(block.clone());
             let bouncer = new_bouncer(&pool, expected_batch_height);
             assert_eq!(bouncer(&dup_notarization_id), Wants);
