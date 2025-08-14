@@ -302,8 +302,8 @@ fn verify_certificate_internal(
 
 /// Verifies a delegation certificate.
 ///
-/// See the documentation of `verify_certificate` for more details.
-fn verify_delegation_certificate(
+/// See the documentation of [`verify_certificate`] for more details.
+pub fn verify_delegation_certificate(
     certificate: &[u8],
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
@@ -312,15 +312,18 @@ fn verify_delegation_certificate(
 ) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
     #[derive(Debug, Deserialize)]
     struct SubnetView {
-        canister_ranges: Blob,
+        canister_ranges: Option<Blob>,
         public_key: Blob,
     }
+
+    type TreeCanisterRanges = BTreeMap<CanisterId, Blob>;
 
     #[derive(Debug, Deserialize)]
     struct SubnetCertificateData {
         #[allow(unused)] // currently delegation timestamps are not checked
         time: Leb128EncodedU64,
         subnet: BTreeMap<SubnetId, SubnetView>,
+        canister_ranges: Option<BTreeMap<SubnetId, TreeCanisterRanges>>,
     }
 
     let certificate: Certificate = parse_certificate(certificate)?;
@@ -349,15 +352,54 @@ fn verify_delegation_certificate(
             subnet_id
         ))
     })?;
-    let canister_id_ranges: Vec<(CanisterId, CanisterId)> =
-        serde_cbor::from_slice(&subnet_info.canister_ranges).map_err(|err| {
-            CertificateValidationError::DeserError(format!(
-                "failed to unpack canister range: {}",
-                err
-            ))
-        })?;
 
     if let Some(canister_id) = canister_id {
+        let canister_id_ranges: Vec<(CanisterId, CanisterId)> =
+            match (&subnet_info.canister_ranges, &subnet_state.canister_ranges) {
+                (Some(canister_ranges), _) => {
+                    serde_cbor::from_slice(canister_ranges).map_err(|err| {
+                        CertificateValidationError::DeserError(format!(
+                            "failed to unpack canister range: {}",
+                            err
+                        ))
+                    })?
+                }
+                (_, Some(canister_ranges_per_subnet_id)) => {
+                    let canister_ranges =
+                        canister_ranges_per_subnet_id
+                            .get(subnet_id)
+                            .ok_or_else(|| {
+                                CertificateValidationError::MalformedHashTree(format!(
+                                    "cannot find canister ranges for subnet {} in the tree",
+                                    subnet_id
+                                ))
+                            })?;
+
+                    let lower_bound = canister_ranges
+                        .range((
+                            std::ops::Bound::Unbounded,
+                            std::ops::Bound::Included(canister_id),
+                        ))
+                        .last();
+
+                    if let Some((_canister_id, canister_ranges)) = lower_bound {
+                        serde_cbor::from_slice(canister_ranges).map_err(|err| {
+                            CertificateValidationError::DeserError(format!(
+                                "failed to unpack canister range: {}",
+                                err
+                            ))
+                        })?
+                    } else {
+                        vec![]
+                    }
+                }
+                (None, None) => {
+                    return Err(CertificateValidationError::MalformedHashTree(String::from(
+                        "state tree doesn't have canister ranges",
+                    )))
+                }
+            };
+
         if !&canister_id_ranges
             .iter()
             .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
@@ -375,7 +417,7 @@ fn verify_delegation_certificate(
 /// Validates a subnet delegation certificate.
 ///
 /// Returns `Ok(())` iff the verification of a delegation certificate
-/// as described in the documentation of `verify_certificate` is successful
+/// as described in the documentation of [`verify_certificate`] is successful
 /// for subnet with ID `subnet_id`, with the exception that no canister ID
 /// range check is performed.
 pub fn validate_subnet_delegation_certificate(

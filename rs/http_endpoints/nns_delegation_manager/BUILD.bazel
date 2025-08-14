@@ -49,6 +49,7 @@ rust_test(
         "//rs/crypto/tls_interfaces/mocks",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/nns_delegation_manager/test_utils",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/fake",
@@ -74,14 +75,11 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":nns_delegation_manager",
-        "//rs/certification/test-utils",
-        "//rs/crypto/tree_hash",
-        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/nns_delegation_manager/test_utils",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:pprof",
-        "@crate_index//:rand",
         "@crate_index//:serde_cbor",
         "@crate_index//:tokio",
     ],

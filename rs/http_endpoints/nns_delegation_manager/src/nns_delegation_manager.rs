@@ -130,12 +130,6 @@ impl DelegationManager {
         )
         .await;
 
-        if let Some(_delegation) = delegation.as_ref() {
-            //self.metrics
-            //    .delegation_size
-            //    .observe(delegation.certificate.len() as f64);
-        }
-
         self.metrics.updates.inc();
 
         delegation
@@ -211,6 +205,7 @@ async fn load_root_delegation(
             nns_subnet_id,
             registry_client,
             tls_config,
+            metrics,
         )
         .await
         {
@@ -243,6 +238,7 @@ async fn try_fetch_delegation_from_nns(
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
+    metrics: &DelegationManagerMetrics,
 ) -> Result<NNSDelegationBuilder, BoxError> {
     let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, nns_subnet_id) {
         Ok(node_topology) => node_topology,
@@ -342,7 +338,7 @@ async fn try_fetch_delegation_from_nns(
                 "Http body exceeds size limit of {} bytes.",
                 config.max_delegation_certificate_size_bytes
             )
-            .into())
+            .into());
         }
         Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
         Err(_) => {
@@ -417,6 +413,7 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
+        metrics,
     ))
 }
 
@@ -557,7 +554,7 @@ mod tests {
         SubnetRecordBuilder,
     };
     use ic_test_utilities_types::ids::canister_test_id;
-    use ic_types::messages::Certificate;
+    use ic_types::messages::{Certificate, CertificateDelegation};
     use ic_types::{
         messages::{Blob, HttpReadStateResponse},
         NodeId,
@@ -574,6 +571,8 @@ mod tests {
     use std::{net::SocketAddr, sync::Arc};
 
     use tokio::time::timeout;
+
+    use crate::CanisterRangesFilter;
 
     use super::*;
 
@@ -732,7 +731,7 @@ mod tests {
                         tokio::time::sleep(Duration::from_secs(60 * 60)).await;
                     }
                     Some(Delay::SendingBody) => {
-                        return Response::new(Body::from_stream(EndlessStream {}))
+                        return Response::new(Body::from_stream(EndlessStream {}));
                     }
                     Some(Delay::AcceptingConnection) => unreachable!(),
                     None => {}
@@ -823,7 +822,7 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let (_, mut rx) = start_nns_delegation_manager(
+        let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
@@ -835,9 +834,9 @@ mod tests {
             CancellationToken::new(),
         );
 
-        rx.receiver.changed().await.unwrap();
+        reader.receiver.changed().await.unwrap();
 
-        assert!(rx.get_delegation_with_flat_canister_ranges().is_none());
+        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
     }
 
     #[tokio::test]
@@ -849,7 +848,7 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let (_, mut rx) = start_nns_delegation_manager(
+        let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
@@ -861,10 +860,10 @@ mod tests {
             CancellationToken::new(),
         );
 
-        rx.receiver.changed().await.unwrap();
+        reader.receiver.changed().await.unwrap();
 
-        let delegation = rx
-            .get_delegation_with_flat_canister_ranges()
+        let delegation = reader
+            .get_delegation(CanisterRangesFilter::Flat)
             .expect("Should return some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
             .expect("Should return a certificate which can be deserialized");
@@ -886,7 +885,7 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let (_, mut rx) = start_nns_delegation_manager(
+        let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
@@ -899,11 +898,11 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        rx.receiver.changed().await.unwrap();
+        reader.receiver.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has elapsed.
         assert!(
-            timeout(DELEGATION_UPDATE_INTERVAL / 2, rx.receiver.changed())
+            timeout(DELEGATION_UPDATE_INTERVAL / 2, reader.receiver.changed())
                 .await
                 .is_err()
         );
@@ -918,7 +917,7 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let (_, mut rx) = start_nns_delegation_manager(
+        let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
@@ -931,12 +930,14 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        rx.receiver.changed().await.unwrap();
+        reader.receiver.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has passed.
-        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.receiver.changed())
-            .await
-            .is_ok());
+        assert!(
+            timeout(DELEGATION_UPDATE_INTERVAL, reader.receiver.changed())
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -949,7 +950,7 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let (_, mut rx) = start_nns_delegation_manager(
+        let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
@@ -962,7 +963,7 @@ mod tests {
         );
 
         // The initial *valid* delegation should be fetched immediately.
-        assert!(rx.receiver.changed().await.is_ok());
+        assert!(reader.receiver.changed().await.is_ok());
 
         // Mock an *invalid* certificate delegation.
         *override_nns_delegation.write().unwrap() = Some(CertificateDelegation {
@@ -972,14 +973,16 @@ mod tests {
 
         // Since the returned certificate is invalid, we don't expect the manager to return
         // any new certification.
-        assert!(timeout(DELEGATION_UPDATE_INTERVAL, rx.receiver.changed())
-            .await
-            .is_err());
+        assert!(
+            timeout(DELEGATION_UPDATE_INTERVAL, reader.receiver.changed())
+                .await
+                .is_err()
+        );
 
         *override_nns_delegation.write().unwrap() = None;
         // The mocked NNS node should now return a valid certification, so we expect that
         // the manager will fetch and send it to all receivers.
-        assert!(rx.receiver.changed().await.is_ok());
+        assert!(reader.receiver.changed().await.is_ok());
     }
 
     #[tokio::test]
@@ -1015,7 +1018,7 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let delegation = load_root_delegation(
+        let builder = load_root_delegation(
             &Config::default(),
             &no_op_logger(),
             &rt_handle,
@@ -1029,9 +1032,13 @@ mod tests {
 
         tokio::time::pause();
 
-        let delegation = delegation.expect("Should return Some delegation on non NNS subnet");
-        let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
-            .expect("Should return a certificate which can be deserialized");
+        let builder = builder.expect("Should return Some delegation on non NNS subnet");
+        let parsed_delegation: Certificate = serde_cbor::from_slice(
+            &builder
+                .build_or_original(CanisterRangesFilter::Flat)
+                .certificate,
+        )
+        .expect("Should return a certificate which can be deserialized");
         let tree = LabeledTree::try_from(parsed_delegation.tree)
             .expect("The deserialized delegation should contain a correct tree");
         // Verify that the state tree has the a subtree corresponding to the requested subnet
@@ -1058,6 +1065,7 @@ mod tests {
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 
@@ -1081,6 +1089,7 @@ mod tests {
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 
@@ -1104,6 +1113,7 @@ mod tests {
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 

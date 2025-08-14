@@ -11,7 +11,7 @@ use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveErro
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
@@ -126,7 +126,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let subnet_type = self.subnet_type;
         let delegation_from_nns = self
             .nns_delegation_reader
-            .get_delegation_with_flat_canister_ranges();
+            .get_delegation(CanisterRangesFilter::Flat);
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -401,7 +401,7 @@ mod tests {
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities_types::messages::RequestBuilder;
+    use ic_test_utilities_types::{ids::SUBNET_0, messages::RequestBuilder};
     use ic_types::canister_http::{Replication, Transform};
     use ic_types::{
         canister_http::CanisterHttpMethod,
@@ -412,7 +412,6 @@ mod tests {
     };
     use std::convert::TryFrom;
     use std::time::Duration;
-    use tokio::sync::watch;
     use tonic::{
         transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
@@ -611,8 +610,6 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -620,7 +617,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
@@ -667,8 +664,6 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -676,7 +671,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
@@ -731,8 +726,6 @@ mod tests {
             )));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -740,7 +733,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
@@ -793,8 +786,6 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -802,7 +793,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
@@ -882,8 +873,6 @@ mod tests {
             )));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -891,7 +880,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
@@ -958,8 +947,6 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -967,7 +954,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
@@ -1015,8 +1002,6 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         // Create a client with a capacity of 2.
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -1025,7 +1010,7 @@ mod tests {
             2,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new_for_test_only(None, SUBNET_0),
             no_op_logger(),
         );
 
