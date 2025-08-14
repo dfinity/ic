@@ -328,7 +328,13 @@ def system_test(
         # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(
+            git_commit_id = MAINNET_NNS_SUBNET_REVISION,
+            variant = "guest-os",
+            update = True,
+            test = False,
+            dev = False,
+        ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
@@ -356,7 +362,13 @@ def system_test(
     if uses_guestos_mainnet_update:
         # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(
+            git_commit_id = MAINNET_NNS_SUBNET_REVISION,
+            variant = "guest-os",
+            update = True,
+            test = False,
+            dev = False,
+        ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
         # _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
@@ -392,7 +404,12 @@ def system_test(
 
     if uses_hostos_mainnet_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_LATEST_HOSTOS_REVISION, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(
+            git_commit_id = MAINNET_LATEST_HOSTOS_REVISION,
+            variant = "host-os",
+            update = True,
+            test = False,
+        ) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS_HASH
 
     deps = list(runtime_deps)

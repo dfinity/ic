@@ -31,8 +31,9 @@ mod multi_call_results {
         use crate::eth_rpc_client::{
             MultiCallError, MultiCallResults, ReduceWithStrategy, StrictMajorityByKey,
         };
-        use evm_rpc_client::{FeeHistory, HttpOutcallError, JsonRpcError, MultiRpcResult};
-        use ic_cdk::api::call::RejectionCode;
+        use evm_rpc_client::{
+            FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
+        };
 
         #[test]
         fn should_get_unanimous_fee_history() {
@@ -76,7 +77,7 @@ mod multi_call_results {
                 (
                     PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
-                        code: RejectionCode::SysTransient,
+                        code: LegacyRejectionCode::SysTransient,
                         message: "no consensus".to_string(),
                     }
                     .into()),
@@ -265,8 +266,7 @@ mod multi_call_results {
     mod has_http_outcall_error_matching {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_client::{HttpOutcallError, JsonRpcError, RpcError};
-        use ic_cdk::api::call::RejectionCode;
+        use evm_rpc_client::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
         use proptest::prelude::any;
         use proptest::proptest;
 
@@ -287,7 +287,7 @@ mod multi_call_results {
         fn should_match_when_consistent_http_outcall_error() {
             let error: MultiCallError<String> = MultiCallError::ConsistentError(
                 RpcError::HttpOutcallError(HttpOutcallError::IcError {
-                    code: RejectionCode::SysTransient,
+                    code: LegacyRejectionCode::SysTransient,
                     message: "message".to_string(),
                 }),
             );
@@ -322,7 +322,7 @@ mod multi_call_results {
                     (
                         LLAMA_NODES,
                         Err(HttpOutcallError::IcError {
-                            code: RejectionCode::SysTransient,
+                            code: LegacyRejectionCode::SysTransient,
                             message: "message".to_string(),
                         }
                         .into()),
