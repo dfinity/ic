@@ -267,7 +267,7 @@ pub struct IcConfig {
     initial_release_package_sha256_hex: Option<String>,
     /// The guest launch measurements of the initial release package.
     initial_release_guest_launch_measurements: Option<GuestLaunchMeasurements>,
-    /// The version id of the initial unassigned nodes replica (optional).
+    /// The version id of the initial unassigned nodes replica.
     /// If not provided, falls back to `initial_release_replica_version_id`.
     initial_unassigned_nodes_release_version_id: Option<ReplicaVersion>,
     /// The URL of the initial unassigned nodes release package.

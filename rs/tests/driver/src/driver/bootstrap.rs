@@ -189,7 +189,6 @@ pub fn init_ic(
         get_guestos_initial_launch_measurements()?,
     );
 
-    // Get unassigned nodes update image values (with fallback to regular values)
     let (
         initial_unassigned_nodes_release_version_id,
         initial_unassigned_nodes_release_package_url,
