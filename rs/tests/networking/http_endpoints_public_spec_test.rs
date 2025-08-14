@@ -208,12 +208,12 @@ fn read_time(env: TestEnv) {
             assert_2xx(&status);
         }
 
-        // Test that requesting the "time" path on an management canister id fails.
+        // Test that requesting the "time" path on the management canister id fails when using API boundary nodes.
         let response = read_state(CanisterId::ic_00(), api_bn_url).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_4xx(&status);
 
-        // Test that requesting the "time" path on an management canister id works when bypassing the API BN.
+        // Test that requesting the "time" path on the management canister id works when bypassing API boundary nodes.
         let response = read_state(CanisterId::ic_00(), subnet_replica_url).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
