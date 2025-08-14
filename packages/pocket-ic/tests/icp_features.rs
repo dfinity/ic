@@ -26,6 +26,68 @@ fn with_all_icp_features() {
 }
 
 #[test]
+fn test_sns() {
+    #[derive(CandidType)]
+    struct EmptyArg {}
+
+    #[derive(CandidType, Deserialize)]
+    struct GetSnsSubnetIdsResponse {
+        sns_subnet_ids: Vec<Principal>,
+    }
+
+    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    // Test that the SNS subnet ID has been set properly.
+    let sns_wasm_canister_id = Principal::from_text("qaa6y-5yaaa-aaaaa-aaafa-cai").unwrap();
+    let sns_subnet_ids = update_candid::<_, (GetSnsSubnetIdsResponse,)>(
+        &pic,
+        sns_wasm_canister_id,
+        "get_sns_subnet_ids",
+        (EmptyArg {},),
+    )
+    .unwrap()
+    .0
+    .sns_subnet_ids;
+    assert_eq!(sns_subnet_ids, vec![pic.topology().get_sns().unwrap()]);
+
+    // Test that all SNS canister types have been uploaded (we don't check the actual WASM in this test).
+    let latest_sns_version_pretty = update_candid::<_, (Vec<(String, String)>,)>(
+        &pic,
+        sns_wasm_canister_id,
+        "get_latest_sns_version_pretty",
+        ((),),
+    )
+    .unwrap()
+    .0;
+    let uploaded_sns_wasms: Vec<String> = latest_sns_version_pretty
+        .into_iter()
+        .map(|(canister_type, _)| canister_type)
+        .collect();
+    for expected_canister_type in [
+        "Root",
+        "Governance",
+        "Swap",
+        "Ledger",
+        "Ledger Archive",
+        "Ledger Index",
+    ] {
+        assert!(uploaded_sns_wasms.contains(&expected_canister_type.to_string()));
+    }
+
+    // Perform health check on the SNS aggregator.
+    let sns_aggregator_canister_id = Principal::from_text("3r4gx-wqaaa-aaaaq-aaaia-cai").unwrap();
+    let health_status =
+        update_candid::<_, (String,)>(&pic, sns_aggregator_canister_id, "health_check", ())
+            .unwrap()
+            .0;
+    let pic_time_seconds = pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
+    assert!(health_status.contains(&format!(
+        "The last partial update was at: {}.  Last update cycle started at {}",
+        pic_time_seconds, pic_time_seconds
+    )));
+}
+
+#[test]
 fn test_nns_governance() {
     #[derive(CandidType)]
     struct ClaimOrRefreshNeuronFromAccount {
