@@ -202,15 +202,14 @@ jobs:
             # complaining about the argument list being too long.
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
-            skip_long_tests_arg=""
+            targets_args=()
             if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
-              skip_long_tests_arg="--skip_long_tests"
+              targets_args+=("--skip_long_tests")
             fi
-            commit_range_arg=""
             if [[ "$DIFF_ONLY" == 'true' ]]; then
-              commit_range_arg="--commit_range=$BASE_SHA..$HEAD_SHA"
+              targets_args+=("--commit_range=$BASE_SHA..$HEAD_SHA")
             fi
-            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "$commit_range_arg" "$skip_long_tests_arg" >"$target_pattern_file"
+            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
             # if bazel targets is empty we don't need to run any tests
             if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
               echo "No bazel targets to build"
@@ -490,11 +489,12 @@ jobs:
             # otherwise, infer targets to build
             targets=$(mktemp)
             trap "rm $targets" INT TERM EXIT
+            targets_args=()
             commit_range_arg=""
             if [[ "$DIFF_ONLY" == 'true' ]]; then
-              commit_range_arg="--commit_range=$BASE_SHA..$HEAD_SHA"
+              targets_args+=("--commit_range=$BASE_SHA..$HEAD_SHA")
             fi
-            ci/bazel-scripts/targets.py build "$commit_range_arg" >"$targets"
+            ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
 
             ARGS=()
 
