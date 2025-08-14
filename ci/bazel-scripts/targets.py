@@ -15,7 +15,6 @@
 
 import argparse
 import fnmatch
-import os
 import subprocess
 import sys
 
@@ -65,7 +64,10 @@ def main():
     parser = argparse.ArgumentParser(description="Return bazel targets which should be build/tested")
     parser.add_argument("command", choices=["build", "test"], help="Bazel command to generate targets for")
     parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
-    parser.add_argument("--commit_range", help="Only include targets with modified inputs in the given git commit range. For example: 'master..HEAD'")
+    parser.add_argument(
+        "--commit_range",
+        help="Only include targets with modified inputs in the given git commit range. For example: 'master..HEAD'",
+    )
     args = parser.parse_args()
 
     # Can be added to a query to exclude long tests if requested:
