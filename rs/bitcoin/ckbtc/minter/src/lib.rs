@@ -573,7 +573,7 @@ async fn finalize_requests() {
         for txid in unstuck_transactions {
             log!(
                 P0,
-                "[finalize_requests]: finalized transaction {} assumed to be stuck",
+                "[finalize_requests]: finalized transaction {} previously assumed to be stuck",
                 &txid
             );
             state::audit::confirm_transaction(s, &txid, &IC_CANISTER_RUNTIME);
@@ -701,6 +701,7 @@ pub async fn resubmit_transactions<
             .map(|req| (req.address.clone(), req.amount))
             .collect();
         let mut input_utxos = submitted_tx.used_utxos;
+        let mut new_tx_requests = submitted_tx.requests;
         let build_result = build_unsigned_transaction_from_inputs(
             &input_utxos,
             outputs,
@@ -716,6 +717,7 @@ pub async fn resubmit_transactions<
                 );
                 let mut inputs = input_utxos.clone().into_iter().collect::<BTreeSet<_>>();
                 input_utxos = utxos_selection(retrieve_btc_min_amount, &mut inputs, 0);
+                new_tx_requests.clear(); // This serves as a marker for cancellation
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
@@ -785,7 +787,7 @@ pub async fn resubmit_transactions<
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 let new_tx = state::SubmittedBtcTransaction {
-                    requests: submitted_tx.requests,
+                    requests: new_tx_requests,
                     used_utxos: input_utxos,
                     txid: new_txid,
                     submitted_at: runtime.time(),
@@ -1147,6 +1149,10 @@ pub fn build_unsigned_transaction_from_inputs(
     // The threshold for other types is lower,
     // so we simply use 546 satoshi as the minimum amount per output.
     const MIN_OUTPUT_AMOUNT: u64 = 546;
+    println!(
+        "input amount = {} fee = {} minter_fee = {} tx.outputs = {:?} fee_shares = {:?}",
+        inputs_value, fee, minter_fee, unsigned_tx.outputs, fee_shares
+    );
 
     for (output, fee_share) in unsigned_tx
         .outputs

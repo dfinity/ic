@@ -423,6 +423,11 @@ pub enum ReimbursementReason {
     CallFailed,
 }
 
+pub struct WithdrawalCancellation {
+    pub fee: u64,
+    pub requests: Vec<RetrieveBtcRequest>,
+}
+
 impl CkBtcMinterState {
     #[allow(deprecated)]
     pub fn reinit(
@@ -719,7 +724,9 @@ impl CkBtcMinterState {
         }
     }
 
-    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) {
+    // Because finalizing a transaction may trigger a replaced transaction to be cancelled,
+    // the return value here is the corresponding cancelled requests.
+    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) -> Option<WithdrawalCancellation> {
         let finalized_tx = if let Some(pos) = self
             .submitted_transactions
             .iter()
@@ -743,14 +750,30 @@ impl CkBtcMinterState {
             self.forget_utxo(utxo);
         }
         self.finalized_requests_count += finalized_tx.requests.len() as u64;
-        for request in finalized_tx.requests {
-            self.push_finalized_request(FinalizedBtcRetrieval {
-                request,
-                state: FinalizedStatus::Confirmed { txid: *txid },
-            });
-        }
+        // If requests is empty, it means it is a cancellation tx
+        if finalized_tx.requests.is_empty() {
+            let input_value = finalized_tx.used_utxos.iter().map(|u| u.value).sum::<u64>();
+            let change = finalized_tx
+                .change_output
+                .map(|c| c.value)
+                .unwrap_or_default();
+            let fee = input_value - change;
+            let requests = self.cancel_tx_replacement(
+                txid,
+                finalized_tx.used_utxos.into_iter().collect::<BTreeSet<_>>(),
+            );
+            Some(WithdrawalCancellation { fee, requests })
+        } else {
+            for request in finalized_tx.requests {
+                self.push_finalized_request(FinalizedBtcRetrieval {
+                    request,
+                    state: FinalizedStatus::Confirmed { txid: *txid },
+                });
+            }
 
-        self.cleanup_tx_replacement_chain(txid);
+            self.cleanup_tx_replacement_chain(txid);
+            None
+        }
     }
 
     fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) {
@@ -786,6 +809,51 @@ impl CkBtcMinterState {
             .retain(|tx| !txids_to_remove.contains(&tx.txid));
         self.stuck_transactions
             .retain(|tx| !txids_to_remove.contains(&tx.txid));
+    }
+
+    fn cancel_tx_replacement(
+        &mut self,
+        confirmed_txid: &Txid,
+        used_utxos: BTreeSet<Utxo>,
+    ) -> Vec<RetrieveBtcRequest> {
+        let mut txid_to_cancel = None;
+
+        // Find the last transaction preceding the confirmed transaction.
+        let mut to_edge = confirmed_txid;
+        while let Some(from_edge) = self.replacement_txid.get(to_edge) {
+            debug_assert_eq!(self.rev_replacement_txid.get(&from_edge), Some(to_edge));
+            txid_to_cancel = Some(from_edge);
+            to_edge = from_edge;
+        }
+
+        let tx_to_cancel = txid_to_cancel
+            .and_then(|txid| {
+                self.submitted_transactions
+                    .iter()
+                    .find(|tx| &tx.txid == txid)
+                    .or_else(|| self.stuck_transactions.iter().find(|tx| &tx.txid == txid))
+            })
+            .unwrap_or_else(|| {
+                ic_cdk::trap(&format!(
+                    "Attempted to cancel a non-existent transaction replaced by {}",
+                    confirmed_txid
+                ));
+            });
+
+        assert!(!tx_to_cancel.requests.is_empty());
+        let cancelled_requests = tx_to_cancel.requests.clone();
+
+        // Put the cancelled UTXOs back to avaiable set
+        for utxo in tx_to_cancel.used_utxos.iter() {
+            if !used_utxos.contains(&utxo) {
+                self.available_utxos.insert(utxo.clone());
+            }
+        }
+
+        // Clean up
+        self.cleanup_tx_replacement_chain(confirmed_txid);
+
+        return cancelled_requests;
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {

@@ -96,7 +96,27 @@ pub fn confirm_transaction<R: CanisterRuntime>(
     runtime: &R,
 ) {
     record_event(EventType::ConfirmedBtcTransaction { txid: *txid }, runtime);
-    state.finalize_transaction(txid);
+    if let Some(cancelled) = state.finalize_transaction(txid) {
+        for _request in cancelled.requests {
+            /* TODO: implement fee deduction and reason
+            if let Some(account) = request.reimbursement_account {
+                    let reason = WithdrawalReimbursementReason::InvalidTransaction(
+                        InvalidTransactionError::TooManyInputs {
+                        // TODO: pass in the error here
+                       },
+                    );
+                    reimburse_withdrawal(
+                        state,
+                        request.block_index,
+                        request.amount,
+                        account,
+                        reason,
+                        runtime,
+                    );
+            }
+            */
+        }
+    }
 }
 
 pub fn mark_utxo_checked<R: CanisterRuntime>(
