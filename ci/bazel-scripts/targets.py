@@ -2,7 +2,7 @@
 #
 #   targets.py [-h] [--skip_long_tests] [--commit_range COMMIT_RANGE] {build,test}
 #
-# This script is invoked from the CI Main workflow to print to stdout which Bazel targets should be built or tested.
+# This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
 # If --commit_range is passed only bazel targets will be included that have modified inputs within the specified git COMMIT_RANGE.
 #
@@ -36,18 +36,18 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
     # simply return all bazel targets. Otherwise return all targets that depend on the modified files.
-    if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in all_targets_globs):
-        query = "//..."
-    else:
+    query = (
+        "//..."
+        if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in all_targets_globs)
         # Note that modified_files may contain files not depended upon by any bazel target.
         # `bazel query --keep_going` will ignore those but will return the special exit code 3
         # in case this happens which we check for below.
-        query = "rdeps(//..., set({targets}))".format(targets=" ".join(modified_files))
+        else "rdeps(//..., set({targets}))".format(targets=" ".join(modified_files))
+    )
 
     # The targets returned by this script will be passed to `bazel test` by the caller (in case there are any).
-    # We have to ensure that the targets include at least one test otherwise `bazel test` will error with:
-    #   ERROR: No test targets were found, yet testing was requested
-    # So we filter the targets for tests to ensure it's either empty or contains at least one test.
+    # So we have to ensure that the targets are either empty or include at least one test
+    # otherwise `bazel test` will error with: ERROR: No test targets were found, yet testing was requested
     if command == "test":
         query = f'kind(".*_test", {query})'
 
