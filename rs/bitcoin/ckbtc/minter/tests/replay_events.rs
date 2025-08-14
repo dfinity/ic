@@ -13,8 +13,8 @@ use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::{
-    build_unsigned_transaction_from_inputs, resubmit_transactions, test_fixtures::mock,
-    BuildTxError, ECDSAPublicKey, Network,
+    build_unsigned_transaction_from_inputs, resubmit_transactions, BuildTxError, ECDSAPublicKey,
+    Network,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use std::cell::RefCell;
@@ -22,6 +22,38 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
+
+pub mod mock {
+    use async_trait::async_trait;
+    use candid::Principal;
+    use ic_btc_checker::CheckTransactionResponse;
+    use ic_btc_interface::Utxo;
+    use ic_ckbtc_minter::management::CallError;
+    use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
+    use ic_ckbtc_minter::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network};
+    use ic_management_canister_types_private::DerivationPath;
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+    use mockall::mock;
+
+    mock! {
+        #[derive(Debug)]
+        pub CanisterRuntime {}
+
+        #[async_trait]
+        impl CanisterRuntime for CanisterRuntime {
+            fn caller(&self) -> Principal;
+            fn id(&self) -> Principal;
+            fn time(&self) -> u64;
+            fn global_timer_set(&self, timestamp: u64);
+            async fn bitcoin_get_utxos(&self, request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
+            async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
+            async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
+            async fn sign_with_ecdsa(&self, key_name: String, derivation_path: DerivationPath, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+        }
+    }
+}
 
 const FAKE_SEC1_SIG: [u8; 64] = [
     0x8A, 0x2F, 0x47, 0x1B, 0x9C, 0xF4, 0x31, 0x6E, 0xA3, 0x55, 0x17, 0xD1, 0x4A, 0xF2, 0x66, 0xCD,
