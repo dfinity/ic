@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{measure_span, SpanName, SpanStats};
 use ic_cdk::trap;
@@ -296,7 +296,6 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(index_arg: Option<IndexArg>) {
     let InitArg {
         ledger_id,
@@ -927,7 +926,6 @@ fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     let chain_length = with_blocks(|blocks| blocks.len());
     let (start, length) = req
@@ -952,13 +950,11 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 #[query]
-#[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     let length = arg
         .max_results
@@ -1040,20 +1036,17 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> Nat {
     get_balance(account).into()
 }
 
 #[query]
-#[candid_method(query)]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
     Status { num_blocks_synced }
 }
 
 #[query]
-#[candid_method(query)]
 fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     let start_key = balance_key(Account {
         owner: args.owner,
@@ -1167,7 +1160,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
     Ok(())
 }
 
-#[candid_method(query)]
 #[query]
 fn get_fee_collectors_ranges() -> FeeCollectorRanges {
     let ranges = with_state(|s| {

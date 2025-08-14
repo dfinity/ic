@@ -1,4 +1,4 @@
-use candid::{candid_method, Principal};
+use candid::Principal;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
@@ -142,7 +142,6 @@ fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> IcrcBlock {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(
     ledger_id: Principal,
     block_index_offset: u64,
@@ -189,7 +188,6 @@ fn post_upgrade() {
 }
 
 #[update]
-#[candid_method(update)]
 fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     let max_memory_size_bytes = with_archive_opts(|opts| {
         if ic_cdk::api::msg_caller() != opts.ledger_id {
@@ -215,7 +213,6 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
 }
 
 #[query]
-#[candid_method(query)]
 fn remaining_capacity() -> u64 {
     let total_block_size = with_blocks(|blocks| blocks.log_size_bytes());
     with_archive_opts(|opts| {
@@ -226,7 +223,6 @@ fn remaining_capacity() -> u64 {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
     let relative_idx = (idx_offset <= index).then_some(index - idx_offset)?;
@@ -256,7 +252,6 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
     let (start, length) = req
         .as_start_and_length()
@@ -268,7 +263,6 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
 
 /// Get length Blocks starting at start BlockIndex.
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
     let (start, length) = req
         .as_start_and_length()
@@ -279,20 +273,17 @@ fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_archives(_arg: GetArchivesArgs) -> GetArchivesResult {
     vec![]
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     // Only the Ledger certifies the tip of the chain.
     None
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
     vec![
         SupportedBlockType {
@@ -324,7 +315,6 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
     const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
 

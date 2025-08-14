@@ -635,13 +635,11 @@ fn account_balance(account: AccountIdentifier) -> Tokens {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(acc: Account) -> Nat {
     Nat::from(account_balance(AccountIdentifier::from(acc)).get_e8s())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_supported_standards() -> Vec<StandardRecord> {
     let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
@@ -664,19 +662,16 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
     LEDGER.read().unwrap().icrc1_minting_account
 }
 
 #[query]
-#[candid_method(query)]
 fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     vec![
         Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
@@ -690,7 +685,6 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_fee() -> Nat {
     Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s())
 }
@@ -701,13 +695,11 @@ fn total_supply() -> Tokens {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_total_supply() -> Nat {
     Nat::from(LEDGER.read().unwrap().balances().total_supply().get_e8s())
 }
 
 #[query(name = "symbol")]
-#[candid_method(query, rename = "symbol")]
 fn token_symbol() -> Symbol {
     Symbol {
         symbol: LEDGER.read().unwrap().token_symbol.clone(),
@@ -715,7 +707,6 @@ fn token_symbol() -> Symbol {
 }
 
 #[query(name = "name")]
-#[candid_method(query, rename = "name")]
 fn token_name() -> Name {
     Name {
         name: LEDGER.read().unwrap().token_name.clone(),
@@ -723,19 +714,16 @@ fn token_name() -> Name {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_name() -> String {
     LEDGER.read().unwrap().token_name.clone()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_symbol() -> String {
     LEDGER.read().unwrap().token_symbol.to_string()
 }
 
 #[query(name = "decimals")]
-#[candid_method(query, rename = "decimals")]
 fn token_decimals() -> Decimals {
     Decimals {
         decimals: DECIMAL_PLACES,
@@ -743,7 +731,6 @@ fn token_decimals() -> Decimals {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_decimals() -> u8 {
     debug_assert!(ic_ledger_core::tokens::DECIMAL_PLACES <= u8::MAX as u32);
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
@@ -956,7 +943,6 @@ fn send_() {
 ///
 /// I STRONGLY recommend that you use "send_pb" instead.
 #[update]
-#[candid_method(update)]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
     transfer(TransferArgs::from(arg)).await.unwrap_or_else(|e| {
         trap(&e.to_string());
@@ -993,7 +979,6 @@ fn notify_() {
 }
 
 #[update]
-#[candid_method(update)]
 async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap(&format!("Invalid account identifier: {}", e));
@@ -1010,7 +995,6 @@ async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
@@ -1049,7 +1033,6 @@ async fn icrc1_transfer(
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     if !LEDGER
         .read()
@@ -1139,7 +1122,6 @@ fn tip_of_chain_() {
 }
 
 #[query(name = "tip_of_chain")]
-#[candid_method(query, rename = "tip_of_chain")]
 fn tip_of_chain_candid() -> TipOfChainRes {
     tip_of_chain()
 }
@@ -1186,7 +1168,6 @@ fn account_balance_() {
 }
 
 #[query(name = "account_balance")]
-#[candid_method(query, rename = "account_balance")]
 fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     match BinaryAccountBalanceArgs::try_from(arg) {
         Ok(arg) => {
@@ -1201,13 +1182,11 @@ fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
 
 /// See caveats of use on send_dfx
 #[query(name = "account_balance_dfx")]
-#[candid_method(query, rename = "account_balance_dfx")]
 fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
     account_balance(args.account)
 }
 
 #[query(name = "account_identifier")]
-#[candid_method(query, rename = "account_identifier")]
 fn compute_account_identifier(arg: Account) -> AccountIdBlob {
     AccountIdentifier::from(arg).to_address()
 }
@@ -1286,7 +1265,6 @@ fn get_blocks_() {
 }
 
 #[query]
-#[candid_method(query)]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
@@ -1329,7 +1307,6 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 }
 
 #[query]
-#[candid_method(query)]
 fn archives() -> Archives {
     let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
     let archive_guard = ledger_guard.blockchain.archive.read().unwrap();
@@ -1492,7 +1469,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
@@ -1640,7 +1616,6 @@ fn icrc2_approve_not_async(
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_index = icrc2_approve_not_async(caller(), arg, None)?;
 
@@ -1660,7 +1635,6 @@ fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowan
 }
 
 #[update]
-#[candid_method(update)]
 async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> {
     let approve_arg = ApproveArgs {
         from_subaccount: args.from_subaccount,
@@ -1686,7 +1660,6 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
@@ -1698,13 +1671,11 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 
 #[cfg(feature = "icp-allowance-getter")]
 #[query(name = "allowance")]
-#[candid_method(query, rename = "allowance")]
 fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
     get_allowance(arg.account, arg.spender)
 }
 
 #[update]
-#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
@@ -1725,13 +1696,11 @@ fn icrc21_canister_call_consent_message(
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     icrc1_supported_standards()
 }
 
 #[query]
-#[candid_method(query)]
 fn is_ledger_ready() -> bool {
     true
 }
@@ -1744,7 +1713,6 @@ fn is_ledger_ready() -> bool {
 /// `arg.take` can be used to limit the number of returned allowances. If not specified,
 /// at most 500 allowances will be returned.
 #[query]
-#[candid_method(query)]
 fn get_allowances(arg: GetAllowancesArgs) -> Allowances {
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
     let max_results = arg

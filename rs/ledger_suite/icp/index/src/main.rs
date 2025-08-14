@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use candid::{candid_method, Principal};
+use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::caller;
@@ -234,7 +234,6 @@ fn balance_key(account_identifier: AccountIdentifier) -> (AccountIdentifierDataT
 }
 
 #[init]
-#[candid_method(init)]
 fn init(init_arg: InitArg) {
     // stable memory initialization
     mutate_state(|state| {
@@ -485,7 +484,6 @@ fn account_identifier_block_ids_key(
 }
 
 #[query]
-#[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
 }
@@ -574,7 +572,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
 }
 
 #[query]
-#[candid_method(query)]
 fn get_blocks(
     req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
 ) -> ic_icp_index::GetBlocksResponse {
@@ -592,7 +589,6 @@ fn get_blocks(
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_identifier_transactions(
     arg: GetAccountIdentifierTransactionsArgs,
 ) -> GetAccountIdentifierTransactionsResult {
@@ -644,7 +640,6 @@ fn get_account_identifier_transactions(
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
         account_identifier: AccountIdentifier::from(arg.account),
@@ -660,8 +655,10 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
     })
 }
 
-#[candid_method(query)]
-#[query(decode_with = "candid::decode_one_with_decoding_quota::<100000,_>")]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -708,20 +705,27 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     }
 }
 
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
+}
+
 #[query]
-#[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> u64 {
     get_balance(AccountIdentifier::from(account))
 }
 
 #[query]
-#[candid_method(query)]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len());
     Status { num_blocks_synced }

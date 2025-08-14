@@ -12,7 +12,9 @@ use ic_nns_test_utils::itest_helpers::{
 };
 use on_wire::bytes;
 
+// Rust CDK no longer set skipping quota by default since v0.18.
 #[test]
+#[ignore]
 fn test_skipping_quota() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(

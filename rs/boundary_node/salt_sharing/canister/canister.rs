@@ -67,13 +67,26 @@ fn get_salt() -> GetSaltResponse {
     Err(GetSaltError::Unauthorized)
 }
 
-#[query(decode_with = "candid::decode_one_with_decoding_quota::<100000,_>")]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => export_metrics_as_http_response(),
         "/logs" => export_logs_as_http_response(request),
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
 }
 
 #[cfg(test)]
