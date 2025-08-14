@@ -39,7 +39,6 @@ pub enum ReimbursedError {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum WithdrawalReimbursementReason {
     InvalidTransaction(InvalidTransactionError),
-    // CancelledByUser TODO XC-451: user should be able to cancel own withdrawals
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
