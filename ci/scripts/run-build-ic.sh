@@ -17,7 +17,8 @@ fi
 
 # otherwise, infer targets to build
 targets=$(mktemp)
-ci/bazel-scripts/diff.sh build "${MERGE_BASE_SHA:-HEAD}..${BRANCH_HEAD_SHA:-}" >"$targets"
+trap "rm $targets" INT TERM EXIT
+ci/bazel-scripts/targets.py build >"$targets"
 
 ARGS=()
 
@@ -30,8 +31,6 @@ fi
 if grep -q '^//publish/binaries' <"$targets"; then
     ARGS+=(-b)
 fi
-
-rm "$targets"
 
 if [[ ${#ARGS[@]} -eq 0 ]]; then
     echo "No changes that require building IC-OS, binaries or canisters."
