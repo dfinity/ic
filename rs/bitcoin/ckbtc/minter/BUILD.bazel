@@ -172,6 +172,7 @@ rust_test(
         "test_resources/mainnet_events.gz",
         "test_resources/testnet_events.gz",
     ],
+    proc_macro_deps = LIB_PROC_MACRO_DEPS,
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
@@ -188,7 +189,6 @@ rust_test(
         "@crate_index//:serde",
         "@crate_index//:tokio",
     ],
-    proc_macro_deps = LIB_PROC_MACRO_DEPS,
 )
 
 # integration tests defined in ckbtc minter tests/
