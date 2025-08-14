@@ -2090,8 +2090,7 @@ impl CanisterManager {
         // This pattern will disappear once we implement the proposal to discard state on failure.
         let original_mutable = snapshot.is_right();
         if original_mutable {
-            drop(snapshot);
-            state
+            let _ = state
                 .canister_snapshots
                 .make_snapshot_immutable(snapshot_id); // we check the result below
         }
@@ -2127,7 +2126,7 @@ impl CanisterManager {
             WasmExecutionMode::Wasm32,
         ) {
             if original_mutable {
-                state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                let _ = state.canister_snapshots.make_snapshot_mutable(snapshot_id);
             }
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
@@ -2159,7 +2158,7 @@ impl CanisterManager {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     if original_mutable {
-                        state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                        let _ = state.canister_snapshots.make_snapshot_mutable(snapshot_id);
                     }
                     let err = CanisterManagerError::from((canister_id, err));
                     return (Err(err), instructions_used);
@@ -2174,7 +2173,7 @@ impl CanisterManager {
                 )
             {
                 if original_mutable {
-                    state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                    let _ = state.canister_snapshots.make_snapshot_mutable(snapshot_id);
                 }
                 return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
@@ -2212,7 +2211,7 @@ impl CanisterManager {
                 .unwrap_or(true)
             {
                 if original_mutable {
-                    state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                    let _ = state.canister_snapshots.make_snapshot_mutable(snapshot_id);
                 }
                 return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
@@ -2247,7 +2246,7 @@ impl CanisterManager {
             Ok(validated_cycles_and_memory_usage) => validated_cycles_and_memory_usage,
             Err(err) => {
                 if original_mutable {
-                    state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                    let _ = state.canister_snapshots.make_snapshot_mutable(snapshot_id);
                 }
                 return (Err(err), instructions_used);
             }
