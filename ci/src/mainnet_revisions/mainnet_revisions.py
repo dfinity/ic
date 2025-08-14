@@ -54,11 +54,8 @@ def download_and_hash_image(url, logger):
         raise
 
 
-def get_image_hash_for_version(version, variant, is_dev=True, logger=None):
+def get_image_hash_for_version(version, variant, logger, is_dev=True):
     """Get the SHA256 hash of an update image for a given version and variant."""
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
     base_url = base_download_url(
         git_commit_id=version,
         variant=variant,
@@ -189,7 +186,7 @@ def get_subnet_replica_version_info(subnet_id: str, logger: logging.Logger) -> (
 
         # TODO(NODE-1682): Currently only the application subnet uses dev images
         is_dev = subnet_id == app_subnet_id
-        hash = get_image_hash_for_version(version, "guest-os", is_dev, logger)
+        hash = get_image_hash_for_version(version, "guest-os", logger, is_dev)
 
         return (version, hash)
 
@@ -209,7 +206,7 @@ def get_latest_hostos_version_info(logger: logging.Logger) -> (str, str):
 
         version = latest_elect_proposal["payload"]["hostos_version_to_elect"]
 
-        hash = get_image_hash_for_version(version, "host-os", is_dev=True, logger=logger)
+        hash = get_image_hash_for_version(version, "host-os", logger, is_dev=True)
 
         return (version, hash)
 
