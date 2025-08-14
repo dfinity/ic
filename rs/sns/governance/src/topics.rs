@@ -1,4 +1,5 @@
 use crate::extensions;
+use crate::extensions::get_extension_operation_spec_from_cache;
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
@@ -142,6 +143,8 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
 }
 
 impl Governance {
+    // TODO DO NOT MERGE - add extensions to this based on the cached extensions.
+    // TODO DO NOT MERGE - does that mean extension cache needs to be persistent?
     pub fn list_topics(&self) -> ListTopicsResponse {
         let mut uncategorized_functions = vec![];
 
@@ -211,10 +214,16 @@ impl Governance {
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
             return Ok((Some(topic), topic.proposal_criticality()));
         };
-        // Although it is a native action, this has to be handled differently
-        // TODO[NNS1-4002]. Topic should depend on the topic of the extension that is being called.
-        if let pb::proposal::Action::ExecuteExtensionOperation(_) = action {
-            let topic = pb::Topic::TreasuryAssetManagement;
+
+        // While these are "native actions", they should return an error if the name of the function
+        // does not map to a known operation spec.
+        if let pb::proposal::Action::ExecuteExtensionOperation(execute_extension_operation) = action
+        {
+            // NOTE: This will not work if the proposal has not been validated already, since that
+            // also serves to populate the cache.  If the cache is unpopulated, then the action
+            // will not be found.
+            let spec = get_extension_operation_spec_from_cache(execute_extension_operation)?;
+            let topic = spec.topic;
             let criticality = topic.proposal_criticality();
             return Ok((Some(topic), criticality));
         }

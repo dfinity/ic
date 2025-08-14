@@ -30,11 +30,17 @@ use sns_treasury_manager::{
 };
 
 use futures::future::BoxFuture;
+use futures::FutureExt;
 use ic_ledger_core::Tokens;
+use std::cell::RefCell;
 use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
     static ref ALLOWED_EXTENSIONS: BTreeMap<[u8; 32], ExtensionSpec> = btreemap! {};
+}
+
+thread_local! {
+    static EXTENSION_SPEC_CACHE: RefCell<BTreeMap<CanisterId, ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
 }
 
 #[derive(Clone)]
@@ -126,6 +132,7 @@ pub struct ExtensionOperationSpec {
     pub name: String,
     pub description: String,
     pub extension_type: ExtensionType,
+    pub topic: Topic,
     pub validate_arg:
         fn(&Governance, ExtensionOperationArg) -> BoxFuture<Result<ValidatedOperationArg, String>>,
 }
@@ -210,6 +217,61 @@ async fn validate_deposit_operation_impl(
     Ok(structurally_valid)
 }
 
+// This map contains the ExtensionOperationSpecs for operations supported by governance.
+lazy_static! {
+    pub static ref EXTENSION_OPERATION_SPECS: BTreeMap<String, ExtensionOperationSpec> = btreemap! {
+       "deposit".to_string() => ExtensionOperationSpec {
+                        name: "deposit".to_string(),
+                        description: "Deposit funds into the treasury manager.".to_string(),
+                        extension_type: ExtensionType::TreasuryManager,
+                        topic: Topic::TreasuryAssetManagement,
+                        validate: validate_deposit_operation,
+                    },
+       "withdraw".to_string() =>  ExtensionOperationSpec {
+                        name: "withdraw".to_string(),
+                        description: "Withdraw funds from the treasury manager.".to_string(),
+                        extension_type: ExtensionType::TreasuryManager,
+                        topic: Topic::TreasuryAssetManagement,
+                        validate: validate_withdraw_operation,
+                    },
+    };
+}
+
+pub fn get_extension_operation_spec_from_cache(
+    execute_extension_operation: &ExecuteExtensionOperation,
+) -> Result<ExtensionOperationSpec, String> {
+    // Extract and validate basic fields
+    let ExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        operation_arg: _,
+    } = execute_extension_operation;
+
+    let Some(extension_canister_id) = extension_canister_id else {
+        return Err("extension_canister_id is required.".to_string());
+    };
+
+    let extension_canister_id =
+        CanisterId::try_from_principal_id(*extension_canister_id).map_err(|err| {
+            format!(
+                "Cannot interpret extension_canister_id as canister ID: {}",
+                err
+            )
+        })?;
+
+    let Some(operation_name) = operation_name else {
+        return Err("operation_name is required.".to_string());
+    };
+
+    get_extension_spec_from_cache(extension_canister_id)
+        .and_then(|spec| spec.get_operation(operation_name))
+        .ok_or(format!(
+            "No operation found called '{}' for extension with \
+                canister id: {}",
+            operation_name, extension_canister_id
+        ))
+}
+
 /// Validates deposit operation arguments
 fn validate_deposit_operation(
     governance: &Governance,
@@ -240,18 +302,8 @@ impl ExtensionType {
     pub fn standard_operations(&self) -> Vec<ExtensionOperationSpec> {
         match self {
             ExtensionType::TreasuryManager => vec![
-                ExtensionOperationSpec {
-                    name: "deposit".to_string(),
-                    description: "Deposit funds into the treasury manager.".to_string(),
-                    extension_type: ExtensionType::TreasuryManager,
-                    validate_arg: validate_deposit_operation,
-                },
-                ExtensionOperationSpec {
-                    name: "withdraw".to_string(),
-                    description: "Withdraw funds from the treasury manager.".to_string(),
-                    extension_type: ExtensionType::TreasuryManager,
-                    validate_arg: validate_withdraw_operation,
-                },
+                EXTENSION_OPERATION_SPECS.get("deposit").cloned().unwrap(),
+                EXTENSION_OPERATION_SPECS.get("withdraw").cloned().unwrap(),
             ],
             // Future extension types would define their standard operations here
         }
@@ -917,14 +969,57 @@ pub async fn validate_register_extension(
     })
 }
 
-/// Validates that this is a supported extension operation.
+async fn get_extension_spec_and_update_cache(
+    governance: &Governance,
+    extension_canister_id: CanisterId,
+) -> Result<ExtensionSpec, GovernanceError> {
+    let governance_proto = &governance.proto;
+    let env = &*governance.env;
+    let root_canister_id = governance_proto.root_canister_id_or_panic();
+    let registered_extensions = list_extensions(env, root_canister_id).await?;
+
+    if !registered_extensions.contains(&extension_canister_id.get()) {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::NotFound,
+            format!(
+                "Extension canister {} is not registered with the SNS.",
+                extension_canister_id
+            ),
+        ));
+    }
+
+    let wasm_module_hash = canister_module_hash(env, extension_canister_id).await?;
+
+    let result = validate_extension_wasm(&wasm_module_hash).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Extension canister {} does not have an extension spec \
+                    despite being registered with Root: {}",
+                extension_canister_id, err,
+            ),
+        )
+    });
+
+    if result.is_ok() {
+        EXTENSION_SPEC_CACHE.with_borrow_mut(|cache| {
+            cache.insert(extension_canister_id, result.as_ref().cloned().unwrap())
+        });
+    }
+
+    result
+}
+
+pub fn get_extension_spec_from_cache(extension_canister_id: CanisterId) -> Option<ExtensionSpec> {
+    EXTENSION_SPEC_CACHE.with_borrow(|cache| cache.get(&extension_canister_id).cloned())
+}
+
+/// Validates that this is a supported extension operation and runs any validation for that
+/// operation.
 pub(crate) async fn validate_execute_extension_operation(
     governance: &crate::governance::Governance,
     operation: ExecuteExtensionOperation,
 ) -> Result<ValidatedExecuteExtensionOperation, GovernanceError> {
-    let governance_proto = &governance.proto;
-    let env = &*governance.env;
-
     // Extract and validate basic fields
     let ExecuteExtensionOperation {
         extension_canister_id,
@@ -964,34 +1059,8 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    let root_canister_id = governance_proto.root_canister_id_or_panic();
-    let registered_extensions = list_extensions(env, root_canister_id).await?;
-
-    if !registered_extensions.contains(&extension_canister_id.get()) {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::NotFound,
-            format!(
-                "Extension canister {} is not registered with the SNS.",
-                extension_canister_id
-            ),
-        ));
-    }
-
-    let wasm_module_hash = canister_module_hash(env, extension_canister_id).await?;
-
-    let extension_spec = match validate_extension_wasm(&wasm_module_hash) {
-        Ok(spec) => spec,
-        Err(err) => {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!(
-                    "Extension canister {} does not have an extension spec despite being \
-                        registered with Root: {}",
-                    extension_canister_id, err,
-                ),
-            ));
-        }
-    };
+    let extension_spec =
+        get_extension_spec_and_update_cache(governance, extension_canister_id).await?;
 
     // Currently only support extensions that implement TreasuryManager
     if !extension_spec.supports_extension_type(ExtensionType::TreasuryManager) {

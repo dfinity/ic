@@ -185,6 +185,7 @@ fn test_all_topics() {
                 ProposalCriticality::Critical,
             )),
         ),
+        // TODO DO NOT MERGE - ADD TESTS HERE, but we have to populate the cache first.
         // TODO[NNS1-4002]. Criticality should depend on the topic of the extension.
         (
             pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
