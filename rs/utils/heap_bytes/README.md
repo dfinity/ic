@@ -1,8 +1,9 @@
 `HeapBytes` Trait and Derive
 ============================
 
-This crate provides the `HeapBytes` trait and its derive macro. The trait
-can be easily derived for structs and enums:
+This crate provides the `HeapBytes` trait and its derive macro.
+The trait can be easily derived for structs and enums,
+enabling deterministic memory usage estimation:
 
 ```rust
 use ic_heap_bytes::HeapBytes;
@@ -28,9 +29,9 @@ Performance Impact
 ------------------
 
 The default trait implementation iterates over all elements in collections
-and sums the heap usage. This is `O(n)` and might be very slow for large collections.
+and sums their heap usage. This is `O(n)` and may be slow for large collections.
 
-To avoid performance impact in such cases, some field size calculations can be
+To mitigate performance impact, field size calculations can be
 approximated using the `#[heap_bytes(with = <CLOSURE>)]` attribute:
 
 ```rust
