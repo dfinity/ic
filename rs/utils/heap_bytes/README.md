@@ -59,13 +59,39 @@ assert_eq!(
 Closure errors are clearly reported:
 
 ```rust
-error[E0425]: cannot find value `a17` in this scope
-   --> rs/utils/heap_bytes/src/tests.rs:711:79
+error[E0282]: type annotations needed
+   --> rs/utils/heap_bytes/src/tests.rs:711:30
     |
-711 |         #[heap_bytes(with = |v: &Vec<String>| v.len() * size_of::<String>() + a17)]
-    |                                                                               ^^^ not found in this scope
+711 |         #[heap_bytes(with = |v| v.len() * size_of::<String>() + 17)]
+    |                              ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+711 |         #[heap_bytes(with = |v: /* Type */| v.len() * size_of::<String>() + 17)]
+    |                               ++++++++++++
 
 error: aborting due to 1 previous error
+```
+
+Closures and functions used with the `#[heap_bytes(with = ...)]` attribute
+must accept a reference to the corresponding field:
+
+```rust
+#[derive(HeapBytes)]
+struct S {
+    #[heap_bytes(with = |v: &Vec<String>| v.len() * size_of::<String>())]
+    v: Vec<String>,
+}
+```
+
+For enum variants, they must accept references to the variant's fields:
+
+```rust
+#[derive(HeapBytes)]
+enum SuperdWith {
+    #[heap_bytes(with = |s1: &String, s2: &String| s1.len() + s2.len())]
+    One(String, String),
+}
 ```
 
 A function name may also be used instead of a closure:
