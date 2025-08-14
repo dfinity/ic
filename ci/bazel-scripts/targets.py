@@ -37,13 +37,13 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     """
     lines = Path(BAZEL_TARGETS).read_text().splitlines()
 
-    # First filter out comments. We use gitignore-style comment handling.
+    # First filter out comments and blank lines. We use gitignore-style comment handling.
     # See: https://git-scm.com/docs/gitignore#_pattern_format
-    # - A line starting with # serves as a comment. (discard it entirely).
-    # - Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
+    # * A blank line matches no files, so it can serve as a separator for readability.
+    # * A line starting with # serves as a comment. (discard it entirely).
+    # * Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
     content_lines = []
     for line in lines:
-        # Filter out comments and blank lines:
         if line.startswith("#") or len(line) == 0 or line.isspace():
             continue
         if line.startswith("\\#"):
