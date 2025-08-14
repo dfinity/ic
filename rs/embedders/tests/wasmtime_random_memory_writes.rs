@@ -613,29 +613,18 @@ mod tests {
                     // Add the target pages.
                     for Write { dst, bytes } in writes {
                         if !bytes.is_empty() {
-                            if embedder.config().feature_flags.write_barrier == FlagStatus::Disabled
-                            {
-                                // A page will not actually be considered dirty
-                                // unless the contents has changed. Memory is
-                                // initially all 0, so this means we should ignore
-                                // all zero bytes.
-                                result.extend(
-                                    bytes
-                                        .iter()
-                                        .enumerate()
-                                        .filter(|(_, b)| **b != 0)
-                                        .map(|(addr, _)| {
-                                            (*dst as u64 + addr as u64) / PAGE_SIZE as u64
-                                        })
-                                        .collect::<BTreeSet<_>>(),
-                                );
-                            } else {
-                                result.extend(
-                                    *dst as u64 / PAGE_SIZE as u64
-                                        ..=(*dst as u64 + bytes.len() as u64 - 1)
-                                            / PAGE_SIZE as u64,
-                                );
-                            }
+                            // A page will not actually be considered dirty
+                            // unless the contents has changed. Memory is
+                            // initially all 0, so this means we should ignore
+                            // all zero bytes.
+                            result.extend(
+                                bytes
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, b)| **b != 0)
+                                    .map(|(addr, _)| (*dst as u64 + addr as u64) / PAGE_SIZE as u64)
+                                    .collect::<BTreeSet<_>>(),
+                            );
                         }
                     }
                     result.iter().cloned().collect()
