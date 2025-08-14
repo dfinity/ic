@@ -13295,6 +13295,7 @@ dependencies = [
  "build-info-build",
  "canbench-rs",
  "candid",
+ "candid-utils",
  "candid_parser",
  "clap 4.5.27",
  "comparable",
