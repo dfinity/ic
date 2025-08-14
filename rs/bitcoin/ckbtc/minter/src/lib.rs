@@ -412,6 +412,7 @@ async fn submit_pending_requests() {
             &req.ecdsa_public_key,
             &req.outpoint_account,
             req.unsigned_tx,
+            &IC_CANISTER_RUNTIME,
         )
         .await
         {
@@ -430,7 +431,10 @@ async fn submit_pending_requests() {
                     "[submit_pending_requests]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
-                match management::send_transaction(&signed_tx, req.network).await {
+                match IC_CANISTER_RUNTIME
+                    .send_transaction(&signed_tx, req.network)
+                    .await
+                {
                     Ok(()) => {
                         log!(
                             P1,
@@ -645,10 +649,41 @@ async fn finalize_requests() {
         Some(fee) => fee,
         None => return,
     };
-
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
+    resubmit_transactions(
+        key_name,
+        fee_per_vbyte,
+        main_address,
+        ecdsa_public_key,
+        btc_network,
+        maybe_finalized_transactions,
+        |tx| state::read_state(|s| filter_output_accounts(s, tx)),
+        |old_txid, new_tx| {
+            state::mutate_state(|s| {
+                state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
+            })
+        },
+        &IC_CANISTER_RUNTIME,
+    )
+    .await
+}
 
-    for (old_txid, submitted_tx) in maybe_finalized_transactions {
+async fn resubmit_transactions<
+    R: CanisterRuntime,
+    F: Fn(&tx::UnsignedTransaction) -> BTreeMap<OutPoint, Account>,
+    G: Fn(Txid, state::SubmittedBtcTransaction),
+>(
+    key_name: String,
+    fee_per_vbyte: u64,
+    main_address: BitcoinAddress,
+    ecdsa_public_key: ECDSAPublicKey,
+    btc_network: Network,
+    transactions: BTreeMap<Txid, state::SubmittedBtcTransaction>,
+    get_outpoint_account: F,
+    replace_transaction: G,
+    runtime: &R,
+) {
+    for (old_txid, submitted_tx) in transactions {
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
@@ -684,15 +719,14 @@ async fn finalize_requests() {
             }
         };
 
-        let outpoint_account = state::read_state(|s| filter_output_accounts(s, &unsigned_tx));
-
+        let outpoint_account = get_outpoint_account(&unsigned_tx);
         let new_txid = unsigned_tx.txid();
-
         let maybe_signed_tx = sign_transaction(
             key_name.clone(),
             &ecdsa_public_key,
             &outpoint_account,
             unsigned_tx,
+            runtime,
         )
         .await;
 
@@ -708,7 +742,7 @@ async fn finalize_requests() {
             }
         };
 
-        match management::send_transaction(&signed_tx, btc_network).await {
+        match runtime.send_transaction(&signed_tx, btc_network).await {
             Ok(()) => {
                 if old_txid == new_txid {
                     // DEFENSIVE: We should never take this branch because we increase fees for
@@ -732,14 +766,12 @@ async fn finalize_requests() {
                     requests: submitted_tx.requests,
                     used_utxos: input_utxos,
                     txid: new_txid,
-                    submitted_at: ic_cdk::api::time(),
+                    submitted_at: runtime.time(),
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
                 };
 
-                state::mutate_state(|s| {
-                    state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
-                });
+                replace_transaction(old_txid, new_tx);
             }
             Err(err) => {
                 log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
@@ -858,11 +890,12 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
 ///
 /// This function panics if the `output_account` map does not have an entry for
 /// at least one of the transaction previous output points.
-pub async fn sign_transaction(
+pub async fn sign_transaction<R: CanisterRuntime>(
     key_name: String,
     ecdsa_public_key: &ECDSAPublicKey,
     output_account: &BTreeMap<tx::OutPoint, Account>,
     unsigned_tx: tx::UnsignedTransaction,
+    runtime: &R,
 ) -> Result<tx::SignedTransaction, CallError> {
     use crate::address::{derivation_path, derive_public_key};
 
@@ -885,7 +918,7 @@ pub async fn sign_transaction(
             key_name.clone(),
             DerivationPath::new(path),
             sighash,
-            &IC_CANISTER_RUNTIME,
+            runtime,
         )
         .await?;
 
@@ -1253,6 +1286,12 @@ pub trait CanisterRuntime {
         derivation_path: DerivationPath,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError>;
+
+    async fn send_transaction(
+        &self,
+        transaction: &tx::SignedTransaction,
+        network: Network,
+    ) -> Result<(), CallError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1322,6 +1361,21 @@ impl CanisterRuntime for IcCanisterRuntime {
         .await
         .map(|(result,)| result.signature)
         .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
+    }
+
+    async fn send_transaction(
+        &self,
+        transaction: &tx::SignedTransaction,
+        network: Network,
+    ) -> Result<(), CallError> {
+        ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
+            ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
+                transaction: transaction.serialize(),
+                network: network.into(),
+            },
+        )
+        .await
+        .map_err(|err| CallError::from_cdk_error("bitcoin_send_transaction", err))
     }
 }
 

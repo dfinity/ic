@@ -1,7 +1,7 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
-use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
+use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
@@ -229,21 +229,6 @@ pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByt
     .await
     .map(|(result,)| result)
     .map_err(|err| CallError::from_cdk_error("bitcoin_get_current_fee_percentiles", err))
-}
-
-/// Sends the transaction to the network the management canister interacts with.
-pub async fn send_transaction(
-    transaction: &tx::SignedTransaction,
-    network: Network,
-) -> Result<(), CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
-        ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
-            transaction: transaction.serialize(),
-            network: network.into(),
-        },
-    )
-    .await
-    .map_err(|err| CallError::from_cdk_error("bitcoin_send_transaction", err))
 }
 
 /// Fetches the ECDSA public key of the canister.

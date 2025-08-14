@@ -113,7 +113,7 @@ pub fn get_uxos_response() -> GetUtxosResponse {
 pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
-    use crate::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse};
+    use crate::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
@@ -137,6 +137,7 @@ pub mod mock {
             async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: DerivationPath, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
         }
     }
 }
