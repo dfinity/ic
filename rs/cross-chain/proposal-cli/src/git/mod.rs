@@ -1,9 +1,7 @@
 use crate::candid::{encode_upgrade_args, UpgradeArgs};
-use crate::canister::{CanisterIdsJson, TargetCanister};
+use crate::canister::TargetCanister;
 use candid::Principal;
 use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -103,21 +101,13 @@ impl GitRepository {
     }
 
     pub async fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
-        let canister_ids: serde_json::Value = match canister.canister_ids_json_file() {
-            CanisterIdsJson::Local { path } => {
-                let path = self.dir.path().join(path);
-                let canister_ids_file =
-                    File::open(&path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
-                let reader = BufReader::new(canister_ids_file);
-                serde_json::from_reader(reader).expect("failed to parse json")
-            }
-            CanisterIdsJson::Remote { url } => {
-                let resp = reqwest::get(url).await.expect("request failed");
-                let body = resp.text().await.expect("body invalid");
-                let reader = BufReader::new(body.as_bytes());
-                serde_json::from_reader(reader).expect("failed to parse json")
-            }
-        };
+        let canister_ids: serde_json::Value = serde_json::from_reader(
+            canister
+                .canister_ids_json_file()
+                .download(self.dir.path())
+                .await,
+        )
+        .expect("failed to parse json");
         let canister_id = canister_ids
             .as_object()
             .unwrap()

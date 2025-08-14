@@ -2,18 +2,36 @@
 mod tests;
 
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
-pub enum CanisterIdsJson {
-    /// For cases where the canister_ids.json file is stored in the same git repository as the
-    /// canister code.
+pub enum DownloadableFile {
+    /// For cases where the file is stored locally.
     Local { path: PathBuf },
-    /// For cases where the canister_ids.json file is stored in a location other than the git
-    /// repository of the canister code.
+    /// For cases where the file is stored remotely.
     Remote { url: String },
+}
+
+impl DownloadableFile {
+    pub async fn download(&self, local_parent_path: &Path) -> BufReader<Box<dyn Read>> {
+        match self {
+            DownloadableFile::Local { path } => {
+                let full_path = local_parent_path.join(path);
+                let canister_ids_file =
+                    File::open(&full_path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
+                BufReader::new(Box::new(canister_ids_file))
+            }
+            DownloadableFile::Remote { url } => {
+                let resp = reqwest::get(url).await.expect("request failed");
+                let body = resp.text().await.expect("body invalid");
+                BufReader::new(Box::new(Cursor::new(body)))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
@@ -317,20 +335,20 @@ impl TargetCanister {
         format!("{:?}", self.build_artifact())
     }
 
-    pub fn canister_ids_json_file(&self) -> CanisterIdsJson {
+    pub fn canister_ids_json_file(&self) -> DownloadableFile {
         match self {
             TargetCanister::BtcChecker
             | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
-            | TargetCanister::CkBtcMinter => CanisterIdsJson::Local {
+            | TargetCanister::CkBtcMinter => DownloadableFile::Local {
                 path: PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json"),
             },
             TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
-            | TargetCanister::LedgerSuiteOrchestrator => CanisterIdsJson::Local {
+            | TargetCanister::LedgerSuiteOrchestrator => DownloadableFile::Local {
                 path: PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json"),
             },
             TargetCanister::IcpArchive1
@@ -338,18 +356,18 @@ impl TargetCanister {
             | TargetCanister::IcpArchive3
             | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
-            | TargetCanister::IcpLedger => CanisterIdsJson::Local {
+            | TargetCanister::IcpLedger => DownloadableFile::Local {
                 path: PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
             },
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
-            | TargetCanister::ExchangeRateCanister => CanisterIdsJson::Local {
+            | TargetCanister::ExchangeRateCanister => DownloadableFile::Local {
                 path: PathBuf::from("canister_ids.json"),
             },
-            TargetCanister::SolRpc => CanisterIdsJson::Local {
+            TargetCanister::SolRpc => DownloadableFile::Local {
                 path: PathBuf::from("canister/prod/canister_ids.json"),
             },
-            TargetCanister::CyclesIndex => CanisterIdsJson::Remote {
+            TargetCanister::CyclesIndex => DownloadableFile::Remote {
                 url: "https://raw.githubusercontent.com/dfinity/cycles-ledger/refs/heads/main/canister_ids.json".to_string()
             },
         }
