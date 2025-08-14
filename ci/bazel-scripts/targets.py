@@ -2,8 +2,7 @@
 #
 #   targets.py [-h] [--skip_long_tests] [--commit_range COMMIT_RANGE] {build,test}
 #
-# This script is invoked from .github/actions/bazel-test-all/action.yaml and ci/scripts/run-build-ic.sh
-# to print to stdout which Bazel targets should be built or tested.
+# This script is invoked from the CI Main workflow to print to stdout which Bazel targets should be built or tested.
 #
 # If --commit_range is passed only bazel targets will be included that have modified inputs within the specified git COMMIT_RANGE.
 #
