@@ -406,11 +406,11 @@ async fn submit_pending_requests() {
         });
 
         let txid = req.unsigned_tx.txid();
-
+        let outpoint_account = req.outpoint_account;
         match sign_transaction(
             req.key_name,
             &req.ecdsa_public_key,
-            &req.outpoint_account,
+            |k| outpoint_account.get(k).cloned(),
             req.unsigned_tx,
             &IC_CANISTER_RUNTIME,
         )
@@ -651,13 +651,14 @@ async fn finalize_requests() {
     };
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
     resubmit_transactions(
-        key_name,
+        &key_name,
         fee_per_vbyte,
         main_address,
         ecdsa_public_key,
         btc_network,
+        state::read_state(|s| s.retrieve_btc_min_amount),
         maybe_finalized_transactions,
-        |tx| state::read_state(|s| filter_output_accounts(s, tx)),
+        |outpoint| state::read_state(|s| s.outpoint_account.get(&outpoint).cloned()),
         |old_txid, new_tx| {
             state::mutate_state(|s| {
                 state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
@@ -668,18 +669,19 @@ async fn finalize_requests() {
     .await
 }
 
-async fn resubmit_transactions<
+pub async fn resubmit_transactions<
     R: CanisterRuntime,
-    F: Fn(&tx::UnsignedTransaction) -> BTreeMap<OutPoint, Account>,
+    F: Fn(&OutPoint) -> Option<Account>,
     G: Fn(Txid, state::SubmittedBtcTransaction),
 >(
-    key_name: String,
+    key_name: &str,
     fee_per_vbyte: u64,
     main_address: BitcoinAddress,
     ecdsa_public_key: ECDSAPublicKey,
     btc_network: Network,
+    _retrieve_btc_min_amount: u64,
     transactions: BTreeMap<Txid, state::SubmittedBtcTransaction>,
-    get_outpoint_account: F,
+    lookup_outpoint_account: F,
     replace_transaction: G,
     runtime: &R,
 ) {
@@ -719,12 +721,11 @@ async fn resubmit_transactions<
             }
         };
 
-        let outpoint_account = get_outpoint_account(&unsigned_tx);
         let new_txid = unsigned_tx.txid();
         let maybe_signed_tx = sign_transaction(
-            key_name.clone(),
+            key_name.to_string(),
             &ecdsa_public_key,
-            &outpoint_account,
+            &lookup_outpoint_account,
             unsigned_tx,
             runtime,
         )
@@ -890,10 +891,10 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
 ///
 /// This function panics if the `output_account` map does not have an entry for
 /// at least one of the transaction previous output points.
-pub async fn sign_transaction<R: CanisterRuntime>(
+pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option<Account>>(
     key_name: String,
     ecdsa_public_key: &ECDSAPublicKey,
-    output_account: &BTreeMap<tx::OutPoint, Account>,
+    lookup_outpoint_account: F,
     unsigned_tx: tx::UnsignedTransaction,
     runtime: &R,
 ) -> Result<tx::SignedTransaction, CallError> {
@@ -904,12 +905,11 @@ pub async fn sign_transaction<R: CanisterRuntime>(
     for input in &unsigned_tx.inputs {
         let outpoint = &input.previous_output;
 
-        let account = output_account
-            .get(outpoint)
+        let account = lookup_outpoint_account(outpoint)
             .unwrap_or_else(|| panic!("bug: no account for outpoint {:?}", outpoint));
 
-        let path = derivation_path(account);
-        let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, account).public_key);
+        let path = derivation_path(&account);
+        let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, &account).public_key);
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(input, &pkhash);
@@ -1093,6 +1093,7 @@ pub fn build_unsigned_transaction_from_inputs(
             value: change_output.value,
         }])
         .collect();
+    let num_outputs = tx_outputs.len();
 
     debug_assert_eq!(
         tx_outputs.iter().map(|out| out.value).sum::<u64>() - minter_fee,
@@ -1126,16 +1127,19 @@ pub fn build_unsigned_transaction_from_inputs(
     // so we simply use 546 satoshi as the minimum amount per output.
     const MIN_OUTPUT_AMOUNT: u64 = 546;
 
-    for (output, fee_share) in unsigned_tx.outputs.iter_mut().zip(fee_shares.iter()) {
-        if output.address != main_address {
-            if output.value <= *fee_share + MIN_OUTPUT_AMOUNT {
-                return Err(BuildTxError::DustOutput {
-                    address: output.address.clone(),
-                    amount: output.value,
-                });
-            }
-            output.value = output.value.saturating_sub(*fee_share);
+    for (output, fee_share) in unsigned_tx
+        .outputs
+        .iter_mut()
+        .zip(fee_shares.iter())
+        .take(num_outputs - 1)
+    {
+        if output.value <= *fee_share + MIN_OUTPUT_AMOUNT {
+            return Err(BuildTxError::DustOutput {
+                address: output.address.clone(),
+                amount: output.value,
+            });
         }
+        output.value = output.value.saturating_sub(*fee_share);
     }
 
     debug_assert_eq!(
