@@ -77,6 +77,23 @@ impl CanisterSnapshots {
         }
     }
 
+    /// During load_snapshot, an uploaded snapshot becomes immutable.
+    pub fn make_snapshot_immutable(&mut self, snapshot_id: SnapshotId) -> Result<(), ()> {
+        let snapshot = self.partial_snapshots.remove(&snapshot_id).ok_or(())?;
+        let snapshot = Arc::into_inner(snapshot).ok_or(())?.into_immutable();
+        self.snapshots.insert(snapshot_id, Arc::new(snapshot));
+        Ok(())
+    }
+
+    /// If load_snapshot of an uploaded snapshot fails, it has to be reverted to mutable.
+    pub fn make_snapshot_mutable(&mut self, snapshot_id: SnapshotId) -> Result<(), ()> {
+        let snapshot = self.snapshots.remove(&snapshot_id).ok_or(())?;
+        let snapshot = Arc::into_inner(snapshot).ok_or(())?.into_mutable();
+        self.partial_snapshots
+            .insert(snapshot_id, Arc::new(snapshot));
+        Ok(())
+    }
+
     pub fn strip_page_map_deltas(&mut self, fd_factory: &Arc<dyn PageAllocatorFileDescriptor>) {
         for (_id, snapshot) in self.snapshots.iter_mut() {
             let new_snapshot = Arc::make_mut(snapshot);
@@ -226,6 +243,7 @@ impl CanisterSnapshots {
     ///
     /// External callers should call `ReplicatedState::delete_snapshots` instead.
     pub(crate) fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
+        // TODO: remove from partials
         let mut result = Vec::default();
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
@@ -525,6 +543,29 @@ impl CanisterSnapshot {
     pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
         &self.execution_snapshot
     }
+
+    /// Only use for reverting state after a failed load_snapshot.
+    pub fn into_mutable(self) -> CanisterSnapshotImpl<Mutable> {
+        CanisterSnapshotImpl {
+            canister_id: self.canister_id,
+            source: self.source,
+            taken_at_timestamp: self.taken_at_timestamp,
+            canister_version: self.canister_version,
+            size: self.size,
+            certified_data: self.certified_data,
+            chunk_store: self.chunk_store,
+            execution_snapshot: ExecutionStateSnapshotImpl {
+                wasm_binary: self.execution_snapshot.wasm_binary.into_mutable(),
+                exported_globals: self.execution_snapshot.exported_globals,
+                stable_memory: self.execution_snapshot.stable_memory,
+                wasm_memory: self.execution_snapshot.wasm_memory,
+                global_timer: self.execution_snapshot.global_timer,
+                on_low_wasm_memory_hook_status: self
+                    .execution_snapshot
+                    .on_low_wasm_memory_hook_status,
+            },
+        }
+    }
 }
 
 /// Impl specific to mutable/partial snapshots.
@@ -565,6 +606,28 @@ impl PartialCanisterSnapshot {
             certified_data: metadata.certified_data.clone(),
             chunk_store,
             execution_snapshot,
+        }
+    }
+
+    pub fn into_immutable(self) -> CanisterSnapshotImpl<()> {
+        CanisterSnapshotImpl {
+            canister_id: self.canister_id,
+            source: self.source,
+            taken_at_timestamp: self.taken_at_timestamp,
+            canister_version: self.canister_version,
+            size: self.size,
+            certified_data: self.certified_data,
+            chunk_store: self.chunk_store,
+            execution_snapshot: ExecutionStateSnapshotImpl {
+                wasm_binary: self.execution_snapshot.wasm_binary.into_immutable(),
+                exported_globals: self.execution_snapshot.exported_globals,
+                stable_memory: self.execution_snapshot.stable_memory,
+                wasm_memory: self.execution_snapshot.wasm_memory,
+                global_timer: self.execution_snapshot.global_timer,
+                on_low_wasm_memory_hook_status: self
+                    .execution_snapshot
+                    .on_low_wasm_memory_hook_status,
+            },
         }
     }
 

@@ -179,6 +179,14 @@ impl<T: SnapshotMutability> CanisterModuleImpl<T> {
             ModuleStorage::File(file) => file.wasm_file_not_loaded_and_path_matches(expected_path),
         }
     }
+
+    pub fn into_mutable(self) -> CanisterModuleImpl<Mutable> {
+        CanisterModuleImpl {
+            module: self.module,
+            module_hash: self.module_hash,
+            _t: std::marker::PhantomData,
+        }
+    }
 }
 
 impl CanisterModuleImpl<Mutable> {

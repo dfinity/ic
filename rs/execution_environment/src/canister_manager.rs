@@ -2036,31 +2036,38 @@ impl CanisterManager {
         }
 
         // Check that snapshot ID exists.
-        let snapshot: &Arc<CanisterSnapshot> = match state.canister_snapshots.get(snapshot_id) {
-            None => {
-                // If not found, the operation fails due to invalid parameters.
-                return (
-                    Err(CanisterManagerError::CanisterSnapshotNotFound {
-                        canister_id,
-                        snapshot_id,
-                    }),
-                    NumInstructions::new(0),
-                );
-            }
-            Some(snapshot) => {
-                // Verify the provided snapshot id belongs to this canister.
-                if snapshot.canister_id() != canister_id {
+        let snapshot: Either<&Arc<CanisterSnapshot>, &Arc<PartialCanisterSnapshot>> =
+            match state.canister_snapshots.get(snapshot_id) {
+                None => {
+                    // If not found, the operation fails due to invalid parameters.
                     return (
-                        Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                        Err(CanisterManagerError::CanisterSnapshotNotFound {
                             canister_id,
                             snapshot_id,
                         }),
                         NumInstructions::new(0),
                     );
                 }
-                snapshot
-            }
-        };
+                Some(snapshot) => {
+                    // Verify the provided snapshot id belongs to this canister.
+                    if snapshot
+                        .as_ref()
+                        .either(|s| s.canister_id(), |s| s.canister_id())
+                        != canister_id
+                    {
+                        return (
+                            Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                canister_id,
+                                snapshot_id,
+                            }),
+                            NumInstructions::new(0),
+                        );
+                    }
+                    snapshot
+                }
+            };
+        // If the snapshot was uploaded, it is still a mutable `PartialCanisterSnapshot`. We transform it into a
+        // complete, immutable `CanisterSnapshot` and load it. If this fails, we have to revert it to mutable.
 
         // Check the precondition:
         // Unable to start executing a `load_canister_snapshot`
