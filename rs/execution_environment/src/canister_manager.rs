@@ -2066,8 +2066,6 @@ impl CanisterManager {
                     snapshot
                 }
             };
-        // If the snapshot was uploaded, it is still a mutable `PartialCanisterSnapshot`. We transform it into a
-        // complete, immutable `CanisterSnapshot` and load it. If this fails, we have to revert it to mutable.
 
         // Check the precondition:
         // Unable to start executing a `load_canister_snapshot`
@@ -2086,6 +2084,33 @@ impl CanisterManager {
                 );
             }
         }
+
+        // If the snapshot was uploaded, it is still a mutable `PartialCanisterSnapshot`. We transform it into a
+        // complete, immutable `CanisterSnapshot` and load it. If this `load_snapshot` fails, we have to revert it to mutable.
+        // This pattern will disappear once we implement the proposal to discard state on failure.
+        let original_mutable = snapshot.is_right();
+        if original_mutable {
+            drop(snapshot);
+            state
+                .canister_snapshots
+                .make_snapshot_immutable(snapshot_id); // we check the result below
+        }
+        let Either::Left(snapshot) = state.canister_snapshots.get(snapshot_id).unwrap() else {
+            error!(
+                self.log,
+                "[EXC-BUG] Failed to make snapshot immutable during load_snapshot: canister_id: {} snapshot_id: {}.",
+                canister_id,
+                snapshot_id
+            );
+            return (
+                Err(CanisterManagerError::CanisterSnapshotTransformFailed {
+                    canister_id,
+                    snapshot_id,
+                }),
+                NumInstructions::new(0),
+            );
+        };
+
         // All basic checks have passed, charge baseline instructions.
         let old_memory_usage = canister.memory_usage();
         let mut canister_clone = canister.clone();
@@ -2101,6 +2126,9 @@ impl CanisterManager {
             // The only overhead is during execution time.
             WasmExecutionMode::Wasm32,
         ) {
+            if original_mutable {
+                state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+            }
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
                 0.into(),
@@ -2130,6 +2158,9 @@ impl CanisterManager {
             let mut new_execution_state = match new_execution_state {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
+                    if original_mutable {
+                        state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                    }
                     let err = CanisterManagerError::from((canister_id, err));
                     return (Err(err), instructions_used);
                 }
@@ -2142,6 +2173,9 @@ impl CanisterManager {
                     &execution_snapshot.exported_globals,
                 )
             {
+                if original_mutable {
+                    state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                }
                 return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
@@ -2177,6 +2211,9 @@ impl CanisterManager {
                 .map(|h| h.is_consistent_with(hook_condition))
                 .unwrap_or(true)
             {
+                if original_mutable {
+                    state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                }
                 return (
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: format!("Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).", snapshot_hook_status, hook_condition),
@@ -2209,6 +2246,9 @@ impl CanisterManager {
         ) {
             Ok(validated_cycles_and_memory_usage) => validated_cycles_and_memory_usage,
             Err(err) => {
+                if original_mutable {
+                    state.canister_snapshots.make_snapshot_mutable(snapshot_id);
+                }
                 return (Err(err), instructions_used);
             }
         };
@@ -2332,7 +2372,12 @@ impl CanisterManager {
     ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-        let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+        let Either::Left(snapshot) =
+            self.get_snapshot(canister.canister_id(), snapshot_id, state)?
+        else {
+            // This only makes sense for non-uploaded snapshots
+            return Err(CanisterManagerError::CanisterSnapshotMutable);
+        };
 
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
@@ -2372,7 +2417,12 @@ impl CanisterManager {
     ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-        let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+        let Either::Left(snapshot) =
+            self.get_snapshot(canister.canister_id(), snapshot_id, state)?
+        else {
+            // This only makes sense for non-uploaded snapshots
+            return Err(CanisterManagerError::CanisterSnapshotMutable);
+        };
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
         let num_response_bytes = get_response_size(&kind)?;
@@ -2470,7 +2520,8 @@ impl CanisterManager {
         let replace_snapshot_size = match args.replace_snapshot() {
             Some(replace_snapshot_id) => self
                 .get_snapshot(canister_id, replace_snapshot_id, state)?
-                .size(),
+                .as_ref()
+                .either(|s| s.size(), |s| s.size()),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.

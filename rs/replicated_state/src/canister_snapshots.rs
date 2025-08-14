@@ -77,7 +77,8 @@ impl CanisterSnapshots {
         }
     }
 
-    /// During load_snapshot, an uploaded snapshot becomes immutable.
+    // During load_snapshot, an uploaded snapshot becomes immutable.
+    #[allow(clippy::result_unit_err)]
     pub fn make_snapshot_immutable(&mut self, snapshot_id: SnapshotId) -> Result<(), ()> {
         let snapshot = self.partial_snapshots.remove(&snapshot_id).ok_or(())?;
         let snapshot = Arc::into_inner(snapshot).ok_or(())?.into_immutable();
@@ -85,7 +86,8 @@ impl CanisterSnapshots {
         Ok(())
     }
 
-    /// If load_snapshot of an uploaded snapshot fails, it has to be reverted to mutable.
+    // If load_snapshot of an uploaded snapshot fails, it has to be reverted to mutable.
+    #[allow(clippy::result_unit_err)]
     pub fn make_snapshot_mutable(&mut self, snapshot_id: SnapshotId) -> Result<(), ()> {
         let snapshot = self.snapshots.remove(&snapshot_id).ok_or(())?;
         let snapshot = Arc::into_inner(snapshot).ok_or(())?.into_mutable();
