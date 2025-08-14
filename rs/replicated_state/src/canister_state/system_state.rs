@@ -372,7 +372,7 @@ pub struct Running {
     /// A queue of execution tasks during a round, i.e. a heartbeat or a global timer.
     task_queue: VecDeque<ExecutionRoundTask>,
     on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-    status: RunningStatus,
+    pub(super) status: RunningStatus,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -421,7 +421,7 @@ pub struct Stopping {
     /// multiple requests to stop the canister while it is stopping. All
     /// of them would be tracked here so that they can all get a response.
     stop_contexts: Vec<StopCanisterContext>,
-    status: StoppingStatus,
+    pub(super) status: StoppingStatus,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -445,7 +445,7 @@ pub struct AbortedResponse(Arc<Response>);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stopped {
-    status: StoppedStatus,
+    pub(super) status: StoppedStatus,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -493,7 +493,7 @@ impl Running {
 
     /// Returns `CanisterTask::OnLowWasmMemory` if the condition on the low wasm memory hook is satisfied,
     /// otherwise a heartbeat or a global timer task if one is scheduled.
-    fn pop_task(&mut self) -> Option<CanisterTask> {
+    pub fn pop_task(&mut self) -> Option<CanisterTask> {
         if self.on_low_wasm_memory_hook_status.is_ready() {
             self.on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Executed;
             Some(CanisterTask::OnLowWasmMemory)
