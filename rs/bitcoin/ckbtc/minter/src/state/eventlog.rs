@@ -215,6 +215,14 @@ mod event {
             /// The burn block on the ledger for that withdrawal that should have been reimbursed
             burn_block_index: u64,
         },
+        /// Indicates that a reimbursement has been executed.
+        #[serde(rename = "reimbursed_withdrawal")]
+        ReimbursedWithdrawal {
+            /// The burn block on the ledger.
+            burn_block_index: u64,
+            /// The mint block on the ledger.
+            mint_block_index: u64,
+        },
     }
 }
 
@@ -459,6 +467,12 @@ pub fn replay<I: CheckInvariants>(
             }
             EventType::QuarantinedWithdrawalReimbursement { burn_block_index } => {
                 state.quarantine_withdrawal_reimbursement(burn_block_index);
+            }
+            EventType::ReimbursedWithdrawal {
+                burn_block_index,
+                mint_block_index,
+            } => {
+                state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
             }
         }
     }

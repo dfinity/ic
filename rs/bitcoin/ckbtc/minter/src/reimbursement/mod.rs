@@ -1,12 +1,17 @@
+use crate::logs::{P0, P1};
+use crate::memo::MintMemo;
 use crate::state::LedgerMintIndex;
 use crate::{state, CanisterRuntime};
 use candid::{CandidType, Deserialize};
+use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::Serialize;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
 pub struct ReimburseWithdrawalTask {
     pub account: Account,
+    /// The amount that should be reimbursed in the smallest denomination.
     pub amount: u64,
     pub reason: WithdrawalReimbursementReason,
 }
@@ -14,6 +19,7 @@ pub struct ReimburseWithdrawalTask {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
 pub struct ReimbursedWithdrawal {
     pub account: Account,
+    /// The amount that was reimbursed in the smallest denomination.
     pub amount: u64,
     pub reason: WithdrawalReimbursementReason,
     pub mint_block_index: LedgerMintIndex,
@@ -47,19 +53,63 @@ pub enum InvalidTransactionError {
     },
 }
 
-/// Reimburse withdrawals that were cancelled.
+/// Reimburse withdrawals that were canceled.
 pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
     if state::read_state(|s| s.pending_withdrawal_reimbursements.is_empty()) {
         return;
     }
     let pending_reimbursements = state::read_state(|s| s.pending_withdrawal_reimbursements.clone());
-    for (index, pending_reimbursement) in pending_reimbursements {
+    let mut error_count = 0;
+    for (burn_index, reimbursement) in pending_reimbursements {
         // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
         // this reimbursement request will not be processed again.
-        let prevent_double_minting_guard = scopeguard::guard(index.clone(), |index| {
+        let prevent_double_minting_guard = scopeguard::guard(burn_index, |index| {
             state::mutate_state(|s| {
                 state::audit::quarantine_withdrawal_reimbursement(s, index, runtime)
             });
         });
+        let memo = MintMemo::ReimburseWithdrawal {
+            withdrawal_id: burn_index,
+        };
+        match runtime
+            .mint_ckbtc(
+                reimbursement.amount,
+                reimbursement.account,
+                Memo::from(crate::memo::encode(&memo)),
+            )
+            .await
+        {
+            Ok(mint_index) => {
+                log!(
+                    P1,
+                    "[reimburse_withdrawals]: Successfully reimbursed {:?} at mint block index {}",
+                    reimbursement,
+                    mint_index
+                );
+                state::mutate_state(|s| {
+                    state::audit::reimburse_withdrawal_completed(s, burn_index, mint_index, runtime)
+                });
+            }
+            Err(err) => {
+                log!(
+                    P0,
+                    "[reimburse_withdrawals]: Failed to reimburse {:?}: {:?}. Will retry later",
+                    reimbursement,
+                    err
+                );
+                error_count += 1;
+            }
+        }
+        // Defuse the guard. Note that In case of a panic in the callback (either before or after this point)
+        // the defuse will not be effective (due to state rollback), and the guard that was
+        // setup before the `mint_ckbtc` async call will be invoked.
+        scopeguard::ScopeGuard::into_inner(prevent_double_minting_guard);
+    }
+
+    if error_count > 0 {
+        log!(
+            P0,
+            "[reimburse_withdrawals] Failed to reimburse {error_count} withdrawal requests, retrying later."
+        );
     }
 }

@@ -240,3 +240,19 @@ pub fn quarantine_withdrawal_reimbursement<R: CanisterRuntime>(
     );
     state.quarantine_withdrawal_reimbursement(burn_block_index)
 }
+
+pub fn reimburse_withdrawal_completed<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    burn_block_index: LedgerBurnIndex,
+    mint_block_index: LedgerBurnIndex,
+    runtime: &R,
+) {
+    record_event(
+        EventType::ReimbursedWithdrawal {
+            burn_block_index,
+            mint_block_index,
+        },
+        runtime,
+    );
+    state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
+}

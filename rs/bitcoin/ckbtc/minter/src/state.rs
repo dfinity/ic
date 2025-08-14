@@ -1389,6 +1389,36 @@ impl CkBtcMinterState {
         self.reimbursed_withdrawals
             .insert(burn_index, Err(ReimbursedError::Quarantined));
     }
+
+    /// The reimbursement of withdrawal request with id `burn_index` was successfully completed.
+    pub fn reimburse_withdrawal_completed(
+        &mut self,
+        burn_index: LedgerBurnIndex,
+        mint_index: LedgerMintIndex,
+    ) {
+        let reimbursement = self
+            .pending_withdrawal_reimbursements
+            .remove(&burn_index)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: missing pending reimbursement of withdrawal {}.",
+                    burn_index
+                )
+            });
+        let reimbursed = ReimbursedWithdrawal {
+            account: reimbursement.account,
+            amount: reimbursement.amount,
+            reason: reimbursement.reason,
+            mint_block_index: mint_index,
+        };
+        assert_eq!(
+            self.reimbursed_withdrawals
+                .insert(burn_index, Ok(reimbursed)),
+            None,
+            "BUG: Reimbursement of withdrawal {:?} was already completed!",
+            reimbursement
+        );
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Default)]
