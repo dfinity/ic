@@ -67,12 +67,15 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.commit_range is None:
-        # If no commit range is specified, form a query to return all targets
-        # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified):
-        query = "(//...)" + (" except attr(tags, long_test, //...)" if args.skip_long_tests else "")
-    else:
-        query = diff_only_query(args.command, args.commit_range, args.skip_long_tests)
+    # If no commit range is specified, form a query to return all targets
+    # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified).
+    # Otherwise return a query for all targets that have modified inputs in the specified
+    # git commit range taking several factors into account:
+    query = (
+        ("//..." + (" except attr(tags, long_test, //...)" if args.skip_long_tests else ""))
+        if args.commit_range
+        else diff_only_query(args.command, args.commit_range, args.skip_long_tests)
+    )
 
     # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
     query = f"({query}) except attr(tags, manual, //...)"
