@@ -35,6 +35,10 @@ def download_and_hash_image(url, logger):
 
     try:
         with urllib.request.urlopen(url, timeout=300) as response:
+            status = response.status
+            if status != 200:
+                raise Exception(f"Unexpected response {status}!")
+
             sha256_hash = hashlib.sha256()
 
             chunk_size = 8192
