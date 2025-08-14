@@ -22,7 +22,7 @@ import sys
 all_targets_globs = ["*.bazel", "*.bzl", ".bazelrc", ".bazelversion", "mainnet-*-revisions.json", ".github/*"]
 
 
-def diff_only_query(command: str, commit_range: str, except_long_tests: str) -> str:
+def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
     * To return all targets in case files matching all_targets_globs are modified.
@@ -52,6 +52,7 @@ def diff_only_query(command: str, commit_range: str, except_long_tests: str) -> 
         query = f'kind(".*_test", {query})'
 
     # Exclude the long_tests if requested:
+    except_long_tests = " except attr(tags, long_test, //...)" if skip_long_tests else ""
     query = f"({query}){except_long_tests}"
 
     return query
@@ -67,15 +68,13 @@ def main():
     )
     args = parser.parse_args()
 
-    # Can be added to a query to exclude long tests if requested:
-    except_long_tests = " except attr(tags, long_test, //...)" if args.skip_long_tests else ""
-
     if args.commit_range is None:
         # If no commit range is specified, form a query to return all targets
         # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified):
+        except_long_tests = " except attr(tags, long_test, //...)" if args.skip_long_tests else ""
         query = f"(//...){except_long_tests}"
     else:
-        query = diff_only_query(args.command, args.commit_range, except_long_tests)
+        query = diff_only_query(args.command, args.commit_range, args.skip_long_tests)
 
     # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
     query = f"({query}) except attr(tags, manual, //...)"
