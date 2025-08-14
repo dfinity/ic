@@ -251,6 +251,7 @@ message IDkgMessage {
     SignedIDkgOpening opening = 5;
     SchnorrSigShare schnorr_sig_share = 6;
     VetKdKeyShare vetkd_key_share = 7;
+    registry.subnet.v1.IDkgTranscript transcript = 8;
   }
 }
 
@@ -333,5 +334,6 @@ message IDkgArtifactId {
     PrefixPairIDkg opening = 5;
     PrefixPairSigShare schnorr_sig_share = 6;
     PrefixPairSigShare vetkd_key_share = 7;
+    PrefixPairIDkg transcript = 8;
   }
 }

@@ -187,10 +187,11 @@ impl ThresholdSignerImpl {
                 !self.signer_has_issued_share(idkg_pool, &self.node_id, request_id, inputs.scheme())
             })
             .collect();
-        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
             .into_par_iter()
-            .chunks(chunk_size)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(|(request_id, sig_inputs)| {
                     self.create_signature_share(
@@ -257,10 +258,13 @@ impl ThresholdSignerImpl {
                 Action::Defer => {}
             }
         }
-        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+        if inputs.is_empty() {
+            return ret;
+        }
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(chunk_size)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(|(id, share, sig_inputs)| {
                     let key = (share.request_id(), share.signer());

@@ -2,7 +2,7 @@
 
 use crate::{
     complaints::IDkgTranscriptLoader,
-    metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics},
+    metrics::{timed_call, IDkgPreSignerMetrics},
     utils::{
         load_transcripts, transcript_op_summary, update_purge_height, IDkgBlockReaderImpl,
         IDkgSchedule, MAX_PARALLELISM,
@@ -77,7 +77,7 @@ impl IDkgPreSignerImpl {
             node_id,
             consensus_block_cache,
             crypto,
-            metrics: IDkgPreSignerMetrics::new(metrics_registry),
+            metrics: IDkgPreSignerMetrics::new(metrics_registry.clone()),
             log,
         }
     }
@@ -107,9 +107,10 @@ impl IDkgPreSignerImpl {
                     )
             })
             .collect::<Vec<_>>();
-        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
-            .par_chunks(chunk_size)
+            .par_chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
@@ -198,10 +199,11 @@ impl IDkgPreSignerImpl {
                 Action::Defer => {}
             }
         }
-        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(chunk_size)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .into_iter()
@@ -311,9 +313,10 @@ impl IDkgPreSignerImpl {
                 }
             })
             .collect::<Vec<_>>();
-        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         inputs
-            .par_chunks(chunk_size)
+            .par_chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
@@ -495,10 +498,11 @@ impl IDkgPreSignerImpl {
                 Action::Defer => {}
             }
         }
-        let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(chunk_size)
+            .chunks(chunk_size.max(1))
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(
                     |(id, support, signed_dealing, transcript_params_ref)| {
@@ -550,6 +554,126 @@ impl IDkgPreSignerImpl {
         }
 
         ret
+    }
+
+    /// Starts the transcript generation sequence by issuing the
+    /// dealing for the transcript. The requests for new transcripts
+    /// come from the latest finalized block.
+    fn build_transcripts(
+        &self,
+        idkg_pool: &dyn IDkgPool,
+        block_reader: &dyn IDkgBlockReader,
+    ) -> IDkgChangeSet {
+        let mut source_subnet_xnet_transcripts = BTreeSet::new();
+        for transcript_params_ref in block_reader.source_subnet_xnet_transcripts() {
+            source_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
+        }
+
+        let created = idkg_pool
+            .validated()
+            .transcripts()
+            .map(|(_, t)| t.transcript_id)
+            .collect::<BTreeSet<_>>();
+
+        let mut inputs = block_reader
+            .requested_transcripts()
+            .filter(|transcript_params_ref| {
+                !created.contains(&transcript_params_ref.transcript_id)
+                    && !source_subnet_xnet_transcripts
+                        .contains(&transcript_params_ref.transcript_id)
+            })
+            .map(|params_ref| (params_ref.transcript_id, TranscriptState::new(params_ref)))
+            .collect::<BTreeMap<_, _>>();
+
+        // Walk the dealings to get the dealings belonging to the transcripts
+        for (id, signed_dealing) in idkg_pool.validated().signed_dealings() {
+            let transcript_id = signed_dealing.idkg_dealing().transcript_id;
+            inputs.entry(transcript_id).and_modify(|transcript_state| {
+                if let Some(dealing_hash) = id.dealing_hash() {
+                    transcript_state.init_dealing_state(dealing_hash, signed_dealing);
+                } else {
+                    self.metrics
+                        .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
+                    warn!(
+                        self.log,
+                        "build_transcript(): Failed to get dealing hash: {:?}", id
+                    );
+                }
+            });
+        }
+
+        // Walk the support shares and assign to the corresponding dealing
+        for (_, support) in idkg_pool.validated().dealing_support() {
+            let transcript_id = support.transcript_id;
+            inputs.entry(transcript_id).and_modify(|transcript_state| {
+                if let Err(err) = transcript_state.add_dealing_support(support) {
+                    warn!(
+                        self.log,
+                        "Failed to add support: transcript_id = {:?}, error = {:?}",
+                        transcript_id,
+                        err
+                    );
+                    self.metrics
+                        .transcript_builder_errors_inc("add_dealing_support");
+                }
+            });
+        }
+
+        let inputs = inputs.into_iter().collect::<Vec<_>>();
+        let chunk_size = (inputs.len() + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+        inputs
+            .into_par_iter()
+            .chunks(chunk_size.max(1))
+            .flat_map_iter(|chunk| {
+                chunk
+                    .into_iter()
+                    .flat_map(|(_, transcript_state)| {
+                        // Look up the transcript params
+                        let transcript_params =
+                            match transcript_state.params_ref.translate(block_reader) {
+                                Ok(transcript_params) => transcript_params,
+                                Err(error) => {
+                                    warn!(
+                                        self.log,
+                                        "build_transcript(): failed to translate transcript ref: \
+                                transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
+                                        transcript_state.params_ref,
+                                        block_reader.tip_height(),
+                                        error
+                                    );
+                                    self.metrics
+                                        .transcript_builder_errors_inc("resolve_transcript_refs");
+                                    return None;
+                                }
+                            };
+
+                        let mut completed_dealings = BatchSignedIDkgDealings::new();
+                        // Aggregate the support shares per dealing
+                        for dealing_state in transcript_state.dealing_state.into_values() {
+                            if let Some(sig_batch) = self.crypto_aggregate_dealing_support(
+                                &transcript_params,
+                                &dealing_state.support_shares,
+                                idkg_pool.stats(),
+                            ) {
+                                let verified_dealing = BatchSignedIDkgDealing {
+                                    content: dealing_state.signed_dealing,
+                                    signature: sig_batch,
+                                };
+                                completed_dealings.insert_or_update(verified_dealing);
+                            }
+                        }
+
+                        self.crypto_create_transcript(
+                            &transcript_params,
+                            &completed_dealings,
+                            idkg_pool.stats(),
+                        )
+                    })
+                    .map(|transcript| {
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Transcript(transcript))
+                    })
+            })
+            .collect()
     }
 
     /// Purges the entries no longer needed from the artifact pool
@@ -625,6 +749,22 @@ impl IDkgPreSignerImpl {
             .filter(|(_, support)| {
                 self.should_purge(
                     &support.transcript_id,
+                    current_height,
+                    &in_progress,
+                    &target_subnet_xnet_transcripts,
+                )
+            })
+            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Validated transcripts.
+        let mut action = idkg_pool
+            .validated()
+            .transcripts()
+            .filter(|(_, transcript)| {
+                self.should_purge(
+                    &transcript.transcript_id,
                     current_height,
                     &in_progress,
                     &target_subnet_xnet_transcripts,
@@ -834,6 +974,97 @@ impl IDkgPreSignerImpl {
         }
     }
 
+    /// Helper to combine the multi sig shares for a dealing
+    fn crypto_aggregate_dealing_support(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        support_shares: &[IDkgDealingSupport],
+        stats: &dyn IDkgStats,
+    ) -> Option<BasicSignatureBatch<SignedIDkgDealing>> {
+        // Check if we have enough shares for aggregation
+        if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
+            self.metrics
+                .transcript_builder_metrics_inc("insufficient_support_shares");
+            return None;
+        }
+
+        let mut signatures = Vec::new();
+        for support_share in support_shares {
+            signatures.push(&support_share.sig_share);
+        }
+
+        let start = std::time::Instant::now();
+        let ret = self
+            .crypto
+            .aggregate(signatures, transcript_params.registry_version());
+        stats.record_support_aggregation(transcript_params, support_shares, start.elapsed());
+
+        ret.map_or_else(
+            |error| {
+                warn!(
+                    self.log,
+                    "Failed to aggregate: transcript_id = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    error
+                );
+                self.metrics
+                    .transcript_builder_errors_inc("aggregate_dealing_support");
+                None
+            },
+            |multi_sig| {
+                self.metrics.transcript_builder_metrics_inc_by(
+                    support_shares.len() as u64,
+                    "support_aggregated",
+                );
+                self.metrics
+                    .transcript_builder_metrics_inc("dealing_aggregated");
+                Some(multi_sig)
+            },
+        )
+    }
+
+    /// Helper to create the transcript from the verified dealings
+    fn crypto_create_transcript(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        verified_dealings: &BatchSignedIDkgDealings,
+        stats: &dyn IDkgStats,
+    ) -> Option<IDkgTranscript> {
+        // Check if we have enough dealings to create transcript
+        if verified_dealings.len() < (transcript_params.collection_threshold().get() as usize) {
+            self.metrics
+                .transcript_builder_metrics_inc("insufficient_dealings");
+            return None;
+        }
+
+        let start = std::time::Instant::now();
+        let ret = IDkgProtocol::create_transcript(
+            self.crypto.as_ref(),
+            transcript_params,
+            verified_dealings,
+        );
+        stats.record_transcript_creation(transcript_params, start.elapsed());
+
+        ret.map_or_else(
+            |error| {
+                warn!(
+                    self.log,
+                    "Failed to create transcript: transcript_id = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    error
+                );
+                self.metrics
+                    .transcript_builder_errors_inc("create_transcript");
+                None
+            },
+            |transcript| {
+                self.metrics
+                    .transcript_builder_metrics_inc("transcript_created");
+                Some(transcript)
+            },
+        )
+    }
+
     /// Helper to load the transcripts the given transcript config is dependent on.
     ///
     /// Returns None if all the transcripts could be loaded successfully.
@@ -1009,12 +1240,20 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
                 &metrics.on_state_change_duration,
             )
         };
+        let build_transcripts = || {
+            timed_call(
+                "build_transcripts",
+                || self.build_transcripts(idkg_pool, &block_reader),
+                &metrics.on_state_change_duration,
+            )
+        };
 
-        let calls: [&'_ dyn Fn() -> IDkgChangeSet; 4] = [
+        let calls: [&'_ dyn Fn() -> IDkgChangeSet; 5] = [
             &send_dealings,
             &validate_dealings,
             &send_dealing_support,
             &validate_dealing_support,
+            &build_transcripts,
         ];
 
         changes.append(&mut schedule.call_next(&calls));
@@ -1035,239 +1274,23 @@ pub(crate) trait IDkgTranscriptBuilder: Send + Sync {
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing>;
 }
 
-pub(crate) struct IDkgTranscriptBuilderImpl<'a> {
-    block_reader: &'a dyn IDkgBlockReader,
-    crypto: &'a dyn ConsensusCrypto,
-    metrics: &'a IDkgPayloadMetrics,
-    idkg_pool: &'a dyn IDkgPool,
-    log: ReplicaLogger,
-}
-
-impl<'a> IDkgTranscriptBuilderImpl<'a> {
-    pub(crate) fn new(
-        block_reader: &'a dyn IDkgBlockReader,
-        crypto: &'a dyn ConsensusCrypto,
-        idkg_pool: &'a dyn IDkgPool,
-        metrics: &'a IDkgPayloadMetrics,
-        log: ReplicaLogger,
-    ) -> Self {
-        Self {
-            block_reader,
-            crypto,
-            idkg_pool,
-            metrics,
-            log,
-        }
-    }
-
-    /// Build the specified transcript from the pool.
-    fn build_transcript(&self, params_ref: &IDkgTranscriptParamsRef) -> Option<IDkgTranscript> {
-        let transcript_id = params_ref.transcript_id;
-        // Look up the transcript params
-        let transcript_params = match params_ref.translate(self.block_reader) {
-            Ok(transcript_params) => transcript_params,
-            Err(error) => {
-                warn!(
-                    self.log,
-                    "build_transcript(): failed to translate transcript ref: \
-                                transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
-                    params_ref,
-                    self.block_reader.tip_height(),
-                    error
-                );
-                self.metrics
-                    .transcript_builder_errors_inc("resolve_transcript_refs");
-                return None;
-            }
-        };
-
-        let mut completed_dealings = BatchSignedIDkgDealings::new();
-
-        // Step 1: Build the verified dealings by aggregating the support shares
-        timed_call(
-            "aggregate_dealing_support",
-            || {
-                let mut transcript_state = TranscriptState::new();
-                // Walk the dealings to get the dealings belonging to the transcript
-                for (id, signed_dealing) in self
-                    .idkg_pool
-                    .validated()
-                    .signed_dealings_by_transcript_id(&transcript_id)
-                {
-                    if let Some(dealing_hash) = id.dealing_hash() {
-                        transcript_state.init_dealing_state(dealing_hash, signed_dealing);
-                    } else {
-                        self.metrics
-                            .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
-                        warn!(
-                            self.log,
-                            "build_transcript(): Failed to get dealing hash: {:?}", id
-                        );
-                    }
-                }
-
-                // Walk the support shares and assign to the corresponding dealing
-                for (_, support) in self
-                    .idkg_pool
-                    .validated()
-                    .dealing_support_by_transcript_id(&transcript_id)
-                {
-                    if let Err(err) = transcript_state.add_dealing_support(support) {
-                        warn!(
-                            self.log,
-                            "Failed to add support: transcript_id = {:?}, error = {:?}",
-                            transcript_id,
-                            err
-                        );
-                        self.metrics
-                            .transcript_builder_errors_inc("add_dealing_support");
-                    }
-                }
-
-                // Aggregate the support shares per dealing
-                for dealing_state in transcript_state.dealing_state.into_values() {
-                    if let Some(sig_batch) = self.crypto_aggregate_dealing_support(
-                        &transcript_params,
-                        &dealing_state.support_shares,
-                    ) {
-                        let verified_dealing = BatchSignedIDkgDealing {
-                            content: dealing_state.signed_dealing,
-                            signature: sig_batch,
-                        };
-                        completed_dealings.insert_or_update(verified_dealing);
-                    }
-                }
-            },
-            &self.metrics.transcript_builder_duration,
-        );
-
-        // Step 2: Build the transcript from the verified dealings
-        timed_call(
-            "create_transcript",
-            || self.crypto_create_transcript(&transcript_params, &completed_dealings),
-            &self.metrics.transcript_builder_duration,
-        )
-    }
-
-    /// Helper to combine the multi sig shares for a dealing
-    fn crypto_aggregate_dealing_support(
+impl<T: ?Sized + IDkgPool> IDkgTranscriptBuilder for T {
+    fn get_completed_transcript(
         &self,
-        transcript_params: &IDkgTranscriptParams,
-        support_shares: &[IDkgDealingSupport],
-    ) -> Option<BasicSignatureBatch<SignedIDkgDealing>> {
-        // Check if we have enough shares for aggregation
-        if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
-            self.metrics
-                .transcript_builder_metrics_inc("insufficient_support_shares");
-            return None;
-        }
-
-        let mut signatures = Vec::new();
-        for support_share in support_shares {
-            signatures.push(&support_share.sig_share);
-        }
-
-        let start = std::time::Instant::now();
-        let ret = self
-            .crypto
-            .aggregate(signatures, transcript_params.registry_version());
-        self.idkg_pool.stats().record_support_aggregation(
-            transcript_params,
-            support_shares,
-            start.elapsed(),
-        );
-
-        ret.map_or_else(
-            |error| {
-                warn!(
-                    self.log,
-                    "Failed to aggregate: transcript_id = {:?}, error = {:?}",
-                    transcript_params.transcript_id(),
-                    error
-                );
-                self.metrics
-                    .transcript_builder_errors_inc("aggregate_dealing_support");
-                None
-            },
-            |multi_sig| {
-                self.metrics.transcript_builder_metrics_inc_by(
-                    support_shares.len() as u64,
-                    "support_aggregated",
-                );
-                self.metrics
-                    .transcript_builder_metrics_inc("dealing_aggregated");
-                Some(multi_sig)
-            },
-        )
-    }
-
-    /// Helper to create the transcript from the verified dealings
-    fn crypto_create_transcript(
-        &self,
-        transcript_params: &IDkgTranscriptParams,
-        verified_dealings: &BatchSignedIDkgDealings,
+        params_ref: &IDkgTranscriptParamsRef,
     ) -> Option<IDkgTranscript> {
-        // Check if we have enough dealings to create transcript
-        if verified_dealings.len() < (transcript_params.collection_threshold().get() as usize) {
-            self.metrics
-                .transcript_builder_metrics_inc("insufficient_dealings");
-            return None;
-        }
-
-        let start = std::time::Instant::now();
-        let ret =
-            IDkgProtocol::create_transcript(self.crypto, transcript_params, verified_dealings);
-        self.idkg_pool
-            .stats()
-            .record_transcript_creation(transcript_params, start.elapsed());
-
-        ret.map_or_else(
-            |error| {
-                warn!(
-                    self.log,
-                    "Failed to create transcript: transcript_id = {:?}, error = {:?}",
-                    transcript_params.transcript_id(),
-                    error
-                );
-                self.metrics
-                    .transcript_builder_errors_inc("create_transcript");
-                None
-            },
-            |transcript| {
-                self.metrics
-                    .transcript_builder_metrics_inc("transcript_created");
-                Some(transcript)
-            },
-        )
+        self.validated().get_completed_transcript(params_ref)
     }
 
-    /// Helper to get the validated dealings.
-    fn validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
         let mut ret = Vec::new();
-        for (_, signed_dealing) in self.idkg_pool.validated().signed_dealings() {
+        for (_, signed_dealing) in self.validated().signed_dealings() {
             let dealing = signed_dealing.idkg_dealing();
             if dealing.transcript_id == transcript_id {
                 ret.push(signed_dealing.clone());
             }
         }
         ret
-    }
-}
-
-impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
-    fn get_completed_transcript(
-        &self,
-        params_ref: &IDkgTranscriptParamsRef,
-    ) -> Option<IDkgTranscript> {
-        self.build_transcript(params_ref)
-    }
-
-    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
-        timed_call(
-            "get_validated_dealings",
-            || self.validated_dealings(transcript_id),
-            &self.metrics.transcript_builder_duration,
-        )
     }
 }
 
@@ -1334,7 +1357,8 @@ impl Debug for Action<'_> {
 
 /// Helper to hold the transcript/dealing state during the transcript
 /// building process
-struct TranscriptState {
+struct TranscriptState<'a> {
+    params_ref: &'a IDkgTranscriptParamsRef,
     dealing_state: BTreeMap<CryptoHashOf<SignedIDkgDealing>, DealingState>,
 }
 
@@ -1343,9 +1367,10 @@ struct DealingState {
     support_shares: Vec<IDkgDealingSupport>,
 }
 
-impl TranscriptState {
-    fn new() -> Self {
+impl<'a> TranscriptState<'a> {
+    fn new(params_ref: &'a IDkgTranscriptParamsRef) -> Self {
         Self {
+            params_ref,
             dealing_state: BTreeMap::new(),
         }
     }
@@ -2774,147 +2799,6 @@ mod tests {
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
             })
         })
-    }
-
-    // Tests transcript builder failures and success
-    #[test]
-    fn test_transcript_builder_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_transcript_builder(key_id);
-        }
-    }
-
-    fn test_transcript_builder(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let params = setup_masked_random_params(
-            &env,
-            AlgorithmId::from(key_id.inner()),
-            &dealers,
-            &receivers,
-            &mut rng,
-        );
-        let tid = params.transcript_id();
-        let params_ref = IDkgTranscriptParamsRef {
-            transcript_id: params.transcript_id(),
-            dealers: params.dealers().get().clone(),
-            receivers: params.receivers().get().clone(),
-            registry_version: params.registry_version(),
-            algorithm_id: params.algorithm_id(),
-            operation_type_ref: ic_types::consensus::idkg::IDkgTranscriptOperationRef::Random,
-        };
-        let (dealings, supports) = get_dealings_and_support(&env, &params);
-        let block_reader =
-            TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
-        let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-        let crypto = first_crypto(&env);
-
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, _) =
-                    create_pre_signer_dependencies(pool_config, logger.clone());
-
-                {
-                    let b = IDkgTranscriptBuilderImpl::new(
-                        &block_reader,
-                        crypto.deref(),
-                        &idkg_pool,
-                        &metrics,
-                        logger.clone(),
-                    );
-
-                    // tid is requested, but there are no dealings for it, the transcript cannot
-                    // be completed
-                    let result = b.get_completed_transcript(&params_ref);
-                    assert_matches!(result, None);
-                }
-
-                // add dealings
-                let change_set = dealings
-                    .values()
-                    .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
-                    .collect();
-                idkg_pool.apply(change_set);
-
-                {
-                    let b = IDkgTranscriptBuilderImpl::new(
-                        &block_reader,
-                        crypto.deref(),
-                        &idkg_pool,
-                        &metrics,
-                        logger.clone(),
-                    );
-
-                    // cannot aggregate empty shares
-                    let result = b.crypto_aggregate_dealing_support(&params, &[]);
-                    assert_matches!(result, None);
-
-                    // there are no support shares, no transcript should be completed
-                    let result = b.get_completed_transcript(&params_ref);
-                    assert_matches!(result, None);
-                }
-
-                // add support
-                let change_set = supports
-                    .iter()
-                    .map(|s| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
-                    })
-                    .collect();
-                idkg_pool.apply(change_set);
-
-                let b = IDkgTranscriptBuilderImpl::new(
-                    &block_reader,
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger.clone(),
-                );
-                // the transcript should be completed now
-                let result = b.get_completed_transcript(&params_ref);
-                assert_matches!(result, Some(t) if t.transcript_id == tid);
-
-                // returned dealings should be equal to the ones we inserted
-                let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
-                let dealings2 = b
-                    .get_validated_dealings(tid)
-                    .into_iter()
-                    .collect::<HashSet<_>>();
-                assert_eq!(dealings1, dealings2);
-
-                // {
-                //     let block_reader =
-                //         TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
-                //     let b = IDkgTranscriptBuilderImpl::new(
-                //         &block_reader,
-                //         crypto.deref(),
-                //         &idkg_pool,
-                //         &metrics,
-                //         logger.clone(),
-                //     );
-                //     // the transcript is no longer requested, it should not be returned
-                //     let result = b.get_completed_transcript(&params_ref);
-                //     assert_matches!(result, None);
-                // }
-
-                let crypto = crypto_without_keys();
-                let b = IDkgTranscriptBuilderImpl::new(
-                    &block_reader,
-                    crypto.as_ref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger,
-                );
-                // transcript completion should fail on crypto failures
-                let result = b.get_completed_transcript(&params_ref);
-                assert_matches!(result, None);
-            })
-        });
     }
 
     fn first_crypto(env: &CanisterThresholdSigTestEnvironment) -> Arc<dyn ConsensusCrypto> {
