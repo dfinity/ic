@@ -22,7 +22,7 @@
 mod interpolation;
 mod poly;
 
-pub use interpolation::{InterpolationError, LagrangeCoefficients};
+pub use interpolation::{InterpolationError, LagrangeCoefficients, NodeIndices};
 pub use poly::Polynomial;
 
 /// The index of a node.

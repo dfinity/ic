@@ -112,6 +112,8 @@ where
                 Sysno::close,
                 Sysno::restart_syscall,
                 Sysno::write,
+                //TODO: debug the need for these syscalls
+                Sysno::rseq,
             ]);
 
             let mut threads: Vec<_> = vec![];

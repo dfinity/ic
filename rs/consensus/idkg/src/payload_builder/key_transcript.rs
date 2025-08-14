@@ -1,14 +1,11 @@
-use crate::{
-    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
-    utils::algorithm_for_key_id,
-};
+use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{
     consensus::idkg::{
         self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript,
         TranscriptAttributes,
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscript,
+    crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
     Height, NodeId, RegistryVersion,
 };
 use std::collections::BTreeSet;
@@ -96,9 +93,7 @@ pub(super) fn update_next_key_transcript(
 
         (Some(_), idkg::KeyTranscriptCreation::ReshareOfUnmaskedParams(config)) => {
             // check if the next key transcript has been made
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 info!(
                     log,
                     "IDkg key transcript created from ReshareOfUnmasked {:?} \
@@ -126,16 +121,14 @@ pub(super) fn update_next_key_transcript(
                     dealers_set,
                     receivers_set,
                     registry_version,
-                    algorithm_for_key_id(&key_transcript.key_id()),
+                    AlgorithmId::from(key_transcript.key_id().inner()),
                 ),
             );
         }
 
         (None, idkg::KeyTranscriptCreation::RandomTranscriptParams(config)) => {
             // Check if the random transcript has been created
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
                 let transcript_ref = idkg::MaskedTranscript::try_from((height, &transcript))?;
                 key_transcript.next_in_creation =
@@ -154,9 +147,7 @@ pub(super) fn update_next_key_transcript(
 
         (None, idkg::KeyTranscriptCreation::ReshareOfMaskedParams(config)) => {
             // Check if the unmasked transcript has been created
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 info!(
                     log,
                     "IDkg key transcript created from ReshareOfMasked {:?} \
@@ -174,9 +165,7 @@ pub(super) fn update_next_key_transcript(
 
         (None, idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, config))) => {
             // Check if the unmasked transcript has been created
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
+            if let Some(transcript) = transcript_cache.get_completed_transcript(config.as_ref()) {
                 // next_unused_transcript_id is not updated, since the transcript_id specified
                 // by the reshared param will be used.
                 info!(
@@ -213,12 +202,9 @@ pub(super) fn update_next_key_transcript(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        test_utils::{
-            create_reshare_unmasked_transcript_param, set_up_idkg_payload, IDkgPayloadTestHelper,
-            TestIDkgBlockReader, TestIDkgTranscriptBuilder,
-        },
-        utils::algorithm_for_key_id,
+    use crate::test_utils::{
+        create_reshare_unmasked_transcript_param, set_up_idkg_payload, IDkgPayloadTestHelper,
+        TestIDkgBlockReader, TestIDkgTranscriptBuilder,
     };
     use ic_crypto_test_utils_canister_threshold_sigs::{
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript, node::Nodes,
@@ -474,7 +460,7 @@ mod tests {
         }
         assert_eq!(
             completed_transcript.algorithm_id,
-            algorithm_for_key_id(&key_id)
+            AlgorithmId::from(key_id.inner())
         );
         assert_eq!(payload.single_key_transcript().key_id(), key_id);
     }
@@ -612,7 +598,7 @@ mod tests {
             &unmasked_transcript,
             &target_subnet_nodes_ids,
             registry_version,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
         );
         let (params, transcript) =
             idkg::unpack_reshare_of_unmasked_params(cur_height, &reshare_params).unwrap();
@@ -623,7 +609,7 @@ mod tests {
         payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
                 Box::new(dummy_initial_idkg_dealing_for_tests(
-                    algorithm_for_key_id(&key_id),
+                    AlgorithmId::from(key_id.inner()),
                     &mut rng,
                 )),
                 params,

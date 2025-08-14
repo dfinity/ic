@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
-use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
-use config::deployment_json::get_deployment_settings;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
 use config::serialize_and_write_config;
+use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -75,10 +75,6 @@ pub struct GenerateTestnetConfigClapArgs {
     pub mgmt_mac: Option<MacAddr6>,
     #[arg(long)]
     pub deployment_environment: Option<DeploymentEnvironment>,
-    #[arg(long)]
-    pub elasticsearch_hosts: Option<String>,
-    #[arg(long)]
-    pub elasticsearch_tags: Option<String>,
     #[arg(long)]
     pub enable_trusted_execution_environment: Option<bool>,
     #[arg(long)]
@@ -193,10 +189,7 @@ pub fn main() -> Result<()> {
                 node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.deployment_environment,
-                logging: Logging {
-                    elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
-                    elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
-                },
+                logging: Logging {},
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
@@ -281,8 +274,6 @@ pub fn main() -> Result<()> {
                 node_reward_type: clap_args.node_reward_type,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
-                elasticsearch_hosts: clap_args.elasticsearch_hosts,
-                elasticsearch_tags: clap_args.elasticsearch_tags,
                 use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
                 enable_trusted_execution_environment: clap_args

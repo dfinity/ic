@@ -4,10 +4,12 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
+use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_config::embedders::Config as HypervisorConfig;
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
@@ -342,17 +344,44 @@ impl CanisterState {
 
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
-    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), String> {
-        let memory_used = self.memory_usage();
-        let memory_limit = self.memory_limit(default_limit);
+    pub fn check_invariants(&self, config: &HypervisorConfig) -> Result<(), String> {
+        match self.memory_allocation() {
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                let memory_used = self.memory_usage();
+                let canister_history_memory_usage = self.canister_history_memory_usage();
 
-        if memory_used > memory_limit {
-            return Err(format!(
-                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
-                self.canister_id(),
-                memory_used,
-                memory_limit
-            ));
+                // We check if the memory usage exceeds the memory allocation while ignoring the canister history memory usage
+                // (whose growth is not validated against the memory allocation), i.e., we want to log an error if
+                // `memory_used - canister_history_memory_usage > memory_allocation`.
+                // To avoid subtraction, we check for
+                // `memory_used > memory_allocation + canister_history_memory_usage` instead.
+                if memory_used > reserved_bytes + canister_history_memory_usage {
+                    return Err(format!("Invariant broken: Memory of canister {} exceeds the memory allocation: used {}, memory allocation {}, canister history memory usage {}",
+                    self.canister_id(),
+                    memory_used,
+                    reserved_bytes,
+                    canister_history_memory_usage,
+                ));
+                }
+            }
+            MemoryAllocation::BestEffort => (),
+        }
+
+        if let Some(execution_state) = &self.execution_state {
+            let wasm_memory_usage = execution_state.wasm_memory_usage();
+            let wasm_memory_limit = match execution_state.wasm_execution_mode() {
+                WasmExecutionMode::Wasm32 => config.max_wasm_memory_size,
+                WasmExecutionMode::Wasm64 => config.max_wasm64_memory_size,
+            };
+            if wasm_memory_usage > wasm_memory_limit {
+                return Err(format!("Invariant broken: Wasm memory of canister {} exceeds the limit allowed: used {}, allowed {}", self.canister_id(), wasm_memory_usage, wasm_memory_limit));
+            }
+
+            let stable_memory_usage = execution_state.stable_memory_usage();
+            let stable_memory_limit = config.max_stable_memory_size;
+            if stable_memory_usage > stable_memory_limit {
+                return Err(format!("Invariant broken: Stable memory of canister {} exceeds the limit allowed: used {}, allowed {}", self.canister_id(), stable_memory_usage, stable_memory_limit));
+            }
         }
 
         self.system_state.check_invariants()
@@ -466,15 +495,6 @@ impl CanisterState {
     /// Returns the current Wasm memory threshold of the canister.
     pub fn wasm_memory_threshold(&self) -> NumBytes {
         self.system_state.wasm_memory_threshold
-    }
-
-    /// Returns the canister's memory limit: its reservation, if set; else the
-    /// provided `default_limit`.
-    pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
-        match self.memory_allocation() {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => default_limit,
-        }
     }
 
     /// Returns the Wasm memory limit from the canister settings.

@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -31,6 +31,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
@@ -534,6 +535,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
                 NumBytes::from(subnet_memory_usage_after - subnet_memory_usage_before),
                 &ResourceSaturation::new(subnet_memory_usage_before, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
     });
@@ -932,6 +934,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
     test.canister_state_mut(canister_id)
@@ -1668,7 +1671,8 @@ fn load_canister_snapshot_succeeds() {
         CanisterChangeDetails::load_snapshot(
             canister_version_before,
             snapshot_id,
-            snapshot_taken_at_timestamp
+            snapshot_taken_at_timestamp,
+            SnapshotSource::TakenFromCanister(Reserved),
         )
     );
     let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
@@ -1908,6 +1912,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -1969,6 +1974,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -2116,7 +2122,7 @@ fn read_canister_snapshot_metadata_succeeds() {
         panic!("expected WasmResult::Reply")
     };
     let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
-    assert_eq!(metadata.source, SnapshotSource::TakenFromCanister);
+    assert_eq!(metadata.source, SnapshotSource::TakenFromCanister(Reserved));
     assert_eq!(
         metadata.stable_memory_size,
         WASM_PAGE_SIZE_IN_BYTES as u64 * stable_pages
@@ -2966,6 +2972,24 @@ fn canister_snapshot_roundtrip_succeeds() {
     );
     let snapshot_stable_memory_2 = read_canister_snapshot_data(&mut test, &args_stable);
     assert_eq!(snapshot_stable_memory, snapshot_stable_memory_2);
+
+    // Make sure canister history contains the `MetadataUpload` variant:
+    let canister_history = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .clone();
+    let history_after = canister_history
+        .get_changes(1)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    let last_canister_change: &CanisterChange = history_after.last().unwrap();
+    let CanisterChangeDetails::CanisterLoadSnapshot(rec) = last_canister_change.details() else {
+        panic!("Expected load snapshot")
+    };
+    assert_eq!(rec.source(), SnapshotSource::MetadataUpload(Reserved));
 }
 
 #[test]

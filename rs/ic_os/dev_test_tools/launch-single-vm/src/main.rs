@@ -2,7 +2,7 @@ use clap::Parser;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::guestos_bootstrap_image::BootstrapOptions;
+use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
@@ -167,6 +167,7 @@ fn main() {
         None,
         None,
         None,
+        None,
         Vec::new(),
     );
     let initialized_ic = ic_config.initialize().unwrap();
@@ -206,8 +207,6 @@ fn main() {
             domain_name: None,
             mgmt_mac: None,
             deployment_environment: Some(DeploymentEnvironment::Testnet),
-            elasticsearch_hosts: None,
-            elasticsearch_tags: None,
             use_nns_public_key: Some(true),
             nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
             enable_trusted_execution_environment: None,

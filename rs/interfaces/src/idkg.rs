@@ -2,8 +2,9 @@
 
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    transcript_prefix, EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare,
-    SigShare, SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
+    transcript_prefix, EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats,
+    IDkgTranscriptParamsRef, SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
+    VetKdKeyShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
@@ -144,8 +145,11 @@ pub trait IDkgPoolSection: Send + Sync {
         unimplemented!()
     }
 
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
-        let prefix = transcript_prefix(&transcript_id);
+    fn get_completed_transcript(
+        &self,
+        params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
+        let prefix = transcript_prefix(&params_ref.transcript_id);
         self.transcripts_by_prefix(prefix).next().map(|(_, t)| t)
     }
 }

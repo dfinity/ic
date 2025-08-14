@@ -5,5 +5,5 @@
 # the system will use SELinux and keep track of operations that would
 # be prohibited, but will only log but not actually deny them. This is
 # useful for debug and policy development.
-BOOT_ARGS_A="root=/dev/vda5 console=ttyS0 nomodeset security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
-BOOT_ARGS_B="root=/dev/vda8 console=ttyS0 nomodeset security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
+BOOT_ARGS_A="root=/dev/vda5 console=ttyS0 nomodeset dfinity.system=A security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
+BOOT_ARGS_B="root=/dev/vda8 console=ttyS0 nomodeset dfinity.system=B security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"

@@ -3,7 +3,10 @@ use crate::{
     metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING},
     pre_signer::IDkgTranscriptBuilder,
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
-    utils::{block_chain_reader, get_idkg_chain_key_config_if_enabled, InvalidChainCacheError},
+    utils::{
+        block_chain_reader, get_idkg_chain_key_config_if_enabled, InvalidChainCacheError,
+        MAX_PARALLELISM,
+    },
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
@@ -21,7 +24,7 @@ use ic_types::{
     consensus::{
         idkg::{
             self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgPayload,
-            MasterKeyTranscript, TranscriptAttributes,
+            IDkgTranscriptParamsRef, MasterKeyTranscript, TranscriptAttributes,
         },
         Block, HasHeight,
     },
@@ -31,6 +34,7 @@ use ic_types::{
     messages::CallbackId,
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
+use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
@@ -462,8 +466,11 @@ struct PoolTranscriptBuilder<'a> {
 }
 
 impl<'a> IDkgTranscriptBuilder for PoolTranscriptBuilder<'a> {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
-        self.idkg_pool.get_completed_transcript(transcript_id)
+    fn get_completed_transcript(
+        &self,
+        params_ref: &IDkgTranscriptParamsRef,
+    ) -> Option<IDkgTranscript> {
+        self.idkg_pool.get_completed_transcript(params_ref)
     }
 
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
@@ -510,13 +517,8 @@ pub fn create_data_payload(
     )?;
     let idkg_pool = idkg_pool.read().unwrap();
     let idkg_pool = idkg_pool.deref();
-    let signature_builder = ThresholdSignatureBuilderImpl::new(
-        &block_reader,
-        crypto,
-        idkg_pool,
-        idkg_payload_metrics,
-        log.clone(),
-    );
+    let signature_builder =
+        ThresholdSignatureBuilderImpl::new(crypto, idkg_pool, idkg_payload_metrics, log.clone());
     let transcript_builder = PoolTranscriptBuilder { idkg_pool };
 
     let new_payload = create_data_payload_helper(
@@ -710,6 +712,20 @@ pub(crate) fn create_data_payload_helper_2(
         }
     }
 
+    let inputs = idkg_payload
+        .iter_pre_sig_transcript_configs_in_creation()
+        .collect::<Vec<_>>();
+    let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+    let transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript> = inputs
+        .par_chunks(chunk_size)
+        .flat_map_iter(|chunk| {
+            chunk
+                .iter()
+                .flat_map(|params_ref| transcript_builder.get_completed_transcript(*params_ref))
+                .map(|t| (t.transcript_id, t))
+        })
+        .collect();
+
     pre_signatures::make_new_pre_signatures_if_needed(
         chain_key_config,
         idkg_payload,
@@ -717,12 +733,7 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     let new_transcripts = [
-        pre_signatures::update_pre_signatures_in_creation(
-            idkg_payload,
-            transcript_builder,
-            height,
-            log,
-        )?,
+        pre_signatures::update_pre_signatures_in_creation(idkg_payload, transcripts, height, log)?,
         key_transcript::update_next_key_transcripts(
             receivers,
             next_interval_registry_version,
@@ -763,10 +774,7 @@ mod tests {
     use super::*;
     use crate::{
         test_utils::*,
-        utils::{
-            algorithm_for_key_id, block_chain_reader,
-            generate_responses_to_signature_request_contexts,
-        },
+        utils::{block_chain_reader, generate_responses_to_signature_request_contexts},
     };
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -803,7 +811,7 @@ mod tests {
                 idkg::IDkgTranscript, ThresholdEcdsaCombinedSignature,
                 ThresholdSchnorrCombinedSignature,
             },
-            CryptoHash, CryptoHashOf, ExtendedDerivationPath,
+            AlgorithmId, CryptoHash, CryptoHashOf, ExtendedDerivationPath,
         },
         messages::CallbackId,
         time::UNIX_EPOCH,
@@ -1255,7 +1263,7 @@ mod tests {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
-            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let mut transcripts = BTreeMap::new();
             let mut add_expected_transcripts = |trancript_refs: Vec<idkg::TranscriptRef>| {
                 for transcript_ref in trancript_refs {
                     expected_transcripts.insert(transcript_ref.transcript_id);
@@ -1280,8 +1288,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(91, summary_height, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(92, summary_height, &key_id);
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1294,14 +1302,12 @@ mod tests {
                 ],
             );
             add_block(summary_block, summary_height.get(), &mut pool);
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_1 = inputs_2.pre_signature_ref;
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 =
-                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
-            let inputs_2 =
-                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(93, payload_height_1, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(94, payload_height_1, &key_id);
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1321,7 +1327,7 @@ mod tests {
                 payload_height_1.get() - summary_height.get(),
                 &mut pool,
             );
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_2 = inputs_2.pre_signature_ref;
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1367,14 +1373,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
+            transcripts.insert(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                &transcript_builder,
+                transcripts,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1434,7 +1440,7 @@ mod tests {
                 assert_eq!(request.key_id(), key_id.clone());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id.clone())
+                    AlgorithmId::from(key_id.inner())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
@@ -1486,7 +1492,7 @@ mod tests {
                 assert_eq!(request.key_id(), key_id.clone());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id.clone())
+                    AlgorithmId::from(key_id.inner())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
@@ -1497,7 +1503,7 @@ mod tests {
             // have been resolved/copied into the summary block
             assert_eq!(summary.idkg_transcripts.len(), expected_transcripts.len());
             for (id, transcript) in &summary.idkg_transcripts {
-                assert_eq!(transcript.algorithm_id, algorithm_for_key_id(&key_id));
+                assert_eq!(transcript.algorithm_id, AlgorithmId::from(key_id.inner()));
                 assert!(expected_transcripts.contains(id));
             }
         })
@@ -1516,7 +1522,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let mut transcripts = BTreeMap::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1535,8 +1541,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(91, summary_height, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(92, summary_height, &key_id);
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1551,14 +1557,12 @@ mod tests {
             let b = add_block(summary_block, summary_height.get(), &mut pool);
             assert_proposal_conversion(b);
 
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_1 = inputs_2.pre_signature_ref;
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 =
-                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
-            let inputs_2 =
-                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(93, payload_height_1, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(94, payload_height_1, &key_id);
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1581,7 +1585,7 @@ mod tests {
             );
             assert_proposal_conversion(b);
 
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_2 = inputs_2.pre_signature_ref;
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1628,14 +1632,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
+            transcripts.insert(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                &transcript_builder,
+                transcripts,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1750,11 +1754,8 @@ mod tests {
             assert_proposal_conversion(b);
 
             // Convert to proto format and back
-            let new_summary_height = Height::new(parent_block_height.get() + 1234);
-            let mut summary_proto: pb::IDkgPayload = (&summary).into();
-            let summary_from_proto: IDkgPayload =
-                (&summary_proto, new_summary_height).try_into().unwrap();
-            summary.update_refs(new_summary_height); // expected
+            let mut summary_proto = pb::IDkgPayload::from(&summary);
+            let summary_from_proto = IDkgPayload::try_from(&summary_proto).unwrap();
             assert_eq!(summary, summary_from_proto);
 
             // Check signature_agreement upgrade compatibility
@@ -1764,8 +1765,7 @@ mod tests {
                     pseudo_random_id: vec![4; 32],
                     unreported: None,
                 });
-            let summary_from_proto: idkg::IDkgPayload =
-                (&summary_proto, new_summary_height).try_into().unwrap();
+            let summary_from_proto = IDkgPayload::try_from(&summary_proto).unwrap();
             // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
             assert!(summary_from_proto
                 .signature_agreements
@@ -2007,10 +2007,10 @@ mod tests {
                 caller: user_test_id(1).get(),
                 derivation_path: vec![],
             };
-            let algorithm = algorithm_for_key_id(&key_id);
+            let algorithm = AlgorithmId::from(key_id.inner());
             let test_inputs = match key_id.inner() {
                 MasterPublicKeyId::Ecdsa(_) => {
-                    TestSigInputs::from(&generate_tecdsa_protocol_inputs(
+                    TestPreSigRef::from(&generate_tecdsa_protocol_inputs(
                         &env,
                         &dealers,
                         &receivers,
@@ -2023,7 +2023,7 @@ mod tests {
                     ))
                 }
                 MasterPublicKeyId::Schnorr(_) => {
-                    TestSigInputs::from(&generate_tschnorr_protocol_inputs(
+                    TestPreSigRef::from(&generate_tschnorr_protocol_inputs(
                         &env,
                         &dealers,
                         &receivers,
@@ -2040,7 +2040,7 @@ mod tests {
             };
             payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_pre_signature_id(),
-                test_inputs.sig_inputs_ref.pre_signature().unwrap(),
+                test_inputs.pre_signature_ref,
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);
@@ -2473,7 +2473,7 @@ mod tests {
 
             // Generate initial dealings
             let initial_dealings =
-                dummy_initial_idkg_dealing_for_tests(algorithm_for_key_id(&key_id), &mut rng);
+                dummy_initial_idkg_dealing_for_tests(AlgorithmId::from(key_id.inner()), &mut rng);
             let init_tid = initial_dealings.params().transcript_id();
 
             // Step 1: initial bootstrap payload should be created successfully

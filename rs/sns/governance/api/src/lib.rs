@@ -1,6 +1,7 @@
 use pb::v1::UpgradeJournal;
 
 pub mod pb;
+pub mod precise_value;
 mod types;
 
 /// Formats the 32 bytes of a hash as a hexadecimal string. Corresponds to 64 ascii symbols.

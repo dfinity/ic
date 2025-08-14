@@ -56,6 +56,7 @@ total_ns="0"
 total_baseline_ns="0"
 total_new_ns="0"
 rm -f "${TMP_FILE}"
+touch "${TMP_FILE}"
 # Example content:
 #   test update/wasm64/baseline/empty loop ... bench:     2720243 ns/iter (+/- 48904)
 while read min_bench; do

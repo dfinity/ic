@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
+    "@crate_index//:rand",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde_json",

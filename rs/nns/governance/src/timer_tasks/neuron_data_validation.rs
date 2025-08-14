@@ -3,7 +3,7 @@ use crate::governance::Governance;
 use ic_nervous_system_timer_task::PeriodicSyncTask;
 use std::{cell::RefCell, thread::LocalKey, time::Duration};
 
-const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
+const NEURON_DATA_VALIDATION_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Copy, Clone)]
 pub(super) struct NeuronDataValidationTask {
@@ -24,5 +24,5 @@ impl PeriodicSyncTask for NeuronDataValidationTask {
     }
 
     const NAME: &'static str = "neuron_data_validation";
-    const INTERVAL: Duration = NEURON_DATA_VALIDATION_INTERNVAL;
+    const INTERVAL: Duration = NEURON_DATA_VALIDATION_INTERVAL;
 }

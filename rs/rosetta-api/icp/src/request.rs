@@ -40,6 +40,8 @@ pub enum Request {
     StopDissolve(StopDissolve),
     #[serde(rename = "DISBURSE")]
     Disburse(Disburse),
+    #[serde(rename = "DISBURSE_MATURITY")]
+    DisburseMaturity(DisburseMaturity),
     #[serde(rename = "ADD_HOT_KEY")]
     AddHotKey(AddHotKey),
     #[serde(rename = "REMOVE_HOTKEY")]
@@ -48,8 +50,6 @@ pub enum Request {
     Spawn(Spawn),
     #[serde(rename = "REGISTER_VOTE")]
     RegisterVote(RegisterVote),
-    #[serde(rename = "MERGE_MATURITY")]
-    MergeMaturity(MergeMaturity),
     #[serde(rename = "STAKE_MATURITY")]
     StakeMaturity(StakeMaturity),
     #[serde(rename = "NEURON_INFO")]
@@ -92,6 +92,11 @@ impl Request {
             Request::Disburse(Disburse { neuron_index, .. }) => Ok(RequestType::Disburse {
                 neuron_index: *neuron_index,
             }),
+            Request::DisburseMaturity(DisburseMaturity { neuron_index, .. }) => {
+                Ok(RequestType::DisburseMaturity {
+                    neuron_index: *neuron_index,
+                })
+            }
             Request::AddHotKey(AddHotKey { neuron_index, .. }) => Ok(RequestType::AddHotKey {
                 neuron_index: *neuron_index,
             }),
@@ -122,11 +127,6 @@ impl Request {
             }),
             Request::RegisterVote(RegisterVote { neuron_index, .. }) => {
                 Ok(RequestType::RegisterVote {
-                    neuron_index: *neuron_index,
-                })
-            }
-            Request::MergeMaturity(MergeMaturity { neuron_index, .. }) => {
-                Ok(RequestType::MergeMaturity {
                     neuron_index: *neuron_index,
                 })
             }
@@ -186,13 +186,13 @@ impl Request {
                 Request::AddHotKey(o) => builder.add_hot_key(o),
                 Request::RemoveHotKey(o) => builder.remove_hotkey(o),
                 Request::Spawn(o) => builder.spawn(o),
-                Request::MergeMaturity(o) => builder.merge_maturity(o),
                 Request::RegisterVote(o) => builder.register_vote(o),
                 Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
                 Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
                 Request::RefreshVotingPower(o) => builder.refresh_voting_power(o),
+                Request::DisburseMaturity(o) => builder.disburse_maturity(o),
             }?;
         }
         Ok(builder.build())
@@ -215,12 +215,12 @@ impl Request {
                 | Request::RemoveHotKey(_)
                 | Request::Spawn(_)
                 | Request::RegisterVote(_)
-                | Request::MergeMaturity(_)
                 | Request::StakeMaturity(_)
                 | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
                 | Request::RefreshVotingPower(_)
                 | Request::Follow(_)
+                | Request::DisburseMaturity(_)
         )
     }
 }
@@ -357,6 +357,29 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Request is missing recipient"))
                 }
             }
+            RequestType::DisburseMaturity { neuron_index } => {
+                let command = manage_neuron()?;
+                if let Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
+                    to_account,
+                    percentage_to_disburse,
+                    to_account_identifier,
+                })) = command
+                {
+                    let recipient = convert::from_account_or_account_identifier(
+                        to_account,
+                        to_account_identifier,
+                    )?;
+
+                    Ok(Request::DisburseMaturity(DisburseMaturity {
+                        account,
+                        percentage_to_disburse,
+                        recipient,
+                        neuron_index: *neuron_index,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request("Request is missing recipient"))
+                }
+            }
             RequestType::AddHotKey { neuron_index } => {
                 if let Some(Command::Configure(Configure {
                     operation:
@@ -431,20 +454,6 @@ impl TryFrom<&models::Request> for Request {
                     }))
                 } else {
                     Err(ApiError::invalid_request("Invalid register vote request."))
-                }
-            }
-            RequestType::MergeMaturity { neuron_index } => {
-                if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
-                    percentage_to_merge,
-                })) = manage_neuron()?
-                {
-                    Ok(Request::MergeMaturity(MergeMaturity {
-                        account,
-                        percentage_to_merge,
-                        neuron_index: *neuron_index,
-                    }))
-                } else {
-                    Err(ApiError::invalid_request("Invalid merge maturity request."))
                 }
             }
             RequestType::StakeMaturity { neuron_index } => {
