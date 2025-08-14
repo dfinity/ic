@@ -146,6 +146,7 @@ mod tests {
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
+        batch::CanisterCyclesCostSchedule,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
@@ -172,7 +173,6 @@ mod tests {
                 NumInstructions::new(INSTRUCTION_LIMIT),
                 NumInstructions::new(INSTRUCTION_LIMIT),
             ),
-            canister_memory_limit: NumBytes::new(4 << 30),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: 50,
@@ -216,6 +216,7 @@ mod tests {
             0,
             ic00_aliases,
             SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,

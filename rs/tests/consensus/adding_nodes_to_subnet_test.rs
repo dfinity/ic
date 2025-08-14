@@ -25,7 +25,6 @@ use ic_consensus_system_test_utils::rw_message::{
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
-use ic_recovery::get_node_metrics;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -40,7 +39,7 @@ use ic_system_test_driver::{
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::{info, warn, Logger};
+use slog::{info, Logger};
 
 const DKG_INTERVAL: u64 = 9;
 const INITIAL_APP_NODES_COUNT: usize = 1;
@@ -186,13 +185,11 @@ fn prepare_subnet(subnet: &SubnetSnapshot, logger: &Logger) -> Principal {
 }
 
 fn verify_node_is_making_progress(node: &IcNodeSnapshot, canister_id: Principal, logger: &Logger) {
-    info!(
+    ic_consensus_system_test_utils::assert_node_is_making_progress(
+        node,
         logger,
-        "Verifying that the node {} is making progress", node.node_id
+        (3 * (DKG_INTERVAL + 1)).into(),
     );
-
-    node.await_status_is_healthy()
-        .expect("Should become healthy");
 
     assert!(can_read_msg_with_retries(
         logger,
@@ -201,45 +198,6 @@ fn verify_node_is_making_progress(node: &IcNodeSnapshot, canister_id: Principal,
         MESSAGE_IN_THE_CANISTER,
         10,
     ));
-
-    let height = get_certification_height_from_metrics(node, logger);
-    let target_height = height + Height::new(3 * (DKG_INTERVAL + 1));
-
-    const MAX_RETRIES: u64 = 30;
-    const SLEEP_TIME_SECS: u64 = 10;
-
-    info!(
-        logger,
-        "Waiting until node {} progresses past height {}", node.node_id, target_height
-    );
-
-    for retry in 1..=MAX_RETRIES {
-        std::thread::sleep(std::time::Duration::from_secs(SLEEP_TIME_SECS));
-        let new_height = get_certification_height_from_metrics(node, logger);
-
-        if new_height >= target_height {
-            info!(
-                logger,
-                "Node {} progressed from height {} to height {}", node.node_id, height, new_height
-            );
-
-            return;
-        }
-
-        warn!(
-            logger,
-            "Node {} didn't make enough progress in {} seconds and is at height {}",
-            node.node_id,
-            retry * SLEEP_TIME_SECS,
-            new_height,
-        );
-    }
-
-    panic!(
-        "Node {} didn't make enough progress in {} seconds",
-        node.node_id,
-        MAX_RETRIES * SLEEP_TIME_SECS,
-    );
 }
 
 fn get_subnets(
@@ -258,12 +216,6 @@ fn get_subnets(
         .clone();
 
     (nns_subnet, app_subnet)
-}
-
-fn get_certification_height_from_metrics(node: &IcNodeSnapshot, logger: &Logger) -> Height {
-    block_on(get_node_metrics(logger, &node.get_ip_addr()))
-        .expect("Should get node metrics")
-        .certification_height
 }
 
 fn main() -> Result<()> {

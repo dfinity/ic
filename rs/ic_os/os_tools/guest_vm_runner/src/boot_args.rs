@@ -86,7 +86,7 @@ fn process_escapes(s: &str) -> String {
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
     use std::fs;

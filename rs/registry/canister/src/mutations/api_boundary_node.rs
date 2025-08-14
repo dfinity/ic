@@ -18,6 +18,7 @@ impl Registry {
             value: api_boundary_node_record_vec,
             version: _,
             deletion_marker: _,
+            timestamp_nanoseconds: _,
         } = self.get(
             &make_api_boundary_node_record_key(node_id).into_bytes(),
             self.latest_version(),

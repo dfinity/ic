@@ -153,6 +153,12 @@ impl AccountIdentifier {
         hasher.update(&self.hash);
         hasher.finalize().to_be_bytes()
     }
+
+    pub fn into_proto_with_checksum(&self) -> proto::AccountIdentifier {
+        proto::AccountIdentifier {
+            hash: self.to_vec(),
+        }
+    }
 }
 
 impl Display for AccountIdentifier {

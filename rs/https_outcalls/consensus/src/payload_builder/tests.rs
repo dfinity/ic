@@ -27,7 +27,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id},
     messages::RequestBuilder,
 };
 use ic_types::{
@@ -44,7 +44,7 @@ use ic_types::{
     registry::RegistryClientError,
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, Time,
+    Height, NumBytes, RegistryVersion, ReplicaVersion, Time,
 };
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
@@ -826,6 +826,600 @@ fn divergence_error_message() {
     );
 }
 
+#[test]
+fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
+    // This test ensures that if the pool contains both a valid share from the
+    // delegated node and a stray share from another node for the same non-replicated
+    // request, the logic correctly includes ONLY the valid share in the proof.
+
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        // In the test setup, the block maker is node 0. We'll make this the delegated node.
+        let delegated_node_id = node_test_id(0);
+        let other_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(42);
+
+        // 1. Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // Insert the context in the replicated state
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // Create two shares for the same metadata: one from the correct delegated
+        // node, and one from another "malicious" node.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let correct_share = metadata_to_share(node_id_to_u64(delegated_node_id), &metadata);
+        let extra_share = metadata_to_share(node_id_to_u64(other_node_id), &metadata);
+
+        // Add both shares to the pool.
+        //    - The block maker (which is the delegated_node_id) adds its own share and content.
+        //    - It also receives the "extra" share from the other node.
+        {
+            let mut pool_access = canister_http_pool.write().unwrap();
+            add_own_share_to_pool(pool_access.deref_mut(), &correct_share, &response);
+            add_received_shares_to_pool(pool_access.deref_mut(), vec![extra_share]);
+        }
+
+        // ACT
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+            &[],
+            &default_validation_context(),
+        );
+
+        // ASSERT
+        payload_builder
+            .validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload,
+                &[],
+            )
+            .unwrap();
+
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+
+        // We should have exactly one response in the payload.
+        assert_eq!(
+            parsed_payload.responses.len(),
+            1,
+            "Expected exactly one response in the payload"
+        );
+
+        // The response must contain EXACTLY ONE signature, proving the "extra" share was ignored.
+        let proof = &parsed_payload.responses[0].proof;
+        assert_eq!(
+            proof.signature.signatures_map.len(),
+            1,
+            "Proof should contain exactly one signature"
+        );
+        assert!(
+            proof
+                .signature
+                .signatures_map
+                .contains_key(&delegated_node_id),
+            "The single signature must be from the delegated node"
+        );
+    });
+}
+
+#[test]
+fn non_replicated_share_is_ignored_if_content_is_missing() {
+    // This test verifies that even if a valid share for a non-replicated request
+    // is in the pool, if the block maker does not also have the corresponding
+    // content, the response is not included in the payload.
+    // As shares are still gossiped, this will occur in production, whenever a
+    // node that is not delegated becomes block maker.
+
+    // ARRANGE
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        // The request is delegated to node 1. The block maker is node 0.
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(55);
+
+        // 1. Setup the NonReplicated request context in the state.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 2. Create a valid share from the delegated node.
+        let (_, metadata) = test_response_and_metadata(callback_id.get());
+        let correct_share = metadata_to_share(node_id_to_u64(delegated_node_id), &metadata);
+
+        // 3. Add the share to the pool.
+        // This adds the metadata but NOT the content.
+        {
+            let mut pool_access = canister_http_pool.write().unwrap();
+            add_received_shares_to_pool(pool_access.deref_mut(), vec![correct_share]);
+        }
+
+        // ACT
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+            &[],
+            &default_validation_context(),
+        );
+
+        // ASSERT
+        // The builder will find the valid share, but the subsequent call to
+        // `get_response_content_by_hash` will fail, so the payload must be empty.
+        payload_builder
+            .validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload,
+                &[],
+            )
+            .unwrap();
+
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(
+            parsed_payload,
+            CanisterHttpPayload::default(),
+            "Payload should be empty as the content for the valid share is missing."
+        );
+    });
+}
+
+#[test]
+fn validate_payload_succeeds_for_valid_non_replicated_response() {
+    // ARRANGE
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(77);
+
+        // 1. Create a context where the request is delegated to `delegated_node_id`.
+        // This context will be used during validation.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // Inject this context into the state reader used by the validator.
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 2. Craft a perfect payload containing one non-replicated response.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        // The proof must contain exactly ONE signature, from the DELEGATED node.
+        proof
+            .proof
+            .signature
+            .signatures_map
+            .insert(delegated_node_id, BasicSigOf::new(BasicSig(vec![])));
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT & ASSERT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        assert!(validation_result.is_ok());
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
+    // ARRANGE
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let wrong_signer_node_id = node_test_id(2); // The node that incorrectly signs
+        let callback_id = CallbackId::from(88);
+
+        // 1. Create a context delegating the request to `delegated_node_id`.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // Inject this context into the state reader.
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 2. Craft a malicious payload where the proof contains only one signature,
+        //    but it's from the wrong node.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+
+        proof.proof.signature.signatures_map.insert(
+            wrong_signer_node_id, // The illegal signature
+            BasicSigOf::new(BasicSig(vec![])),
+        );
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        // Validation must fail because the effective committee for this request is just
+        // `[delegated_node_id]`. Since the only signature present is from
+        // `wrong_signer_node_id`, there will be no valid signers and one invalid signer.
+        match validation_result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::SignersNotMembers {
+                        invalid_signers, ..
+                    },
+                ),
+            )) => {
+                // The `invalid_signers` list should contain our one wrong signer.
+                assert_eq!(invalid_signers, vec![wrong_signer_node_id]);
+            }
+            res => panic!("Expected SignersNotMembers error, but got {:?}", res),
+        }
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_response_with_no_signatures() {
+    // ARRANGE
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(99);
+
+        // 1. A request context is still needed for the validator to determine the
+        //    effective committee and threshold.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // Inject this context into the state reader used by the validator.
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 2. Craft a payload where the proof for the response contains no signatures.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+
+        // Ensure the signature map is empty.
+        proof.proof.signature.signatures_map = BTreeMap::new();
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        // Validation must fail because the number of valid signers (0) is less
+        // than the required threshold (1 for a NonReplicated request).
+        match validation_result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                        signers,
+                        expected_threshold,
+                        ..
+                    },
+                ),
+            )) => {
+                assert!(signers.is_empty(), "There should be no valid signers");
+                assert_eq!(expected_threshold, 1, "Expected threshold should be 1");
+            }
+            res => panic!("Expected NotEnoughSigners error, but got {:?}", res),
+        }
+    });
+}
+
+#[test]
+fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_request() {
+    // This test ensures the validator rejects a payload that provides a single-signature
+    // proof (as if for a NonReplicated request) when the true context in the state
+    // indicates the request was actually FullyReplicated, thus requiring more signatures.
+
+    // ARRANGE
+    // Use a subnet of 4, where the threshold for a replicated request is 2f+1 = 3.
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let signer_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(101);
+
+        // 1. Create a context where the request is FullyReplicated. This is what
+        //    the validator will see in the certified state and treat as the source of truth.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            // The state says the request is replicated.
+            replication: ic_types::canister_http::Replication::FullyReplicated,
+        };
+
+        // Inject this context into the state reader.
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 2. Craft a payload that provides a proof with only a single signature,
+        //    as if it were for a NonReplicated request.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+
+        // The proof only contains one signature.
+        proof
+            .proof
+            .signature
+            .signatures_map
+            .insert(signer_node_id, BasicSigOf::new(BasicSig(vec![])));
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        // Validation must fail. The validator looks at the state, sees the request
+        // is FullyReplicated, and determines the threshold is 3. The payload only
+        // provides 1 signature, so it fails with NotEnoughSigners.
+        match validation_result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotEnoughSigners {
+                        signers,
+                        expected_threshold,
+                        ..
+                    },
+                ),
+            )) => {
+                assert_eq!(signers.len(), 1, "There should be one valid signer found");
+                // For a subnet of 4, faults tolerated f=1, threshold 2f+1=3
+                assert_eq!(
+                    expected_threshold, 3,
+                    "Expected threshold for replicated request was not met"
+                );
+            }
+            res => panic!("Expected NotEnoughSigners error, but got {:?}", res),
+        }
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_duplicate_non_replicated_response() {
+    // This test ensures the validator rejects a payload containing two identical
+    // proofs for the same NonReplicated request.
+
+    // ARRANGE
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let duplicate_callback_id = CallbackId::from(102);
+
+        // 1. Define the context for the NonReplicated request.
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+        };
+
+        // 2. Inject this context into the state reader
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(duplicate_callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // 3. Craft a valid proof for the NonReplicated response.
+        let (response, metadata) = test_response_and_metadata(duplicate_callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        proof
+            .proof
+            .signature
+            .signatures_map
+            .insert(delegated_node_id, BasicSigOf::new(BasicSig(vec![])));
+
+        // 4. Create a payload that includes this same proof twice.
+        let payload = CanisterHttpPayload {
+            responses: vec![proof.clone(), proof], // Duplicate the proof
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        // Validation must fail because two responses for the same NonReplicated
+        // request ID are not allowed.
+        match validation_result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateResponse(callback_id),
+                ),
+            )) => {
+                assert_eq!(
+                    callback_id, duplicate_callback_id,
+                    "The error should report the correct duplicate callback ID"
+                );
+            }
+            res => panic!("Expected DuplicateResponse error, but got {:?}", res),
+        }
+    });
+}
+
 /// Build some test metadata and response, which is valid and can be used in
 /// different tests
 pub(crate) fn test_response_and_metadata(
@@ -877,6 +1471,7 @@ fn test_response_and_metadata_full(
         timeout: response.timeout,
         content_hash: crypto_hash(&response),
         registry_version: RegistryVersion::new(1),
+        replica_version: ReplicaVersion::default(),
     };
     (response, metadata)
 }

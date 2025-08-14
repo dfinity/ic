@@ -24,7 +24,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
         last_full_execution_round: ExecutionRound::from(0),
-        call_context_manager: None,
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
         accumulated_priority: AccumulatedPriority::default(),
         priority_credit: AccumulatedPriority::default(),
@@ -146,7 +145,7 @@ fn test_encode_decode_non_empty_history() {
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
         CanisterChangeDetails::canister_creation(
             vec![canister_test_id(777).get(), user_test_id(42).get()],
-            Some(vec![4; 32]),
+            Some([4; 32]),
         ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
@@ -192,13 +191,13 @@ fn test_encode_decode_non_empty_history() {
         555,
         7,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
-        CanisterChangeDetails::settings_change(None, Some(vec![1, 2, 3, 4, 5])),
+        CanisterChangeDetails::settings_change(None, Some([1; 32])),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         555,
         7,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
-        CanisterChangeDetails::settings_change(Some(vec![]), Some(vec![1, 2, 3, 4, 5])),
+        CanisterChangeDetails::settings_change(Some(vec![]), Some([1; 32])),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         555,
@@ -206,7 +205,7 @@ fn test_encode_decode_non_empty_history() {
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
         CanisterChangeDetails::settings_change(
             Some(vec![canister_test_id(123).into()]),
-            Some(vec![1, 2, 3, 4, 5]),
+            Some([1; 32]),
         ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
@@ -243,7 +242,7 @@ fn test_canister_snapshots_decode() {
         wasm_memory_size: NumWasmPages::new(10),
         total_size: NumBytes::new(100),
         exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
-        source: SnapshotSource::TakenFromCanister,
+        source: SnapshotSource::taken_from_canister(),
         global_timer: Some(CanisterTimer::Inactive),
         on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
     };

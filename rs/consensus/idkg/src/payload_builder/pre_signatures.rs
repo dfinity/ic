@@ -1,4 +1,4 @@
-use crate::{payload_builder::IDkgPayloadError, utils::algorithm_for_key_id};
+use crate::payload_builder::IDkgPayloadError;
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -12,7 +12,10 @@ use ic_types::{
         HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
         TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
-    crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId},
+    crypto::{
+        canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId},
+        AlgorithmId,
+    },
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
@@ -419,7 +422,7 @@ fn new_random_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -440,7 +443,7 @@ pub fn new_random_unmasked_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -526,11 +529,10 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::{algorithm_for_key_id, test_utils::*, *};
+    use super::{test_utils::*, *};
     use crate::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
-        TestIDkgTranscriptBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -621,7 +623,7 @@ pub(super) mod tests {
                     MasterPublicKeyId::Schnorr(transcript.key_id.clone())
                 );
                 let config = transcript.blinder_unmasked_config.as_ref();
-                assert_eq!(config.algorithm_id, algorithm_for_key_id(key_id));
+                assert_eq!(config.algorithm_id, AlgorithmId::from(key_id.inner()));
                 assert_eq!(config.registry_version, registry_version);
                 assert_eq!(config.dealers, config.receivers);
                 assert_eq!(config.dealers, BTreeSet::from(*nodes));
@@ -722,7 +724,7 @@ pub(super) mod tests {
             &mut rng,
         );
         let block_reader = TestIDkgBlockReader::new();
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut transcripts = BTreeMap::new();
         let height = Height::from(1);
         let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(0), height);
 
@@ -742,7 +744,7 @@ pub(super) mod tests {
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &transcript_builder,
+                &mut transcripts,
                 height,
                 &no_op_logger(),
             )
@@ -757,12 +759,12 @@ pub(super) mod tests {
                 &param.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(param.transcript_id, blinder_unmasked_transcript);
+            transcripts.insert(param.transcript_id, blinder_unmasked_transcript);
 
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &transcript_builder,
+                &mut transcripts,
                 height,
                 &no_op_logger(),
             )
@@ -774,7 +776,7 @@ pub(super) mod tests {
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &transcript_builder,
+                &mut transcripts,
                 height,
                 &no_op_logger(),
             )
@@ -792,7 +794,7 @@ pub(super) mod tests {
         let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut transcripts = BTreeMap::new();
 
         // Start quadruple creation
         let [ref lambda_config_ref, ref kappa_unmasked_config_ref] =
@@ -813,7 +815,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         );
@@ -830,13 +832,13 @@ pub(super) mod tests {
             &lambda_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcript_builder.add_transcript(lambda_config_ref.transcript_id, lambda_transcript);
+        transcripts.insert(lambda_config_ref.transcript_id, lambda_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         )
@@ -861,7 +863,7 @@ pub(super) mod tests {
             &kappa_unmasked_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcript_builder.add_transcript(
+        transcripts.insert(
             kappa_unmasked_config_ref.transcript_id,
             kappa_unmasked_transcript,
         );
@@ -870,7 +872,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         )
@@ -902,8 +904,7 @@ pub(super) mod tests {
                 &mut rng,
             )
         };
-        transcript_builder
-            .add_transcript(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
+        transcripts.insert(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
         let key_times_lambda_transcript = {
             let param = payload
                 .iter_transcript_configs_in_creation()
@@ -915,13 +916,13 @@ pub(super) mod tests {
                 &mut rng,
             )
         };
-        transcript_builder.add_transcript(key_times_lambda_config_id, key_times_lambda_transcript);
+        transcripts.insert(key_times_lambda_config_id, key_times_lambda_transcript);
         let cur_height = Height::new(5000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts,
             cur_height,
             &no_op_logger(),
         )
@@ -962,7 +963,7 @@ pub(super) mod tests {
         let key_id: IDkgMasterPublicKeyId = fake_schnorr_idkg_master_public_key_id(algorithm);
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut transcripts = BTreeMap::new();
 
         // Start pre-signature creation
         let [ref blinder_config_ref] = create_new_pre_signature_in_creation(
@@ -981,7 +982,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         );
@@ -998,13 +999,13 @@ pub(super) mod tests {
             &blinder_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcript_builder.add_transcript(blinder_config_ref.transcript_id, blinder_transcript);
+        transcripts.insert(blinder_config_ref.transcript_id, blinder_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         )
@@ -1036,7 +1037,7 @@ pub(super) mod tests {
             .expect("Translating should succeed");
         assert_eq!(
             translated.blinder_unmasked().algorithm_id,
-            algorithm_for_key_id(&key_id)
+            AlgorithmId::from(key_id.inner())
         );
     }
 
@@ -1071,7 +1072,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let key_transcript2 =
@@ -1178,7 +1179,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let other_key_transcript =

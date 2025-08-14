@@ -7,7 +7,7 @@ use std::{
 use anyhow::{bail, Context, Error};
 use clap::Parser;
 
-use config::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, VmResources};
+use config::setupos::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, VmResources};
 use config_types::DeploymentEnvironment;
 use setupos_image_config::{write_config, ConfigIni, DeploymentConfig};
 
@@ -76,10 +76,7 @@ async fn main() -> Result<(), Error> {
                 .deployment_environment
                 .unwrap_or(DeploymentEnvironment::Mainnet),
         },
-        logging: Logging {
-            elasticsearch_hosts: cli.deployment.elasticsearch_hosts,
-            elasticsearch_tags: cli.deployment.elasticsearch_tags,
-        },
+        logging: Logging {},
         nns: Nns {
             urls: cli.deployment.nns_urls.into_iter().collect(),
         },

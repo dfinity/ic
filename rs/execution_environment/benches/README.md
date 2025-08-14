@@ -90,7 +90,8 @@ Adding New Benchmarks
    ```Starlark
    rust_ic_bench(
       name = "my_new_bench",
-      with_test = True,
+      test_name = "my_new_bench_test",
+      test_timeout = "long", # default to "moderate"
       [...]
    )
    ```

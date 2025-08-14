@@ -368,8 +368,8 @@ impl ConsensusImpl {
 
         // Check that this replica is listed as a receiver for every transcript type
         transcripts
-            .iter()
-            .map(|(_, transcript)| {
+            .values()
+            .map(|transcript| {
                 transcript
                     .committee
                     .get()

@@ -5,6 +5,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+## [2.1.7] - 2025-08-12
+### Added
+- Environment presets to configure ICP Rosetta API with `--environment` flag ([#5982](https://github.com/dfinity/ic/pull/5982))
+- New endpoint `get_minimum_dissolve_delay` to retrieve the minimum dissolve delay of a neuron that allows voting ([#5863](https://github.com/dfinity/ic/pull/5863))
+
+### Changed
+- Grouped Rosetta CLI parameters for better organization and readability ([#5981](https://github.com/dfinity/ic/pull/5981))
+- Ignore spender account in transfers when searching transactions by account ([#5794](https://github.com/dfinity/ic/pull/5794))
+
+### Removed
+- Removed deprecated `MERGE_MATURITY` neuron management operation.
+
+## [2.1.6] - 2025-06-27
+### Added
+- Enhanced transaction search capabilities with database indexing optimizations for improved performance ([#5739](https://github.com/dfinity/ic/pull/5739))
+- Extended search_transactions method in Rosetta client to support filtering by transaction_hash and operation_type ([#5739](https://github.com/dfinity/ic/pull/5739))
+- Optional CLI flag --optimize-search-indexes to enable database indexing optimizations for transaction search ([#5739](https://github.com/dfinity/ic/pull/5739))
+
+### Changed
+- Enhanced test framework to support transfer_from transactions in valid_transactions_strategy ([#5592](https://github.com/dfinity/ic/pull/5592))
+- Marked ICP Rosetta system tests as flaky to address test stability issues ([#5746](https://github.com/dfinity/ic/pull/5746))
+
 ## [2.1.5] - 2025-06-13
 ### Fixed
 - Fixed heartbeat during initial sync to prevent premature watchdog timeouts ([#5293](https://github.com/dfinity/ic/pull/5293))
