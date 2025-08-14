@@ -134,6 +134,7 @@ impl CanisterSnapshots {
     }
 
     /// Returns a reference of the canister snapshot identified by `snapshot_id`.
+    #[allow(clippy::type_complexity)]
     pub fn get(
         &self,
         snapshot_id: SnapshotId,
@@ -180,11 +181,25 @@ impl CanisterSnapshots {
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
     /// External callers should call `ReplicatedState::delete_snapshot` instead.
-    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
-        let removed_snapshot = self.snapshots.remove(&snapshot_id);
+    pub(crate) fn remove(
+        &mut self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<Arc<CanisterSnapshot>, Arc<PartialCanisterSnapshot>>> {
+        let removed_snapshot = self
+            .snapshots
+            .remove(&snapshot_id)
+            .map(Either::Left)
+            .or_else(|| {
+                self.partial_snapshots
+                    .remove(&snapshot_id)
+                    .map(Either::Right)
+            });
+
         match removed_snapshot {
             Some(snapshot) => {
-                let canister_id = snapshot.canister_id();
+                let canister_id = snapshot
+                    .as_ref()
+                    .either(|s| s.canister_id(), |s| s.canister_id());
 
                 // The snapshot ID if present in the `self.snapshots`,
                 // must also be present in the `self.snapshot_ids`.
@@ -195,7 +210,7 @@ impl CanisterSnapshots {
                 if snapshot_ids.is_empty() {
                     self.snapshot_ids.remove(&canister_id);
                 }
-                self.memory_usage -= snapshot.size();
+                self.memory_usage -= snapshot.as_ref().either(|s| s.size(), |s| s.size());
 
                 Some(snapshot)
             }
@@ -916,6 +931,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
+    use ic_wasm_types::CanisterModule;
     use maplit::{btreemap, btreeset};
 
     fn fake_canister_snapshot(

@@ -14,6 +14,7 @@ use crate::{
     metadata_state::subnet_call_context_manager::PreSignatureStash,
     CanisterQueues, DroppedMessageMetrics,
 };
+use either::Either;
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
@@ -1289,7 +1290,10 @@ impl ReplicatedState {
     }
 
     /// Delete a snapshot from the list of snapshots.
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+    pub fn delete_snapshot(
+        &mut self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<Arc<CanisterSnapshot>, Arc<PartialCanisterSnapshot>>> {
         let result = self.canister_snapshots.remove(snapshot_id);
         if result.is_some() {
             self.metadata

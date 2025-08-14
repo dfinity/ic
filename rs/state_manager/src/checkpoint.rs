@@ -4,8 +4,8 @@ use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
-    CanisterSnapshot, CanisterSnapshotImpl, CanisterSnapshots, ExecutionStateSnapshot,
-    ExecutionStateSnapshotImpl, PageMemory, PartialCanisterSnapshot,
+    CanisterSnapshot, CanisterSnapshotImpl, CanisterSnapshots, ExecutionStateSnapshotImpl,
+    PageMemory, PartialCanisterSnapshot,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;

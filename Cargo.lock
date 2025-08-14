@@ -9220,6 +9220,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "either",
  "escargot",
  "execution-environment-bench",
  "hex",

@@ -58,7 +58,7 @@ pub enum ModuleLoadingStatus {
 /// Marker trait for `CanisterModuleImpl<.>` and `CanisterSnapshotImpl<.>`
 /// which have immutable and mutable versions.
 pub trait SnapshotMutability {
-    fn is_partial(&self) -> bool {
+    fn is_partial() -> bool {
         false
     }
 }
@@ -73,7 +73,7 @@ impl SnapshotMutability for () {}
 pub struct Mutable;
 
 impl SnapshotMutability for Mutable {
-    fn is_partial(&self) -> bool {
+    fn is_partial() -> bool {
         true
     }
 }

@@ -10,6 +10,7 @@ use crate::{
     types::{IngressResponse, Response},
     util::GOVERNANCE_CANISTER_ID,
 };
+use either::Either;
 use ic_base_types::NumSeconds;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
@@ -1834,7 +1835,7 @@ impl CanisterManager {
         let replace_snapshot_size = match replace_snapshot {
             Some(replace_snapshot_id) => self
                 .get_snapshot(canister_id, replace_snapshot_id, state)?
-                .size(),
+                .either(|s| s.size(), |s| s.size()),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
@@ -1945,14 +1946,18 @@ impl CanisterManager {
     }
 
     /// Returns an Arc to the snapshot, if it exists.
+    /// The snapshot may be an immutable `CanisterSnapshot` or a mutable `PartialCanisterSnapshot`.
     /// Returns an error if the snapshot given by the snapshot ID does not
     /// belong to this canister.
-    fn get_snapshot(
+    fn get_snapshot<'a>(
         &self,
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
-        state: &ReplicatedState,
-    ) -> Result<Arc<CanisterSnapshot>, CanisterManagerError> {
+        state: &'a ReplicatedState,
+    ) -> Result<
+        Either<&'a Arc<CanisterSnapshot>, &'a Arc<PartialCanisterSnapshot>>,
+        CanisterManagerError,
+    > {
         // If not found, the operation fails due to invalid parameters.
         let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
             return Err(CanisterManagerError::CanisterSnapshotNotFound {
@@ -1961,16 +1966,16 @@ impl CanisterManager {
             });
         };
         // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister_id {
+        if snapshot.either(|s| s.canister_id(), |s| s.canister_id()) != canister_id {
             return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
                 canister_id,
                 snapshot_id,
             });
         }
-        Ok(Arc::clone(snapshot))
+        Ok(snapshot)
     }
 
-    /// Returns a mutable Arc to the snapshot, if it exists.
+    /// Returns a mutable Arc to the partial snapshot, if it exists.
     /// Returns an error if the snapshot given by the snapshot ID does not
     /// belong to this canister.
     pub fn get_partial_snapshot_mut<'a>(
@@ -2031,8 +2036,15 @@ impl CanisterManager {
             );
         }
 
-        // Check that snapshot ID exists.
-        let snapshot: &Arc<CanisterSnapshot> = match state.canister_snapshots.get(snapshot_id) {
+        // Check that snapshot ID exists and extract fields from Either<Snapshot, PartialSnapshot>.
+        let (
+            snapshot_wasm_binary,
+            snapshot_exported_globals,
+            snapshot_stable_memory,
+            snapshot_wasm_memory,
+            snapshot_global_timer,
+            snapshot_on_low_wasm_memory_hook_status,
+        ) = match state.canister_snapshots.get(snapshot_id) {
             None => {
                 // If not found, the operation fails due to invalid parameters.
                 return (
@@ -2044,17 +2056,48 @@ impl CanisterManager {
                 );
             }
             Some(snapshot) => {
-                // Verify the provided snapshot id belongs to this canister.
-                if snapshot.canister_id() != canister_id {
-                    return (
-                        Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                            canister_id,
-                            snapshot_id,
-                        }),
-                        NumInstructions::new(0),
-                    );
+                match snapshot {
+                    Either::Left(snapshot) => {
+                        // Verify the provided snapshot id belongs to this canister.
+                        if snapshot.canister_id() != canister_id {
+                            return (
+                                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                    canister_id,
+                                    snapshot_id,
+                                }),
+                                NumInstructions::new(0),
+                            );
+                        }
+                        (
+                            snapshot.wasm_binary,
+                            snapshot.exported_globals,
+                            snapshot.stable_memory,
+                            snapshot.wasm_memory,
+                            snapshot.global_timer,
+                            snapshot.on_low_wasm_memory_hook_status,
+                        )
+                    }
+                    Either::Right(snapshot) => {
+                        // Verify the provided snapshot id belongs to this canister.
+                        if snapshot.canister_id() != canister_id {
+                            return (
+                                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                    canister_id,
+                                    snapshot_id,
+                                }),
+                                NumInstructions::new(0),
+                            );
+                        }
+                        (
+                            snapshot.wasm_binary,
+                            snapshot.exported_globals,
+                            snapshot.stable_memory,
+                            snapshot.wasm_memory,
+                            snapshot.global_timer,
+                            snapshot.on_low_wasm_memory_hook_status,
+                        )
+                    }
                 }
-                snapshot
             }
         };
 
@@ -2101,7 +2144,7 @@ impl CanisterManager {
         let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
 
         let (instructions_used, new_execution_state) = {
-            let execution_snapshot = snapshot.execution_snapshot();
+            let execution_snapshot = snapshot_execution_snapshot;
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
             let compilation_cost_handling = if state
                 .metadata
@@ -2130,7 +2173,7 @@ impl CanisterManager {
             };
 
             // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
-            if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved)
+            if snapshot_source == SnapshotSource::MetadataUpload(candid::Reserved)
                 && !globals_match(
                     &new_execution_state.exported_globals,
                     &execution_snapshot.exported_globals,
@@ -2150,10 +2193,10 @@ impl CanisterManager {
             (instructions_used, Some(new_execution_state))
         };
 
-        system_state.wasm_chunk_store = snapshot.chunk_store().clone();
+        system_state.wasm_chunk_store = snapshot_chunk_store.clone();
         system_state
             .certified_data
-            .clone_from(snapshot.certified_data());
+            .clone_from(snapshot_certified_data);
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {
@@ -2166,9 +2209,9 @@ impl CanisterManager {
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
         // Otherwise, the snapshot is invalid.
-        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
+        if snapshot_source == SnapshotSource::MetadataUpload(candid::Reserved) {
             let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
-            let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
+            let snapshot_hook_status = snapshot_execution_snapshot.on_low_wasm_memory_hook_status;
             if !snapshot_hook_status
                 .map(|h| h.is_consistent_with(hook_condition))
                 .unwrap_or(true)
@@ -2183,7 +2226,7 @@ impl CanisterManager {
         }
 
         // Compute cycles for instructions spent loading a snapshot of the canister.
-        let instructions = instructions_used.saturating_add(&snapshot.size().get().into());
+        let instructions = instructions_used.saturating_add(snapshot_size.get().into());
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
@@ -2225,10 +2268,10 @@ impl CanisterManager {
             state.time(),
             origin,
             CanisterChangeDetails::load_snapshot(
-                snapshot.canister_version(),
+                snapshot_canister_version,
                 snapshot_id,
-                snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
-                snapshot.source(),
+                snapshot_taken_at_timestamp.as_nanos_since_unix_epoch(),
+                snapshot_source,
             ),
         );
         state
@@ -2299,7 +2342,10 @@ impl CanisterManager {
 
         let old_snapshot = state.delete_snapshot(delete_snapshot_id);
         // Already confirmed that `old_snapshot` exists.
-        let old_snapshot_size = old_snapshot.unwrap().size();
+        let old_snapshot_size = old_snapshot
+            .unwrap()
+            .as_ref()
+            .either(|s| s.size(), |s| s.size());
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage

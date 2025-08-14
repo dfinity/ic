@@ -37,6 +37,7 @@ DEPENDENCIES = [
     "//rs/utils/lru_cache",
     "//rs/utils/thread",
     "@crate_index//:candid",
+    "@crate_index//:either",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-vetkeys",
