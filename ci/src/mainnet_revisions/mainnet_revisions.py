@@ -29,7 +29,7 @@ def base_download_url(git_commit_id, variant, update, test, dev=True):
     test_suffix = "-test" if test else ""
     return f"https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test_suffix}/"
 
-
+# NOTE: We must download and hash the update dev image ourselves because public proposals only include hashes for the production images
 def download_and_hash_image(url, logger):
     """Download an image from the given URL and return its SHA256 hash."""
     logger.info(f"Downloading image from: {url}")
