@@ -19,6 +19,7 @@ import argparse
 import fnmatch
 import subprocess
 import sys
+from pathlib import Path
 from typing import Set
 
 BAZEL_TARGETS = "BAZEL_TARGETS"
@@ -34,46 +35,51 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     Returns a dictionary mapping globbing patterns
     to a set of targets to test explicitly on PRs.
     """
-    with open(BAZEL_TARGETS, "r") as f:
-        lines = f.read().splitlines()
+    lines = Path(BAZEL_TARGETS).read_text().splitlines()
 
-        # First filter out comments. All text from the first '#' character is filtered out.
-        nocomment_lines = []
-        for line in lines:
-            comment_ix = line.find("#")
-            nocomment_lines.append(line[:comment_ix] if comment_ix != -1 else line)
+    # First filter out comments. We use gitignore-style comment handling.
+    # See: https://git-scm.com/docs/gitignore#_pattern_format
+    # - A line starting with # serves as a comment. (discard it entirely).
+    # - Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
+    nocomment_lines = []
+    for line in lines:
+        if line.startswith("#"):
+            continue
+        if line.startswith("\\#"):
+            nocomment_lines.append(line[1:])  # drop the escaping backslash
+        else:
+            nocomment_lines.append(line)
 
-        explicit_targets = []
-        for line in nocomment_lines:
-            # Indented lines are considered part of the previous list of targets.
-            if len(line) > 0 and line[0].isspace():
-                if len(explicit_targets) == 0:
-                    raise ValueError(f"Unexpected indentation in {BAZEL_TARGETS} for line: '{line}'")
-                else:
-                    targets = line.split()
-                    explicit_targets[-1][1].update(targets)
-            else:
-                parts = line.split()
-                if len(parts) == 0:
-                    # Empty lines are ignored:
-                    continue
-                else:
-                    pattern = parts[0]
-                    targets = set(parts[1:])
+    # Filter out empty or pure whitespace lines:
+    nonempty_lines = [ line for line in nocomment_lines if line and not line.isspace()]
 
-                    if len(targets) == 0:
-                        raise ValueError(
-                            f"Expected a line with both a file pattern and a space-separated list of at least a single target in {BAZEL_TARGETS} but got: '{line}'"
-                        )
+    explicit_targets = []
+    for line in nonempty_lines:
+        # Indented lines are considered part of the previous list of targets.
+        if len(line) > 0 and line[0].isspace():
+            if len(explicit_targets) == 0:
+                raise ValueError(f"Unexpected indentation in {BAZEL_TARGETS} for line: '{line}'")
+            targets = line.split()
+            explicit_targets[-1][1].update(targets)
+        else:
+            parts = line.split()
 
-                    explicit_targets.append((pattern, targets))
+            pattern = parts[0]
+            targets = set(parts[1:])
 
-        # Turn the list of explicit targets into a dictionary to unify equivalent patterns.
-        explicit_targets_dict = {}
-        for pattern, targets in explicit_targets:
-            explicit_targets_dict[pattern] = explicit_targets_dict.get(pattern, set()) | targets
+            if len(targets) == 0:
+                raise ValueError(
+                    f"Expected a line with both a file pattern and a space-separated list of at least a single target in {BAZEL_TARGETS} but got: '{line}'"
+                )
 
-        return explicit_targets_dict
+            explicit_targets.append((pattern, targets))
+
+    # Turn the list of explicit targets into a dictionary to unify equivalent patterns.
+    explicit_targets_dict = {}
+    for pattern, targets in explicit_targets:
+        explicit_targets_dict[pattern] = explicit_targets_dict.get(pattern, set()) | targets
+
+    return explicit_targets_dict
 
 
 def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> str:
@@ -86,6 +92,8 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
     modified_files = subprocess.run(
         ["git", "diff", "--name-only", commit_range], check=True, capture_output=True, text=True
     ).stdout.splitlines()
+
+    print(modified_files)
 
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified

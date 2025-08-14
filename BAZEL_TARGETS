@@ -1,3 +1,7 @@
+# What?
+# This file specifies additional bazel targets to test for specific file changes.
+#
+# Why?
 # On PRs not tagged with CI_ALL_BAZEL_TARGETS, which is the default,
 # we only test bazel targets which have modified inputs.
 #
@@ -6,24 +10,35 @@
 # which implicitly depends on the whole workspace.
 #
 # To still test these targets this file can specify which bazel
-# targets to explicitly test based on modified files.
+# targets to explicitly test based on which files were modified.
 #
 # Furthermore the targets specified here won't be filtered out
 # based on whether they're tagged as a `long_test`. So this file
-# can additionally be used to test certain long_tests for certain file changes.
+# can additionally be used to test certain long_tests for certain modifications.
 #
-# The file patterns use globbing semantics. See:
-# https://docs.python.org/3/library/fnmatch.html
+# How?
+# The syntax is similar but not the same as gitignore
+# (https://git-scm.com/docs/gitignore#_pattern_format):
+# * A blank line matches no files, so it can serve as a separator for readability.
+# * A line starting with # serves as a comment.
+#   Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
+# * A pattern is separated by whitespace from its targets.
+# * Patterns don't support spaces in them. This might be added later if desired.
+# * Unlike gitignore, patterns use globbing semantics:
+#   https://docs.python.org/3/library/fnmatch.html
+# * Targets can span multiple lines for readability.
+#   So the targets on a line starting with whitespace
+#   are considered part of the previous list of targets.
 
-*.sh                                //pre-commit:shfmt-check
-*.py                                //pre-commit:ruff-lint
-*.hs                                //pre-commit:ormolu-lint
-*.proto                             //pre-commit:protobuf-format-check
-                                    //pre-commit:buf-breaking
+*.sh        //pre-commit:shfmt-check
+*.py        //pre-commit:ruff-lint
+*.hs        //pre-commit:ormolu-lint
+*.proto     //pre-commit:protobuf-format-check
+            //pre-commit:buf-breaking
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
-*ic[-_]os/*                         //rs/tests/nested:guestos_upgrade_smoke_test
-                                    //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
-                                    //rs/tests/nested:hostos_upgrade_smoke_test
-                                    //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
-                                    //rs/tests/nested:registration
+*ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
+            //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
+            //rs/tests/nested:hostos_upgrade_smoke_test
+            //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
+            //rs/tests/nested:registration
