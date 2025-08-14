@@ -236,10 +236,10 @@ mod tests {
             dup_notarization.signature.signers = vec![node_test_id(42)];
             // Move block back to unvalidated after attribute is computed
             pool.purge_validated_below(block.clone());
-            pool.insert_validated(
-                TestConsensusPool::make_genesis_cup(registry.as_ref(), replica_config.subnet_id)
-                    .into_message(),
-            );
+            pool.insert_validated(TestConsensusPool::make_genesis_cup(
+                registry.as_ref(),
+                replica_config.subnet_id,
+            ));
             pool.insert_unvalidated(block.clone());
             let bouncer = new_bouncer(&pool, expected_batch_height);
             assert_eq!(bouncer(&dup_notarization_id), Wants);
