@@ -16,9 +16,12 @@ use crate::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             get_build_setupos_config_image_tool, get_create_setupos_config_tool,
-            get_guestos_img_version, get_guestos_initial_update_img_sha256,
-            get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
-            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
+            get_guestos_img_version, get_guestos_initial_unassigned_update_img_sha256,
+            get_guestos_initial_unassigned_update_img_url,
+            get_guestos_initial_unassigned_update_img_version,
+            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+            get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
+            IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -176,10 +179,25 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
+    let (
+        initial_release_package_sha256_hex,
+        initial_release_package_url,
+        initial_release_guest_launch_measurements,
+    ) = (
         get_guestos_initial_update_img_sha256()?,
         get_guestos_initial_update_img_url()?,
         get_guestos_initial_launch_measurements()?,
+    );
+
+    // Get unassigned nodes update image values (with fallback to regular values)
+    let (
+        initial_unassigned_nodes_release_version_id,
+        initial_unassigned_nodes_release_package_url,
+        initial_unassigned_nodes_release_package_sha256_hex,
+    ) = (
+        get_guestos_initial_unassigned_update_img_version().ok(),
+        get_guestos_initial_unassigned_update_img_url().ok(),
+        get_guestos_initial_unassigned_update_img_sha256().ok(),
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -192,12 +210,12 @@ pub fn init_ic(
         /* generate_subnet_records= */
         true,
         Some(nns_subnet_idx.unwrap_or(0)),
-        Some(ic_os_update_img_url),
-        Some(ic_os_update_img_sha256),
-        ic_os_launch_measurements,
-        None,
-        None,
-        None,
+        Some(initial_release_package_url),
+        Some(initial_release_package_sha256_hex),
+        initial_release_guest_launch_measurements,
+        initial_unassigned_nodes_release_version_id,
+        initial_unassigned_nodes_release_package_url,
+        initial_unassigned_nodes_release_package_sha256_hex,
         None,
         Some(whitelist),
         ic.node_operator,
