@@ -258,24 +258,17 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     assert!(state
         .submitted_transactions
         .iter()
-        .find(|tx| tx.txid == txid)
-        .is_some());
+        .any(|tx| tx.txid == txid));
     state::audit::replace_transaction(&mut state, txid, cancellation_tx.clone(), &runtime);
+    assert!(!state
+        .submitted_transactions
+        .iter()
+        .any(|tx| tx.txid == txid));
     assert!(state
         .submitted_transactions
         .iter()
-        .find(|tx| tx.txid == txid)
-        .is_none());
-    assert!(state
-        .stuck_transactions
-        .iter()
-        .find(|tx| tx.txid == txid)
-        .is_some());
-    assert!(state
-        .submitted_transactions
-        .iter()
-        .find(|tx| tx.txid == cancellation_txid)
-        .is_some());
+        .any(|tx| tx.txid == cancellation_txid));
+    assert!(state.stuck_transactions.iter().any(|tx| tx.txid == txid));
 
     // Check if transaction is cancelled once cancellation tx is finalized.
     now += MIN_RESUBMISSION_DELAY.as_nanos() as u64;
@@ -309,16 +302,11 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         main_account,
         &runtime,
     );
-    assert!(state
-        .stuck_transactions
-        .iter()
-        .find(|tx| tx.txid == txid)
-        .is_none());
-    assert!(state
+    assert!(!state.stuck_transactions.iter().any(|tx| tx.txid == txid));
+    assert!(!state
         .submitted_transactions
         .iter()
-        .find(|tx| tx.txid == cancellation_txid)
-        .is_none());
+        .any(|tx| tx.txid == cancellation_txid));
     assert!(maybe_finalized_transactions.is_empty());
 }
 
