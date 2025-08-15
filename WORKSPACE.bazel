@@ -52,7 +52,7 @@ canisters(
         "node-rewards": "node-rewards-canister.wasm.gz",
         "internet_identity_test": "internet_identity_dev.wasm.gz",
         "nns_dapp_test": "nns-dapp_test.wasm.gz",
-        "sns_aggregator_test": "sns_aggregator_test.wasm.gz",
+        "sns_aggregator_test": "sns_aggregator_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
         "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
     },

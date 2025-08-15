@@ -19181,6 +19181,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replicated-state",
+ "ic-sns-wasm",
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-test-utilities",
