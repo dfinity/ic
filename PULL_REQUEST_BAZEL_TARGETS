@@ -36,7 +36,7 @@
 #   like gitignore wildmatch patterns.
 #
 # Tip: to test which files matches <PATTERN> you can use the following:
-# find . | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
+# git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
 
 
 *.sh        //pre-commit:shfmt-check
