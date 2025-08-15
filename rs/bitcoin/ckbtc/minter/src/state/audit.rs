@@ -91,33 +91,13 @@ pub fn sent_transaction<R: CanisterRuntime>(
     state.push_submitted_transaction(tx);
 }
 
-// If the given finalized transaction is a cancellation transaction, all its
-// related retrieve_btc requests will be reimbursed.
-// TODO: deduct processing fee
 pub fn confirm_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     txid: &Txid,
     runtime: &R,
-) {
+) -> Option<WithdrawalCancellation> {
     record_event(EventType::ConfirmedBtcTransaction { txid: *txid }, runtime);
-    if let Some(WithdrawalCancellation {
-        reason, requests, ..
-    }) = state.finalize_transaction(txid)
-    {
-        for request in requests {
-            if let Some(account) = request.reimbursement_account {
-                let reason = WithdrawalReimbursementReason::InvalidTransaction(reason.clone());
-                reimburse_withdrawal(
-                    state,
-                    request.block_index,
-                    request.amount,
-                    account,
-                    reason,
-                    runtime,
-                );
-            }
-        }
-    }
+    state.finalize_transaction(txid)
 }
 
 pub fn mark_utxo_checked<R: CanisterRuntime>(

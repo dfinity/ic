@@ -286,6 +286,43 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     }
 }
 
+fn reimburse_cancelled_requests<R: CanisterRuntime>(
+    state: &mut state::CkBtcMinterState,
+    requests: impl Iterator<Item = state::RetrieveBtcRequest>,
+    err: InvalidTransactionError,
+    runtime: &R,
+) {
+    for request in requests {
+        // TODO: deduct processing fee
+        if let Some(account) = request.reimbursement_account {
+            let reason =
+                reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
+            state::audit::reimburse_withdrawal(
+                state,
+                request.block_index,
+                request.amount,
+                account,
+                reason,
+                runtime,
+            );
+        }
+        state::audit::remove_retrieve_btc_request(state, request, runtime);
+    }
+}
+
+pub fn confirm_transaction<R: CanisterRuntime>(
+    state: &mut state::CkBtcMinterState,
+    txid: &Txid,
+    runtime: &R,
+) {
+    if let Some(state::WithdrawalCancellation {
+        reason, requests, ..
+    }) = state::audit::confirm_transaction(state, txid, runtime)
+    {
+        reimburse_cancelled_requests(state, requests.into_iter(), reason, runtime)
+    }
+}
+
 /// Constructs and sends out signed Bitcoin transactions for pending retrieve
 /// requests.
 async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
@@ -347,24 +384,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
-                for request in batch {
-                    // TODO: deduct processing fee
-                    if let Some(account) = request.reimbursement_account {
-                        let reason =
-                            reimbursement::WithdrawalReimbursementReason::InvalidTransaction(
-                                err.clone(),
-                            );
-                        state::audit::reimburse_withdrawal(
-                            s,
-                            request.block_index,
-                            request.amount,
-                            account,
-                            reason,
-                            runtime,
-                        );
-                    }
-                    state::audit::remove_retrieve_btc_request(s, request, runtime);
-                }
+                reimburse_cancelled_requests(s, batch.into_iter(), err, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -548,7 +568,7 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
         state::audit::add_utxos(state, None, main_account, new_utxos, runtime);
     }
     for txid in &confirmed_transactions {
-        state::audit::confirm_transaction(state, txid, runtime);
+        confirm_transaction(state, txid, runtime);
         maybe_finalized_transactions.remove(txid);
     }
 
@@ -564,7 +584,7 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
             "[finalize_requests]: finalized transaction {} previously assumed to be stuck",
             &txid
         );
-        state::audit::confirm_transaction(state, &txid, runtime);
+        confirm_transaction(state, &txid, runtime);
     }
 }
 
