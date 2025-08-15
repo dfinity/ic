@@ -18,6 +18,7 @@ ic_sev = { path = "../../sev" }
 anyhow = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
+devicemapper = "0.34"
 gpt = { workspace = true }
 macaddr = { workspace = true }
 nix = { workspace = true }
@@ -29,8 +30,6 @@ tokio-util = { workspace = true }
 uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-loopdev-3 = "0.5"
-devicemapper = "0.34"
 systemd = { workspace = true }
 virt = { workspace = true }
 
