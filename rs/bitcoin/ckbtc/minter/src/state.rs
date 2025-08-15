@@ -922,7 +922,7 @@ impl CkBtcMinterState {
     ) -> Vec<RetrieveBtcRequest> {
         // At this point, confirmed_txid has already been removed from submitted_transactions/stuck_transactions.
         // Any other transaction in there with input UTXOs overlapping with `used_utxos` should be
-        // considered for cancellation, their input UTXOs should be returned to the available set, and
+        // considered for cancellation, their input UTXOs (non-overlapping with `used_utxos`) should be returned to the available set, and
         // corresponding requests should be refunded.
         let mut txids_to_remove = BTreeSet::new();
         let mut cancelled_requests = BTreeSet::new();
