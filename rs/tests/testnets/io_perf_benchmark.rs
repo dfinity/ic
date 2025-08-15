@@ -60,7 +60,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
-use nns_dapp::{nns_dapp_customizations, set_authorized_subnets, set_icp_xdr_exchange_rate};
+use nns_dapp::{nns_dapp_customizations, set_authorized_subnets};
 use slog::{info, Logger};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
@@ -292,9 +292,6 @@ pub fn setup(env: TestEnv, config: Config) {
         topology_snapshot,
         nns_dapp_customizations(),
     );
-
-    // sets the exchange rate to 12 XDR per 1 ICP
-    set_icp_xdr_exchange_rate(&env, 12_0000);
 
     set_authorized_subnets(&env);
 
