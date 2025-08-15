@@ -7,16 +7,18 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_btc_interface::Txid;
+use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::{
-    build_unsigned_transaction_from_inputs, resubmit_transactions, BuildTxError, ECDSAPublicKey,
-    Network,
+    build_unsigned_transaction_from_inputs, process_maybe_finalized_transactions,
+    resubmit_transactions, state, tx, BuildTxError, ECDSAPublicKey, Network,
+    MIN_RESUBMISSION_DELAY,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use maplit::btreemap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -148,19 +150,19 @@ async fn should_replay_events_for_mainnet() {
 async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30() {
     Mainnet.retrieve_and_store_events_if_env().await;
 
-    let state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
+    let mut state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
         .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
 
-    let tx_id = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
+    let txid = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
 
     let submitted_tx = {
         let mut txs: Vec<_> = state
             .submitted_transactions
             .iter()
-            .filter(|tx| tx.txid.to_string() == tx_id)
+            .filter(|tx| tx.txid.to_string() == txid)
             .collect();
         assert_eq!(txs.len(), 1);
         txs.pop().unwrap()
@@ -206,21 +208,23 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         }
     );
 
-    let tx_id = Txid::from_str(tx_id).unwrap();
+    // Check if a cancellation tx will be sent
+    let txid = Txid::from_str(txid).unwrap();
     let min_amount = 50_000;
     let mut transactions = BTreeMap::new();
-    transactions.insert(tx_id, submitted_tx.clone());
-    let mut runtime = mock::MockCanisterRuntime::new();
+    transactions.insert(txid, submitted_tx.clone());
     let replaced = RefCell::new(vec![]);
-    let transactions_sent: Arc<RwLock<Vec<Vec<u8>>>> = Arc::new(RwLock::new(vec![]));
-    runtime.expect_time().return_const(0u64);
+    let transactions_sent: Arc<RwLock<Vec<tx::SignedTransaction>>> = Arc::new(RwLock::new(vec![]));
+    let mut now = submitted_tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64;
+    let mut runtime = mock::MockCanisterRuntime::new();
+    runtime.expect_time().return_const(now);
     runtime
         .expect_sign_with_ecdsa()
         .return_const(Ok(FAKE_SEC1_SIG.to_vec()));
     let sent_clone = transactions_sent.clone();
     runtime.expect_send_transaction().returning(move |tx, _| {
         let mut arr = sent_clone.write().unwrap();
-        arr.push(tx.serialize());
+        arr.push(tx.clone());
         Ok(())
     });
     resubmit_transactions(
@@ -243,10 +247,78 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     .await;
     let replaced = replaced.borrow();
     assert_eq!(replaced.len(), 1);
-    assert_eq!(replaced[0].0, tx_id);
-    assert_eq!(replaced[0].1.used_utxos.len(), 1);
+    assert_eq!(replaced[0].0, txid);
+    let cancellation_tx = replaced[0].1.clone();
+    let cancellation_txid = cancellation_tx.txid;
+    assert_eq!(cancellation_tx.used_utxos.len(), 1);
     let sent = transactions_sent.read().unwrap();
     assert_eq!(sent.len(), 1);
+    let signed_tx = sent[0].clone();
+
+    // Triggle the replacement in state
+    assert!(state
+        .submitted_transactions
+        .iter()
+        .find(|tx| tx.txid == txid)
+        .is_some());
+    state::audit::replace_transaction(&mut state, txid, cancellation_tx.clone(), &runtime);
+    assert!(state
+        .submitted_transactions
+        .iter()
+        .find(|tx| tx.txid == txid)
+        .is_none());
+    assert!(state
+        .stuck_transactions
+        .iter()
+        .find(|tx| tx.txid == txid)
+        .is_some());
+    assert!(state
+        .submitted_transactions
+        .iter()
+        .find(|tx| tx.txid == cancellation_txid)
+        .is_some());
+
+    // Check if transaction is cancelled once cancellation tx is finalized.
+    now += MIN_RESUBMISSION_DELAY.as_nanos() as u64;
+    let main_account = Account {
+        owner: Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap(),
+        subaccount: None,
+    };
+    let mut runtime = mock::MockCanisterRuntime::new();
+    runtime.expect_time().return_const(now);
+    let mut maybe_finalized_transactions = btreemap! { cancellation_txid => cancellation_tx };
+    let mock_height = 910109u32;
+    let new_utxos = signed_tx
+        .outputs
+        .iter()
+        .enumerate()
+        .map(|(i, out)| Utxo {
+            outpoint: OutPoint {
+                txid: cancellation_txid,
+                vout: i as u32,
+            },
+            value: out.value,
+            height: mock_height,
+        })
+        .collect::<Vec<_>>();
+    process_maybe_finalized_transactions(
+        &mut state,
+        &mut maybe_finalized_transactions,
+        new_utxos,
+        main_account,
+        &runtime,
+    );
+    assert!(state
+        .stuck_transactions
+        .iter()
+        .find(|tx| tx.txid == txid)
+        .is_none());
+    assert!(state
+        .submitted_transactions
+        .iter()
+        .find(|tx| tx.txid == cancellation_txid)
+        .is_none());
+    assert!(maybe_finalized_transactions.is_empty());
 }
 
 #[tokio::test]
