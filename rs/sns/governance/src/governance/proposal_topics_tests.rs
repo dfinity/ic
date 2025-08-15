@@ -201,10 +201,8 @@ fn test_all_topics() {
     );
 
     // Extension Test Cases
-    // TODO DO NOT MERGE - ADD TESTS HERE, but we have to populate the cache first.
-    // TODO[NNS1-4002]. Criticality should depend on the topic of the extension.
     let extension_canister_id = CanisterId::from_u64(100_000);
-    fn foo(
+    fn unimplemented_validator(
         _gov: &Governance,
         _init: ExtensionInit,
     ) -> futures::future::BoxFuture<Result<ValidatedExtensionInit, String>> {
@@ -215,7 +213,7 @@ fn test_all_topics() {
         version: ExtensionVersion(1),
         topic: TreasuryAssetManagement,
         extension_types: vec![TreasuryManager],
-        validate_init_arg: foo,
+        validate_init_arg: unimplemented_validator,
     };
     with_extension_spec_cache_mut(|spec_cache| {
         spec_cache.insert(extension_canister_id, extension_spec);
@@ -268,7 +266,7 @@ fn test_all_topics() {
             operation_name: Some("other_op".to_string()),
             operation_arg: None,
         }),
-        Err("No operation found called 'other_op' for extension with canister id: 4zjg6-jalaa-aaaaa-aaaap-4ai".to_string()),
+        Err("No operation found called 'other_op' for extension with canister id: ug6pj-fqaaa-aaaaa-bq2qa-cai".to_string()),
     ));
 
     // Special case: Undefined function.
