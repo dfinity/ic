@@ -45,7 +45,9 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, candid::CandidType,
+)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
     /// The minter withdraws BTC transfer fees from this amount.
@@ -762,6 +764,10 @@ impl CkBtcMinterState {
                 txid,
                 finalized_tx.used_utxos.into_iter().collect::<BTreeSet<_>>(),
             );
+            assert!(
+                !requests.is_empty(),
+                "Unable to find any retrieve_btc request corresponding to cancellation tx {txid}"
+            );
             Some(WithdrawalCancellation { fee, requests })
         } else {
             for request in finalized_tx.requests {
@@ -816,44 +822,29 @@ impl CkBtcMinterState {
         confirmed_txid: &Txid,
         used_utxos: BTreeSet<Utxo>,
     ) -> Vec<RetrieveBtcRequest> {
-        let mut txid_to_cancel = None;
-
-        // Find the last transaction preceding the confirmed transaction.
-        let mut to_edge = confirmed_txid;
-        while let Some(from_edge) = self.replacement_txid.get(to_edge) {
-            debug_assert_eq!(self.rev_replacement_txid.get(from_edge), Some(to_edge));
-            txid_to_cancel = Some(from_edge);
-            to_edge = from_edge;
-        }
-
-        let tx_to_cancel = txid_to_cancel
-            .and_then(|txid| {
-                self.submitted_transactions
-                    .iter()
-                    .find(|tx| &tx.txid == txid)
-                    .or_else(|| self.stuck_transactions.iter().find(|tx| &tx.txid == txid))
-            })
-            .unwrap_or_else(|| {
-                ic_cdk::trap(&format!(
-                    "Attempted to cancel a non-existent transaction replaced by {}",
-                    confirmed_txid
-                ));
+        // At this point, confirmed_txid has already been removed from submitted_transactions/stuck_transactions.
+        // Any other transaction in there with input UTXOs overlapping with `used_utxos` should be
+        // considered for cancellation, their input UTXOs should be returned to the available set, and
+        // corresponding requests should be refunded.
+        let mut cancelled_requests = BTreeSet::new();
+        self.submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+            .filter(|tx| tx.used_utxos.iter().any(|x| used_utxos.contains(x)))
+            .for_each(|tx| {
+                debug_assert!(&tx.txid != confirmed_txid);
+                for utxo in tx.used_utxos.iter() {
+                    if !used_utxos.contains(utxo) {
+                        self.available_utxos.insert(utxo.clone());
+                    }
+                }
+                for request in tx.requests.iter() {
+                    cancelled_requests.insert(request.clone());
+                }
             });
-
-        assert!(!tx_to_cancel.requests.is_empty());
-        let cancelled_requests = tx_to_cancel.requests.clone();
-
-        // Put the cancelled UTXOs back to avaiable set
-        for utxo in tx_to_cancel.used_utxos.iter() {
-            if !used_utxos.contains(utxo) {
-                self.available_utxos.insert(utxo.clone());
-            }
-        }
-
-        // Clean up
+        // Drop all replaced txs before return
         self.cleanup_tx_replacement_chain(confirmed_txid);
-
-        cancelled_requests
+        cancelled_requests.into_iter().collect::<Vec<_>>()
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {

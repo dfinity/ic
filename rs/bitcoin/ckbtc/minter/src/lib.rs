@@ -717,7 +717,10 @@ pub async fn resubmit_transactions<
                 );
                 let mut inputs = input_utxos.clone().into_iter().collect::<BTreeSet<_>>();
                 input_utxos = utxos_selection(retrieve_btc_min_amount, &mut inputs, 0);
-                new_tx_requests.clear(); // This serves as a marker for cancellation
+                // The requests field has to be cleared because the finalization of this
+                // transaction is not meant to complete the corresponding RetrieveBtcRequests
+                // but rather to cancel them.
+                new_tx_requests.clear();
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
