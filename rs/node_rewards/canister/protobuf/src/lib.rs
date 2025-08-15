@@ -55,7 +55,7 @@ impl KeyRange for pb::ic_node_rewards::v1::SubnetMetricsKey {
     }
 }
 
-///------------ Storable Implementations ------------///
+//------------ Storable Implementations ------------//
 
 impl Storable for pb::ic_node_rewards::v1::SubnetIdKey {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {

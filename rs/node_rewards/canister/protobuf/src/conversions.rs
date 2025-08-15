@@ -69,7 +69,7 @@ impl From<NodeResults> for pb::rewards_calculator::v1::NodeResults {
         }: NodeResults,
     ) -> Self {
         Self {
-            node_id: Some(node_id.get().into()),
+            node_id: Some(node_id.get()),
             node_reward_type: Some(node_reward_type.to_string()),
             region: Some(region),
             dc_id: Some(dc_id),
