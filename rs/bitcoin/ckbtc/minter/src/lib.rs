@@ -617,7 +617,7 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
     }
 }
 
-async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
+async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool) {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
     }
@@ -660,8 +660,9 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
 
     // Do not replace transactions if less than MIN_RESUBMISSION_DELAY passed since their
     // submission. This strategy works around short-term fee spikes.
-    maybe_finalized_transactions
-        .retain(|_txid, tx| tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64 <= now);
+    maybe_finalized_transactions.retain(|_txid, tx| {
+        force_resubmit || tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64 <= now
+    });
     if maybe_finalized_transactions.is_empty() {
         // There are no transactions eligible for replacement.
         return;
