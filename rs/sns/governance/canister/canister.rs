@@ -304,8 +304,6 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     log!(INFO, "Executing post upgrade");
 
-    let mut reader = StableReader::default();
-
     // Look for MemoryManager magic bytes
     let mut magic_bytes = [0u8; 3];
     stable_read(0, &mut magic_bytes);
