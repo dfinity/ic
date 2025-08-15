@@ -270,7 +270,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     assert_eq!(signed_tx.inputs.len(), 1);
     assert_eq!(&used_utxo.outpoint, &signed_tx.inputs[0].previous_output);
 
-    // Triggle the replacement in state
+    // Trigger the replacement in state
     state::audit::replace_transaction(
         &mut state,
         resubmitted_txid,

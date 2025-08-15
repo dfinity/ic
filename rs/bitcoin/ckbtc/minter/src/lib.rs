@@ -298,23 +298,24 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
     runtime: &R,
 ) {
     assert!(!requests.is_empty());
-    let n = requests.len();
-    let fees = distribute(total_fee, n as u64);
+    let fees = distribute(total_fee, requests.len() as u64);
     // This assertion makes sure fee is smaller than all request amount
     assert!(fees[0] <= state.retrieve_btc_min_amount);
     for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
-            let reason =
-                reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
-            state::audit::reimburse_withdrawal(
-                state,
-                request.block_index,
-                amount,
-                account,
-                reason.clone(),
-                runtime,
-            );
+            if amount > 0 {
+                let reason =
+                    reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
+                state::audit::reimburse_withdrawal(
+                    state,
+                    request.block_index,
+                    amount,
+                    account,
+                    reason.clone(),
+                    runtime,
+                );
+            }
         } else {
             log!(
                 P0,
@@ -345,7 +346,7 @@ pub fn confirm_transaction<R: CanisterRuntime>(
 async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     // We make requests if we have old requests in the queue or if have enough
     // requests to fill a batch.
-    if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, ic_cdk::api::time())) {
+    if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, runtime.time())) {
         return;
     }
 
@@ -519,7 +520,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                         let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
                         state::mutate_state(|s| {
-                            s.last_transaction_submission_time_ns = Some(ic_cdk::api::time());
+                            s.last_transaction_submission_time_ns = Some(runtime.time());
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
@@ -529,7 +530,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                                     txid,
                                     used_utxos,
                                     change_output: Some(req.change_output),
-                                    submitted_at: ic_cdk::api::time(),
+                                    submitted_at: runtime.time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                                     total_fee: Some(total_fee),
                                 },
@@ -630,7 +631,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     }
 
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
-    let now = ic_cdk::api::time();
+    let now = runtime.time();
 
     // The list of transactions that are likely to be finalized, indexed by the transaction id.
     let mut maybe_finalized_transactions: BTreeMap<Txid, state::SubmittedBtcTransaction> =
