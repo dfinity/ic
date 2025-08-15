@@ -294,10 +294,15 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
     runtime: &R,
 ) {
     assert!(!requests.is_empty());
-    let fee = total_fee / requests.len() as u64;
+    let n = requests.len();
+    let average_fee = total_fee / requests.len() as u64;
     // This assertion makes sure fee is smaller than all request amount
-    assert!(fee <= state.retrieve_btc_min_amount);
-    for request in requests {
+    assert!(average_fee <= state.retrieve_btc_min_amount);
+    let last_fee = total_fee.saturating_sub(average_fee * (n as u64 - 1));
+    assert!(last_fee <= state.retrieve_btc_min_amount);
+    for (i, request) in requests.into_iter().enumerate() {
+        // Make sure total_fee is fully covered
+        let fee = if i == n - 1 { last_fee } else { average_fee };
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
             let reason =
