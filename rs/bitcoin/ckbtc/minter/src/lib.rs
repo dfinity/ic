@@ -290,7 +290,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     }
 }
 
-fn reimburse_cancelled_requests<R: CanisterRuntime>(
+fn reimburse_canceled_requests<R: CanisterRuntime>(
     state: &mut state::CkBtcMinterState,
     requests: BTreeSet<state::RetrieveBtcRequest>,
     err: InvalidTransactionError,
@@ -319,7 +319,7 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
         } else {
             log!(
                 P0,
-                "[reimburse_cancelled_requests]: account is not found for retrieve_btc request ({:?})",
+                "[reimburse_canceled_requests]: account is not found for retrieve_btc request ({:?})",
                 request
             );
         }
@@ -337,7 +337,7 @@ pub fn confirm_transaction<R: CanisterRuntime>(
         fee,
     }) = state::audit::confirm_transaction(state, txid, runtime)
     {
-        reimburse_cancelled_requests(state, requests, reason, fee, runtime)
+        reimburse_canceled_requests(state, requests, reason, fee, runtime)
     }
 }
 
@@ -408,7 +408,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
                 // is reasonable to charge a fee based on it.
                 let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
-                reimburse_cancelled_requests(s, batch, err, fee, runtime);
+                reimburse_canceled_requests(s, batch, err, fee, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -802,7 +802,7 @@ pub async fn resubmit_transactions<
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
                     P0,
-                    "[finalize_requests]: {:?}, transaction {} will be cancelled",
+                    "[finalize_requests]: {:?}, transaction {} will be canceled",
                     err,
                     &submitted_tx.txid,
                 );

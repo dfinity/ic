@@ -828,8 +828,8 @@ impl CkBtcMinterState {
         }
     }
 
-    // Because finalizing a transaction may trigger a replaced transaction to be cancelled,
-    // the return value here is the corresponding cancelled requests.
+    // Because finalizing a transaction may trigger a replaced transaction to be canceled,
+    // the return value here is the corresponding canceled requests.
     pub(crate) fn finalize_transaction(&mut self, txid: &Txid) -> Option<WithdrawalCancellation> {
         let finalized_tx = if let Some(pos) = self
             .submitted_transactions
@@ -869,12 +869,12 @@ impl CkBtcMinterState {
             SubmittedWithdrawalRequests::ToCancel { requests, reason } => {
                 let requests = requests.into_iter().collect::<BTreeSet<_>>();
                 let fee = finalized_tx.withdrawal_fee.unwrap_or_default();
-                let cancelled_requests = self.cancel_tx_replacement(
+                let canceled_requests = self.cancel_tx_replacement(
                     txid,
                     finalized_tx.used_utxos.iter().collect::<BTreeSet<_>>(),
                 );
                 debug_assert_eq!(
-                    cancelled_requests, requests,
+                    canceled_requests, requests,
                     "Cancelled requests set does not match what was in cancellation tx {txid}"
                 );
                 Some(WithdrawalCancellation {
@@ -932,7 +932,7 @@ impl CkBtcMinterState {
         // considered for cancellation, their input UTXOs (non-overlapping with `used_utxos`) should be returned to the available set, and
         // corresponding requests should be refunded.
         let mut txids_to_remove = BTreeSet::new();
-        let mut cancelled_requests = BTreeSet::new();
+        let mut canceled_requests = BTreeSet::new();
         for tx in self
             .submitted_transactions
             .iter()
@@ -949,13 +949,13 @@ impl CkBtcMinterState {
                     SubmittedWithdrawalRequests::ToConfirm { requests } => requests.clone(),
                     SubmittedWithdrawalRequests::ToCancel { .. } => BTreeSet::new(),
                 };
-                cancelled_requests.append(&mut requests);
+                canceled_requests.append(&mut requests);
             }
         }
         // Drop all replaced txs before return
         let txids_removed = self.cleanup_tx_replacement_chain(confirmed_txid);
         assert_eq!(txids_to_remove, txids_removed);
-        cancelled_requests
+        canceled_requests
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {
