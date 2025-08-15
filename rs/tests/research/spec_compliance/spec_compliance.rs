@@ -23,9 +23,6 @@ const REPLICATION_FACTOR: usize = 2;
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    // the replica does not yet check that the effective canister id is valid in all cases
-    "$0 ~ /wrong effective canister id.in management call/",
-    "$0 ~ /access denied with different effective canister id/",
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",

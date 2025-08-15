@@ -9627,6 +9627,7 @@ dependencies = [
  "reqwest 0.12.15",
  "serde_cbor",
  "tokio",
+ "url",
 ]
 
 [[package]]
