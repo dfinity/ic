@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests;
-use crate::{estimate_fee_per_vbyte, finalize_requests, submit_pending_requests, CanisterRuntime};
+use crate::{
+    estimate_fee_per_vbyte, finalize_requests, submit_pending_requests, CanisterRuntime,
+    IC_CANISTER_RUNTIME,
+};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -140,8 +143,8 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
 
-            submit_pending_requests().await;
-            finalize_requests().await;
+            submit_pending_requests(&IC_CANISTER_RUNTIME).await;
+            finalize_requests(&IC_CANISTER_RUNTIME).await;
         }
         TaskType::RefreshFeePercentiles => {
             const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);

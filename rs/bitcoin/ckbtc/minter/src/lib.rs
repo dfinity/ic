@@ -286,7 +286,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
 
 /// Constructs and sends out signed Bitcoin transactions for pending retrieve
 /// requests.
-async fn submit_pending_requests() {
+async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     // We make requests if we have old requests in the queue or if have enough
     // requests to fill a batch.
     if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, ic_cdk::api::time())) {
@@ -352,7 +352,7 @@ async fn submit_pending_requests() {
                 // There is no point in retrying the request because the
                 // amount is too low.
                 for request in batch {
-                    state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
+                    state::audit::remove_retrieve_btc_request(s, request, runtime);
                 }
                 None
             }
@@ -366,7 +366,7 @@ async fn submit_pending_requests() {
                 for request in batch {
                     if request.address == address && request.amount == amount {
                         // Finalize the request that we cannot fulfill.
-                        state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
+                        state::audit::remove_retrieve_btc_request(s, request, runtime);
                     } else {
                         // Keep the rest of the requests in the batch, we will
                         // try to build a new transaction on the next iteration.
@@ -409,7 +409,7 @@ async fn submit_pending_requests() {
             &req.ecdsa_public_key,
             |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
             req.unsigned_tx,
-            &IC_CANISTER_RUNTIME,
+            runtime,
         )
         .await
         {
@@ -428,10 +428,7 @@ async fn submit_pending_requests() {
                     "[submit_pending_requests]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
-                match IC_CANISTER_RUNTIME
-                    .send_transaction(&signed_tx, req.network)
-                    .await
-                {
+                match runtime.send_transaction(&signed_tx, req.network).await {
                     Ok(()) => {
                         log!(
                             P1,
@@ -455,7 +452,7 @@ async fn submit_pending_requests() {
                                     submitted_at: ic_cdk::api::time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                                 },
-                                &IC_CANISTER_RUNTIME,
+                                runtime,
                             );
                         });
                     }
@@ -506,7 +503,47 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
         .collect()
 }
 
-async fn finalize_requests() {
+pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
+    state: &mut state::CkBtcMinterState,
+    maybe_finalized_transactions: &mut BTreeMap<Txid, state::SubmittedBtcTransaction>,
+    new_utxos: Vec<Utxo>,
+    main_account: Account,
+    runtime: &R,
+) {
+    // Transactions whose change outpoint is present in the newly fetched UTXOs
+    // can be finalized. Note that all new minter transactions must have a
+    // change output because minter always charges a fee for converting tokens.
+    let confirmed_transactions: Vec<_> = finalized_txids(&state.submitted_transactions, &new_utxos);
+
+    // It's possible that some transactions we considered lost or rejected became finalized in the
+    // meantime. If that happens, we should stop waiting for replacement transactions to finalize.
+    let unstuck_transactions: Vec<_> = finalized_txids(&state.stuck_transactions, &new_utxos);
+
+    if !new_utxos.is_empty() {
+        state::audit::add_utxos(state, None, main_account, new_utxos, runtime);
+    }
+    for txid in &confirmed_transactions {
+        state::audit::confirm_transaction(state, txid, runtime);
+        maybe_finalized_transactions.remove(txid);
+    }
+
+    for txid in &unstuck_transactions {
+        if let Some(replacement_txid) = state.find_last_replacement_tx(txid) {
+            maybe_finalized_transactions.remove(replacement_txid);
+        }
+    }
+
+    for txid in unstuck_transactions {
+        log!(
+            P0,
+            "[finalize_requests]: finalized transaction {} previously assumed to be stuck",
+            &txid
+        );
+        state::audit::confirm_transaction(state, &txid, runtime);
+    }
+}
+
+async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
     }
@@ -535,53 +572,22 @@ async fn finalize_requests() {
     };
 
     let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
-    let new_utxos = fetch_main_utxos(&main_account, &main_address, &IC_CANISTER_RUNTIME).await;
+    let new_utxos = fetch_main_utxos(&main_account, &main_address, runtime).await;
 
-    // Transactions whose change outpoint is present in the newly fetched UTXOs
-    // can be finalized. Note that all new minter transactions must have a
-    // change output because minter always charges a fee for converting tokens.
-    let confirmed_transactions: Vec<_> =
-        state::read_state(|s| finalized_txids(&s.submitted_transactions, &new_utxos));
-
-    // It's possible that some transactions we considered lost or rejected became finalized in the
-    // meantime. If that happens, we should stop waiting for replacement transactions to finalize.
-    let unstuck_transactions: Vec<_> =
-        state::read_state(|s| finalized_txids(&s.stuck_transactions, &new_utxos));
-
-    state::mutate_state(|s| {
-        if !new_utxos.is_empty() {
-            state::audit::add_utxos(s, None, main_account, new_utxos, &IC_CANISTER_RUNTIME);
-        }
-        for txid in &confirmed_transactions {
-            state::audit::confirm_transaction(s, txid, &IC_CANISTER_RUNTIME);
-            maybe_finalized_transactions.remove(txid);
-        }
-    });
-
-    for txid in &unstuck_transactions {
-        state::read_state(|s| {
-            if let Some(replacement_txid) = s.find_last_replacement_tx(txid) {
-                maybe_finalized_transactions.remove(replacement_txid);
-            }
-        });
-    }
-
-    state::mutate_state(|s| {
-        for txid in unstuck_transactions {
-            log!(
-                P0,
-                "[finalize_requests]: finalized transaction {} previously assumed to be stuck",
-                &txid
-            );
-            state::audit::confirm_transaction(s, &txid, &IC_CANISTER_RUNTIME);
-        }
+    state::mutate_state(|state| {
+        process_maybe_finalized_transactions(
+            state,
+            &mut maybe_finalized_transactions,
+            new_utxos,
+            main_account,
+            runtime,
+        )
     });
 
     // Do not replace transactions if less than MIN_RESUBMISSION_DELAY passed since their
     // submission. This strategy works around short-term fee spikes.
     maybe_finalized_transactions
         .retain(|_txid, tx| tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64 <= now);
-
     if maybe_finalized_transactions.is_empty() {
         // There are no transactions eligible for replacement.
         return;
@@ -598,7 +604,7 @@ async fn finalize_requests() {
         &main_address.display(btc_network),
         /*min_confirmations=*/ 0,
         management::CallSource::Minter,
-        &IC_CANISTER_RUNTIME,
+        runtime,
     )
     .await
     {
@@ -658,7 +664,7 @@ async fn finalize_requests() {
         |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
         |old_txid, new_tx| {
             state::mutate_state(|s| {
-                state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
+                state::audit::replace_transaction(s, old_txid, new_tx, runtime);
             })
         },
         &IC_CANISTER_RUNTIME,
