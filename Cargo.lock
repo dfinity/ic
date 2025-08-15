@@ -3516,7 +3516,6 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
- "ic-stable-structures",
  "ic-types",
  "ic-types-test-utils",
  "ic-xrc-types",
