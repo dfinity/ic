@@ -523,7 +523,9 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
-                                    requests: state::SubmittedRequests::ToConfirm { requests },
+                                    requests: state::SubmittedWithdrawalRequests::ToConfirm {
+                                        requests,
+                                    },
                                     txid,
                                     used_utxos,
                                     change_output: Some(req.change_output),
@@ -779,11 +781,11 @@ pub async fn resubmit_transactions<
         };
 
         let outputs = match &submitted_tx.requests {
-            state::SubmittedRequests::ToConfirm { requests } => requests
+            state::SubmittedWithdrawalRequests::ToConfirm { requests } => requests
                 .iter()
                 .map(|req| (req.address.clone(), req.amount))
                 .collect(),
-            state::SubmittedRequests::ToCancel { .. } => {
+            state::SubmittedWithdrawalRequests::ToCancel { .. } => {
                 vec![(main_address.clone(), retrieve_btc_min_amount)]
             }
         };
@@ -811,12 +813,12 @@ pub async fn resubmit_transactions<
                 // transaction is not meant to complete the corresponding RetrieveBtcRequests
                 // but rather to cancel them.
                 let requests = match new_tx_requests {
-                    state::SubmittedRequests::ToConfirm { requests } => requests,
-                    state::SubmittedRequests::ToCancel { .. } => {
+                    state::SubmittedWithdrawalRequests::ToConfirm { requests } => requests,
+                    state::SubmittedWithdrawalRequests::ToCancel { .. } => {
                         unreachable!("cancellation tx never has too many inputs!")
                     }
                 };
-                new_tx_requests = state::SubmittedRequests::ToCancel {
+                new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel {
                     requests,
                     reason: err,
                 };
