@@ -2837,12 +2837,7 @@ mod tests {
     use ic_base_types::{NumBytes, PrincipalId};
 
     use ic_crypto_sha2::Sha256;
-<<<<<<< HEAD
-    use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
-    use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
-=======
     use ic_management_canister_types::{CanisterIdRecord, ChunkHash, StoredChunksReply};
->>>>>>> ac2760f9f0 (Migrate from ic-management-canister-types-private to public ic-management-canister-types)
     use ic_nervous_system_clients::canister_status::{
         CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
     };
