@@ -1014,6 +1014,7 @@ pub trait SystemApi {
         &mut self,
         current_size: u64,
         additional_pages: u64,
+        max_size: u64,
         stable_memory_api: StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome>;
 

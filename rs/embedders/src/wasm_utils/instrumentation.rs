@@ -1939,6 +1939,11 @@ fn export_table(mut module: Module) -> Module {
 /// Exports existing memories and injects new memories. Returns the index of an
 /// injected stable memory when using wasm-native stable memory. The bytemap for
 /// the stable memory will always be inserted directly after the stable memory.
+///
+/// This function is also responsible for inserting maximum memory limits for all
+/// defined memories. Checks in the system API will only check against dynamic
+/// limits so we need to impose global limits for 32-bit heap, 64-bit heap, and
+/// stable memory here.
 fn update_memories(
     mut module: Module,
     write_barrier: FlagStatus,
@@ -1946,19 +1951,17 @@ fn update_memories(
     max_stable_memory_size: NumBytes,
 ) -> (Module, u32) {
     if let Some(mem) = module.memories.first_mut() {
-        if mem.memory64 {
-            let max_wasm_memory_size_in_wasm_pages =
-                max_memory_size_in_wasm_pages(max_wasm_memory_size);
-            match mem.maximum {
-                Some(max) => {
-                    // In case the maximum memory size is larger than the maximum allowed, cap it.
-                    if max > max_wasm_memory_size_in_wasm_pages {
-                        mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
-                    }
-                }
-                None => {
+        let max_wasm_memory_size_in_wasm_pages =
+            max_memory_size_in_wasm_pages(max_wasm_memory_size);
+        match mem.maximum {
+            Some(max) => {
+                // In case the maximum memory size is larger than the maximum allowed, cap it.
+                if max > max_wasm_memory_size_in_wasm_pages {
                     mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
                 }
+            }
+            None => {
+                mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
             }
         }
     }
