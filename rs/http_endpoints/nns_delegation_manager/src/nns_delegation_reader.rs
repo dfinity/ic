@@ -6,9 +6,12 @@ use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation},
     CanisterId, SubnetId,
 };
+use serde::ser::Serialize;
 use tokio::sync::watch;
 
-#[derive(Clone, Copy)]
+use crate::metrics::DelegationManagerMetrics;
+
+#[derive(Clone, Copy, Debug)]
 /// Filter for the canister ranges in the NNS delegation.
 pub enum CanisterRangesFilter {
     /// Keep the `/subnet/<subnet_id>/canister_ranges` leaf and purge
@@ -24,12 +27,17 @@ pub enum CanisterRangesFilter {
 }
 
 #[derive(Clone)]
+/// Wrapper around [`tokio::sync::watch::Receiver`] with some utility methods.
 // TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
 }
 
 impl NNSDelegationReader {
+    pub fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
+        Self { receiver }
+    }
+
     /// Returns the most recent NNS delegation known to the replica.
     /// Consecutive calls might return different delegations.
     pub fn get_delegation(
@@ -42,10 +50,6 @@ impl NNSDelegationReader {
             .map(|builder| builder.build_or_original(canister_ranges_filter))
     }
 
-    pub fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
-        Self { receiver }
-    }
-
     pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
         self.receiver.changed().await
     }
@@ -53,7 +57,7 @@ impl NNSDelegationReader {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NNSDelegationBuilder {
-    builder: NNSDelegationBuilderPriv,
+    builder: NNSDelegationBuilderInner,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
     precomputed_delegation_without_canister_ranges: CertificateDelegation,
 }
@@ -61,10 +65,10 @@ pub struct NNSDelegationBuilder {
 impl NNSDelegationBuilder {
     pub fn try_new(raw_certificate: Blob, subnet_id: SubnetId) -> Result<Self, String> {
         let full_certificate: Certificate = serde_cbor::from_slice(&raw_certificate)
-            .map_err(|e| format!("Failed to parse delegation certificate: {}", e))?;
+            .map_err(|err| format!("Failed to parse delegation certificate: {err}"))?;
 
         let full_labeled_tree = LabeledTree::try_from(full_certificate.tree.clone())
-            .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;
+            .map_err(|err| format!("Invalid hash tree in the delegation certificate: {err:?}"))?;
 
         Ok(Self::new(
             full_certificate,
@@ -80,7 +84,7 @@ impl NNSDelegationBuilder {
         raw_certificate: Blob,
         subnet_id: SubnetId,
     ) -> Self {
-        let builder = NNSDelegationBuilderPriv::new(
+        let builder = NNSDelegationBuilderInner::new(
             full_certificate,
             full_labeled_tree,
             raw_certificate,
@@ -98,6 +102,10 @@ impl NNSDelegationBuilder {
         }
     }
 
+    /// Builds an NNS delegation with the given canister ranges filter.
+    /// If for some reasons the delegation cannot be built, it returns the full delegation
+    /// as received from the NNS. This means the returned delegation might contain
+    /// both formats of the canister ranges.
     pub(crate) fn build_or_original(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
@@ -114,10 +122,33 @@ impl NNSDelegationBuilder {
             }
         }
     }
+
+    pub(crate) fn observe_delegation_sizes(&self, metrics: &DelegationManagerMetrics) {
+        metrics
+            .delegation_size
+            .with_label_values(&["both_canister_ranges"])
+            .observe(self.builder.original_delegation.certificate.len() as f64);
+        metrics
+            .delegation_size
+            .with_label_values(&["no_canister_ranges"])
+            .observe(
+                self.precomputed_delegation_without_canister_ranges
+                    .certificate
+                    .len() as f64,
+            );
+        metrics
+            .delegation_size
+            .with_label_values(&["flat_canister_ranges"])
+            .observe(
+                self.precomputed_delegation_with_flat_canister_ranges
+                    .certificate
+                    .len() as f64,
+            );
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct NNSDelegationBuilderPriv {
+struct NNSDelegationBuilderInner {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,
     full_filter_builder: FilterBuilder,
@@ -125,7 +156,7 @@ struct NNSDelegationBuilderPriv {
     original_delegation: CertificateDelegation,
 }
 
-impl NNSDelegationBuilderPriv {
+impl NNSDelegationBuilderInner {
     fn new(
         full_certificate: Certificate,
         full_labeled_tree: LabeledTree<Vec<u8>>,
@@ -147,8 +178,13 @@ impl NNSDelegationBuilderPriv {
     fn build_or_original(&self, filter: CanisterRangesFilter) -> CertificateDelegation {
         match self.try_build(filter) {
             Ok(delegation) => delegation,
-            // FIXME(kpop): log something
-            Err(_) => self.original_delegation.clone(),
+            Err(err) => {
+                // FIXME(kpop): log something
+                if cfg!(debug_assertions) {
+                    panic!("Failed to build an NNS delegation with filter {filter:?}: {err}");
+                }
+                self.original_delegation.clone()
+            }
         }
     }
 
@@ -175,27 +211,31 @@ impl NNSDelegationBuilderPriv {
             }
             // Additionally include `/canister_ranges/<subnet_id>/<canister_id_label>`
             CanisterRangesFilter::Tree(canister_id) => {
-                let label = match lookup_lower_bound(
+                match lookup_lower_bound(
                     &self.full_labeled_tree,
                     &[b"canister_ranges".as_ref(), &self.subnet_id.get().to_vec()],
                     &canister_id.get().to_vec(),
                 ) {
-                    LookupLowerBoundStatus::Found(label, _labeled_subtree) => label,
-                    LookupLowerBoundStatus::PrefixNotFound
-                    | LookupLowerBoundStatus::LabelNotFound => {
+                    LookupLowerBoundStatus::Found(label, _labeled_subtree) => {
+                        paths.push(Path::new(vec![
+                            b"canister_ranges".into(),
+                            self.subnet_id.get().into(),
+                            label.clone(),
+                        ]));
+                    }
+                    LookupLowerBoundStatus::LabelNotFound => {
                         // The canister id is not assigned to the subnet according to the NNS delegation.
                         // This could mean that the routing table has changed but we haven't refreshed the
                         // NNS delegation just yet.
                         // In that case, we return the delegation without canister ranges.
-                        return Err(String::from("Not found"));
+                    }
+                    LookupLowerBoundStatus::PrefixNotFound => {
+                        return Err(format!(
+                            "Path `/canister_ranges/{}` not found",
+                            self.subnet_id,
+                        ));
                     }
                 };
-
-                paths.push(Path::new(vec![
-                    b"canister_ranges".into(),
-                    self.subnet_id.get().into(),
-                    label.clone(),
-                ]));
             }
         }
 
@@ -217,11 +257,23 @@ impl NNSDelegationBuilderPriv {
         Ok(CertificateDelegation {
             subnet_id: Blob(self.subnet_id.get().to_vec()),
             certificate: Blob(
-                serde_cbor::ser::to_vec(&certificate)
-                    .map_err(|err| format!("Failed to serialize certificate: {err}"))?,
+                into_cbor(&certificate)
+                    .map_err(|err| format!("Failed to serialize certificate to cbor: {err}"))?,
             ),
         })
     }
+}
+
+/// Convert an object into CBOR binary.
+fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
+    let mut serializer = serde_cbor::Serializer::new(Vec::new());
+    serializer
+        .self_describe()
+        .map_err(|err| format!("Could not write magic tag: {err}"))?;
+    certificate
+        .serialize(&mut serializer)
+        .map_err(|err| format!("Failed to serialize the object: {err}"))?;
+    Ok(serializer.into_inner())
 }
 
 #[cfg(test)]
@@ -374,5 +426,46 @@ mod tests {
             /*use_signature_cache=*/ false,
         )
         .expect_err("Should fail because the range [0, 10] should have been pruned from the tree");
+    }
+
+    #[test]
+    fn canister_out_of_range_test() {
+        let (full_delegation, root_public_key) = create_fake_certificate_delegation(
+            &vec![
+                (CanisterId::from(1), CanisterId::from(10)),
+                (CanisterId::from(11), CanisterId::from(20)),
+                (CanisterId::from(21), CanisterId::from(30)),
+                (CanisterId::from(31), CanisterId::from(31)),
+                (CanisterId::from(41), CanisterId::from(41)),
+                (CanisterId::from(100), CanisterId::from(200)),
+            ],
+            SUBNET_0,
+        );
+        let reader = create_reader(Some(full_delegation), SUBNET_0);
+
+        let delegation = reader
+            .get_delegation(CanisterRangesFilter::Tree(CanisterId::from(0)))
+            .expect("Should succeed");
+
+        assert!(
+            !path_exists(&delegation, &[b"canister_ranges"]),
+            "New canister ranges should have been purged because no leaf contains the \
+            specified canister id"
+        );
+        assert!(
+            !path_exists(
+                &delegation,
+                &[b"subnet", SUBNET_0.get().as_ref(), b"canister_ranges"],
+            ),
+            "Old canister ranges should have been purged"
+        );
+        verify_delegation_certificate(
+            &delegation.certificate,
+            &SUBNET_0,
+            &root_public_key,
+            None,
+            /*use_signature_cache=*/ false,
+        )
+        .expect("The delegation should still be verifiable");
     }
 }

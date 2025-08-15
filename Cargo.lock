@@ -11455,6 +11455,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "rustls 0.23.27",
+ "serde",
  "serde_cbor",
  "slog",
  "tokio",

@@ -407,34 +407,17 @@ async fn try_fetch_delegation_from_nns(
     )
     .map_err(|err| format!("invalid subnet delegation certificate: {:?} ", err))?;
 
-    metrics
-        .delegation_size
-        .with_label_values(&["both_canister_ranges"])
-        .observe(response.certificate.len() as f64);
-    //        metrics
-    //            .delegation_size
-    //            .with_label_values(&["no_canister_ranges"])
-    //            .observe(
-    //                precomputed_delegation_without_canister_ranges
-    //                    .certificate
-    //                    .len() as f64,
-    //            );
-    //        metrics
-    //            .delegation_size
-    //            .with_label_values(&["flat_canister_ranges"])
-    //            .observe(
-    //                precomputed_delegation_with_flat_canister_ranges
-    //                    .certificate
-    //                    .len() as f64,
-    //            );
-
     info!(log, "Setting NNS delegation to: {:?}", response.certificate);
-    Ok(NNSDelegationBuilder::new(
+    let nns_delegation_builder = NNSDelegationBuilder::new(
         parsed_delegation,
         labeled_tree,
         response.certificate,
         subnet_id,
-    ))
+    );
+
+    nns_delegation_builder.observe_delegation_sizes(metrics);
+
+    Ok(nns_delegation_builder)
 }
 
 async fn connect(

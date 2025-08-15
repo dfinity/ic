@@ -17,7 +17,8 @@ use ic_types::Time;
 
 use crate::{
     validate_subnet_delegation_certificate, validate_subnet_delegation_certificate_with_cache,
-    verify_certified_data, verify_certified_data_with_cache, CertificateValidationError,
+    verify_certified_data, verify_certified_data_with_cache, verify_delegation_certificate,
+    CertificateValidationError,
 };
 
 fn verify_certified_data_with_and_without_cache(
@@ -49,6 +50,25 @@ fn validate_subnet_delegation_certificate_with_and_without_cache(
         validate_subnet_delegation_certificate(certificate, subnet_id, root_pk);
     let verification_result_with_cache =
         validate_subnet_delegation_certificate_with_cache(certificate, subnet_id, root_pk);
+
+    assert_eq!(
+        verification_result_without_cache,
+        verification_result_with_cache
+    );
+
+    verification_result_without_cache
+}
+
+fn verify_subnet_delegation_certificate_with_and_without_cache(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
+    let verification_result_without_cache =
+        verify_delegation_certificate(certificate, subnet_id, root_pk, Some(canister_id), false);
+    let verification_result_with_cache =
+        verify_delegation_certificate(certificate, subnet_id, root_pk, Some(canister_id), true);
 
     assert_eq!(
         verification_result_without_cache,
@@ -836,10 +856,11 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_missing() {
 fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_missing() {
     let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
+    let canister_id = canister_id(1);
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
         CanisterData {
-            canister_id: canister_id(1),
+            canister_id,
             certified_data: random_certified_data(),
         },
         rng,
@@ -861,9 +882,9 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_missing() {
     let delegation = cert.delegation.expect("missing delegation");
 
     assert_matches!(
-        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
-        Err(CertificateValidationError::DeserError(e))
-        if e.contains("failed to unpack replica state from a labeled tree")
+        verify_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &canister_id, &root_pk),
+        Err(CertificateValidationError::MalformedHashTree(e))
+        if e.contains("state tree doesn't have canister ranges")
     );
 }
 
@@ -903,9 +924,10 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_malformed() {
 fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_malformed() {
     let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
+    let canister_id = canister_id(1);
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
-                    canister_id: canister_id(1),
+                    canister_id,
                     certified_data: random_certified_data(),
                 },rng)
                 .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
@@ -923,7 +945,7 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_malformed()
                 .build();
     let delegation = cert.delegation.expect("missing delegation");
     assert_matches!(
-        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
+        verify_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &canister_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack canister range")
     );

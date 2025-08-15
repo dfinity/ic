@@ -28,6 +28,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
