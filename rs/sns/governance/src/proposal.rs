@@ -1507,7 +1507,7 @@ async fn validate_and_render_execute_extension_operation(
     let ValidatedExecuteExtensionOperation {
         extension_canister_id,
         operation_name,
-        operation_arg,
+        arg,
     } = validate_execute_extension_operation(governance, execute.clone())
         .await
         .map_err(|err| err.error_message)?;
@@ -1517,7 +1517,7 @@ async fn validate_and_render_execute_extension_operation(
 
 * Extension canister ID: `{extension_canister_id}`
 * Operation name: `{operation_name}`
-* Operation argument: `{operation_arg}`
+* Operation argument: `{arg}`
 #"
     ))
 }
@@ -1539,8 +1539,9 @@ async fn validate_and_render_register_extension(
             None
         }
         Some(chunked_wasm) => {
-            if let Some(canister_id) = chunked_wasm.store_canister_id {
-                match Wasm::try_from(chunked_wasm.clone()) {
+            let canister_id = chunked_wasm.store_canister_id;
+            if let Some(canister_id) = canister_id {
+                match Wasm::try_from(chunked_wasm) {
                     Ok(wasm) => Some((wasm, canister_id)),
                     Err(err) => {
                         defects.push(format!("Invalid chunked_canister_wasm: {}", err));

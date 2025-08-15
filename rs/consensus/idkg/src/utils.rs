@@ -23,15 +23,15 @@ use ic_types::{
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::{
         idkg::{
-            common::ThresholdSigInputs, CompletedSignature, HasIDkgMasterPublicKeyId,
-            IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage, IDkgPayload,
-            IDkgTranscriptParamsRef, PreSigId, RequestId, TranscriptLookupError, TranscriptRef,
+            common::{BuildSignatureInputsError, ThresholdSigInputs},
+            CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
+            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
+            TranscriptLookupError, TranscriptRef,
         },
         Block, HasHeight,
     },
     crypto::{
         canister_threshold_sig::{
-            error::{ThresholdEcdsaSigInputsCreationError, ThresholdSchnorrSigInputsCreationError},
             idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
             MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
@@ -221,29 +221,6 @@ pub(super) fn block_chain_cache(
             pool_reader.get_finalized_height(),
             pool_reader.get_catch_up_height()
         )))
-    }
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub enum BuildSignatureInputsError {
-    /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
-    ContextIncomplete,
-    /// The tECDSA signature inputs could not be created because the context is malformed
-    ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
-    /// The tSchnorr signature inputs could not be created because the context is malformed
-    ThresholdSchnorrSigInputsCreationError(ThresholdSchnorrSigInputsCreationError),
-}
-
-impl BuildSignatureInputsError {
-    /// Fatal errors indicate a problem in the construction of payloads,
-    /// request contexts, or the match between both.
-    pub(crate) fn is_fatal(&self) -> bool {
-        matches!(
-            self,
-            BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError(_)
-                | BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(_)
-        )
     }
 }
 
