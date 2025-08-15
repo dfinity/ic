@@ -62,7 +62,6 @@ use ic_stable_structures::{
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::io::Read;
 use std::{
     boxed::Box,
     cell::RefCell,
