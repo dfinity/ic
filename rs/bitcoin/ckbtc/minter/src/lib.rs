@@ -1132,7 +1132,7 @@ pub fn build_unsigned_transaction_from_inputs(
     // so we simply use 546 satoshi as the minimum amount per output.
     const MIN_OUTPUT_AMOUNT: u64 = 546;
 
-    // The last output has to main_address
+    // The last output has to match the main_address.
     debug_assert!(matches!(unsigned_tx.outputs.iter().last(),
         Some(tx::TxOut { value: _, address }) if address == &main_address));
 
