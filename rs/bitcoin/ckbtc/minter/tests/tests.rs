@@ -1197,6 +1197,7 @@ impl CkBtcSetup {
         }
         for _ in 0..max_ticks {
             self.env.tick();
+            self.env.advance_time(Duration::from_nanos(1));
             if let Some(result) = condition(self) {
                 return result;
             }
@@ -2386,6 +2387,10 @@ fn test_retrieve_btc_with_approval_fail() {
 #[test]
 fn should_cancel_non_standard_transaction() {
     let ckbtc = CkBtcSetup::new();
+    let main_address: BtcAddress = ckbtc
+        .get_btc_address(Principal::from(ckbtc.minter_id))
+        .parse()
+        .unwrap();
     let user = Principal::from(ckbtc.caller);
 
     // Step 1: deposit a lot of small UTXOs
@@ -2408,8 +2413,9 @@ fn should_cancel_non_standard_transaction() {
         .collect::<Vec<_>>();
     ckbtc.deposit_utxos(user, utxos);
 
+    let balance_after_deposit = ckbtc.balance_of(user);
     assert_eq!(
-        ckbtc.balance_of(user),
+        balance_after_deposit,
         Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
     );
 
@@ -2418,10 +2424,17 @@ fn should_cancel_non_standard_transaction() {
     // Step 2: request a withdrawal
     let withdrawal_amount = 1_800 * deposit_value;
     ckbtc.approve_minter(user, withdrawal_amount, None);
+    let balance_before_withdrawal = ckbtc.balance_of(user);
 
     let RetrieveBtcOk { block_index } = ckbtc
         .retrieve_btc_with_approval(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount, None)
         .expect("retrieve_btc failed");
+
+    let balance_after_withdrawal = ckbtc.balance_of(user);
+    assert_eq!(
+        balance_after_withdrawal,
+        balance_before_withdrawal.clone() - Nat::from(withdrawal_amount)
+    );
 
     assert_eq!(
         ckbtc.retrieve_btc_status_v2(block_index),
@@ -2440,20 +2453,67 @@ fn should_cancel_non_standard_transaction() {
         1,
         "ckbtc transaction did not appear in the mempool"
     );
-    let tx = mempool
+    let non_standard_tx = mempool
         .get(&txid)
         .expect("the mempool does not contain the withdrawal transaction");
-    assert_eq!(tx.input.len(), 1_800);
-    assert_eq!(tx.vsize(), 122_244); //above 100 kvbytes is non standard
+    assert_eq!(non_standard_tx.input.len(), 1_800);
+    assert_eq!(
+        non_standard_tx.txid().to_string(),
+        "c729d4a443158e70a4a3f550f0c88df865c05ca92d8048830a8585c7a7ffa09f"
+    );
+    assert_eq!(non_standard_tx.vsize(), 122_244); //above 100 kvbytes is non standard
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
         RetrieveBtcStatusV2::Submitted { .. }
     );
 
     ckbtc.enable_non_standard_tx(false);
+    ckbtc.env.checkpointed_tick();
     ckbtc.upgrade();
 
-    //TODO XC-450: cancel Bitocin transaction + reimbursement flow
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Submitted { .. }
+    );
+
+    //TODO: should not be needed
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+
+    let mempool = ckbtc.tick_until(
+        "mempool contains a replacement transaction",
+        1_000,
+        |ckbtc| {
+            let mempool = ckbtc.mempool();
+            (mempool.len() > 1).then_some(mempool)
+        },
+    );
+
+    assert_eq!(ckbtc.balance_of(user), balance_after_withdrawal);
+
+    assert_eq!(mempool.len(), 2);
+    let (cancel_tx_id, cancel_tx) = {
+        let txs: Vec<_> = mempool
+            .into_iter()
+            .filter(|(txid, tx)| txid.to_string() != non_standard_tx.txid().to_string())
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs[0].clone()
+    };
+
+    println!("Found cancel transaction {cancel_tx_id}: {cancel_tx:?}");
+
+    assert_eq!(cancel_tx.input.len(), 1);
+    assert_eq!(cancel_tx.output.len(), 2);
+    for output in &cancel_tx.output {
+        assert_eq!(
+            BtcAddress::from_script(&output.script_pubkey, BtcNetwork::Bitcoin).unwrap(),
+            main_address
+        );
+    }
+
+    //TODO XC-450: cancel Bitcoin transaction + reimbursement flow
 }
 
 #[test]
