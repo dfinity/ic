@@ -348,6 +348,21 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     err
                 );
                 for request in batch {
+                    // TODO: deduct processing fee
+                    if let Some(account) = request.reimbursement_account {
+                        let reason =
+                            reimbursement::WithdrawalReimbursementReason::InvalidTransaction(
+                                err.clone(),
+                            );
+                        state::audit::reimburse_withdrawal(
+                            s,
+                            request.block_index,
+                            request.amount,
+                            account,
+                            reason,
+                            runtime,
+                        );
+                    }
                     state::audit::remove_retrieve_btc_request(s, request, runtime);
                 }
                 None

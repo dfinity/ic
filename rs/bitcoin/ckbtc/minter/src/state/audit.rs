@@ -91,6 +91,9 @@ pub fn sent_transaction<R: CanisterRuntime>(
     state.push_submitted_transaction(tx);
 }
 
+// If the given finalized transaction is a cancellation transaction, all its
+// related retrieve_btc requests will be reimbursed.
+// TODO: deduct processing fee
 pub fn confirm_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     txid: &Txid,
