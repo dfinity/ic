@@ -852,7 +852,6 @@ impl CkBtcMinterState {
         for utxo in finalized_tx.used_utxos.iter() {
             self.forget_utxo(utxo);
         }
-        // If requests is empty, it means it is a cancellation tx
         match finalized_tx.requests {
             SubmittedRequests::ToConfirm(requests) => {
                 self.finalized_requests_count += requests.len() as u64;
