@@ -545,6 +545,7 @@ pub struct IcpFeatures {
     pub registry: bool,
     pub cycles_minting: bool,
     pub icp_token: bool,
+    /// If the `cycles_token` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
     pub cycles_token: bool,
     pub nns_governance: bool,
 }
