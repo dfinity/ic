@@ -2563,6 +2563,18 @@ fn should_cancel_non_standard_transaction() {
         RetrieveBtcStatusV2::Unknown
     );
 
+    let _replaced_event = ckbtc
+        .get_events()
+        .iter()
+        .find(|event| {
+            matches!(
+                event.payload, EventType::ReplacedBtcTransaction { old_txid, new_txid, .. }
+                if old_txid.to_string() == non_standard_tx.txid().to_string() &&
+                new_txid == cancel_tx_id
+            )
+        })
+        .unwrap();
+
     ckbtc.finalize_transaction(&cancel_tx);
 
     ckbtc.env.advance_time(Duration::from_secs(5));
