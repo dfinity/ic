@@ -816,7 +816,7 @@ proptest! {
         let submitted_at = 1_234_567_890;
 
         state.push_submitted_transaction(SubmittedBtcTransaction {
-            requests: requests.clone(),
+            requests: requests.clone().into(),
             txid: txids[0],
             used_utxos: used_utxos.clone(),
             submitted_at,
@@ -840,7 +840,7 @@ proptest! {
             let new_txid = tx.txid();
 
             state.replace_transaction(prev_txid, SubmittedBtcTransaction {
-                requests: requests.clone(),
+                requests: requests.clone().into(),
                 txid: new_txid,
                 used_utxos: used_utxos.clone(),
                 submitted_at,

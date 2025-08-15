@@ -2,7 +2,7 @@
 
 use super::{
     eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
@@ -97,25 +97,22 @@ pub fn confirm_transaction<R: CanisterRuntime>(
     runtime: &R,
 ) {
     record_event(EventType::ConfirmedBtcTransaction { txid: *txid }, runtime);
-    if let Some(cancelled) = state.finalize_transaction(txid) {
-        for _request in cancelled.requests {
-            /* TODO: implement fee deduction and reason
+    if let Some(WithdrawalCancellation {
+        reason, requests, ..
+    }) = state.finalize_transaction(txid)
+    {
+        for request in requests {
             if let Some(account) = request.reimbursement_account {
-                    let reason = WithdrawalReimbursementReason::InvalidTransaction(
-                        InvalidTransactionError::TooManyInputs {
-                        // TODO: pass in the error here
-                       },
-                    );
-                    reimburse_withdrawal(
-                        state,
-                        request.block_index,
-                        request.amount,
-                        account,
-                        reason,
-                        runtime,
-                    );
+                let reason = WithdrawalReimbursementReason::InvalidTransaction(reason.clone());
+                reimburse_withdrawal(
+                    state,
+                    request.block_index,
+                    request.amount,
+                    account,
+                    reason,
+                    runtime,
+                );
             }
-            */
         }
     }
 }

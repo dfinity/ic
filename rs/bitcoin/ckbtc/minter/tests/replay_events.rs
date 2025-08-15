@@ -9,6 +9,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_btc_interface::{OutPoint, Utxo};
 use ic_ckbtc_minter::address::BitcoinAddress;
+use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
@@ -214,10 +215,10 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
 
     assert_eq!(
         build_tx_error,
-        BuildTxError::TooManyInputs {
+        BuildTxError::InvalidTransaction(InvalidTransactionError::TooManyInputs {
             num_inputs: 1799,
             max_num_inputs: 1000
-        }
+        })
     );
 
     // Check if a cancellation tx will be sent

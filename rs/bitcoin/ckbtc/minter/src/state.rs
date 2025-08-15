@@ -84,11 +84,38 @@ pub struct ChangeOutput {
     pub value: u64,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubmittedRequests {
+    ToConfirm(Vec<RetrieveBtcRequest>),
+    ToCancel(Vec<RetrieveBtcRequest>, InvalidTransactionError),
+}
+
+impl From<Vec<RetrieveBtcRequest>> for SubmittedRequests {
+    fn from(requests: Vec<RetrieveBtcRequest>) -> Self {
+        Self::ToConfirm(requests)
+    }
+}
+
+impl SubmittedRequests {
+    pub fn iter(&self) -> impl Iterator<Item = &RetrieveBtcRequest> {
+        match self {
+            Self::ToConfirm(requests) => requests.iter(),
+            Self::ToCancel(requests, _) => requests.iter(),
+        }
+    }
+    pub fn len(&self) -> usize {
+        match self {
+            Self::ToConfirm(requests) => requests.len(),
+            Self::ToCancel(requests, _) => requests.len(),
+        }
+    }
+}
+
 /// Represents a transaction sent to the Bitcoin network.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
-    pub requests: Vec<RetrieveBtcRequest>,
+    pub requests: SubmittedRequests,
     /// The identifier of the unconfirmed transaction.
     pub txid: Txid,
     /// The list of UTXOs we used in the transaction.
@@ -96,10 +123,8 @@ pub struct SubmittedBtcTransaction {
     /// The IC time at which we submitted the Bitcoin transaction.
     pub submitted_at: u64,
     /// The tx output from the submitted transaction that the minter owns.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub change_output: Option<ChangeOutput>,
     /// Fee per vbyte in millisatoshi.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_per_vbyte: Option<u64>,
 }
 
@@ -451,6 +476,7 @@ pub enum ReimbursementReason {
 
 pub struct WithdrawalCancellation {
     pub fee: u64,
+    pub reason: InvalidTransactionError,
     pub requests: Vec<RetrieveBtcRequest>,
 }
 
@@ -674,9 +700,16 @@ impl CkBtcMinterState {
             };
         }
 
-        if let Some(txid) = self.submitted_transactions.iter().find_map(|tx| {
-            (tx.requests.iter().any(|r| r.block_index == block_index)).then_some(tx.txid)
-        }) {
+        if let Some(txid) = self
+            .submitted_transactions
+            .iter()
+            .find_map(|tx| match &tx.requests {
+                SubmittedRequests::ToConfirm(requests) => {
+                    (requests.iter().any(|r| r.block_index == block_index)).then_some(tx.txid)
+                }
+                SubmittedRequests::ToCancel(_, _) => None,
+            })
+        {
             return RetrieveBtcStatus::Submitted { txid };
         }
 
@@ -807,34 +840,42 @@ impl CkBtcMinterState {
         for utxo in finalized_tx.used_utxos.iter() {
             self.forget_utxo(utxo);
         }
-        self.finalized_requests_count += finalized_tx.requests.len() as u64;
         // If requests is empty, it means it is a cancellation tx
-        if finalized_tx.requests.is_empty() {
-            let input_value = finalized_tx.used_utxos.iter().map(|u| u.value).sum::<u64>();
-            let change = finalized_tx
-                .change_output
-                .map(|c| c.value)
-                .unwrap_or_default();
-            let fee = input_value.saturating_sub(change);
-            let requests = self.cancel_tx_replacement(
-                txid,
-                finalized_tx.used_utxos.into_iter().collect::<BTreeSet<_>>(),
-            );
-            assert!(
-                !requests.is_empty(),
-                "Unable to find any retrieve_btc request corresponding to cancellation tx {txid}"
-            );
-            Some(WithdrawalCancellation { fee, requests })
-        } else {
-            for request in finalized_tx.requests {
-                self.push_finalized_request(FinalizedBtcRetrieval {
-                    request,
-                    state: FinalizedStatus::Confirmed { txid: *txid },
-                });
-            }
+        match finalized_tx.requests {
+            SubmittedRequests::ToConfirm(requests) => {
+                self.finalized_requests_count += requests.len() as u64;
+                for request in requests {
+                    self.push_finalized_request(FinalizedBtcRetrieval {
+                        request,
+                        state: FinalizedStatus::Confirmed { txid: *txid },
+                    });
+                }
 
-            self.cleanup_tx_replacement_chain(txid);
-            None
+                self.cleanup_tx_replacement_chain(txid);
+                None
+            }
+            SubmittedRequests::ToCancel(requests, reason) => {
+                let input_value = finalized_tx.used_utxos.iter().map(|u| u.value).sum::<u64>();
+                let change = finalized_tx
+                    .change_output
+                    .map(|c| c.value)
+                    .unwrap_or_default();
+                let fee = input_value.saturating_sub(change);
+                let cancelled_requests = self.cancel_tx_replacement(
+                    txid,
+                    finalized_tx.used_utxos.into_iter().collect::<BTreeSet<_>>(),
+                );
+                debug_assert_eq!(
+                    cancelled_requests.iter().collect::<BTreeSet<_>>(),
+                    requests.iter().collect::<BTreeSet<_>>(),
+                    "Cancelled requests set does not match what was in cancellation tx {txid}"
+                );
+                Some(WithdrawalCancellation {
+                    reason,
+                    fee,
+                    requests,
+                })
+            }
         }
     }
 
@@ -897,7 +938,11 @@ impl CkBtcMinterState {
                         self.available_utxos.insert(utxo.clone());
                     }
                 }
-                for request in tx.requests.iter() {
+                let requests = match &tx.requests {
+                    SubmittedRequests::ToConfirm(requests) => requests,
+                    SubmittedRequests::ToCancel(_, _) => &vec![],
+                };
+                for request in requests.iter() {
                     cancelled_requests.insert(request.clone());
                 }
             });

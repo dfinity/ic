@@ -4,7 +4,7 @@ use crate::reimbursement::ReimburseWithdrawalTask;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
@@ -342,7 +342,7 @@ pub fn replay<I: CheckInvariants>(
                     state.available_utxos.remove(utxo);
                 }
                 state.push_submitted_transaction(SubmittedBtcTransaction {
-                    requests: retrieve_btc_requests,
+                    requests: SubmittedRequests::ToConfirm(retrieve_btc_requests),
                     txid,
                     used_utxos: utxos,
                     fee_per_vbyte,

@@ -2,6 +2,7 @@ use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
+use crate::reimbursement::InvalidTransactionError;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
@@ -340,8 +341,16 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     utxos,
                 })
             }
-            Err(BuildTxError::TooManyInputs { .. }) => {
-                unimplemented!()
+            Err(BuildTxError::InvalidTransaction(err)) => {
+                log!(
+                    P0,
+                    "[submit_pending_requests]: error in building transaction ({:?})",
+                    err
+                );
+                for request in batch {
+                    state::audit::remove_retrieve_btc_request(s, request, runtime);
+                }
+                None
             }
             Err(BuildTxError::AmountTooLow) => {
                 log!(P0,
@@ -446,7 +455,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
-                                    requests,
+                                    requests: state::SubmittedRequests::ToConfirm(requests),
                                     txid,
                                     used_utxos,
                                     change_output: Some(req.change_output),
@@ -699,11 +708,16 @@ pub async fn resubmit_transactions<
             None => fee_per_vbyte,
         };
 
-        let outputs = submitted_tx
-            .requests
-            .iter()
-            .map(|req| (req.address.clone(), req.amount))
-            .collect();
+        let outputs = match &submitted_tx.requests {
+            state::SubmittedRequests::ToConfirm(requests) => requests
+                .iter()
+                .map(|req| (req.address.clone(), req.amount))
+                .collect(),
+            state::SubmittedRequests::ToCancel(_, _) => {
+                vec![(main_address.clone(), retrieve_btc_min_amount)]
+            }
+        };
+
         let mut input_utxos = submitted_tx.used_utxos;
         let mut new_tx_requests = submitted_tx.requests;
         let build_result = match build_unsigned_transaction_from_inputs(
@@ -712,7 +726,7 @@ pub async fn resubmit_transactions<
             main_address.clone(),
             tx_fee_per_vbyte,
         ) {
-            Err(err @ BuildTxError::TooManyInputs { .. }) => {
+            Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
                     P0,
                     "[finalize_requests]: {:?}, transaction {} will be cancelled",
@@ -726,7 +740,13 @@ pub async fn resubmit_transactions<
                 // The requests field has to be cleared because the finalization of this
                 // transaction is not meant to complete the corresponding RetrieveBtcRequests
                 // but rather to cancel them.
-                new_tx_requests.clear();
+                let requests = match new_tx_requests {
+                    state::SubmittedRequests::ToConfirm(requests) => requests,
+                    state::SubmittedRequests::ToCancel(_, _) => {
+                        unreachable!("cancellation tx never has too many inputs!")
+                    }
+                };
+                new_tx_requests = state::SubmittedRequests::ToCancel(requests, err);
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
@@ -976,10 +996,7 @@ pub enum BuildTxError {
     /// The transaction contains too many inputs.
     /// If such a transaction were signed, there is a risk that the resulting transaction
     /// will have a size over 100k vbytes and therefore be *non-standard*.
-    TooManyInputs {
-        num_inputs: usize,
-        max_num_inputs: usize,
-    },
+    InvalidTransaction(InvalidTransactionError),
 }
 
 /// Builds a transaction that moves BTC to the specified destination accounts
@@ -1070,10 +1087,12 @@ pub fn build_unsigned_transaction_from_inputs(
         return Err(BuildTxError::NotEnoughFunds);
     }
     if num_inputs > MAX_NUM_INPUTS {
-        return Err(BuildTxError::TooManyInputs {
-            max_num_inputs: MAX_NUM_INPUTS,
-            num_inputs,
-        });
+        return Err(BuildTxError::InvalidTransaction(
+            InvalidTransactionError::TooManyInputs {
+                max_num_inputs: MAX_NUM_INPUTS,
+                num_inputs,
+            },
+        ));
     }
 
     let inputs_value = input_utxos.iter().map(|u| u.value).sum::<u64>();
