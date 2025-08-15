@@ -249,16 +249,6 @@ pub struct Event {
     pub payload: EventType,
 }
 
-// TODO XC-261: Inline logic
-impl From<EventType> for Event {
-    fn from(value: EventType) -> Self {
-        Self {
-            timestamp: None,
-            payload: value,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum ReplayLogError {
     /// There are no events in the event log.

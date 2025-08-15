@@ -604,7 +604,7 @@ impl CkBtcMinterState {
     }
 
     pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
-        // Hack to avoid Candid breaking change in ReimbursementReason
+        // Hack to avoid a Candid breaking change in `ReimbursementReason`
         // which is in the return type of `retrieve_btc_status_v2`
         fn map_reimbursement_reason(reason: &WithdrawalReimbursementReason) -> ReimbursementReason {
             match reason {
@@ -639,13 +639,7 @@ impl CkBtcMinterState {
                     mint_block_index: reimbursement.mint_block_index,
                 }),
                 Err(err) => match err {
-                    ReimbursedError::Quarantined => {
-                        // Hack to avoid Candid breaking change in ReimbursementReason
-                        // which is in the return type of `retrieve_btc_status_v2`.
-                        // At this point the reimbursement will actually not occur automatically
-                        // and may need manual intervention.
-                        RetrieveBtcStatusV2::Unknown
-                    }
+                    ReimbursedError::Quarantined => RetrieveBtcStatusV2::Unknown,
                 },
             };
         }
@@ -1219,6 +1213,13 @@ impl CkBtcMinterState {
     ) {
         self.pending_retrieve_btc_requests
             .retain(|req| req.block_index != ledger_burn_index);
+
+        if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
+            panic!(
+                "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
+                ledger_burn_index,
+                tx_status)
+        }
 
         for submitted_tx in self
             .submitted_transactions

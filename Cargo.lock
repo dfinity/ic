@@ -5377,6 +5377,7 @@ dependencies = [
 name = "grub"
 version = "1.0.0"
 dependencies = [
+ "ic-sys",
  "regex",
  "strum 0.26.3",
  "tempfile",
@@ -5391,12 +5392,11 @@ dependencies = [
  "clap 4.5.27",
  "config",
  "config_types",
- "grub",
+ "ic-sys",
  "ic_device",
  "ic_sev",
  "itertools 0.12.1",
  "libcryptsetup-rs",
- "linux_kernel_command_line",
  "nix 0.24.3",
  "parking_lot",
  "rand 0.8.5",
@@ -9162,7 +9162,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "candid",
  "curve25519-dalek",
@@ -13114,7 +13114,7 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256k1"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bip32 0.5.3",
  "bitcoin 0.28.2",
@@ -13295,6 +13295,7 @@ dependencies = [
  "build-info-build",
  "canbench-rs",
  "candid",
+ "candid-utils",
  "candid_parser",
  "clap 4.5.27",
  "comparable",
@@ -18508,6 +18509,7 @@ dependencies = [
  "ic-agent",
  "ic-boundary-nodes-system-test-utils",
  "ic-canister-client",
+ "ic-http-utils",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
@@ -18521,6 +18523,7 @@ dependencies = [
  "reqwest 0.12.15",
  "serde",
  "slog",
+ "tempfile",
  "tokio",
  "url",
  "wat",

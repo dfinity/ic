@@ -284,6 +284,45 @@ pub fn fake_signature_request_context_from_id(
     (request_id.callback_id, context)
 }
 
+pub fn fake_malformed_signature_request_context_from_id(
+    key_id: MasterPublicKeyId,
+    pre_sig_id: PreSigId,
+    request_id: RequestId,
+) -> (CallbackId, SignWithThresholdContext) {
+    let (callback_id, mut context) =
+        fake_signature_request_context_from_id(key_id, pre_sig_id, request_id);
+
+    // Change the algorithm ID of the key transcript to make it invalid.
+    match &mut context.args {
+        ThresholdArguments::Ecdsa(ecdsa) => {
+            let mut key_transcript = ecdsa
+                .pre_signature
+                .as_ref()
+                .unwrap()
+                .key_transcript
+                .as_ref()
+                .clone();
+            key_transcript.algorithm_id = AlgorithmId::Tls;
+            ecdsa.pre_signature.as_mut().unwrap().key_transcript = Arc::new(key_transcript);
+        }
+        ThresholdArguments::Schnorr(schnorr) => {
+            let mut key_transcript = schnorr
+                .pre_signature
+                .as_ref()
+                .unwrap()
+                .key_transcript
+                .as_ref()
+                .clone();
+            key_transcript.algorithm_id = AlgorithmId::Tls;
+            schnorr.pre_signature.as_mut().unwrap().key_transcript = Arc::new(key_transcript);
+        }
+        // VetKd contexts cannot be malformed in this way.
+        ThresholdArguments::VetKd(_) => {}
+    };
+
+    (callback_id, context)
+}
+
 pub fn fake_signature_request_context_with_registry_version(
     pre_sig_id: Option<PreSigId>,
     key_id: &MasterPublicKeyId,

@@ -3855,6 +3855,23 @@ fn declare_memory_beyond_max_size_1() {
 }
 
 #[test]
+fn declare_memory_beyond_max_size_64_bit() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_init")
+                (i32.store (i32.const 0) (i32.const 1))
+            )
+            (memory i64 {})
+        )"#,
+        (ic_types::MAX_WASM64_MEMORY_IN_BYTES / WASM_PAGE_SIZE as u64) + 1
+    );
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(ErrorCode::CanisterInvalidWasm, err.code());
+}
+
+#[test]
 fn declare_memory_beyond_max_size_2() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"

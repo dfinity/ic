@@ -1,6 +1,5 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use ic_canister_client::Sender;
-use ic_http_utils::file_downloader::FileDownloader;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, GuestLaunchMeasurements};
@@ -17,68 +16,7 @@ use ic_system_test_driver::{
 use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
 use prost::Message;
 use slog::{info, Logger};
-use std::{convert::TryFrom, fs, io::Read, path::Path};
-
-pub fn get_public_update_image_url(git_revision: &ReplicaVersion) -> String {
-    format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
-                git_revision
-            )
-}
-
-pub fn get_public_update_image_sha_url(git_revision: &ReplicaVersion) -> String {
-    format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
-        git_revision
-    )
-}
-
-pub fn get_public_update_image_guest_launch_measurements(git_revision: &ReplicaVersion) -> String {
-    format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/launch-measurements.json",
-        git_revision
-    )
-}
-
-/// Returns (SHA256, GuestLaunchMeasurements) of the update package with the given version.
-pub async fn fetch_update_metadata_with_retry(log: &Logger, version: &ReplicaVersion) -> String {
-    retry_async(
-        format!("fetch update file sha256 of version {}", version),
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || async {
-            fetch_update_file_sha256(version)
-                .await
-                .context("Failed to fetch update file sha256")
-        },
-    )
-    .await
-    .expect("Failed to fetch update metadata")
-}
-
-pub async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String> {
-    let sha_url = get_public_update_image_sha_url(version);
-    let tmp_dir = tempfile::tempdir().unwrap().keep();
-    let mut tmp_file = tmp_dir.clone();
-    tmp_file.push("SHA256.txt");
-
-    let file_downloader = FileDownloader::new(None);
-    file_downloader
-        .download_file(&sha_url, &tmp_file, None)
-        .await
-        .context("Download of SHA256SUMS file failed")?;
-    let contents = fs::read_to_string(tmp_file).context("Something went wrong reading the file")?;
-    for line in contents.lines() {
-        let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        let suffix = "update-img.tar.zst";
-        if words.len() == 2 && words[1].ends_with(suffix) {
-            return Ok(words[0].to_string());
-        }
-    }
-
-    bail!("SHA256 hash is not found in {}", sha_url)
-}
+use std::{convert::TryFrom, io::Read, path::Path};
 
 pub async fn get_blessed_replica_versions(
     registry_canister: &RegistryCanister,

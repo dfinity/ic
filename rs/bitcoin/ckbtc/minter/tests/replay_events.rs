@@ -13,63 +13,12 @@ use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::{
     build_unsigned_transaction_from_inputs, sign_transaction, ECDSAPublicKey, Network,
-    SignTransactionError,
+    SignTransactionError, MIN_RELAY_FEE_PER_VBYTE,
 };
-use std::collections::BTreeMap;
+use maplit::btreeset;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-
-fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
-    let mut count = 0;
-    for event in events {
-        match &event.payload {
-            EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                count += 1;
-            }
-            _ => {}
-        }
-    }
-    assert_eq!(count, 0);
-}
-
-async fn should_migrate_events_for(file: impl GetEventsFile) -> CkBtcMinterState {
-    use ic_ckbtc_minter::storage::{decode_event, encode_event, migrate_events};
-    use ic_stable_structures::{
-        log::Log as StableLog,
-        memory_manager::{MemoryId, MemoryManager},
-        DefaultMemoryImpl,
-    };
-
-    file.retrieve_and_store_events_if_env().await;
-
-    let mgr = MemoryManager::init(DefaultMemoryImpl::default());
-    let old_events = StableLog::new(mgr.get(MemoryId::new(0)), mgr.get(MemoryId::new(1)));
-    let new_events = StableLog::new(mgr.get(MemoryId::new(2)), mgr.get(MemoryId::new(3)));
-    let events = file.deserialize().events;
-    events.iter().for_each(|event| {
-        old_events.append(&encode_event(event)).unwrap();
-    });
-    let removed = migrate_events(&old_events, &new_events);
-    assert!(removed > 0);
-    assert!(!new_events.is_empty());
-    assert_eq!(new_events.len() + removed, old_events.len());
-    assert_useless_events_is_empty(new_events.iter().map(|bytes| decode_event(&bytes)));
-
-    let state =
-        replay::<SkipCheckInvariantsImpl>(new_events.iter().map(|bytes| decode_event(&bytes)))
-            .expect("Failed to replay events");
-    state
-        .check_invariants()
-        .expect("Failed to check invariants");
-
-    state
-}
-
-#[tokio::test]
-async fn should_migrate_events_for_testnet() {
-    let state = should_migrate_events_for(Testnet).await;
-    assert_eq!(state.btc_network, Network::Testnet);
-    assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
-}
 
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
@@ -82,7 +31,40 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
+}
+
+#[tokio::test]
+async fn should_have_not_many_transactions_with_many_used_utxos() {
+    let mut txs_by_used_utxos: BTreeMap<_, Vec<String>> = BTreeMap::new();
+    for event in Mainnet.deserialize().events.into_iter() {
+        // Note: this does not consider resubmitted transactions (event `ReplacedBtcTransaction`)
+        // which use the same UTXOs set as the replaced transaction.
+        if let EventType::SentBtcTransaction { utxos, txid, .. } = event.payload {
+            txs_by_used_utxos
+                .entry(std::cmp::Reverse(utxos.len()))
+                .and_modify(|txs| txs.push(txid.to_string()))
+                .or_insert(vec![txid.to_string()]);
+        }
+    }
+
+    let mut iter = txs_by_used_utxos.into_iter();
+
+    assert_eq!(
+        iter.next(),
+        Some((
+            Reverse(1799),
+            vec!["87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30".to_string()]
+        ))
+    );
+
+    assert_eq!(
+        iter.next(),
+        Some((
+            Reverse(725),
+            vec!["201e83d0f5b35bd658b4dc87a70936d8d750532da46f5a635d403246d41cc032".to_string()]
+        ))
+    );
 }
 
 #[tokio::test]
@@ -93,13 +75,13 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
 
     let tx_id = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
 
-    let submitted_tx = {
+    let stuck_tx = {
         let mut txs: Vec<_> = state
-            .submitted_transactions
+            .stuck_transactions
             .iter()
             .filter(|tx| tx.txid.to_string() == tx_id)
             .collect();
@@ -107,30 +89,62 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         txs.pop().unwrap()
     };
 
-    assert_eq!(submitted_tx.requests.len(), 43);
+    assert_eq!(stuck_tx.submitted_at, 1_755_022_419_795_766_424);
+    assert_eq!(stuck_tx.requests.len(), 43);
     assert_eq!(
-        submitted_tx
-            .requests
-            .iter()
-            .map(|req| req.amount)
-            .sum::<u64>(),
+        stuck_tx.requests.iter().map(|req| req.amount).sum::<u64>(),
         3_316_317_017_u64 //33 BTC!
     );
-    assert_eq!(submitted_tx.used_utxos.len(), 1_799);
-    assert_eq!(submitted_tx.fee_per_vbyte, Some(7_486));
+    assert_eq!(stuck_tx.used_utxos.len(), 1_799);
+    assert_eq!(stuck_tx.fee_per_vbyte, Some(7_486));
 
-    let outputs = submitted_tx
+    let principals: BTreeSet<_> = stuck_tx
+        .requests
+        .iter()
+        .map(|req| req.reimbursement_account.unwrap())
+        .map(|account| account.owner)
+        .collect();
+    assert_eq!(
+        principals,
+        btreeset! {Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap()}
+    );
+
+    assert_eq!(state.replacement_txid.len(), 1);
+    let resubmitted_tx_id = state.replacement_txid.get(&stuck_tx.txid).unwrap();
+    let resubmitted_tx = {
+        let mut txs: Vec<_> = state
+            .submitted_transactions
+            .iter()
+            .filter(|tx| tx.txid == *resubmitted_tx_id)
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs.pop().unwrap()
+    };
+    assert_eq!(
+        resubmitted_tx.txid.to_string(),
+        "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
+    );
+    assert_eq!(resubmitted_tx.submitted_at, 1_755_116_484_667_101_556);
+
+    assert_eq!(stuck_tx.used_utxos, resubmitted_tx.used_utxos);
+    assert_eq!(
+        stuck_tx.fee_per_vbyte.unwrap() + MIN_RELAY_FEE_PER_VBYTE,
+        resubmitted_tx.fee_per_vbyte.unwrap()
+    );
+    assert_eq!(stuck_tx.requests, resubmitted_tx.requests);
+
+    let outputs = resubmitted_tx
         .requests
         .iter()
         .map(|req| (req.address.clone(), req.amount))
         .collect();
-    let input_utxos = &submitted_tx.used_utxos;
+    let input_utxos = &resubmitted_tx.used_utxos;
     let main_address = BitcoinAddress::parse(
         "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
         Network::Mainnet,
     )
     .unwrap();
-    let tx_fee_per_vbyte = submitted_tx.fee_per_vbyte.unwrap();
+    let tx_fee_per_vbyte = resubmitted_tx.fee_per_vbyte.unwrap();
     let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
         input_utxos,
         outputs,
@@ -170,7 +184,7 @@ async fn should_replay_events_for_testnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Testnet);
-    assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
+    assert_eq!(state.get_total_btc_managed(), 24_902_022_759);
 }
 
 // This test is ignored because it takes too long to run,
@@ -190,48 +204,30 @@ fn should_replay_events_and_check_invariants() {
     test(Testnet);
 }
 
-// It's not clear why those events are here in the first place
-// but this test ensures that the number of such events doesn't grow.
+// Due to an initial bug, there were a lot of useless events.
+// Those have been "removed" with [#3424](https://github.com/dfinity/ic/pull/3434),
+// meaning that events have been migrated to a new stable memory region and those useless events
+// have been filtered out during the migration.
+// That means that those useless events still exist in the initial stable memory region and this test is to prevent
+// any regression.
 #[tokio::test]
-async fn should_not_grow_number_of_useless_events() {
-    fn test(file: impl GetEventsFile) -> (u64, Vec<usize>) {
+async fn should_not_have_useless_events() {
+    fn assert_useless_events_is_empty(file: impl GetEventsFile) {
         let events = file.deserialize();
-        let received_utxo_to_minter_with_empty_utxos = EventType::ReceivedUtxos {
-            mint_txid: None,
-            to_account: file.minter_canister_id().into(),
-            utxos: vec![],
-        };
-
-        let useless_events_indexes =
-            assert_useless_events_eq(&events.events, &received_utxo_to_minter_with_empty_utxos);
-        (events.total_event_count, useless_events_indexes)
-    }
-
-    let (total_event_count, useless_events_indexes) = test(Mainnet);
-    assert_eq!(total_event_count, 551_739);
-    assert_eq!(useless_events_indexes.len(), 0);
-
-    let (total_event_count, useless_events_indexes) = test(Testnet);
-    assert_eq!(total_event_count, 46_815);
-    assert_eq!(useless_events_indexes.len(), 4_044);
-    assert_eq!(useless_events_indexes.last(), Some(&4_614_usize));
-
-    fn assert_useless_events_eq(
-        events: &[Event],
-        expected_useless_event: &EventType,
-    ) -> Vec<usize> {
-        let mut indexes = Vec::new();
-        for (index, event) in events.iter().enumerate() {
+        let mut count = 0;
+        for event in events.events {
             match &event.payload {
                 EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                    assert_eq!(&event.payload, expected_useless_event);
-                    indexes.push(index);
+                    count += 1;
                 }
                 _ => {}
             }
         }
-        indexes
+        assert_eq!(count, 0);
     }
+
+    assert_useless_events_is_empty(Mainnet);
+    assert_useless_events_is_empty(Testnet);
 }
 
 #[derive(Debug)]
@@ -241,15 +237,6 @@ struct Mainnet;
 struct Testnet;
 
 trait GetEventsFile {
-    // TODO (XC-261):
-    // These associated types are meant to deal with the the type difference in existing
-    // event logs between mainnet (with timestamps) and testnet (without timestamps)
-    // when we deserialize them for processing. This difference will go away once
-    // we re-deploy the testnet canister. These types (and the GetEventsFile trait)
-    // should be consolidated by then.
-    type EventType: CandidType + for<'a> Deserialize<'a> + Into<Event>;
-    type ResultType: CandidType + for<'a> Deserialize<'a> + Into<GetEventsResult>;
-
     async fn retrieve_and_store_events_if_env(&self) {
         if std::env::var("RETRIEVE_MINTER_EVENTS").map(|s| s.parse().ok().unwrap_or_default())
             == Ok(true)
@@ -276,11 +263,7 @@ trait GetEventsFile {
             .call_and_wait()
             .await
             .expect("Failed to call get_events");
-        Decode!(&raw_result, Vec<Self::EventType>)
-            .unwrap()
-            .into_iter()
-            .map(|x| x.into())
-            .collect()
+        Decode!(&raw_result, Vec<Event>).unwrap()
     }
 
     async fn retrieve_and_store_events(&self) {
@@ -354,15 +337,11 @@ trait GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        Decode!(&decompressed_buffer, Self::ResultType)
-            .expect("Failed to decode events")
-            .into()
+        Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
     }
 }
 
 impl GetEventsFile for Mainnet {
-    type EventType = Event;
-    type ResultType = GetEventsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap()
     }
@@ -372,8 +351,6 @@ impl GetEventsFile for Mainnet {
 }
 
 impl GetEventsFile for Testnet {
-    type EventType = EventType;
-    type ResultType = GetEventsWithoutTimestampsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("ml52i-qqaaa-aaaar-qaaba-cai").unwrap()
     }
@@ -382,27 +359,10 @@ impl GetEventsFile for Testnet {
     }
 }
 
-// TODO XC-261: Remove
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct GetEventsWithoutTimestampsResult {
-    pub events: Vec<EventType>,
-    pub total_event_count: u64,
-}
-
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
     pub events: Vec<Event>,
     pub total_event_count: u64,
-}
-
-// TODO XC-261: Remove
-impl From<GetEventsWithoutTimestampsResult> for GetEventsResult {
-    fn from(value: GetEventsWithoutTimestampsResult) -> Self {
-        Self {
-            events: value.events.into_iter().map(Event::from).collect(),
-            total_event_count: value.total_event_count,
-        }
-    }
 }
 
 /// This struct is used to skip the check invariants when replaying the events

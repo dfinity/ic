@@ -308,11 +308,73 @@ mod withdrawal_reimbursement {
     use crate::reimbursement::{
         InvalidTransactionError, ReimburseWithdrawalTask, WithdrawalReimbursementReason,
     };
-    use crate::state::{CkBtcMinterState, RetrieveBtcStatus, RetrieveBtcStatusV2};
-    use crate::test_fixtures::{init_args, ledger_account};
+    use crate::state::{
+        CkBtcMinterState, InFlightStatus, RetrieveBtcStatus, RetrieveBtcStatusV2,
+        SubmittedBtcTransaction,
+    };
+    use crate::test_fixtures::{expect_panic_with_message, init_args, ledger_account};
     use assert_matches::assert_matches;
     use icrc_ledger_types::icrc1::account::Account;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn should_fail_to_schedule_reimbursement_when_transaction_pending() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let ledger_burn_index = 1;
+        let amount_to_reimburse = 1_000;
+        let ledger_account = ledger_account();
+        state.push_in_flight_request(1, InFlightStatus::Signing);
+
+        expect_panic_with_message(
+            || {
+                state.schedule_withdrawal_reimbursement(
+                    ledger_burn_index,
+                    reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+                )
+            },
+            "BUG: Cannot reimburse",
+        );
+
+        let dummy_tx = SubmittedBtcTransaction {
+            requests: vec![],
+            txid: "688f1309fe62ae66ea71959ef6d747bb63ec7c5ab3d8b1e25d8233616c3ec71a"
+                .parse()
+                .unwrap(),
+            used_utxos: vec![],
+            submitted_at: 0,
+            change_output: None,
+            fee_per_vbyte: None,
+        };
+        state.push_submitted_transaction(dummy_tx.clone());
+
+        expect_panic_with_message(
+            || {
+                state.schedule_withdrawal_reimbursement(
+                    ledger_burn_index,
+                    reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+                )
+            },
+            "BUG: Cannot reimburse",
+        );
+
+        let replaced_tx = SubmittedBtcTransaction {
+            txid: "c9535f049c9423e974ac8daddcd0353579d779cb386fd212357e199e83f4ec5f"
+                .parse()
+                .unwrap(),
+            ..dummy_tx.clone()
+        };
+        state.replace_transaction(&dummy_tx.txid, replaced_tx);
+
+        expect_panic_with_message(
+            || {
+                state.schedule_withdrawal_reimbursement(
+                    ledger_burn_index,
+                    reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+                )
+            },
+            "BUG: Cannot reimburse",
+        );
+    }
 
     #[test]
     fn should_quarantine_withdrawal_reimbursement() {
