@@ -181,7 +181,6 @@ struct SignTxRequest {
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
     change_output: state::ChangeOutput,
-    outpoint_account: BTreeMap<OutPoint, Account>,
     /// The original requests that we keep around to place back to the queue
     /// if the signature fails.
     requests: Vec<state::RetrieveBtcRequest>,
@@ -334,7 +333,6 @@ async fn submit_pending_requests() {
                     key_name: s.ecdsa_key_name.clone(),
                     ecdsa_public_key,
                     change_output,
-                    outpoint_account: filter_output_accounts(s, &unsigned_tx),
                     network: s.btc_network,
                     unsigned_tx,
                     requests: batch,
@@ -406,11 +404,10 @@ async fn submit_pending_requests() {
         });
 
         let txid = req.unsigned_tx.txid();
-        let outpoint_account = req.outpoint_account;
         match sign_transaction(
             req.key_name,
             &req.ecdsa_public_key,
-            |k| outpoint_account.get(k).cloned(),
+            |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
             req.unsigned_tx,
             &IC_CANISTER_RUNTIME,
         )
@@ -810,31 +807,6 @@ pub async fn resubmit_transactions<
             }
         }
     }
-}
-
-/// Builds the minimal OutPoint -> Account map required to sign a transaction.
-fn filter_output_accounts(
-    state: &state::CkBtcMinterState,
-    unsigned_tx: &tx::UnsignedTransaction,
-) -> BTreeMap<OutPoint, Account> {
-    unsigned_tx
-        .inputs
-        .iter()
-        .map(|input| {
-            (
-                input.previous_output.clone(),
-                *state
-                    .outpoint_account
-                    .get(&input.previous_output)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "bug: missing account for output point {:?}",
-                            input.previous_output
-                        )
-                    }),
-            )
-        })
-        .collect()
 }
 
 /// The algorithm greedily selects the smallest UTXO(s) with a value that is at least the given `target` in a first step.
