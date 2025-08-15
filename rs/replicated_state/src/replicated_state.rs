@@ -663,18 +663,16 @@ impl ReplicatedState {
     /// Returns the cost schedule of this subnet.
     pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
         let subnet_id = self.metadata.own_subnet_id;
-        // unwrap: our own subnet_id is contained in network_topology
         self.metadata
             .network_topology
             .subnets
             .get(&subnet_id)
-            .unwrap()
-            .cost_schedule
+            .map(|x| x.cost_schedule)
+            .unwrap_or_default()
     }
 
     /// Returns the cost schedule of the provided subnet, if it exists.
     pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
-        // unwrap: our own subnet_id is contained in network_topology
         self.metadata
             .network_topology
             .subnets
