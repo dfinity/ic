@@ -143,8 +143,9 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
 }
 
 impl Governance {
-    // TODO DO NOT MERGE - add extensions to this based on the cached extensions.
-    // TODO DO NOT MERGE - does that mean extension cache needs to be persistent?
+    // TODO(NNS1-4036): List all registered extensions in their topic, which would require a cache
+    // We would need to iterate through registered extensions to find all the different
+    // operations that they support?  And Add something to TopicInfo for this.
     pub fn list_topics(&self) -> ListTopicsResponse {
         let mut uncategorized_functions = vec![];
 
