@@ -215,8 +215,8 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         halt_at_cup_height: None,
         features: None,
         chain_key_config: None,
-        chain_key_signing_enable: None,
-        chain_key_signing_disable: None,
+        chain_key_enable: None,
+        chain_key_disable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
@@ -1034,7 +1034,7 @@ pub async fn enable_chain_key_signing_with_timeout_and_rotation_period(
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        chain_key_signing_enable: Some(key_ids),
+        chain_key_enable: Some(key_ids),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(
