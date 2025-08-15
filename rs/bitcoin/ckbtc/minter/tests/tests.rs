@@ -2574,7 +2574,7 @@ fn should_cancel_non_standard_transaction() {
         .map(|txin| txin.previous_output)
         .collect();
     assert!(
-        non_standard_tx_used_utxos.contains(&cancel_tx.input.get(0).unwrap().previous_output),
+        non_standard_tx_used_utxos.contains(&cancel_tx.input.first().unwrap().previous_output),
         "BUG: Cancel transaction {cancel_tx:?} must have a common input with the transaction {non_standard_tx:?} to cancel!"
     );
 

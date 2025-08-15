@@ -615,7 +615,8 @@ proptest! {
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address,
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
 
@@ -654,7 +655,8 @@ proptest! {
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
 
@@ -681,7 +683,8 @@ proptest! {
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address.clone(),
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
 
@@ -726,7 +729,8 @@ proptest! {
                 &mut utxos,
                 vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), total_value * 2)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                fee_per_vbyte
+            fee_per_vbyte,
+            false
             ).expect_err("build transaction should fail because the amount is too high"),
             BuildTxError::NotEnoughFunds
         );
@@ -737,7 +741,8 @@ proptest! {
                 &mut utxos,
                 vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), 1)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                fee_per_vbyte
+            fee_per_vbyte,
+            false
             ).expect_err("build transaction should fail because the amount is too low to pay the fee"),
             BuildTxError::AmountTooLow
         );
@@ -814,7 +819,8 @@ proptest! {
             &mut state.available_utxos,
             requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
             BitcoinAddress::P2wpkhV0(main_pkhash),
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
         let mut txids = vec![tx.txid()];
@@ -840,6 +846,7 @@ proptest! {
                 requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
                 BitcoinAddress::P2wpkhV0(main_pkhash),
                 fee_per_vbyte + 1000 * i as u64,
+                false
             )
             .expect("failed to build transaction");
 
