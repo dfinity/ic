@@ -17,9 +17,10 @@ pub enum CanisterRangesFilter {
     /// Keep the `/subnet/<subnet_id>/canister_ranges` leaf and purge
     /// the whole `/canister_ranges` subtree.
     Flat,
-    /// Keep only the `/canister_ranges/subnet_id/canister_id_label` leaf
-    /// and purge all other leaves under `/canister_ranges/subnet_id` and
-    /// the `/subnet/<subnet_id>/canister_ranges` leaf.
+    /// Keep only the `/canister_ranges/<subnet_id>/<canister_id_lower_bound>` leaf,
+    /// where `canister_id_lower_bound` is the largest label in the `/canister_ranges/<subnet_id>/`
+    /// subtree which is not greater than `CanisterId`, and purge all other leaves under
+    /// `/canister_ranges/<subnet_id>` and the `/subnet/<subnet_id>/canister_ranges` leaf.
     Tree(CanisterId),
     /// Purge both the `/canister_ranges` subtree and the `/subnet/<subnet_id>/canister_ranges`
     /// leaf.
@@ -189,6 +190,7 @@ impl NNSDelegationBuilderInner {
     }
 
     fn try_build(&self, filter: CanisterRangesFilter) -> Result<CertificateDelegation, String> {
+        // Always include `/subnet/<subnet_id>/public_key` and `/time` paths.
         let mut paths = vec![
             Path::new(vec![
                 b"subnet".into(),
@@ -209,7 +211,7 @@ impl NNSDelegationBuilderInner {
                     b"canister_ranges".into(),
                 ]));
             }
-            // Additionally include `/canister_ranges/<subnet_id>/<canister_id_label>`
+            // Additionally include `/canister_ranges/<subnet_id>/<canister_id_lower_bound>`
             CanisterRangesFilter::Tree(canister_id) => {
                 match lookup_lower_bound(
                     &self.full_labeled_tree,
@@ -269,7 +271,6 @@ impl NNSDelegationBuilderInner {
     }
 }
 
-/// Convert an object into CBOR binary.
 fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
     let mut serializer = serde_cbor::Serializer::new(Vec::new());
     serializer

@@ -8,8 +8,8 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
-    WitnessGenerator,
+    flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
+    MixedHashTree, WitnessGenerator,
 };
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_types::messages::Blob;
@@ -69,6 +69,7 @@ impl CertificateData {
         &self,
         subnet_pub_key: Option<ThresholdSigPublicKey>,
         time: Option<u64>,
+        canister_ranges_format: CanisterRangesFormat,
     ) -> LabeledTree<Vec<u8>> {
         let encoded_time = encoded_time(time.unwrap_or(REPLICA_TIME));
         match self {
@@ -89,18 +90,54 @@ impl CertificateData {
                 canister_id_ranges,
             } => {
                 let public_key = subnet_pub_key.expect("no delegation public_key. Note: Subnet data cannot be used at the lowest certificate level");
-                LabeledTree::SubTree(flatmap![
-                    Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                        Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(canister_id_ranges)),
-                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&public_key.into_bytes()).unwrap()),
-                        ])
+                match canister_ranges_format {
+                    CanisterRangesFormat::Flat => LabeledTree::SubTree(flatmap![
+                        Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(canister_id_ranges)),
+                                Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&public_key.into_bytes()).unwrap()),
+                            ])
+                        ]),
+                        Label::from("time") => LabeledTree::Leaf(encoded_time)
                     ]),
-                    Label::from("time") => LabeledTree::Leaf(encoded_time)
-                ])
+                    CanisterRangesFormat::Tree => {
+                        const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
+
+                        let canister_ranges_subtree =
+                            LabeledTree::SubTree(FlatMap::from_key_values(
+                                canister_id_ranges
+                                    .chunks(MAX_RANGES_PER_ROUTING_TABLE_LEAF)
+                                    .map(|chunk| {
+                                        (
+                                            Label::from(chunk[0].0),
+                                            LabeledTree::Leaf(serialize_to_cbor(&chunk)),
+                                        )
+                                    })
+                                    .collect(),
+                            ));
+
+                        LabeledTree::SubTree(flatmap![
+                            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                    Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&public_key.into_bytes()).unwrap()),
+                                ])
+                            ]),
+                            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                                Label::from(subnet_id.get_ref().to_vec()) => canister_ranges_subtree,
+                            ]),
+                            Label::from("time") => LabeledTree::Leaf(encoded_time)
+                        ])
+                    }
+                }
             }
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CanisterRangesFormat {
+    Flat,
+    Tree,
 }
 
 #[derive(Clone, Debug)]
@@ -142,6 +179,7 @@ pub struct CertificateBuilder {
     subnet_id: Option<SubnetId>,
     delegation: Option<Box<CertificateBuilder>>,
     time: Option<u64>,
+    canister_ranges_format: CanisterRangesFormat,
 }
 
 impl CertificateBuilder {
@@ -161,6 +199,7 @@ impl CertificateBuilder {
             subnet_id: None,
             delegation: None,
             time: None,
+            canister_ranges_format: CanisterRangesFormat::Flat,
         }
     }
 
@@ -181,6 +220,11 @@ impl CertificateBuilder {
 
     pub fn with_delegation_subnet_id(mut self, subnet_id: SubnetId) -> Self {
         self.subnet_id = Some(subnet_id);
+        self
+    }
+
+    pub fn with_canister_ranges_format(mut self, format: CanisterRangesFormat) -> Self {
+        self.canister_ranges_format = format;
         self
     }
 
@@ -214,7 +258,11 @@ impl CertificateBuilder {
     /// a tuple of (Certificate, ThresholdSigPublicKey, Vec<u8> containing the cbor encoded certificate)
     pub fn build(&self) -> (Certificate, ThresholdSigPublicKey, Vec<u8>) {
         let mut b = HashTreeBuilderImpl::new();
-        let tree = &self.data.get_tree(self.delegatee_pub_key, self.time);
+        let tree = &self.data.get_tree(
+            self.delegatee_pub_key,
+            self.time,
+            self.canister_ranges_format,
+        );
         hash_full_tree(&mut b, tree);
 
         let witness_gen = b.witness_generator().unwrap();

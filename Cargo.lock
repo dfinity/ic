@@ -7342,6 +7342,7 @@ dependencies = [
  "ic-types",
  "leb128",
  "rand 0.8.5",
+ "rstest",
  "serde",
  "serde_cbor",
  "tree-deserializer",

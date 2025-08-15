@@ -5,8 +5,8 @@ use rand::{thread_rng, Rng};
 
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_certification_test_utils::{
-    encoded_time, serialize_to_cbor, CertificateBuilder, CertificateData::CanisterData,
-    CertificateData::CustomTree, CertificateData::SubnetData,
+    encoded_time, serialize_to_cbor, CanisterRangesFormat, CertificateBuilder,
+    CertificateData::{CanisterData, CustomTree, SubnetData},
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -14,6 +14,7 @@ use ic_crypto_tree_hash::{flatmap, Digest, Label, LabeledTree};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_der, public_key_to_der};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::Time;
+use rstest::rstest;
 
 use crate::{
     validate_subnet_delegation_certificate, validate_subnet_delegation_certificate_with_cache,
@@ -177,8 +178,12 @@ fn should_validate_certificate_with_delegation() {
     verification_result.expect("expect valid signature");
 }
 
-#[test]
-fn should_validate_certificate_with_delegation_lowest_canister_id() {
+#[rstest]
+#[case::old_format(CanisterRangesFormat::Flat)]
+#[case::new_format(CanisterRangesFormat::Tree)]
+fn should_validate_certificate_with_delegation_lowest_canister_id(
+    #[case] format: CanisterRangesFormat,
+) {
     let rng = &mut reproducible_rng();
     let low_canister_id = canister_id(0);
     let certified_data = random_certified_data();
@@ -189,13 +194,16 @@ fn should_validate_certificate_with_delegation_lowest_canister_id() {
         },
         rng,
     )
-    .with_delegation(CertificateBuilder::new_with_rng(
-        SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(low_canister_id, canister_id(10))],
-        },
-        rng,
-    ))
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(low_canister_id, canister_id(10))],
+            },
+            rng,
+        )
+        .with_canister_ranges_format(format),
+    )
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -208,8 +216,12 @@ fn should_validate_certificate_with_delegation_lowest_canister_id() {
     verification_result.expect("expect valid signature");
 }
 
-#[test]
-fn should_validate_certificate_with_delegation_highest_canister_id() {
+#[rstest]
+#[case::old_format(CanisterRangesFormat::Flat)]
+#[case::new_format(CanisterRangesFormat::Tree)]
+fn should_validate_certificate_with_delegation_highest_canister_id(
+    #[case] format: CanisterRangesFormat,
+) {
     let rng = &mut reproducible_rng();
     let high_canister_id = canister_id(10);
     let certified_data = random_certified_data();
@@ -220,13 +232,16 @@ fn should_validate_certificate_with_delegation_highest_canister_id() {
         },
         rng,
     )
-    .with_delegation(CertificateBuilder::new_with_rng(
-        SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(canister_id(0), high_canister_id)],
-        },
-        rng,
-    ))
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(canister_id(0), high_canister_id)],
+            },
+            rng,
+        )
+        .with_canister_ranges_format(format),
+    )
     .build();
     let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
@@ -238,8 +253,12 @@ fn should_validate_certificate_with_delegation_highest_canister_id() {
     verification_result.expect("expect valid signature");
 }
 
-#[test]
-fn should_validate_certificate_with_single_id_canister_id_range() {
+#[rstest]
+#[case::old_format(CanisterRangesFormat::Flat)]
+#[case::new_format(CanisterRangesFormat::Tree)]
+fn should_validate_certificate_with_single_id_canister_id_range(
+    #[case] format: CanisterRangesFormat,
+) {
     let rng = &mut reproducible_rng();
     let canister_id = canister_id(1);
     let certified_data = random_certified_data();
@@ -250,13 +269,16 @@ fn should_validate_certificate_with_single_id_canister_id_range() {
         },
         rng,
     )
-    .with_delegation(CertificateBuilder::new_with_rng(
-        SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(canister_id, canister_id)],
-        },
-        rng,
-    ))
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(canister_id, canister_id)],
+            },
+            rng,
+        )
+        .with_canister_ranges_format(format),
+    )
     .build();
     let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
@@ -268,10 +290,14 @@ fn should_validate_certificate_with_single_id_canister_id_range() {
     verification_result.expect("expect valid signature");
 }
 
-#[test]
-fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges() {
+#[rstest]
+#[case::old_format(CanisterRangesFormat::Flat)]
+#[case::new_format(CanisterRangesFormat::Tree)]
+fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges(
+    #[case] format: CanisterRangesFormat,
+) {
     let rng = &mut reproducible_rng();
-    let cid = canister_id(9);
+    let cid = canister_id(21);
     let certified_data = random_certified_data();
     let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
         CanisterData {
@@ -280,17 +306,24 @@ fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges(
         },
         rng,
     )
-    .with_delegation(CertificateBuilder::new_with_rng(
-        SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![
-                (canister_id(0), canister_id(2)),
-                (canister_id(4), canister_id(6)),
-                (canister_id(8), canister_id(10)),
-            ],
-        },
-        rng,
-    ))
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![
+                    (canister_id(0), canister_id(2)),
+                    (canister_id(4), canister_id(6)),
+                    (canister_id(8), canister_id(10)),
+                    (canister_id(12), canister_id(14)),
+                    (canister_id(14), canister_id(16)),
+                    (canister_id(16), canister_id(18)),
+                    (canister_id(20), canister_id(22)),
+                ],
+            },
+            rng,
+        )
+        .with_canister_ranges_format(format),
+    )
     .build();
     let verification_result =
         verify_certified_data_with_and_without_cache(&cbor, &cid, &pk, certified_data.as_bytes());
@@ -496,8 +529,12 @@ fn should_fail_certificate_verification_with_too_many_delegations() {
     );
 }
 
-#[test]
-fn should_fail_certificate_verification_with_canister_id_out_of_range() {
+#[rstest]
+#[case::old_format(CanisterRangesFormat::Flat)]
+#[case::new_format(CanisterRangesFormat::Tree)]
+fn should_fail_certificate_verification_with_canister_id_out_of_range(
+    #[case] format: CanisterRangesFormat,
+) {
     let rng = &mut reproducible_rng();
     let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
         CanisterData {
@@ -506,13 +543,16 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range() {
         },
         rng,
     )
-    .with_delegation(CertificateBuilder::new_with_rng(
-        SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(canister_id(20), canister_id(30))],
-        },
-        rng,
-    ))
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(canister_id(20), canister_id(30))],
+            },
+            rng,
+        )
+        .with_canister_ranges_format(format),
+    )
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -528,8 +568,12 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range() {
     );
 }
 
-#[test]
-fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_ranges() {
+#[rstest]
+#[case::old_format(CanisterRangesFormat::Flat)]
+#[case::new_format(CanisterRangesFormat::Tree)]
+fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_ranges(
+    #[case] format: CanisterRangesFormat,
+) {
     let rng = &mut reproducible_rng();
     let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
         CanisterData {
@@ -538,16 +582,19 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_r
         },
         rng,
     )
-    .with_delegation(CertificateBuilder::new_with_rng(
-        SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![
-                (canister_id(2), canister_id(3)),
-                (canister_id(20), canister_id(30)),
-            ],
-        },
-        rng,
-    ))
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![
+                    (canister_id(2), canister_id(3)),
+                    (canister_id(20), canister_id(30)),
+                ],
+            },
+            rng,
+        )
+        .with_canister_ranges_format(format),
+    )
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -939,6 +986,41 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_malformed()
                             ])
                         ]),
                         Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+                    ],
+                )),rng))
+                .with_delegation_subnet_id(subnet_id)
+                .build();
+    let delegation = cert.delegation.expect("missing delegation");
+    assert_matches!(
+        verify_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &canister_id, &root_pk),
+        Err(CertificateValidationError::DeserError(e))
+        if e.contains("failed to unpack canister range")
+    );
+}
+
+#[test]
+fn should_fail_to_validate_delegation_cert_if_subnet_new_canister_ranges_malformed() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let canister_id = canister_id(1);
+
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
+                    canister_id,
+                    certified_data: random_certified_data(),
+                },rng)
+                .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
+                    flatmap![
+                        Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&threshold_sig_pubkey().into_bytes()).unwrap()),
+                            ])
+                        ]),
+                        Label::from("time") => LabeledTree::Leaf(encoded_time(1234567)),
+                        Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from(canister_id.get().to_vec()) => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
+                            ])
+                        ])
                     ],
                 )),rng))
                 .with_delegation_subnet_id(subnet_id)
