@@ -387,7 +387,9 @@ pub fn tecdsa_performance_test(
         };
 
         let open_and_write_to_file_result =
-            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report_str.as_bytes()));
+            ic_sys::fs::write_atomically(&report_path, ic_sys::fs::Clobber::Yes, |f| {
+                f.write_all(json_report_str.as_bytes())
+            });
 
         match create_dir_result.and(open_and_write_to_file_result) {
             Ok(()) => info!(log, "Benchmark report written to {}", report_path.display()),

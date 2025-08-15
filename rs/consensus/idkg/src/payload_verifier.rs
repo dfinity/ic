@@ -30,8 +30,8 @@ use crate::{
     signer::ThresholdSignatureBuilder,
     utils::build_signature_inputs,
     utils::{
-        block_chain_cache, get_idkg_chain_key_config_if_enabled, BuildSignatureInputsError,
-        IDkgBlockReaderImpl, InvalidChainCacheError,
+        block_chain_cache, get_idkg_chain_key_config_if_enabled, IDkgBlockReaderImpl,
+        InvalidChainCacheError,
     },
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -55,7 +55,7 @@ use ic_types::{
     consensus::{
         idkg::{
             self,
-            common::{CombinedSignature, ThresholdSigInputs},
+            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
             IDkgBlockReader, TranscriptRef,
         },
         Block, BlockPayload, HasHeight,
@@ -91,6 +91,7 @@ pub enum IDkgPayloadValidationFailure {
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
+    NewSignatureBuildInputsError(BuildSignatureInputsError),
 }
 
 #[derive(Debug)]
@@ -108,6 +109,7 @@ pub enum InvalidIDkgPayloadReason {
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
+    NewSignatureBuildInputsError(BuildSignatureInputsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
     ChainKeyConfigNotFound,
@@ -119,7 +121,6 @@ pub enum InvalidIDkgPayloadReason {
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
     NewSignatureUnexpected(idkg::PseudoRandomId),
-    NewSignatureBuildInputsError(BuildSignatureInputsError),
     NewSignatureMissingContext(idkg::PseudoRandomId),
     VetKdUnexpected(CallbackId),
     XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
@@ -190,6 +191,18 @@ impl From<ThresholdEcdsaVerifyCombinedSignatureError> for InvalidIDkgPayloadReas
 impl From<ThresholdEcdsaVerifyCombinedSignatureError> for IDkgPayloadValidationFailure {
     fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
         IDkgPayloadValidationFailure::ThresholdEcdsaVerifyCombinedSignatureError(err)
+    }
+}
+
+impl From<BuildSignatureInputsError> for InvalidIDkgPayloadReason {
+    fn from(err: BuildSignatureInputsError) -> Self {
+        InvalidIDkgPayloadReason::NewSignatureBuildInputsError(err)
+    }
+}
+
+impl From<BuildSignatureInputsError> for IDkgPayloadValidationFailure {
+    fn from(err: BuildSignatureInputsError) -> Self {
+        IDkgPayloadValidationFailure::NewSignatureBuildInputsError(err)
     }
 }
 
@@ -607,8 +620,7 @@ fn validate_new_signature_agreements(
                 let (id, context) = context_map.get(random_id).ok_or(
                     InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input) = build_signature_inputs(*id, context)
-                    .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
+                let (_, input) = build_signature_inputs(*id, context)?;
                 match input {
                     ThresholdSigInputs::Ecdsa(input) => {
                         let reply = SignWithECDSAReply::decode(data).map_err(|err| {
@@ -1053,13 +1065,22 @@ mod test {
         let mut prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id2 = prev_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id3 = prev_payload.uid_generator.next_pre_signature_id();
 
         let id1 = request_id(1, height);
         let id2 = request_id(2, height);
+        let id3 = request_id(3, height);
+
+        let malformed_context = fake_malformed_signature_request_context_from_id(
+            key_id.clone().into(),
+            pre_sig_id3,
+            id3,
+        );
 
         let signature_request_contexts = BTreeMap::from_iter([
             fake_signature_request_context_with_pre_sig(id1, key_id.clone(), Some(pre_sig_id)),
             fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id2, id2),
+            malformed_context.clone(),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
@@ -1105,7 +1126,7 @@ mod test {
             empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         idkg_payload_missing_context
             .signature_agreements
-            .insert(fake_context.pseudo_random_id, fake_response);
+            .insert(fake_context.pseudo_random_id, fake_response.clone());
         let res = validate_new_signature_agreements(
             crypto,
             snapshot.get_state(),
@@ -1116,6 +1137,28 @@ mod test {
             res,
             Err(ValidationError::InvalidArtifact(
                 InvalidIDkgPayloadReason::NewSignatureMissingContext(_)
+            ))
+        );
+
+        // Insert agreement for malformed context
+        let mut idkg_payload_malformed_context =
+            empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        idkg_payload_malformed_context
+            .signature_agreements
+            .insert(malformed_context.1.pseudo_random_id, fake_response);
+        let res = validate_new_signature_agreements(
+            crypto,
+            snapshot.get_state(),
+            &prev_payload,
+            &idkg_payload_malformed_context,
+        );
+        assert_matches!(
+            res,
+            Err(ValidationError::InvalidArtifact(
+                InvalidIDkgPayloadReason::NewSignatureBuildInputsError(
+                    BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError(_)
+                        | BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(_)
+                )
             ))
         );
     }
