@@ -168,6 +168,7 @@ cargo_build_script(
     },
     data = [
         "templates/dashboard.html",
+        "@internet_identity_dev_at_mainnet_commit//file",
         "@mainnet_cycles_ledger_canister//file",
         "@mainnet_cycles_ledger_index//file",
         "@mainnet_ic-icrc1-archive//file",
@@ -184,7 +185,6 @@ cargo_build_script(
         "@mainnet_sns-swap-canister//file",
         "@nns_governance_canister_test_at_mainnet_commit//file",
         "@sns_aggregator_test_at_mainnet_commit//file",
-        "@internet_identity_dev_at_mainnet_commit//file",
     ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
