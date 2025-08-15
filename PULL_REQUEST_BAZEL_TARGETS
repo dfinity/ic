@@ -1,5 +1,5 @@
 # What?
-# This file specifies additional bazel targets to test for specific file changes.
+# This file specifies which additional bazel targets to test for which specific file changes.
 #
 # Why?
 # On PRs not tagged with CI_ALL_BAZEL_TARGETS, which is the default,
