@@ -9627,6 +9627,7 @@ dependencies = [
  "reqwest 0.12.15",
  "serde_cbor",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -19170,6 +19171,9 @@ dependencies = [
  "ic-metrics",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-governance-init",
+ "ic-nns-handler-root",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
@@ -19177,6 +19181,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replicated-state",
+ "ic-sns-wasm",
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-test-utilities",

@@ -76,8 +76,9 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
-/// The Max number of UTXO inputs allowed in a transaction
-const MAX_NUM_INPUTS: usize = 1_000;
+/// Maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
+/// to ensure that the resulting signed transaction is standard.
+pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
@@ -402,7 +403,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 );
                 // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
                 // is reasonable to charge a fee based on it.
-                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS as u64;
+                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
                 reimburse_cancelled_requests(s, batch, err, fee, runtime);
                 None
             }
@@ -1150,10 +1151,10 @@ pub fn build_unsigned_transaction_from_inputs(
     if num_inputs == 0 {
         return Err(BuildTxError::NotEnoughFunds);
     }
-    if num_inputs > MAX_NUM_INPUTS {
+    if num_inputs > MAX_NUM_INPUTS_IN_TRANSACTION {
         return Err(BuildTxError::InvalidTransaction(
             InvalidTransactionError::TooManyInputs {
-                max_num_inputs: MAX_NUM_INPUTS,
+                max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
                 num_inputs,
             },
         ));
