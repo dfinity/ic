@@ -51,3 +51,9 @@
             //rs/tests/nested:hostos_upgrade_smoke_test
             //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
             //rs/tests/nested:registration
+
+# Full rejoin test for state sync changes:
+*state_sync* //rs/tests/message_routing:rejoin_test
+
+# XNet compatibility test for changes to certifications
+*canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility
