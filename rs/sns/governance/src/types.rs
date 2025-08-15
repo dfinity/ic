@@ -1083,14 +1083,12 @@ impl NervousSystemFunction {
 
     /// The special cases are for:
     /// - `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
-    ///     proposals of this SNS While technically being a native function
+    ///   proposals of this SNS While technically being a native function
     /// - `EXECUTE_EXTENSION_OPERATION` which are custom functions for extensions
-    ///    which have their own topics defined on the extension operation spec
+    ///   which have their own topics defined on the extension operation spec
     pub fn needs_topic(&self) -> bool {
-        !vec![
-            native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-            native_action_ids::EXECUTE_EXTENSION_OPERATION,
-        ]
+        ![native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            native_action_ids::EXECUTE_EXTENSION_OPERATION]
         .contains(&self.id)
     }
 
