@@ -782,7 +782,8 @@ impl CkBtcMinterState {
         }
     }
 
-    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) {
+    // Return removed txids
+    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) -> BTreeSet<Txid> {
         let mut txids_to_remove = BTreeSet::new();
 
         // Collect transactions preceding the confirmed transaction.
@@ -807,14 +808,14 @@ impl CkBtcMinterState {
             self.rev_replacement_txid.remove(txid);
         }
 
-        if txids_to_remove.is_empty() {
-            return;
+        if !txids_to_remove.is_empty() {
+            self.submitted_transactions
+                .retain(|tx| !txids_to_remove.contains(&tx.txid));
+            self.stuck_transactions
+                .retain(|tx| !txids_to_remove.contains(&tx.txid));
         }
 
-        self.submitted_transactions
-            .retain(|tx| !txids_to_remove.contains(&tx.txid));
-        self.stuck_transactions
-            .retain(|tx| !txids_to_remove.contains(&tx.txid));
+        txids_to_remove
     }
 
     fn cancel_tx_replacement(
@@ -826,6 +827,7 @@ impl CkBtcMinterState {
         // Any other transaction in there with input UTXOs overlapping with `used_utxos` should be
         // considered for cancellation, their input UTXOs should be returned to the available set, and
         // corresponding requests should be refunded.
+        let mut txids_to_remove = BTreeSet::new();
         let mut cancelled_requests = BTreeSet::new();
         self.submitted_transactions
             .iter()
@@ -833,6 +835,7 @@ impl CkBtcMinterState {
             .filter(|tx| tx.used_utxos.iter().any(|x| used_utxos.contains(x)))
             .for_each(|tx| {
                 debug_assert!(&tx.txid != confirmed_txid);
+                txids_to_remove.insert(tx.txid);
                 for utxo in tx.used_utxos.iter() {
                     if !used_utxos.contains(utxo) {
                         self.available_utxos.insert(utxo.clone());
@@ -843,7 +846,8 @@ impl CkBtcMinterState {
                 }
             });
         // Drop all replaced txs before return
-        self.cleanup_tx_replacement_chain(confirmed_txid);
+        let txids_removed = self.cleanup_tx_replacement_chain(confirmed_txid);
+        debug_assert_eq!(txids_to_remove, txids_removed);
         cancelled_requests.into_iter().collect::<Vec<_>>()
     }
 
