@@ -2438,8 +2438,15 @@ fn should_cancel_non_standard_transaction() {
                 value: deposit_value,
             }
         })
-        .collect::<Vec<_>>();
-    ckbtc.deposit_utxos(user, utxos);
+        .collect::<BTreeSet<_>>();
+    ckbtc.deposit_utxos(user, utxos.clone().into_iter().collect());
+    assert_eq!(
+        ckbtc
+            .get_known_utxos(user)
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        utxos
+    );
 
     let balance_after_deposit = ckbtc.balance_of(user);
     assert_eq!(
@@ -2566,6 +2573,10 @@ fn should_cancel_non_standard_transaction() {
     for _ in 0..10 {
         ckbtc.env.tick();
     }
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+    ckbtc.env.checkpointed_tick();
     ckbtc.env.advance_time(Duration::from_secs(5));
     for _ in 0..10 {
         ckbtc.env.tick();
