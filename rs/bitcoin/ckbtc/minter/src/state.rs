@@ -821,7 +821,7 @@ impl CkBtcMinterState {
         // Find the last transaction preceding the confirmed transaction.
         let mut to_edge = confirmed_txid;
         while let Some(from_edge) = self.replacement_txid.get(to_edge) {
-            debug_assert_eq!(self.rev_replacement_txid.get(&from_edge), Some(to_edge));
+            debug_assert_eq!(self.rev_replacement_txid.get(from_edge), Some(to_edge));
             txid_to_cancel = Some(from_edge);
             to_edge = from_edge;
         }
@@ -845,7 +845,7 @@ impl CkBtcMinterState {
 
         // Put the cancelled UTXOs back to avaiable set
         for utxo in tx_to_cancel.used_utxos.iter() {
-            if !used_utxos.contains(&utxo) {
+            if !used_utxos.contains(utxo) {
                 self.available_utxos.insert(utxo.clone());
             }
         }
@@ -853,7 +853,7 @@ impl CkBtcMinterState {
         // Clean up
         self.cleanup_tx_replacement_chain(confirmed_txid);
 
-        return cancelled_requests;
+        cancelled_requests
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {
