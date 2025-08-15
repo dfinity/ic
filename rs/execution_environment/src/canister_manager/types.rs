@@ -10,7 +10,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshotError},
+    canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{chunk_size, WasmChunkStore},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     CanisterState,
@@ -1047,7 +1047,7 @@ impl From<CanisterManagerError> for UserError {
             }
             CanisterSnapshotTransformFailed { canister_id, snapshot_id } => {
                 Self::new(
-                    ErrorCode::CanisterSnapshotTransformFailed, 
+                    ErrorCode::CanisterSnapshotTransformFailed,
                     format!("Failed to convert a mutable snapshot to immutable during snapshot_load. canister_id: {} snapshot_id: {}. This is a bug in the canister manager.", canister_id, snapshot_id),
                 )
             }
