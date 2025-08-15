@@ -30,7 +30,6 @@ use sns_treasury_manager::{
 };
 
 use futures::future::BoxFuture;
-use futures::FutureExt;
 use ic_ledger_core::Tokens;
 use std::cell::RefCell;
 use std::{collections::BTreeMap, fmt::Display};
