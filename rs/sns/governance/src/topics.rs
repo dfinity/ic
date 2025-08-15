@@ -149,11 +149,12 @@ impl Governance {
     pub fn list_topics(&self) -> ListTopicsResponse {
         let mut uncategorized_functions = vec![];
 
-        let topic_id_to_functions: HashMap<u64, NervousSystemFunction> =
+        let function_id_to_functions: HashMap<u64, NervousSystemFunction> =
             native_action_ids::nervous_system_functions()
                 .into_iter()
                 .map(|function| (function.id, function))
                 .collect();
+
         let custom_functions = self
             .proto
             .id_to_nervous_system_functions
@@ -190,7 +191,7 @@ impl Governance {
                         .functions
                         .native_functions
                         .into_iter()
-                        .map(|id| topic_id_to_functions[&id].clone())
+                        .map(|id| function_id_to_functions[&id].clone())
                         .collect(),
                     custom_functions: custom_functions
                         .get(&topic.topic)
