@@ -1436,6 +1436,34 @@ impl CkBtcSetup {
             )
             .unwrap();
     }
+
+    pub fn assert_ledger_transaction_reimbursement_correct(
+        &self,
+        burn_index: u64,
+        reimbursement_block_index: u64,
+    ) {
+        let get_transaction_request = GetTransactionsRequest {
+            start: reimbursement_block_index.into(),
+            length: 1_u8.into(),
+        };
+        let res = self.get_transactions(get_transaction_request);
+        if res.transactions.len() != 1 {
+            self.print_minter_logs();
+            self.print_minter_events();
+            panic!("Reimbursement transaction {reimbursement_block_index} for withdrawal {burn_index} not found!");
+        }
+        let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
+        use ic_ckbtc_minter::memo::MintMemo;
+
+        let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
+        assert_eq!(
+            decoded_data,
+            MintMemo::ReimburseWithdrawal {
+                withdrawal_id: burn_index,
+            },
+            "memo not found in mint"
+        );
+    }
 }
 
 impl CanisterHttpQuery<UserError> for CkBtcSetup {
@@ -2496,7 +2524,7 @@ fn should_cancel_non_standard_transaction() {
     let (cancel_tx_id, cancel_tx) = {
         let txs: Vec<_> = mempool
             .into_iter()
-            .filter(|(txid, tx)| txid.to_string() != non_standard_tx.txid().to_string())
+            .filter(|(txid, _tx)| txid.to_string() != non_standard_tx.txid().to_string())
             .collect();
         assert_eq!(txs.len(), 1);
         txs[0].clone()
@@ -2513,6 +2541,36 @@ fn should_cancel_non_standard_transaction() {
         );
     }
 
+    let non_standard_tx_used_utxos: BTreeSet<_> = non_standard_tx
+        .input
+        .iter()
+        .map(|txin| txin.previous_output)
+        .collect();
+    assert!(
+        non_standard_tx_used_utxos.contains(&cancel_tx.input.get(0).unwrap().previous_output),
+        "BUG: Cancel transaction {cancel_tx:?} must have a common input with the transaction {non_standard_tx:?} to cancel!"
+    );
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Unknown
+    );
+
+    ckbtc.finalize_transaction(&cancel_tx);
+
+    // We need to wait at least 5 seconds before the next resubmission because it's the internal
+    // timer interval.
+    ckbtc.env.advance_time(Duration::from_secs(5));
+    for _ in 0..10 {
+        ckbtc.env.tick();
+    }
+
+    let reimbursement_block_index = block_index + 1;
+
+    ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
+    assert_eq!(ckbtc.balance_of(user), balance_before_withdrawal);
+
+    ckbtc.minter_self_check();
     //TODO XC-450: cancel Bitcoin transaction + reimbursement flow
 }
 
