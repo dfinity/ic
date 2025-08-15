@@ -1131,10 +1131,6 @@ pub fn build_unsigned_transaction_from_inputs(
     // The threshold for other types is lower,
     // so we simply use 546 satoshi as the minimum amount per output.
     const MIN_OUTPUT_AMOUNT: u64 = 546;
-    println!(
-        "input amount = {} fee = {} minter_fee = {} tx.outputs = {:?} fee_shares = {:?}",
-        inputs_value, fee, minter_fee, unsigned_tx.outputs, fee_shares
-    );
 
     // The last output has to main_address
     debug_assert!(matches!(unsigned_tx.outputs.iter().last(),
