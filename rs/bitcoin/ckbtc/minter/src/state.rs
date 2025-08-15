@@ -485,7 +485,7 @@ pub enum ReimbursementReason {
 pub struct WithdrawalCancellation {
     pub fee: u64,
     pub reason: InvalidTransactionError,
-    pub requests: Vec<RetrieveBtcRequest>,
+    pub requests: BTreeSet<RetrieveBtcRequest>,
 }
 
 impl CkBtcMinterState {
@@ -863,6 +863,7 @@ impl CkBtcMinterState {
                 None
             }
             SubmittedRequests::ToCancel(requests, reason) => {
+                let requests = requests.into_iter().collect::<BTreeSet<_>>();
                 let input_value = finalized_tx.used_utxos.iter().map(|u| u.value).sum::<u64>();
                 let change = finalized_tx
                     .change_output
@@ -871,11 +872,10 @@ impl CkBtcMinterState {
                 let fee = input_value.saturating_sub(change);
                 let cancelled_requests = self.cancel_tx_replacement(
                     txid,
-                    finalized_tx.used_utxos.into_iter().collect::<BTreeSet<_>>(),
+                    finalized_tx.used_utxos.iter().collect::<BTreeSet<_>>(),
                 );
                 debug_assert_eq!(
-                    cancelled_requests.iter().collect::<BTreeSet<_>>(),
-                    requests.iter().collect::<BTreeSet<_>>(),
+                    cancelled_requests, requests,
                     "Cancelled requests set does not match what was in cancellation tx {txid}"
                 );
                 Some(WithdrawalCancellation {
@@ -926,25 +926,25 @@ impl CkBtcMinterState {
     fn cancel_tx_replacement(
         &mut self,
         confirmed_txid: &Txid,
-        used_utxos: BTreeSet<Utxo>,
-    ) -> Vec<RetrieveBtcRequest> {
+        used_utxos: BTreeSet<&Utxo>,
+    ) -> BTreeSet<RetrieveBtcRequest> {
         // At this point, confirmed_txid has already been removed from submitted_transactions/stuck_transactions.
         // Any other transaction in there with input UTXOs overlapping with `used_utxos` should be
         // considered for cancellation, their input UTXOs (non-overlapping with `used_utxos`) should be returned to the available set, and
         // corresponding requests should be refunded.
         let mut txids_to_remove = BTreeSet::new();
         let mut cancelled_requests = BTreeSet::new();
-        self.submitted_transactions
+        for tx in self
+            .submitted_transactions
             .iter()
             .chain(self.stuck_transactions.iter())
-            .filter(|tx| tx.used_utxos.iter().any(|x| used_utxos.contains(x)))
-            .for_each(|tx| {
+        {
+            let tx_used_utxos = tx.used_utxos.iter().collect::<BTreeSet<_>>();
+            if !tx_used_utxos.is_disjoint(&used_utxos) {
                 debug_assert!(&tx.txid != confirmed_txid);
                 txids_to_remove.insert(tx.txid);
-                for utxo in tx.used_utxos.iter() {
-                    if !used_utxos.contains(utxo) {
-                        self.available_utxos.insert(utxo.clone());
-                    }
+                for &utxo in tx_used_utxos.difference(&used_utxos) {
+                    self.available_utxos.insert(utxo.clone());
                 }
                 let requests = match &tx.requests {
                     SubmittedRequests::ToConfirm(requests) => requests,
@@ -953,11 +953,12 @@ impl CkBtcMinterState {
                 for request in requests.iter() {
                     cancelled_requests.insert(request.clone());
                 }
-            });
+            }
+        }
         // Drop all replaced txs before return
         let txids_removed = self.cleanup_tx_replacement_chain(confirmed_txid);
-        debug_assert_eq!(txids_to_remove, txids_removed);
-        cancelled_requests.into_iter().collect::<Vec<_>>()
+        assert_eq!(txids_to_remove, txids_removed);
+        cancelled_requests
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {
