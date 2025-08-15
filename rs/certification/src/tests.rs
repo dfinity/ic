@@ -577,7 +577,7 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_r
     let rng = &mut reproducible_rng();
     let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
         CanisterData {
-            canister_id: canister_id(1),
+            canister_id: canister_id(10),
             certified_data: random_certified_data(),
         },
         rng,
@@ -599,7 +599,7 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_r
 
     let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
-        &canister_id(1),
+        &canister_id(10),
         &pk,
         random_certified_data().as_bytes(),
     );

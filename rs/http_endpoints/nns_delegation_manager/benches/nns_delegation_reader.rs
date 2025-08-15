@@ -59,6 +59,16 @@ fn get_delegation_bench(
 
         let reader = NNSDelegationReader::new(receiver);
 
+        println!(
+            "The delegation size in bytes with {} canister ranges: {}",
+            canister_id_ranges_count,
+            reader
+                .get_delegation(canister_ranges_filter)
+                .expect("We just set a delegation above")
+                .certificate
+                .len()
+        );
+
         group.bench_function(
             format!("{canister_id_ranges_count}_canister_id_ranges"),
             |bencher| {

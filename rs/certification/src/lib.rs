@@ -353,62 +353,68 @@ pub fn verify_delegation_certificate(
         ))
     })?;
 
+    // canister ranges could be found in two places. Either in the
+    // `/subnet/<subnet_id>/canister_ranges` leaf or in the
+    // `/canister_ranges/<subnet_id>` subtree.
     if let Some(canister_id) = canister_id {
-        let canister_id_ranges: Vec<(CanisterId, CanisterId)> =
-            // canister ranges could be found in two places. Either in the
-            // `/subnet/<subnet_id>/canister_ranges` leaf or in the
-            // `/canister_ranges/<subnet_id>` subtree.
-            match (&subnet_info.canister_ranges, &subnet_state.canister_ranges) {
-                (Some(canister_ranges), _) => {
-                    serde_cbor::from_slice(canister_ranges).map_err(|err| {
-                        CertificateValidationError::DeserError(format!(
-                            "failed to unpack canister range: {}",
-                            err
-                        ))
-                    })?
-                }
-                (_, Some(canister_ranges_per_subnet_id)) => {
-                    let canister_ranges =
-                        canister_ranges_per_subnet_id
-                            .get(subnet_id)
-                            .ok_or_else(|| {
-                                CertificateValidationError::MalformedHashTree(format!(
-                                    "cannot find canister ranges for subnet {} in the tree",
-                                    subnet_id
-                                ))
-                            })?;
+        if subnet_info.canister_ranges.is_none() && subnet_state.canister_ranges.is_none() {
+            return Err(CertificateValidationError::MalformedHashTree(String::from(
+                "state tree doesn't have canister ranges",
+            )));
+        }
 
-                    // Find the leaf which *might* cover the canister ID.
-                    let lower_bound = canister_ranges
-                        .range((
-                            std::ops::Bound::Unbounded,
-                            std::ops::Bound::Included(canister_id),
-                        ))
-                        .last();
+        let canister_id_ranges_contain = |canister_id, canister_id_ranges: Vec<_>| {
+            canister_id_ranges
+                .iter()
+                .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
+        };
 
-                    if let Some((_canister_id, canister_ranges)) = lower_bound {
-                        serde_cbor::from_slice(canister_ranges).map_err(|err| {
-                            CertificateValidationError::DeserError(format!(
-                                "failed to unpack canister range: {}",
-                                err
-                            ))
-                        })?
-                    } else {
-                        vec![]
-                    }
-                }
-                (None, None) => {
-                    return Err(CertificateValidationError::MalformedHashTree(String::from(
-                        "state tree doesn't have canister ranges",
-                    )))
-                }
+        // Check `/subnet/<subnet_id>/canister_ranges`
+        if let Some(canister_ranges) = &subnet_info.canister_ranges {
+            let canister_id_ranges = serde_cbor::from_slice(canister_ranges).map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to unpack canister range: {}",
+                    err
+                ))
+            })?;
+
+            if !canister_id_ranges_contain(canister_id, canister_id_ranges) {
+                return Err(CertificateValidationError::CanisterIdOutOfRange);
+            }
+        }
+
+        // Check `/canister_ranges/<subnet_id>`
+        if let Some(canister_ranges_per_subnet_id) = &subnet_state.canister_ranges {
+            let canister_ranges =
+                canister_ranges_per_subnet_id
+                    .get(subnet_id)
+                    .ok_or_else(|| {
+                        CertificateValidationError::MalformedHashTree(format!(
+                            "cannot find canister ranges for subnet {} in the tree",
+                            subnet_id
+                        ))
+                    })?;
+
+            // Find the leaf which *might* cover the canister ID.
+            let Some((_canister_id, canister_ranges)) = canister_ranges
+                .range((
+                    std::ops::Bound::Unbounded,
+                    std::ops::Bound::Included(canister_id),
+                ))
+                .last()
+            else {
+                return Err(CertificateValidationError::CanisterIdOutOfRange);
             };
 
-        if !&canister_id_ranges
-            .iter()
-            .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
-        {
-            return Err(CertificateValidationError::CanisterIdOutOfRange);
+            let canister_id_ranges = serde_cbor::from_slice(canister_ranges).map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to unpack canister range: {err}",
+                ))
+            })?;
+
+            if !canister_id_ranges_contain(canister_id, canister_id_ranges) {
+                return Err(CertificateValidationError::CanisterIdOutOfRange);
+            }
         }
     }
 
