@@ -549,6 +549,7 @@ pub struct IcpFeatures {
     pub cycles_token: bool,
     pub nns_governance: bool,
     pub sns: bool,
+    pub ii: bool,
 }
 
 impl IcpFeatures {
@@ -560,6 +561,7 @@ impl IcpFeatures {
             cycles_token: true,
             nns_governance: true,
             sns: true,
+            ii: true,
         }
     }
 }
@@ -723,6 +725,7 @@ impl ExtendedSubnetConfigSet {
             cycles_token,
             nns_governance,
             sns,
+            ii,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -738,7 +741,7 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the II subnet
-        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token")] {
+        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token"), (*ii, "ii")] {
             if flag {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());

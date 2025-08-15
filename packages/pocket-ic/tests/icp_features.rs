@@ -6,6 +6,7 @@ use pocket_ic::{
     start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
     StartServerParams,
 };
+use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -23,6 +24,23 @@ fn test_canister_wasm() -> Vec<u8> {
 #[test]
 fn with_all_icp_features() {
     let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+}
+
+#[test]
+fn test_ii() {
+    let mut pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    let mut endpoint = pic.make_live(Some(8080));
+    assert_eq!(endpoint.host_str().unwrap(), "localhost");
+    let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+    endpoint
+        .set_host(Some(&format!("{}.localhost", ii_canister_id)))
+        .unwrap();
+
+    let client = Client::new();
+    let resp = client.get(endpoint).send().unwrap();
+    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(body.contains("<title>Internet Identity</title>"));
 }
 
 #[test]
