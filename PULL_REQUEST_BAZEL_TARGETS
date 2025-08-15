@@ -35,7 +35,7 @@
 #   So there's no negation of patterns or special directory handling
 #   like gitignore wildmatch patterns.
 #
-# Tip: to test which files <PATTERN> matches you can use the following:
+# Tip: to test which files matches <PATTERN> you can use the following:
 # find . | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
 
 
