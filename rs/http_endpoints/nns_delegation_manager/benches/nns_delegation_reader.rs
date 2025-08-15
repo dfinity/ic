@@ -79,17 +79,17 @@ fn get_delegation_on_nns(criterion: &mut Criterion) {
     let (_, rx) = watch::channel(None);
     let reader = NNSDelegationReader::new(rx);
 
-    group.bench_function(format!("tree"), |bencher| {
+    group.bench_function("tree", |bencher| {
         bencher.iter(|| {
             black_box(reader.get_delegation(CanisterRangesFilter::Tree(CanisterId::from(0))))
         });
     });
 
-    group.bench_function(format!("flat"), |bencher| {
+    group.bench_function("flat", |bencher| {
         bencher.iter(|| black_box(reader.get_delegation(CanisterRangesFilter::Flat)));
     });
 
-    group.bench_function(format!("none"), |bencher| {
+    group.bench_function("none", |bencher| {
         bencher.iter(|| black_box(reader.get_delegation(CanisterRangesFilter::None)));
     });
 }

@@ -217,6 +217,11 @@ impl NNSDelegationBuilderInner {
                     &canister_id.get().to_vec(),
                 ) {
                     LookupLowerBoundStatus::Found(label, _labeled_subtree) => {
+                        // Note: This only means that the given canister id *might* be covered by
+                        // the ranges in the found leaf. For performance reasons, we don't
+                        // deserialize the subtree to check if the canister id is actually covered.
+                        // It could happen that the NNS delegation is old and has an old view of
+                        // the routing table and not have the canister id assigned to the subnet.
                         paths.push(Path::new(vec![
                             b"canister_ranges".into(),
                             self.subnet_id.get().into(),
