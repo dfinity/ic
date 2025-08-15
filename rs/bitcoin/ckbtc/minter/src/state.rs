@@ -164,12 +164,6 @@ pub enum FinalizedStatus {
         /// The witness transaction identifier of the transaction.
         txid: Txid,
     },
-    /// The transaction was reimbursed
-    Reimbursed {
-        amount: u64,
-        fee: u64,
-        reason: InvalidTransactionError,
-    },
 }
 
 /// The status of a Bitcoin transaction that the minter hasn't yet sent to the Bitcoin network.
@@ -744,8 +738,6 @@ impl CkBtcMinterState {
         {
             Some(FinalizedStatus::AmountTooLow) => RetrieveBtcStatus::AmountTooLow,
             Some(FinalizedStatus::Confirmed { txid }) => RetrieveBtcStatus::Confirmed { txid },
-            // For compatibility reason, we can only return Unknown for this case
-            Some(FinalizedStatus::Reimbursed { .. }) => RetrieveBtcStatus::Unknown,
             None => RetrieveBtcStatus::Unknown,
         }
     }
