@@ -309,19 +309,9 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
             state::audit::reimburse_withdrawal(
                 state,
                 request.block_index,
-                request.amount.saturating_sub(fee),
+                amount,
                 account,
                 reason.clone(),
-                runtime,
-            );
-            state::audit::remove_retrieve_btc_request(
-                state,
-                request,
-                state::FinalizedStatus::Reimbursed {
-                    amount,
-                    fee,
-                    reason: err.clone(),
-                },
                 runtime,
             );
         } else {
