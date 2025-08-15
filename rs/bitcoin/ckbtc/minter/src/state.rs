@@ -103,6 +103,14 @@ impl SubmittedRequests {
             Self::ToCancel(requests, _) => requests.iter(),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::ToConfirm(requests) => requests.is_empty(),
+            Self::ToCancel(requests, _) => requests.is_empty(),
+        }
+    }
+
     pub fn len(&self) -> usize {
         match self {
             Self::ToConfirm(requests) => requests.len(),
