@@ -58,7 +58,7 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -68,6 +68,8 @@ use ic_registry_routing_table::{
     are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ic_state_machine_tests::{
     add_global_registry_records, add_initial_registry_records, FakeVerifier, StateMachine,
     StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
@@ -141,6 +143,18 @@ const CYCLES_LEDGER_INDEX_CANISTER_WASM: &[u8] =
 const GOVERNANCE_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("GOVERNANCE_TEST_CANISTER_WASM_PATH"));
 const ROOT_CANISTER_WASM: &[u8] = include_bytes!(env!("ROOT_CANISTER_WASM_PATH"));
+const SNS_WASM_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_WASM_CANISTER_WASM_PATH"));
+const SNS_ROOT_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_ROOT_CANISTER_WASM_PATH"));
+const SNS_GOVERNANCE_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_GOVERNANCE_CANISTER_WASM_PATH"));
+const SNS_SWAP_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_SWAP_CANISTER_WASM_PATH"));
+const SNS_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_LEDGER_CANISTER_WASM_PATH"));
+const SNS_LEDGER_ARCHIVE_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH"));
+const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
+const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -492,6 +506,7 @@ struct PocketIcSubnets {
     subnet_configs: Vec<SubnetConfigInternal>,
     subnets: Arc<SubnetsImpl>,
     nns_subnet: Option<Arc<Subnet>>,
+    sns_subnet: Option<Arc<Subnet>>,
     ii_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -594,6 +609,7 @@ impl PocketIcSubnets {
             subnet_configs: vec![],
             subnets: Arc::new(SubnetsImpl::new()),
             nns_subnet: None,
+            sns_subnet: None,
             ii_subnet: None,
             runtime,
             state_dir,
@@ -638,6 +654,7 @@ impl PocketIcSubnets {
     fn clear(&mut self) {
         self.subnets.clear();
         self.nns_subnet.take();
+        self.sns_subnet.take();
         self.ii_subnet.take();
     }
 
@@ -759,6 +776,9 @@ impl PocketIcSubnets {
             self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
 
+        if let SubnetKind::SNS = subnet_kind {
+            self.sns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
         if let SubnetKind::II = subnet_kind {
             self.ii_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
@@ -869,6 +889,7 @@ impl PocketIcSubnets {
                 icp_token,
                 cycles_token,
                 nns_governance,
+                sns,
             } = icp_features;
             if registry {
                 self.update_registry();
@@ -884,6 +905,9 @@ impl PocketIcSubnets {
             }
             if nns_governance {
                 self.deploy_nns_governance();
+            }
+            if sns {
+                self.deploy_sns();
             }
         }
 
@@ -1506,6 +1530,170 @@ impl PocketIcSubnets {
                     CanisterInstallMode::Install,
                     ROOT_CANISTER_WASM.to_vec(),
                     Encode!(&root_canister_init_payload).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_sns(&self) {
+        // Nothing to do if the SNS subnet does not exist (yet).
+        let Some(ref sns_subnet) = self.sns_subnet else {
+            return;
+        };
+
+        let nns_subnet = self.nns_subnet.clone().expect(
+            "The NNS subnet is supposed to already exist if the `sns` ICP feature is specified.",
+        );
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(SNS_WASM_CANISTER_ID)
+        {
+            // Create the SNS-W canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"qaa6y-5yaaa-aaaaa-aaafa-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(SNS_WASM_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, SNS_WASM_CANISTER_ID);
+
+            // Install the SNS-W canister and upload SNS canister WASMs.
+            let sns_subnet_id = sns_subnet.get_subnet_id();
+            let sns_wasm_init_payload = SnsWasmCanisterInitPayloadBuilder::new()
+                .with_sns_subnet_ids(vec![sns_subnet_id])
+                .build();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    SNS_WASM_CANISTER_WASM.to_vec(),
+                    Encode!(&sns_wasm_init_payload).unwrap(),
+                )
+                .unwrap();
+
+            for (sns_canister_type, sns_canister_wasm) in [
+                (SnsCanisterType::Root, SNS_ROOT_CANISTER_WASM),
+                (SnsCanisterType::Governance, SNS_GOVERNANCE_CANISTER_WASM),
+                (SnsCanisterType::Swap, SNS_SWAP_CANISTER_WASM),
+                (SnsCanisterType::Ledger, SNS_LEDGER_CANISTER_WASM),
+                (SnsCanisterType::Archive, SNS_LEDGER_ARCHIVE_CANISTER_WASM),
+                (SnsCanisterType::Index, SNS_LEDGER_INDEX_CANISTER_WASM),
+            ] {
+                let mut hasher = Sha256::new();
+                hasher.write(sns_canister_wasm);
+                let sns_canister_wasm_hash = hasher.finish();
+                let add_sns_wasm_request = AddWasmRequest {
+                    wasm: Some(SnsWasm {
+                        wasm: sns_canister_wasm.to_vec(),
+                        canister_type: sns_canister_type as i32,
+                        // `proposal_id` would have been filled by NNS governance if there was an actual NNS proposal
+                        proposal_id: None,
+                    }),
+                    hash: sns_canister_wasm_hash.to_vec(),
+                };
+                self.execute_ingress_on(
+                    nns_subnet.clone(),
+                    GOVERNANCE_CANISTER_ID.get(),
+                    SNS_WASM_CANISTER_ID,
+                    "add_wasm".to_string(),
+                    Encode!(&add_sns_wasm_request).unwrap(),
+                );
+            }
+        }
+
+        if !sns_subnet
+            .state_machine
+            .canister_exists(SNS_AGGREGATOR_CANISTER_ID)
+        {
+            // Create the SNS aggregator canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"3r4gx-wqaaa-aaaaq-aaaia-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec {
+            //         principal "r7inp-6aaaa-aaaaa-aaabq-cai";
+            //         principal "qaa6y-5yaaa-aaaaa-aaafa-cai";
+            //       };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![
+                    ROOT_CANISTER_ID.get(),
+                    SNS_WASM_CANISTER_ID.get(),
+                ])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // The SNS aggregator canister is created on an *application* subnet
+            // and thus we have to top it up with cycles:
+            // - the canister should have enough cycles to never run out of cycles;
+            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
+                Some(SNS_AGGREGATOR_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, SNS_AGGREGATOR_CANISTER_ID);
+
+            // Install the SNS aggregator canister.
+            // The configuration values have been obtained by calling
+            // `dfx canister call 3r4gx-wqaaa-aaaaq-aaaia-cai get_canister_config --update --ic`:
+            //     record {
+            //       update_interval_ms = 120_000 : nat64;
+            //       fast_interval_ms = 10_000 : nat64;
+            //     },
+            #[derive(CandidType)]
+            struct Config {
+                update_interval_ms: u64,
+                fast_interval_ms: u64,
+            }
+            let sns_aggregator_init_payload = Config {
+                update_interval_ms: 120_000,
+                fast_interval_ms: 10_000,
+            };
+            sns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    SNS_AGGREGATOR_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&Some(sns_aggregator_init_payload)).unwrap(),
                 )
                 .unwrap();
         }

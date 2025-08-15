@@ -27,7 +27,7 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats},
+    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
@@ -659,6 +659,43 @@ impl ReplicatedState {
 
     pub fn system_metadata(&self) -> &SystemMetadata {
         &self.metadata
+    }
+
+    /// Returns the cost schedule of this subnet.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        let subnet_id = self.metadata.own_subnet_id;
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+            .unwrap_or_default()
+    }
+
+    /// Returns the cost schedule of the provided subnet, if it exists.
+    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+    }
+
+    /// Every round, the cost schedule flag is read from the registry and the
+    /// replicated state's flag is updated.
+    ///
+    /// Don't use this outside of tests or `execute_round`, or state may become
+    /// inconsistent.
+    pub fn set_own_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        let own_subnet_id = self.metadata.own_subnet_id;
+        if let Some(subnet_topology) = self
+            .metadata
+            .network_topology
+            .subnets
+            .get_mut(&own_subnet_id)
+        {
+            subnet_topology.cost_schedule = cost_schedule
+        }
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
