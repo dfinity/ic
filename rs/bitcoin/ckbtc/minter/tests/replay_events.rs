@@ -98,13 +98,13 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
 
     let tx_id = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
 
-    let submitted_tx = {
+    let stuck_tx = {
         let mut txs: Vec<_> = state
-            .submitted_transactions
+            .stuck_transactions
             .iter()
             .filter(|tx| tx.txid.to_string() == tx_id)
             .collect();
@@ -112,31 +112,27 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         txs.pop().unwrap()
     };
 
-    assert_eq!(submitted_tx.submitted_at, 1_755_022_419_795_766_424);
-    assert_eq!(submitted_tx.requests.len(), 43);
+    assert_eq!(stuck_tx.submitted_at, 1_755_022_419_795_766_424);
+    assert_eq!(stuck_tx.requests.len(), 43);
     assert_eq!(
-        submitted_tx
-            .requests
-            .iter()
-            .map(|req| req.amount)
-            .sum::<u64>(),
+        stuck_tx.requests.iter().map(|req| req.amount).sum::<u64>(),
         3_316_317_017_u64 //33 BTC!
     );
-    assert_eq!(submitted_tx.used_utxos.len(), 1_799);
-    assert_eq!(submitted_tx.fee_per_vbyte, Some(7_486));
+    assert_eq!(stuck_tx.used_utxos.len(), 1_799);
+    assert_eq!(stuck_tx.fee_per_vbyte, Some(7_486));
 
-    let outputs = submitted_tx
+    let outputs = stuck_tx
         .requests
         .iter()
         .map(|req| (req.address.clone(), req.amount))
         .collect();
-    let input_utxos = &submitted_tx.used_utxos;
+    let input_utxos = &stuck_tx.used_utxos;
     let main_address = BitcoinAddress::parse(
         "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
         Network::Mainnet,
     )
     .unwrap();
-    let tx_fee_per_vbyte = submitted_tx.fee_per_vbyte.unwrap();
+    let tx_fee_per_vbyte = stuck_tx.fee_per_vbyte.unwrap();
     let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
         input_utxos,
         outputs,
