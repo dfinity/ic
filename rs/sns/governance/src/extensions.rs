@@ -43,6 +43,13 @@ thread_local! {
     static EXTENSION_SPEC_CACHE: RefCell<BTreeMap<CanisterId, ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
 }
 
+#[cfg(test)]
+pub fn with_extension_spec_cache_mut(
+    f: impl FnOnce(&mut BTreeMap<CanisterId, ExtensionSpec>) -> (),
+) {
+    EXTENSION_SPEC_CACHE.with_borrow_mut(f)
+}
+
 #[derive(Clone)]
 pub struct TreasuryManagerDepositContext {
     pub sns_root_canister_id: CanisterId,
@@ -225,14 +232,14 @@ lazy_static! {
                         description: "Deposit funds into the treasury manager.".to_string(),
                         extension_type: ExtensionType::TreasuryManager,
                         topic: Topic::TreasuryAssetManagement,
-                        validate: validate_deposit_operation,
+                        validate_arg: validate_deposit_operation,
                     },
        "withdraw".to_string() =>  ExtensionOperationSpec {
                         name: "withdraw".to_string(),
                         description: "Withdraw funds from the treasury manager.".to_string(),
                         extension_type: ExtensionType::TreasuryManager,
                         topic: Topic::TreasuryAssetManagement,
-                        validate: validate_withdraw_operation,
+                        validate_arg: validate_withdraw_operation,
                     },
     };
 }
@@ -311,7 +318,7 @@ impl ExtensionType {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExtensionVersion(u64);
+pub struct ExtensionVersion(pub u64);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionSpec {
