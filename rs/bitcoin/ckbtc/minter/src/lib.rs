@@ -378,7 +378,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             outputs,
             main_address,
             fee_millisatoshi_per_vbyte,
-            state::read_state(|s| s.enable_non_standard_tx),
+            s.enable_non_standard_tx,
         ) {
             Ok((unsigned_tx, change_output, utxos)) => {
                 for req in batch.iter() {
