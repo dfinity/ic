@@ -4,9 +4,8 @@ use candid_parser::utils::{service_equal, CandidSource};
 use ic_sns_governance::pb::v1::{
     governance::{Version, Versions},
     upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
-    DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
+    UpgradeJournal, UpgradeJournalEntry,
 };
-use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::api::stable::{stable_read, StableReader};
+use ic_cdk::api::stable::stable_read;
 use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -26,9 +26,7 @@ use ic_nervous_system_proto::pb::v1::{
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::{
-    governance::{
-        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
-    },
+    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
     pb::v1::{self as sns_gov_pb},
     types::{Environment, HeapGrowthPotential},
