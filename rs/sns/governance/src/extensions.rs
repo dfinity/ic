@@ -43,9 +43,7 @@ thread_local! {
 }
 
 #[cfg(test)]
-pub fn with_extension_spec_cache_mut(
-    f: impl FnOnce(&mut BTreeMap<CanisterId, ExtensionSpec>) -> (),
-) {
+pub fn with_extension_spec_cache_mut(f: impl FnOnce(&mut BTreeMap<CanisterId, ExtensionSpec>)) {
     EXTENSION_SPEC_CACHE.with_borrow_mut(f)
 }
 
@@ -976,12 +974,10 @@ pub async fn validate_register_extension(
 }
 
 async fn get_extension_spec_and_update_cache(
-    governance: &Governance,
+    env: &dyn Environment,
+    root_canister_id: CanisterId,
     extension_canister_id: CanisterId,
 ) -> Result<ExtensionSpec, GovernanceError> {
-    let governance_proto = &governance.proto;
-    let env = &*governance.env;
-    let root_canister_id = governance_proto.root_canister_id_or_panic();
     let registered_extensions = list_extensions(env, root_canister_id).await?;
 
     if !registered_extensions.contains(&extension_canister_id.get()) {
@@ -1065,8 +1061,12 @@ pub(crate) async fn validate_execute_extension_operation(
         ));
     };
 
-    let extension_spec =
-        get_extension_spec_and_update_cache(governance, extension_canister_id).await?;
+    let extension_spec = get_extension_spec_and_update_cache(
+        &*governance.env,
+        governance.proto.root_canister_id_or_panic(),
+        extension_canister_id,
+    )
+    .await?;
 
     // Currently only support extensions that implement TreasuryManager
     if !extension_spec.supports_extension_type(ExtensionType::TreasuryManager) {
