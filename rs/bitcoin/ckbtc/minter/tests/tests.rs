@@ -1406,16 +1406,23 @@ impl CkBtcSetup {
         }
 
         let events = read_events_file(&path_to_events_file());
-        let total = events.events.len();
-        let mut start = 0;
-        while start < total {
-            let mut end = start + 2000;
-            if end > total {
-                end = total;
-            };
-            self.upload_events_v1(&events.events[start..end].to_vec());
-            start = end;
-        }
+        self.upload_events_v1(&events.events);
+        // let total = events.events.len();
+        // let mut start = 0;
+        // while start < total {
+        //     let mut end = start + 2000;
+        //     if end > total {
+        //         end = total;
+        //     };
+        //     self.upload_events_v1(&events.events[start..end].to_vec());
+        //     start = end;
+        // }
+    }
+
+    pub fn upgrade(&self) {
+        self.env
+            .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&()).unwrap())
+            .unwrap();
     }
 }
 
@@ -2369,4 +2376,14 @@ fn test_retrieve_btc_with_approval_fail() {
 fn should_reimburse_withdrawal() {
     let ckbtc = CkBtcSetup::new();
     ckbtc.upload_mainnet_events();
+    ckbtc.upgrade(); //replay events to repopulate state
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2(2952170),
+        RetrieveBtcStatusV2::Submitted {
+            txid: "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
+                .parse()
+                .unwrap()
+        }
+    );
 }
