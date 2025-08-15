@@ -355,6 +355,9 @@ pub fn verify_delegation_certificate(
 
     if let Some(canister_id) = canister_id {
         let canister_id_ranges: Vec<(CanisterId, CanisterId)> =
+            // canister ranges could be found in two places. Either in the
+            // `/subnet/<subnet_id>/canister_ranges` leaf or in the
+            // `/canister_ranges/<subnet_id>` subtree.
             match (&subnet_info.canister_ranges, &subnet_state.canister_ranges) {
                 (Some(canister_ranges), _) => {
                     serde_cbor::from_slice(canister_ranges).map_err(|err| {
@@ -375,6 +378,7 @@ pub fn verify_delegation_certificate(
                                 ))
                             })?;
 
+                    // Find the leaf which *might* cover the canister ID.
                     let lower_bound = canister_ranges
                         .range((
                             std::ops::Bound::Unbounded,
