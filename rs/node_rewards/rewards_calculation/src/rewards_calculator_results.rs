@@ -1,5 +1,4 @@
 use crate::types::{Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
-use candid::CandidType;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
@@ -12,7 +11,7 @@ use std::fmt::Display;
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
 
-#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, CandidType)]
+#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy)]
 pub struct DayUtc(UnixTsNanos);
 
 impl From<UnixTsNanos> for DayUtc {

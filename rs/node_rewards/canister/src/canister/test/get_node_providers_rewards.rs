@@ -3,11 +3,13 @@ use crate::canister::test::test_utils::{
 };
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
-use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
+};
+use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
+    NodeMetrics, SubnetMetricsKey, SubnetMetricsValue,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};

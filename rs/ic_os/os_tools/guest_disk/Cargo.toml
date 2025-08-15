@@ -8,7 +8,6 @@ clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 grub = { path = "../../grub" }
-libcryptsetup-rs = { workspace = true }
 linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 ic_device = { path = "../../device" }
 ic_sev = { path = "../../sev" }
@@ -16,6 +15,8 @@ itertools = { workspace = true }
 nix = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }
+[target.'cfg(target_os = "linux")'.dependencies]
+libcryptsetup-rs = { workspace = true }
 
 [dev-dependencies]
 parking_lot = { workspace = true }
