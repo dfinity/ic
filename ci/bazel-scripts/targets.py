@@ -8,7 +8,7 @@
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
-# ./BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
+# ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
@@ -22,7 +22,9 @@ import sys
 from pathlib import Path
 from typing import Set
 
-BAZEL_TARGETS = "BAZEL_TARGETS"
+# The file specifying which bazel targets to test explicitly on PRs based on which file modifications
+# regardless of whether those targets explicitly depend on those files or whether they're tagged as `long_test`.
+PULL_REQUEST_BAZEL_TARGETS = "PULL_REQUEST_BAZEL_TARGETS"
 
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
 # in case any file is modified matching any of the following globs:
@@ -31,11 +33,11 @@ all_targets_globs = ["*.bazel", "*.bzl", ".bazelrc", ".bazelversion", "mainnet-*
 
 def load_explicit_targets() -> dict[str, Set[str]]:
     """
-    Load and parse explicit targets from the BAZEL_TARGETS file.
+    Load and parse explicit targets from the PULL_REQUEST_BAZEL_TARGETS file.
     Returns a dictionary mapping globbing patterns
     to a set of targets to test explicitly on PRs.
     """
-    lines = Path(BAZEL_TARGETS).read_text().splitlines()
+    lines = Path(PULL_REQUEST_BAZEL_TARGETS).read_text().splitlines()
 
     # First filter out comments and blank lines. We use gitignore-style comment handling.
     # See: https://git-scm.com/docs/gitignore#_pattern_format
@@ -56,7 +58,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
         # Indented lines are considered part of the previous list of targets.
         if len(line) > 0 and line[0].isspace():
             if len(explicit_targets) == 0:
-                raise ValueError(f"Unexpected indentation in {BAZEL_TARGETS} for line: '{line}'")
+                raise ValueError(f"Unexpected indentation in {PULL_REQUEST_BAZEL_TARGETS} for line: '{line}'")
             targets = line.split()
             explicit_targets[-1][1].update(targets)
         else:
@@ -67,7 +69,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
 
             if len(targets) == 0:
                 raise ValueError(
-                    f"Expected a line with both a file pattern and a space-separated list of at least a single target in {BAZEL_TARGETS} but got: '{line}'"
+                    f"Expected a line with both a file pattern and a space-separated list of at least a single target in {PULL_REQUEST_BAZEL_TARGETS} but got: '{line}'"
                 )
 
             explicit_targets.append((pattern, targets))
@@ -112,7 +114,7 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
     # Exclude the long_tests if requested:
     query = f"({query})" + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
 
-    # Next, add the explicit targets from the BAZEL_TARGETS file that match the modified files:
+    # Next, add the explicit targets from the PULL_REQUEST_BAZEL_TARGETS file that match the modified files:
     explicit_targets: Set[str] = set()
     for pattern, explicit_targets_for_pattern in load_explicit_targets().items():
         if len(fnmatch.filter(modified_files, pattern)) > 0:
