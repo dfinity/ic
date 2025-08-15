@@ -1099,8 +1099,8 @@ mod tests {
     fn test_send_signature_shares_incomplete_contexts(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
-        let pids: Vec<_> = (0..3).map(|_| generator.next_pre_signature_id()).collect();
+        let ids: Vec<_> = (0..4).map(|i| request_id(i, height)).collect();
+        let pids: Vec<_> = (0..4).map(|_| generator.next_pre_signature_id()).collect();
 
         // Set up the signature requests
         let transcript_loader: TestIDkgTranscriptLoader = Default::default();
@@ -1114,6 +1114,12 @@ mod tests {
                 fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
                 fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
+                // One malformed context
+                fake_malformed_signature_request_context_from_id(
+                    key_id.clone().into(),
+                    pids[3],
+                    ids[3],
+                ),
             ],
         );
 
@@ -1506,8 +1512,8 @@ mod tests {
     fn test_validate_signature_shares_incomplete_contexts(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
-        let pids: Vec<_> = (0..3).map(|_| generator.next_pre_signature_id()).collect();
+        let ids: Vec<_> = (0..4).map(|i| request_id(i, height)).collect();
+        let pids: Vec<_> = (0..4).map(|_| generator.next_pre_signature_id()).collect();
 
         // Set up the signature requests
         let state = fake_state_with_signature_requests(
@@ -1519,6 +1525,12 @@ mod tests {
                 fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
                 fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
+                // One malformed context
+                fake_malformed_signature_request_context_from_id(
+                    key_id.clone().into(),
+                    pids[3],
+                    ids[3],
+                ),
             ],
         );
 
@@ -1554,6 +1566,14 @@ mod tests {
         wrong_id_3.height = ids[2].height.decrement();
         let message = create_signature_share(&key_id, NODE_2, wrong_id_3);
         let msg_id_4 = message.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message,
+            peer_id: NODE_2,
+            timestamp: UNIX_EPOCH,
+        });
+
+        // A share for a the malformed context (deferred)
+        let message = create_signature_share(&key_id, NODE_2, ids[3]);
         artifacts.push(UnvalidatedArtifact {
             message,
             peer_id: NODE_2,

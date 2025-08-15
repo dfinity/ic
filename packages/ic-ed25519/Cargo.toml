@@ -1,6 +1,6 @@
 [package]
 name = "ic-ed25519"
-version = "0.2.0"
+version = "0.3.0"
 description = "A package created for the Internet Computer Protocol for creating and verifying Ed25519 signatures."
 license = "Apache-2.0"
 readme = "README.md"
