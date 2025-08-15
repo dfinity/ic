@@ -158,13 +158,13 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     let txid = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
 
     let submitted_tx = {
-        let mut txs: Vec<_> = state
+        let txs: Vec<_> = state
             .submitted_transactions
             .iter()
             .filter(|tx| tx.txid.to_string() == txid)
             .collect();
         assert_eq!(txs.len(), 1);
-        txs.pop().unwrap()
+        txs[0].clone()
     };
 
     assert_eq!(submitted_tx.requests.len(), 43);
@@ -250,9 +250,12 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     let cancellation_tx = replaced[0].1.clone();
     let cancellation_txid = cancellation_tx.txid;
     assert_eq!(cancellation_tx.used_utxos.len(), 1);
+    let used_utxo = cancellation_tx.used_utxos[0].clone();
     let sent = transactions_sent.read().unwrap();
     assert_eq!(sent.len(), 1);
     let signed_tx = sent[0].clone();
+    assert_eq!(signed_tx.inputs.len(), 1);
+    assert_eq!(&used_utxo.outpoint, &signed_tx.inputs[0].previous_output);
 
     // Triggle the replacement in state
     assert!(state
@@ -308,6 +311,11 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         .iter()
         .any(|tx| tx.txid == cancellation_txid));
     assert!(maybe_finalized_transactions.is_empty());
+    assert!(!state.available_utxos.contains(&used_utxo));
+    assert!(submitted_tx
+        .used_utxos
+        .iter()
+        .all(|utxo| utxo == &used_utxo || state.available_utxos.contains(utxo)));
 }
 
 #[tokio::test]
