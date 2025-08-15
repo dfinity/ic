@@ -310,13 +310,9 @@ fn canister_post_upgrade() {
 
     // Look for MemoryManager magic bytes
     let mut magic_bytes = [0u8; 3];
-    reader
-        .read_exact(&mut magic_bytes)
-        .expect("Failed to read from stable memory");
+    stable_read(0, &mut magic_bytes);
     let mut mgr_version_byte = [0u8; 1];
-    reader
-        .read_exact(&mut mgr_version_byte)
-        .expect("Failed to read from stable memory");
+    stable_read(3, &mut mgr_version_byte);
 
     // For the version of MemoryManager we are using, the version byte will be 1
     // We use the magic bytes, along with this, to identify if we are before or after the migration
