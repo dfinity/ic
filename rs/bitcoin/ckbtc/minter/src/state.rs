@@ -142,7 +142,7 @@ pub struct SubmittedBtcTransaction {
     /// Fee per vbyte in millisatoshi.
     pub fee_per_vbyte: Option<u64>,
     /// Include both the fee paid for the transaction and the minter fee.
-    pub total_fee: Option<WithdrawalFee>,
+    pub withdrawal_fee: Option<WithdrawalFee>,
 }
 
 /// Pairs a retrieve_btc request with its outcome.
@@ -868,7 +868,7 @@ impl CkBtcMinterState {
             }
             SubmittedWithdrawalRequests::ToCancel { requests, reason } => {
                 let requests = requests.into_iter().collect::<BTreeSet<_>>();
-                let fee = finalized_tx.total_fee.unwrap_or_default();
+                let fee = finalized_tx.withdrawal_fee.unwrap_or_default();
                 let cancelled_requests = self.cancel_tx_replacement(
                     txid,
                     finalized_tx.used_utxos.iter().collect::<BTreeSet<_>>(),

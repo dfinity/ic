@@ -424,7 +424,7 @@ pub mod arbitrary {
                     change_output: option::of(change_output()),
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: option::of(any::<u64>()),
-                    total_fee: option::of(withdrawal_fee()),
+                    withdrawal_fee: option::of(withdrawal_fee()),
                 }),
                 prop_struct!(EventType::ReplacedBtcTransaction {
                     old_txid: txid(),
@@ -432,7 +432,7 @@ pub mod arbitrary {
                     change_output: change_output(),
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: any::<u64>(),
-                    total_fee: option::of(withdrawal_fee()),
+                    withdrawal_fee: option::of(withdrawal_fee()),
                 }),
                 prop_struct!(EventType::ConfirmedBtcTransaction { txid: txid() }),
                 prop_struct!(EventType::CheckedUtxo {

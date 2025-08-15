@@ -313,11 +313,11 @@ fn test_min_change_amount() {
 
     assert_eq!(tx.outputs.len(), 3);
     let fee_shares = {
-        let total_fee = fee + minter_fee;
-        let avg_fee_per_share = total_fee / 2;
-        let share_1 = avg_fee_per_share + (total_fee % 2);
+        let withdrawal_fee = fee + minter_fee;
+        let avg_fee_per_share = withdrawal_fee / 2;
+        let share_1 = avg_fee_per_share + (withdrawal_fee % 2);
         let share_2 = avg_fee_per_share;
-        assert_eq!(share_1 + share_2, total_fee);
+        assert_eq!(share_1 + share_2, withdrawal_fee);
         [share_1, share_2]
     };
 
@@ -416,7 +416,7 @@ fn test_no_dust_in_change_output() {
 
     for change in 1..=100 {
         let mut available_utxos = btreeset! {utxo.clone()};
-        let (tx, change_output, _total_fee, _utxos) = build_unsigned_transaction(
+        let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
             minter_addr.clone(),
@@ -805,7 +805,7 @@ proptest! {
         }
         let fee_per_vbyte = 100_000u64;
 
-        let (tx, change_output, total_fee, used_utxos) = build_unsigned_transaction(
+        let (tx, change_output, withdrawal_fee, used_utxos) = build_unsigned_transaction(
             &mut state.available_utxos,
             requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -822,7 +822,7 @@ proptest! {
             submitted_at,
             change_output: Some(change_output),
             fee_per_vbyte: Some(fee_per_vbyte),
-            total_fee: Some(total_fee),
+            withdrawal_fee: Some(withdrawal_fee),
         });
 
         state.check_invariants().expect("violated invariants");
@@ -830,7 +830,7 @@ proptest! {
         for i in 1..=resubmission_chain_length {
             let prev_txid = txids.last().unwrap();
             // Build a replacement transaction
-            let (tx, change_output, total_fee, _used_utxos) = build_unsigned_transaction(
+            let (tx, change_output, withdrawal_fee, _used_utxos) = build_unsigned_transaction(
                 &mut used_utxos.clone().into_iter().collect(),
                 requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
                 BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -847,7 +847,7 @@ proptest! {
                 submitted_at,
                 change_output: Some(change_output),
                 fee_per_vbyte: Some(fee_per_vbyte),
-                total_fee: Some(total_fee),
+                withdrawal_fee: Some(withdrawal_fee),
             });
 
             for txid in &txids {

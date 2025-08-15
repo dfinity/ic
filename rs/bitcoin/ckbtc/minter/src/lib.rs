@@ -299,7 +299,7 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
 ) {
     assert!(!requests.is_empty());
     let fees = distribute(total_fee, requests.len() as u64);
-    // This assertion makes sure fee is smaller than all request amount
+    // This assertion makes sure the fee is smaller than each request amount
     assert!(fees[0] <= state.retrieve_btc_min_amount);
     for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
         if let Some(account) = request.reimbursement_account {
@@ -532,7 +532,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                                     change_output: Some(req.change_output),
                                     submitted_at: runtime.time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
-                                    total_fee: Some(total_fee),
+                                    withdrawal_fee: Some(total_fee),
                                 },
                                 runtime,
                             );
@@ -897,7 +897,7 @@ pub async fn resubmit_transactions<
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
-                    total_fee: Some(total_fee),
+                    withdrawal_fee: Some(total_fee),
                 };
 
                 replace_transaction(old_txid, new_tx);

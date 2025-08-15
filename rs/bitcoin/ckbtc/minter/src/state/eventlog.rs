@@ -98,9 +98,9 @@ mod event {
             #[serde(skip_serializing_if = "Option::is_none")]
             fee_per_vbyte: Option<u64>,
             /// The total fee for this transaction
-            #[serde(rename = "withdraw_fee")]
+            #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
-            total_fee: Option<WithdrawalFee>,
+            withdrawal_fee: Option<WithdrawalFee>,
         },
 
         /// Indicates that the minter sent out a new transaction to replace an older transaction
@@ -123,9 +123,9 @@ mod event {
             #[serde(rename = "fee")]
             fee_per_vbyte: u64,
             /// The total fee for this transaction
-            #[serde(rename = "withdraw_fee")]
+            #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
-            total_fee: Option<WithdrawalFee>,
+            withdrawal_fee: Option<WithdrawalFee>,
         },
 
         /// Indicates that the minter received enough confirmations for a bitcoin
@@ -337,7 +337,7 @@ pub fn replay<I: CheckInvariants>(
                 fee_per_vbyte,
                 change_output,
                 submitted_at,
-                total_fee,
+                withdrawal_fee,
             } => {
                 let mut retrieve_btc_requests = BTreeSet::new();
                 for block_index in request_block_indices {
@@ -361,7 +361,7 @@ pub fn replay<I: CheckInvariants>(
                     fee_per_vbyte,
                     change_output,
                     submitted_at,
-                    total_fee,
+                    withdrawal_fee,
                 });
             }
             EventType::ReplacedBtcTransaction {
@@ -370,7 +370,7 @@ pub fn replay<I: CheckInvariants>(
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                total_fee,
+                withdrawal_fee,
             } => {
                 let (requests, used_utxos) = match state
                     .submitted_transactions
@@ -395,7 +395,7 @@ pub fn replay<I: CheckInvariants>(
                         change_output: Some(change_output),
                         submitted_at,
                         fee_per_vbyte: Some(fee_per_vbyte),
-                        total_fee,
+                        withdrawal_fee,
                     },
                 );
             }
