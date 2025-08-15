@@ -17,9 +17,8 @@ thread_local! {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum TaskType {
-    ProcessLogic,
+    ProcessLogic(bool),
     RefreshFeePercentiles,
-    InitialProcessLogic,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -133,19 +132,17 @@ pub fn global_timer() -> u64 {
 
 pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
     match task.task_type {
-        TaskType::ProcessLogic | TaskType::InitialProcessLogic => {
+        TaskType::ProcessLogic(force_resubmit_stuck_transactions) => {
             const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
 
             let _enqueue_followup_guard = guard((), |_| {
-                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic, &runtime)
+                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic(false), &runtime)
             });
 
             let _guard = match crate::guard::TimerLogicGuard::new() {
                 Some(guard) => guard,
                 None => return,
             };
-
-            let force_resubmit_stuck_transactions = task.task_type == TaskType::InitialProcessLogic;
 
             submit_pending_requests(&IC_CANISTER_RUNTIME).await;
             finalize_requests(&IC_CANISTER_RUNTIME, force_resubmit_stuck_transactions).await;

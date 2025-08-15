@@ -440,16 +440,6 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
             )
             .unwrap();
             match &req.state {
-                state::FinalizedStatus::Reimbursed {
-                    amount,
-                    fee,
-                    reason,
-                } => write!(
-                    buf,
-                    "<td>Reimbursed {amount} after deducting fee {fee} due to {:?}</td>",
-                    reason
-                )
-                .unwrap(),
                 state::FinalizedStatus::AmountTooLow => {
                     write!(buf, "<td>Amount is too low to cover fees</td>").unwrap()
                 }

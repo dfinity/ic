@@ -178,6 +178,7 @@ pub mod arbitrary {
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
+        WithdrawalFee,
     };
     use candid::Principal;
     pub use event::event_type;
@@ -273,6 +274,13 @@ pub mod arbitrary {
             Just(SuspendedReason::ValueTooSmall),
             Just(SuspendedReason::Quarantined),
         ]
+    }
+
+    fn withdrawal_fee() -> impl Strategy<Value = WithdrawalFee> {
+        (any::<u64>(), any::<u64>()).prop_map(|(bitcoin_fee, minter_fee)| WithdrawalFee {
+            bitcoin_fee,
+            minter_fee,
+        })
     }
 
     fn change_output() -> impl Strategy<Value = ChangeOutput> {
@@ -416,6 +424,7 @@ pub mod arbitrary {
                     change_output: option::of(change_output()),
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: option::of(any::<u64>()),
+                    withdrawal_fee: option::of(withdrawal_fee()),
                 }),
                 prop_struct!(EventType::ReplacedBtcTransaction {
                     old_txid: txid(),
@@ -423,6 +432,7 @@ pub mod arbitrary {
                     change_output: change_output(),
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: any::<u64>(),
+                    withdrawal_fee: option::of(withdrawal_fee()),
                 }),
                 prop_struct!(EventType::ConfirmedBtcTransaction { txid: txid() }),
                 prop_struct!(EventType::CheckedUtxo {

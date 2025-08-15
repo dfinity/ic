@@ -344,7 +344,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         scopeguard::ScopeGuard::into_inner(guard);
     }
 
-    schedule_now(TaskType::ProcessLogic, runtime);
+    schedule_now(TaskType::ProcessLogic(false), runtime);
 
     observe_update_call_latency(utxo_statuses.len(), start_time, runtime.time());
 

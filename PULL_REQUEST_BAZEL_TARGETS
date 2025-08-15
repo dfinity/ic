@@ -34,6 +34,10 @@
 #   https://docs.python.org/3/library/fnmatch.html
 #   So there's no negation of patterns or special directory handling
 #   like gitignore wildmatch patterns.
+#
+# Tip: to test which files matches <PATTERN> you can use the following:
+# git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
+
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint

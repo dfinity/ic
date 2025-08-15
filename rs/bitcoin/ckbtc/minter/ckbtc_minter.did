@@ -368,6 +368,11 @@ type SuspendedReason = variant {
     Quarantined;
 };
 
+type WithdrawalFee = record {
+    minter_fee : nat64;
+    bitcoin_fee : nat64;
+};
+
 type Event = record {
     timestamp : opt nat64;
     payload : EventType;
@@ -398,6 +403,7 @@ type EventType = variant {
         change_output : opt record { vout : nat32; value : nat64 };
         submitted_at : nat64;
         fee: opt nat64;
+        withdrawal_fee : opt WithdrawalFee;
     };
     replaced_transaction : record {
         new_txid : blob;
@@ -405,6 +411,7 @@ type EventType = variant {
         change_output : record { vout : nat32; value : nat64 };
         submitted_at : nat64;
         fee: nat64;
+        withdrawal_fee : opt WithdrawalFee;
     };
     confirmed_transaction : record { txid : blob };
     checked_utxo : record {

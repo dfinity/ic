@@ -272,7 +272,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     assert_eq!(signed_tx.inputs.len(), 1);
     assert_eq!(&used_utxo.outpoint, &signed_tx.inputs[0].previous_output);
 
-    // Triggle the replacement in state
+    // Trigger the replacement in state
     state::audit::replace_transaction(
         &mut state,
         resubmitted_txid,
@@ -292,7 +292,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         .iter()
         .any(|tx| tx.txid == resubmitted_txid));
 
-    // Check if transaction is cancelled once cancellation tx is finalized.
+    // Check if transaction is canceled once cancellation tx is finalized.
     now += MIN_RESUBMISSION_DELAY.as_nanos() as u64;
     let main_account = Account {
         owner: Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap(),

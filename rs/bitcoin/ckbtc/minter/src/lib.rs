@@ -76,8 +76,9 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
-/// The Max number of UTXO inputs allowed in a transaction
-const MAX_NUM_INPUTS: usize = 1_000;
+/// Maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
+/// to ensure that the resulting signed transaction is standard.
+pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
@@ -289,7 +290,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     }
 }
 
-fn reimburse_cancelled_requests<R: CanisterRuntime>(
+fn reimburse_canceled_requests<R: CanisterRuntime>(
     state: &mut state::CkBtcMinterState,
     requests: BTreeSet<state::RetrieveBtcRequest>,
     err: InvalidTransactionError,
@@ -297,27 +298,28 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
     runtime: &R,
 ) {
     assert!(!requests.is_empty());
-    let n = requests.len();
-    let fees = distribute(total_fee, n as u64);
-    // This assertion makes sure fee is smaller than all request amount
+    let fees = distribute(total_fee, requests.len() as u64);
+    // This assertion makes sure the fee is smaller than each request amount
     assert!(fees[0] <= state.retrieve_btc_min_amount);
     for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
-            let reason =
-                reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
-            state::audit::reimburse_withdrawal(
-                state,
-                request.block_index,
-                amount,
-                account,
-                reason.clone(),
-                runtime,
-            );
+            if amount > 0 {
+                let reason =
+                    reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
+                state::audit::reimburse_withdrawal(
+                    state,
+                    request.block_index,
+                    amount,
+                    account,
+                    reason.clone(),
+                    runtime,
+                );
+            }
         } else {
             log!(
                 P0,
-                "[reimburse_cancelled_requests]: account is not found for retrieve_btc request ({:?})",
+                "[reimburse_canceled_requests]: account is not found for retrieve_btc request ({:?})",
                 request
             );
         }
@@ -335,7 +337,7 @@ pub fn confirm_transaction<R: CanisterRuntime>(
         fee,
     }) = state::audit::confirm_transaction(state, txid, runtime)
     {
-        reimburse_cancelled_requests(state, requests, reason, fee, runtime)
+        reimburse_canceled_requests(state, requests, reason, fee, runtime)
     }
 }
 
@@ -344,7 +346,7 @@ pub fn confirm_transaction<R: CanisterRuntime>(
 async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     // We make requests if we have old requests in the queue or if have enough
     // requests to fill a batch.
-    if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, ic_cdk::api::time())) {
+    if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, runtime.time())) {
         return;
     }
 
@@ -380,20 +382,23 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             fee_millisatoshi_per_vbyte,
             s.enable_non_standard_tx,
         ) {
-            Ok((unsigned_tx, change_output, utxos)) => {
+            Ok((unsigned_tx, change_output, total_fee, utxos)) => {
                 for req in batch.iter() {
                     s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
                 }
 
-                Some(SignTxRequest {
-                    key_name: s.ecdsa_key_name.clone(),
-                    ecdsa_public_key,
-                    change_output,
-                    network: s.btc_network,
-                    unsigned_tx,
-                    requests: batch.into_iter().collect(),
-                    utxos,
-                })
+                Some((
+                    SignTxRequest {
+                        key_name: s.ecdsa_key_name.clone(),
+                        ecdsa_public_key,
+                        change_output,
+                        network: s.btc_network,
+                        unsigned_tx,
+                        requests: batch.into_iter().collect(),
+                        utxos,
+                    },
+                    total_fee,
+                ))
             }
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
@@ -403,8 +408,8 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 );
                 // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
                 // is reasonable to charge a fee based on it.
-                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS as u64;
-                reimburse_cancelled_requests(s, batch, err, fee, runtime);
+                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
+                reimburse_canceled_requests(s, batch, err, fee, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -465,7 +470,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         }
     });
 
-    if let Some(req) = maybe_sign_request {
+    if let Some((req, total_fee)) = maybe_sign_request {
         log!(
             P1,
             "[submit_pending_requests]: signing a new transaction: {}",
@@ -516,16 +521,19 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                         let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
                         state::mutate_state(|s| {
-                            s.last_transaction_submission_time_ns = Some(ic_cdk::api::time());
+                            s.last_transaction_submission_time_ns = Some(runtime.time());
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
-                                    requests: state::SubmittedRequests::ToConfirm(requests),
+                                    requests: state::SubmittedWithdrawalRequests::ToConfirm {
+                                        requests,
+                                    },
                                     txid,
                                     used_utxos,
                                     change_output: Some(req.change_output),
-                                    submitted_at: ic_cdk::api::time(),
+                                    submitted_at: runtime.time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
+                                    withdrawal_fee: Some(total_fee),
                                 },
                                 runtime,
                             );
@@ -628,7 +636,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     }
 
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
-    let now = ic_cdk::api::time();
+    let now = runtime.time();
 
     // The list of transactions that are likely to be finalized, indexed by the transaction id.
     let mut maybe_finalized_transactions: BTreeMap<Txid, state::SubmittedBtcTransaction> =
@@ -782,11 +790,11 @@ pub async fn resubmit_transactions<
         };
 
         let outputs = match &submitted_tx.requests {
-            state::SubmittedRequests::ToConfirm(requests) => requests
+            state::SubmittedWithdrawalRequests::ToConfirm { requests } => requests
                 .iter()
                 .map(|req| (req.address.clone(), req.amount))
                 .collect(),
-            state::SubmittedRequests::ToCancel(_, _) => {
+            state::SubmittedWithdrawalRequests::ToCancel { .. } => {
                 vec![(main_address.clone(), retrieve_btc_min_amount)]
             }
         };
@@ -803,7 +811,7 @@ pub async fn resubmit_transactions<
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
                     P0,
-                    "[finalize_requests]: {:?}, transaction {} will be cancelled",
+                    "[finalize_requests]: {:?}, transaction {} will be canceled",
                     err,
                     &submitted_tx.txid,
                 );
@@ -815,24 +823,27 @@ pub async fn resubmit_transactions<
                 // transaction is not meant to complete the corresponding RetrieveBtcRequests
                 // but rather to cancel them.
                 let requests = match new_tx_requests {
-                    state::SubmittedRequests::ToConfirm(requests) => requests,
-                    state::SubmittedRequests::ToCancel(_, _) => {
+                    state::SubmittedWithdrawalRequests::ToConfirm { requests } => requests,
+                    state::SubmittedWithdrawalRequests::ToCancel { .. } => {
                         unreachable!("cancellation tx never has too many inputs!")
                     }
                 };
-                new_tx_requests = state::SubmittedRequests::ToCancel(requests, err);
+                new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel {
+                    requests,
+                    reason: err,
+                };
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
                     outputs,
                     main_address.clone(),
-                    fee_per_vbyte,
+                    fee_per_vbyte, // Use normal fee
                     enable_non_standard_tx,
                 )
             }
             result => result,
         };
-        let (unsigned_tx, change_output) = match build_result {
+        let (unsigned_tx, change_output, total_fee) = match build_result {
             Ok(tx) => tx,
             // If it's impossible to build a new transaction, the fees probably became too high.
             // Let's ignore this transaction and wait for fees to go down.
@@ -896,6 +907,7 @@ pub async fn resubmit_transactions<
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
+                    withdrawal_fee: Some(total_fee),
                 };
 
                 replace_transaction(old_txid, new_tx);
@@ -1126,7 +1138,15 @@ pub fn build_unsigned_transaction(
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
     enable_non_standard_tx: bool,
-) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        state::ChangeOutput,
+        WithdrawalFee,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
@@ -1137,7 +1157,7 @@ pub fn build_unsigned_transaction(
         fee_per_vbyte,
         enable_non_standard_tx,
     ) {
-        Ok((tx, change)) => Ok((tx, change, inputs)),
+        Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case
             for utxo in inputs {
@@ -1154,7 +1174,7 @@ pub fn build_unsigned_transaction_from_inputs(
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
     enable_non_standard_tx: bool,
-) -> Result<(tx::UnsignedTransaction, state::ChangeOutput), BuildTxError> {
+) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
@@ -1168,10 +1188,10 @@ pub fn build_unsigned_transaction_from_inputs(
     if num_inputs == 0 {
         return Err(BuildTxError::NotEnoughFunds);
     }
-    if !enable_non_standard_tx && num_inputs > MAX_NUM_INPUTS {
+    if !enable_non_standard_tx && num_inputs > MAX_NUM_INPUTS_IN_TRANSACTION {
         return Err(BuildTxError::InvalidTransaction(
             InvalidTransactionError::TooManyInputs {
-                max_num_inputs: MAX_NUM_INPUTS,
+                max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
                 num_inputs,
             },
         ));
@@ -1258,7 +1278,14 @@ pub fn build_unsigned_transaction_from_inputs(
         fee + unsigned_tx.outputs.iter().map(|u| u.value).sum::<u64>()
     );
 
-    Ok((unsigned_tx, change_output))
+    Ok((
+        unsigned_tx,
+        change_output,
+        WithdrawalFee {
+            bitcoin_fee: fee,
+            minter_fee,
+        },
+    ))
 }
 
 pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {

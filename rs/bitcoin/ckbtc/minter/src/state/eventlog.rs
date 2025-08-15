@@ -4,9 +4,10 @@ use crate::reimbursement::ReimburseWithdrawalTask;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedRequests, SuspendedReason,
+    RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
+use crate::WithdrawalFee;
 use candid::Principal;
 pub use event::EventType;
 use ic_btc_interface::{Txid, Utxo};
@@ -96,6 +97,10 @@ mod event {
             #[serde(rename = "fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
             fee_per_vbyte: Option<u64>,
+            /// The total fee for this transaction
+            #[serde(rename = "withdrawal_fee")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            withdrawal_fee: Option<WithdrawalFee>,
         },
 
         /// Indicates that the minter sent out a new transaction to replace an older transaction
@@ -117,6 +122,10 @@ mod event {
             /// The fee per vbyte (in millisatoshi) that we used for the transaction.
             #[serde(rename = "fee")]
             fee_per_vbyte: u64,
+            /// The total fee for this transaction
+            #[serde(rename = "withdrawal_fee")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            withdrawal_fee: Option<WithdrawalFee>,
         },
 
         /// Indicates that the minter received enough confirmations for a bitcoin
@@ -328,6 +337,7 @@ pub fn replay<I: CheckInvariants>(
                 fee_per_vbyte,
                 change_output,
                 submitted_at,
+                withdrawal_fee,
             } => {
                 let mut retrieve_btc_requests = BTreeSet::new();
                 for block_index in request_block_indices {
@@ -343,12 +353,15 @@ pub fn replay<I: CheckInvariants>(
                     state.available_utxos.remove(utxo);
                 }
                 state.push_submitted_transaction(SubmittedBtcTransaction {
-                    requests: SubmittedRequests::ToConfirm(retrieve_btc_requests),
+                    requests: SubmittedWithdrawalRequests::ToConfirm {
+                        requests: retrieve_btc_requests,
+                    },
                     txid,
                     used_utxos: utxos,
                     fee_per_vbyte,
                     change_output,
                     submitted_at,
+                    withdrawal_fee,
                 });
             }
             EventType::ReplacedBtcTransaction {
@@ -357,6 +370,7 @@ pub fn replay<I: CheckInvariants>(
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
+                withdrawal_fee,
             } => {
                 let (requests, used_utxos) = match state
                     .submitted_transactions
@@ -381,6 +395,7 @@ pub fn replay<I: CheckInvariants>(
                         change_output: Some(change_output),
                         submitted_at,
                         fee_per_vbyte: Some(fee_per_vbyte),
+                        withdrawal_fee,
                     },
                 );
             }

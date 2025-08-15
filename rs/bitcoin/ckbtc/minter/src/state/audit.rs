@@ -85,6 +85,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
             change_output: tx.change_output.clone(),
             submitted_at: tx.submitted_at,
             fee_per_vbyte: tx.fee_per_vbyte,
+            withdrawal_fee: tx.withdrawal_fee,
         },
         runtime,
     );
@@ -207,6 +208,7 @@ pub fn replace_transaction<R: CanisterRuntime>(
             fee_per_vbyte: new_tx
                 .fee_per_vbyte
                 .expect("bug: all replacement transactions must have the fee"),
+            withdrawal_fee: new_tx.withdrawal_fee,
         },
         runtime,
     );
