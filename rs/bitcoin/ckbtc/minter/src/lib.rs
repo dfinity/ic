@@ -78,7 +78,7 @@ pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
 /// Maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
 /// to ensure that the resulting signed transaction is standard.
-pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
+pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 10;
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
