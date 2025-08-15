@@ -462,6 +462,8 @@ pub struct CkBtcMinterState {
 
     /// Cache of get_utxos call results
     pub get_utxos_cache: GetUtxosCache,
+
+    pub enable_non_standard_tx: bool,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -1823,6 +1825,7 @@ impl From<InitArgs> for CkBtcMinterState {
             )),
             pending_withdrawal_reimbursements: Default::default(),
             reimbursed_withdrawals: Default::default(),
+            enable_non_standard_tx: false,
         }
     }
 }

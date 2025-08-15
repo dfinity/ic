@@ -1424,6 +1424,17 @@ impl CkBtcSetup {
             .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&()).unwrap())
             .unwrap();
     }
+
+    pub fn enable_non_standard_tx(&self, enable: bool) {
+        self.env
+            .execute_ingress_as(
+                Principal::anonymous().into(),
+                self.minter_id,
+                "enable_non_standard_transaction",
+                Encode!(&enable).unwrap(),
+            )
+            .unwrap();
+    }
 }
 
 impl CanisterHttpQuery<UserError> for CkBtcSetup {
@@ -2402,6 +2413,8 @@ fn should_cancel_non_standard_transaction() {
         Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
     );
 
+    ckbtc.enable_non_standard_tx(true);
+
     // Step 2: request a withdrawal
     let withdrawal_amount = 1_800 * deposit_value;
     ckbtc.approve_minter(user, withdrawal_amount, None);
@@ -2417,16 +2430,30 @@ fn should_cancel_non_standard_transaction() {
 
     ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
 
+    // Step 3: wait for the transaction to be submitted
+
+    // A lot of UTXOs to sign
+    let txid = ckbtc.await_btc_transaction(block_index, 10_000);
     let mempool = ckbtc.mempool();
     assert_eq!(
         mempool.len(),
-        0,
-        "no transaction should appear when being reimbursed"
+        1,
+        "ckbtc transaction did not appear in the mempool"
     );
-    assert_eq!(
+    let tx = mempool
+        .get(&txid)
+        .expect("the mempool does not contain the withdrawal transaction");
+    assert_eq!(tx.input.len(), 1_800);
+    assert_eq!(tx.vsize(), 122_244); //above 100 kvbytes is non standard
+    assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Pending
+        RetrieveBtcStatusV2::Submitted { .. }
     );
+
+    ckbtc.enable_non_standard_tx(false);
+    ckbtc.upgrade();
+
+    //TODO XC-450: cancel Bitocin transaction + reimbursement flow
 }
 
 #[test]
