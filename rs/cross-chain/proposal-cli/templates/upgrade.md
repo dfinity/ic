@@ -15,8 +15,8 @@ Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 ---
 
 ## Motivation
-
 TODO: THIS MUST BE FILLED OUT
+
 
 ## Release Notes
 
