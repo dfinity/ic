@@ -22,14 +22,13 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_log",
     "//rs/sns/swap",  # TODO[NNS1-2282]
     "//rs/types/base_types",
-    
-    "@crate_index//:ic-management-canister-types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:prost",
     "@crate_index//:serde",

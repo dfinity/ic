@@ -31,12 +31,11 @@ BASE_DEPENDENCIES = [
     "//rs/sns/swap",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
-    
-    "@crate_index//:ic-management-canister-types",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",

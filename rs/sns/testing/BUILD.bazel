@@ -25,7 +25,6 @@ DEPENDENCIES = [
     "//rs/sns/governance/api",
     "//rs/sns/swap:swap",
     "//rs/types/base_types",
-    
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:clap",
@@ -67,7 +66,6 @@ DEV_DATA = [
     "//rs/sns/governance:sns-governance-canister-test",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
-    
     "@cycles-ledger.wasm.gz//file",
     "@ii_dev_canister//file",
     "@nns_dapp_canister//file",
