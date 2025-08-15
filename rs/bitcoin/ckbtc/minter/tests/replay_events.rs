@@ -7,7 +7,7 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_btc_interface::{OutPoint, Txid, Utxo};
+use ic_btc_interface::{OutPoint, Utxo};
 use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
@@ -23,7 +23,6 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 pub mod mock {
@@ -170,12 +169,12 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     );
 
     assert_eq!(state.replacement_txid.len(), 1);
-    let resubmitted_tx_id = state.replacement_txid.get(&stuck_tx.txid).unwrap();
+    let resubmitted_txid = *state.replacement_txid.get(&stuck_tx.txid).unwrap();
     let resubmitted_tx = {
         let txs: Vec<_> = state
             .submitted_transactions
             .iter()
-            .filter(|tx| tx.txid == *resubmitted_tx_id)
+            .filter(|tx| tx.txid == resubmitted_txid)
             .collect();
         assert_eq!(txs.len(), 1);
         txs[0].clone()
@@ -222,10 +221,9 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     );
 
     // Check if a cancellation tx will be sent
-    let txid = Txid::from_str(txid).unwrap();
     let min_amount = 50_000;
     let mut transactions = BTreeMap::new();
-    transactions.insert(txid, resubmitted_tx.clone());
+    transactions.insert(resubmitted_txid, resubmitted_tx.clone());
     let replaced = RefCell::new(vec![]);
     let transactions_sent: Arc<RwLock<Vec<tx::SignedTransaction>>> = Arc::new(RwLock::new(vec![]));
     let mut now = resubmitted_tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64;
@@ -260,7 +258,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     .await;
     let replaced = replaced.borrow();
     assert_eq!(replaced.len(), 1);
-    assert_eq!(replaced[0].0, txid);
+    assert_eq!(replaced[0].0, resubmitted_txid);
     let cancellation_tx = replaced[0].1.clone();
     let cancellation_txid = cancellation_tx.txid;
     assert_eq!(cancellation_tx.used_utxos.len(), 1);
@@ -272,20 +270,24 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     assert_eq!(&used_utxo.outpoint, &signed_tx.inputs[0].previous_output);
 
     // Triggle the replacement in state
-    assert!(state
-        .submitted_transactions
-        .iter()
-        .any(|tx| tx.txid == txid));
-    state::audit::replace_transaction(&mut state, txid, cancellation_tx.clone(), &runtime);
+    state::audit::replace_transaction(
+        &mut state,
+        resubmitted_txid,
+        cancellation_tx.clone(),
+        &runtime,
+    );
     assert!(!state
         .submitted_transactions
         .iter()
-        .any(|tx| tx.txid == txid));
+        .any(|tx| tx.txid == resubmitted_txid));
     assert!(state
         .submitted_transactions
         .iter()
         .any(|tx| tx.txid == cancellation_txid));
-    assert!(state.stuck_transactions.iter().any(|tx| tx.txid == txid));
+    assert!(state
+        .stuck_transactions
+        .iter()
+        .any(|tx| tx.txid == resubmitted_txid));
 
     // Check if transaction is cancelled once cancellation tx is finalized.
     now += MIN_RESUBMISSION_DELAY.as_nanos() as u64;
@@ -319,7 +321,14 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         main_account,
         &runtime,
     );
-    assert!(!state.stuck_transactions.iter().any(|tx| tx.txid == txid));
+    assert!(!state
+        .stuck_transactions
+        .iter()
+        .any(|tx| tx.txid == stuck_tx.txid));
+    assert!(!state
+        .stuck_transactions
+        .iter()
+        .any(|tx| tx.txid == resubmitted_txid));
     assert!(!state
         .submitted_transactions
         .iter()
