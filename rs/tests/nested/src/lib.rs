@@ -165,8 +165,7 @@ pub fn registration(env: TestEnv) {
     assert_eq!(num_unassigned_nodes, 1);
 }
 
-/// Test that all four VMs can register with the network successfully.
-/// This test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
+/// Tests an e2e manual recovery of the NNS subnet
 pub fn nns_recovery_test(env: TestEnv) {
     let logger = env.logger();
 
@@ -414,13 +413,13 @@ pub fn nns_recovery_test(env: TestEnv) {
     //      * TODO: Get (dummy) recovery-dev image and accompanying version/hash
     //        * implementation detail: instead of having to build a recovery-dev image with the EXPECTED_RECOVERY_HASH written into it, we can use a ‘dummy’ recovery-dev image that doesn’t include the hard-coded EXPECTED_RECOVERY_HASH, and later, once we upgrade nodes to the dummy recovery-dev image, ssh in and update the EXPECTED_RECOVERY_HASH value. That way, we don’t have to build the recovery-dev image *after* obtaining the recovery artifacts.
     //      * TODO: Create a VM to host the recovery artifacts and (dummy) recovery-dev image
-    //        * note: it may be tricky to have the VM host the recovery-dev image? If so, we can always fall back to SSHing into the nodes and hard-coding the system-test-generated recovery-dev image URL in recovery-upgrader.sh, but this is not ideal)
+    //        * note: if it's tricky to have the VM host the recovery-dev image, we can always fall back to SSHing into the nodes and hard-coding the bazel-generated recovery-dev image URL in recovery-upgrader.sh, but this is not ideal)
 
     // Recovery execution:
-    //      * TODO: for all nodes: SSH into the HostOS node and
+    //      * TODO: for all nodes: SSH into the HostOS node and (pull logic from recovery_upgrader_test)
     //         * Update /etc/hosts of the node to point at our hosting VM
     //         * Update BOOT_ARGS_A with version/hash of the (dummy) recovery-dev image and reboot node
-    //      * TODO: for all nodes: wait for node to:
+    //      * TODO: for all nodes: wait for node to: (pull logic from recovery_upgrader_test)
     //          * reboot (new boot ID)
     //          * recovery-upgrader to upgrade GuestOS (new GuestOS version)
     //      * TODO: for all nodes: SSH into the GuestOS node and
