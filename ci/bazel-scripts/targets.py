@@ -63,15 +63,8 @@ def load_explicit_targets() -> dict[str, Set[str]]:
             explicit_targets[-1][1].update(targets)
         else:
             parts = line.split()
-
-            pattern = parts[0]
-            targets = set(parts[1:])
-
-            if len(targets) == 0:
-                raise ValueError(
-                    f"Expected a line with both a file pattern and a space-separated list of at least a single target in {PULL_REQUEST_BAZEL_TARGETS} but got: '{line}'"
-                )
-
+            pattern = parts[0]  # Blank lines have been filtered out so we have at least a pattern.
+            targets = set(parts[1:])  # Note we accept an empty set of targets.
             explicit_targets.append((pattern, targets))
 
     # Turn the list of explicit targets into a dictionary to unify equivalent patterns.
