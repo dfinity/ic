@@ -1214,6 +1214,13 @@ impl CkBtcMinterState {
         self.pending_retrieve_btc_requests
             .retain(|req| req.block_index != ledger_burn_index);
 
+        if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
+            panic!(
+                "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
+                ledger_burn_index,
+                tx_status)
+        }
+
         for submitted_tx in self
             .submitted_transactions
             .iter()
