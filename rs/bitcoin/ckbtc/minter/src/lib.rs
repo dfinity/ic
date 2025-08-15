@@ -378,6 +378,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             outputs,
             main_address,
             fee_millisatoshi_per_vbyte,
+            state::read_state(|s| s.enable_non_standard_tx),
         ) {
             Ok((unsigned_tx, change_output, utxos)) => {
                 for req in batch.iter() {
@@ -732,6 +733,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         None => return,
     };
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
+    let enable_non_standard_tx = state::read_state(|s| s.enable_non_standard_tx);
     resubmit_transactions(
         &key_name,
         fee_per_vbyte,
@@ -747,6 +749,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
             })
         },
         &IC_CANISTER_RUNTIME,
+        enable_non_standard_tx,
     )
     .await
 }
@@ -766,6 +769,7 @@ pub async fn resubmit_transactions<
     lookup_outpoint_account: F,
     replace_transaction: G,
     runtime: &R,
+    enable_non_standard_tx: bool,
 ) {
     for (old_txid, submitted_tx) in transactions {
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
@@ -794,6 +798,7 @@ pub async fn resubmit_transactions<
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
+            enable_non_standard_tx,
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
@@ -821,7 +826,8 @@ pub async fn resubmit_transactions<
                     &input_utxos,
                     outputs,
                     main_address.clone(),
-                    fee_per_vbyte, // Use normal fee
+                    fee_per_vbyte,
+                    enable_non_standard_tx,
                 )
             }
             result => result,
@@ -1119,11 +1125,18 @@ pub fn build_unsigned_transaction(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
+    enable_non_standard_tx: bool,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
-    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
+    match build_unsigned_transaction_from_inputs(
+        &inputs,
+        outputs,
+        main_address,
+        fee_per_vbyte,
+        enable_non_standard_tx,
+    ) {
         Ok((tx, change)) => Ok((tx, change, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case
@@ -1140,6 +1153,7 @@ pub fn build_unsigned_transaction_from_inputs(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
+    enable_non_standard_tx: bool,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput), BuildTxError> {
     assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
@@ -1154,7 +1168,7 @@ pub fn build_unsigned_transaction_from_inputs(
     if num_inputs == 0 {
         return Err(BuildTxError::NotEnoughFunds);
     }
-    if num_inputs > MAX_NUM_INPUTS {
+    if !enable_non_standard_tx && num_inputs > MAX_NUM_INPUTS {
         return Err(BuildTxError::InvalidTransaction(
             InvalidTransactionError::TooManyInputs {
                 max_num_inputs: MAX_NUM_INPUTS,

@@ -257,6 +257,7 @@ fn should_have_same_input_and_output_count() {
         vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
         minter_addr.clone(),
         fee_per_vbyte,
+        false,
     )
     .expect("failed to build a transaction");
 
@@ -304,6 +305,7 @@ fn test_min_change_amount() {
         ],
         minter_addr.clone(),
         fee_per_vbyte,
+        false,
     )
     .expect("failed to build a transaction");
     let change_value = 1;
@@ -374,6 +376,7 @@ fn test_no_dust_outputs() {
                 vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
                 minter_addr.clone(),
                 fee_per_vbyte,
+                false,
             ),
             Err(BuildTxError::DustOutput {
                 address: out2_addr.clone(),
@@ -389,6 +392,7 @@ fn test_no_dust_outputs() {
                 vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
                 minter_addr.clone(),
                 fee_per_vbyte,
+                false,
             ),
             Err(BuildTxError::DustOutput {
                 address: out2_addr.clone(),
@@ -421,6 +425,7 @@ fn test_no_dust_in_change_output() {
             vec![(out1_addr.clone(), utxo.value - change)],
             minter_addr.clone(),
             fee_per_vbyte,
+            false,
         )
         .expect("failed to build a transaction");
         let fee = evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
