@@ -2558,8 +2558,14 @@ fn should_cancel_non_standard_transaction() {
 
     ckbtc.finalize_transaction(&cancel_tx);
 
-    // We need to wait at least 5 seconds before the next resubmission because it's the internal
-    // timer interval.
+    ckbtc.env.advance_time(Duration::from_secs(5));
+    for _ in 0..10 {
+        ckbtc.env.tick();
+    }
+    ckbtc.env.advance_time(Duration::from_secs(5));
+    for _ in 0..10 {
+        ckbtc.env.tick();
+    }
     ckbtc.env.advance_time(Duration::from_secs(5));
     for _ in 0..10 {
         ckbtc.env.tick();
