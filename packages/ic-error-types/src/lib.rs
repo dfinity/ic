@@ -334,8 +334,8 @@ impl UserError {
         }
     }
 
-    pub fn count_bytes(&self) -> usize {
-        std::mem::size_of_val(self) + self.description.len()
+    pub fn count_heap_bytes(&self) -> usize {
+        self.description.len()
     }
 
     /// Panics if the error doesn't have the expected code and description.
