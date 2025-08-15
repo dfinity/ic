@@ -5,7 +5,7 @@ load("//ic-os/guestos:defs.bzl", "image_deps")
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_images = icos_build(
+icos_build(
     name = "dev-malicious",
     image_deps_func = image_deps,
     malicious = True,
