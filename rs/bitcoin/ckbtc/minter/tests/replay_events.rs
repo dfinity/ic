@@ -18,7 +18,6 @@ use ic_ckbtc_minter::{
     MIN_RESUBMISSION_DELAY,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use maplit::btreemap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -286,7 +285,9 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     };
     let mut runtime = mock::MockCanisterRuntime::new();
     runtime.expect_time().return_const(now);
-    let mut maybe_finalized_transactions = btreemap! { cancellation_txid => cancellation_tx };
+    let mut maybe_finalized_transactions = vec![(cancellation_txid, cancellation_tx)]
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
     let mock_height = 910109u32;
     let new_utxos = signed_tx
         .outputs
