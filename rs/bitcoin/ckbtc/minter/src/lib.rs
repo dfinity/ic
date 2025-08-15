@@ -699,20 +699,22 @@ pub async fn resubmit_transactions<
             .collect();
         let mut input_utxos = submitted_tx.used_utxos;
         let mut new_tx_requests = submitted_tx.requests;
-        let build_result = build_unsigned_transaction_from_inputs(
+        let build_result = match build_unsigned_transaction_from_inputs(
             &input_utxos,
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
-        )
-        .or_else(|err| {
-            if let BuildTxError::TooManyInputs { .. } = err {
+        ) {
+            Err(err @ BuildTxError::TooManyInputs { .. }) => {
                 log!(
                     P0,
-                    "[finalize_requests]: transaction {} has too many inputs, and will be cancelled",
+                    "[finalize_requests]: {:?}, transaction {} will be cancelled",
+                    err,
                     &submitted_tx.txid,
                 );
                 let mut inputs = input_utxos.clone().into_iter().collect::<BTreeSet<_>>();
+                // The following selection is guaranteed to select at least 1 UTXO because
+                // the value of stuck transaction is no less than retrieve_btc_min_amount.
                 input_utxos = utxos_selection(retrieve_btc_min_amount, &mut inputs, 0);
                 // The requests field has to be cleared because the finalization of this
                 // transaction is not meant to complete the corresponding RetrieveBtcRequests
@@ -725,10 +727,9 @@ pub async fn resubmit_transactions<
                     main_address.clone(),
                     fee_per_vbyte, // Use normal fee
                 )
-            } else {
-                Err(err)
             }
-        });
+            result => result,
+        };
         let (unsigned_tx, change_output) = match build_result {
             Ok(tx) => tx,
             // If it's impossible to build a new transaction, the fees probably became too high.
@@ -966,8 +967,8 @@ pub enum BuildTxError {
         amount: u64,
     },
     /// The transaction contains too many inputs.
-    /// If such a transaction where signed, there is a risk that the resulting transaction will have a size
-    /// over 100k vbytes and therefore be *non-standard*.
+    /// If such a transaction were signed, there is a risk that the resulting transaction
+    /// will have a size over 100k vbytes and therefore be *non-standard*.
     TooManyInputs {
         num_inputs: usize,
         max_num_inputs: usize,
@@ -1128,6 +1129,10 @@ pub fn build_unsigned_transaction_from_inputs(
         "input amount = {} fee = {} minter_fee = {} tx.outputs = {:?} fee_shares = {:?}",
         inputs_value, fee, minter_fee, unsigned_tx.outputs, fee_shares
     );
+
+    // The last output has to main_address
+    debug_assert!(matches!(unsigned_tx.outputs.iter().last(),
+        Some(tx::TxOut { value: _, address }) if address == &main_address));
 
     for (output, fee_share) in unsigned_tx
         .outputs
