@@ -865,7 +865,27 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 if let Some(upgrade_args) = upgrade_args {
                     ledger.upgrade(upgrade_args);
                 }
-        }
+                // FIXME(FI-1729): Remove this burn once a ledger version allowing the anonymous principal
+                //  to perform transactions has been released.
+                let anonymous_account = AccountIdentifier::from(PrincipalId::new_anonymous());
+                let anonymous_balance = ledger.balances().account_balance(&anonymous_account);
+                if anonymous_balance > Tokens::ZERO {
+                    ledger.add_payment(
+                        Memo::default(),
+                        Operation::Burn {
+                            from: anonymous_account,
+                            amount: anonymous_balance,
+                            spender: None,
+                        },
+                        None,
+                    )
+                        .expect("Burning tokens during upgrade failed");
+                    print(format!(
+                        "[ledger] post_upgrade(): burned {} from default account of the anonymous principal ({})",
+                        anonymous_balance, anonymous_account
+                    ));
+                }
+            }
     }
         }
         set_certified_data(

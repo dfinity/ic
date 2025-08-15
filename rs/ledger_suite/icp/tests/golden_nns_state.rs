@@ -1,6 +1,6 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
@@ -20,6 +20,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, Instant};
 
 /// The number of instructions that can be executed in a single canister upgrade as per
@@ -238,6 +239,9 @@ impl LedgerState {
 fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
+    // Check the balance of the default account of the anonymous principal
+    setup.check_balance_of_anonymous_account(false);
+
     // Advance the time to make sure the ledger gets the current time for checking allowances.
     setup.state_machine.advance_time(Duration::from_secs(1u64));
     setup.state_machine.tick();
@@ -253,6 +257,17 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.upgrade_to_master();
     // Upgrade again to test the pre-upgrade
     setup.upgrade_to_master();
+
+    // Check the balance of the default account of the anonymous principal again
+    setup.check_balance_of_anonymous_account(true);
+    // Ingest the burn block from the ledger into the in-memory ledger
+    let mut previous_ledger_state = setup.previous_ledger_state.take().unwrap();
+    previous_ledger_state.fetch_and_ingest_next_ledger_and_archive_blocks(
+        &setup.state_machine,
+        LEDGER_CANISTER_ID,
+        None,
+    );
+    setup.previous_ledger_state = Some(previous_ledger_state);
 
     // Perform upgrade and downgrade testing
     setup.perform_upgrade_downgrade_testing(true, AllowancesRecentlyPurged::Yes);
@@ -385,6 +400,40 @@ impl Setup {
             should_verify_balances_and_allowances,
             allowances_recently_purged,
         ));
+    }
+
+    fn check_balance_of_anonymous_account(&self, should_be_zero: bool) -> Nat {
+        let anonymous = PrincipalId::new_anonymous();
+        let anonymous_default_account = Account {
+            owner: anonymous.0,
+            subaccount: None,
+        };
+        let balance = Decode!(
+            &self
+                .state_machine
+                .query(
+                    LEDGER_CANISTER_ID,
+                    "icrc1_balance_of",
+                    Encode!(&anonymous_default_account).unwrap()
+                )
+                .expect("failed to query balance")
+                .bytes(),
+            Nat
+        )
+        .expect("failed to decode balance_of response");
+        println!(
+            "Balance of anonymous principal's default account: {}",
+            balance
+        );
+        let modifier = if should_be_zero { "" } else { "not " };
+        assert_eq!(
+            should_be_zero,
+            balance == 0u64,
+            "Balance of anonymous principal's default account should {}be zero, but is {}",
+            modifier,
+            balance
+        );
+        balance
     }
 
     fn check_ledger_metrics(&self) {
