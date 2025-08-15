@@ -869,6 +869,8 @@ impl CkBtcMinterState {
             SubmittedWithdrawalRequests::ToCancel { requests, reason } => {
                 let requests = requests.into_iter().collect::<BTreeSet<_>>();
                 let fee = finalized_tx.withdrawal_fee.unwrap_or_default();
+                let fee = fee.bitcoin_fee + fee.minter_fee;
+                assert!(fee > 0, "withdraw_fee is zero");
                 let canceled_requests = self.cancel_tx_replacement(
                     txid,
                     finalized_tx.used_utxos.iter().collect::<BTreeSet<_>>(),
@@ -879,7 +881,7 @@ impl CkBtcMinterState {
                 );
                 Some(WithdrawalCancellation {
                     reason,
-                    fee: fee.bitcoin_fee + fee.minter_fee,
+                    fee,
                     requests,
                 })
             }
