@@ -357,17 +357,6 @@ fn canister_post_upgrade() {
     log!(INFO, "Completed post upgrade");
 }
 
-fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut sns_gov_pb::Governance) {
-    for neuron in governance_proto.neurons.values_mut() {
-        for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
-            disbursement.finalize_disbursement_timestamp_seconds = Some(
-                disbursement.timestamp_of_disbursement_seconds
-                    + MATURITY_DISBURSEMENT_DELAY_SECONDS,
-            );
-        }
-    }
-}
-
 /// Test only feature. Internal method for calling set_time_warp.
 #[cfg(feature = "test")]
 #[update(hidden = true)]
