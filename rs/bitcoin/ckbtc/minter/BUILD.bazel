@@ -167,6 +167,7 @@ rust_binary(
 
 rust_test(
     name = "ckbtc_minter_replay_events_tests",
+    timeout = "long",
     srcs = ["tests/replay_events.rs"],
     data = [
         "test_resources/mainnet_events.gz",
