@@ -76,6 +76,9 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
+/// The Max number of UTXO inputs allowed in a transaction
+const MAX_NUM_INPUTS: usize = 1_000;
+
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
@@ -407,8 +410,10 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
-                // TODO: charge a reasonable fee here, which is zero for now since we haven't spent any BTC.
-                reimburse_cancelled_requests(s, batch, err, 0, runtime);
+                // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
+                // is reasonable to charge a fee based on it.
+                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS as u64;
+                reimburse_cancelled_requests(s, batch, err, fee, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -1147,7 +1152,6 @@ pub fn build_unsigned_transaction_from_inputs(
     /// The rbf option is used in `resubmit_retrieve_btc`.
     /// https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki
     const SEQUENCE_RBF_ENABLED: u32 = 0xfffffffd;
-    const MAX_NUM_INPUTS: usize = 1_000;
 
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
 
