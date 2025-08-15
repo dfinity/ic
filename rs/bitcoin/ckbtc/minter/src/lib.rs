@@ -1374,14 +1374,7 @@ impl CanisterRuntime for IcCanisterRuntime {
         transaction: &tx::SignedTransaction,
         network: Network,
     ) -> Result<(), CallError> {
-        ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
-            ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
-                transaction: transaction.serialize(),
-                network: network.into(),
-            },
-        )
-        .await
-        .map_err(|err| CallError::from_cdk_error("bitcoin_send_transaction", err))
+        management::send_transaction(transaction, network).await
     }
 }
 
