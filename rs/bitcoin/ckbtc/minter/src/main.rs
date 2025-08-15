@@ -227,8 +227,8 @@ async fn reimburse_pending_withdrawal(ledger_burn_index: u64) {
             pending_withdrawal_request.reimbursement_account.unwrap(),
             WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: 2000,
-                    max_num_inputs: 1000,
+                    num_inputs: 2 * ic_ckbtc_minter::MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: ic_ckbtc_minter::MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ),
             &IC_CANISTER_RUNTIME,

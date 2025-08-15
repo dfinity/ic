@@ -76,6 +76,10 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
+/// Maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
+/// to ensure that the resulting signed transaction is standard.
+pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
+
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
@@ -903,12 +907,10 @@ pub async fn sign_transaction(
 ) -> Result<tx::SignedTransaction, SignTransactionError> {
     use crate::address::{derivation_path, derive_public_key};
 
-    const MAX_NUM_INPUTS: usize = 1_000;
-
     let num_inputs = unsigned_tx.inputs.len();
-    if num_inputs > MAX_NUM_INPUTS {
+    if num_inputs > MAX_NUM_INPUTS_IN_TRANSACTION {
         return Err(SignTransactionError::TooManyInputs {
-            max_num_inputs: MAX_NUM_INPUTS,
+            max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
             num_inputs,
         });
     }
