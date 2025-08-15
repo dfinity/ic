@@ -380,20 +380,23 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             main_address,
             fee_millisatoshi_per_vbyte,
         ) {
-            Ok((unsigned_tx, change_output, utxos)) => {
+            Ok((unsigned_tx, change_output, total_fee, utxos)) => {
                 for req in batch.iter() {
                     s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
                 }
 
-                Some(SignTxRequest {
-                    key_name: s.ecdsa_key_name.clone(),
-                    ecdsa_public_key,
-                    change_output,
-                    network: s.btc_network,
-                    unsigned_tx,
-                    requests: batch.into_iter().collect(),
-                    utxos,
-                })
+                Some((
+                    SignTxRequest {
+                        key_name: s.ecdsa_key_name.clone(),
+                        ecdsa_public_key,
+                        change_output,
+                        network: s.btc_network,
+                        unsigned_tx,
+                        requests: batch.into_iter().collect(),
+                        utxos,
+                    },
+                    total_fee,
+                ))
             }
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
@@ -465,7 +468,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         }
     });
 
-    if let Some(req) = maybe_sign_request {
+    if let Some((req, total_fee)) = maybe_sign_request {
         log!(
             P1,
             "[submit_pending_requests]: signing a new transaction: {}",
@@ -520,12 +523,13 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
-                                    requests: state::SubmittedRequests::ToConfirm(requests),
+                                    requests: state::SubmittedRequests::ToConfirm { requests },
                                     txid,
                                     used_utxos,
                                     change_output: Some(req.change_output),
                                     submitted_at: ic_cdk::api::time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
+                                    total_fee: Some(total_fee),
                                 },
                                 runtime,
                             );
@@ -775,11 +779,11 @@ pub async fn resubmit_transactions<
         };
 
         let outputs = match &submitted_tx.requests {
-            state::SubmittedRequests::ToConfirm(requests) => requests
+            state::SubmittedRequests::ToConfirm { requests } => requests
                 .iter()
                 .map(|req| (req.address.clone(), req.amount))
                 .collect(),
-            state::SubmittedRequests::ToCancel(_, _) => {
+            state::SubmittedRequests::ToCancel { .. } => {
                 vec![(main_address.clone(), retrieve_btc_min_amount)]
             }
         };
@@ -807,12 +811,15 @@ pub async fn resubmit_transactions<
                 // transaction is not meant to complete the corresponding RetrieveBtcRequests
                 // but rather to cancel them.
                 let requests = match new_tx_requests {
-                    state::SubmittedRequests::ToConfirm(requests) => requests,
-                    state::SubmittedRequests::ToCancel(_, _) => {
+                    state::SubmittedRequests::ToConfirm { requests } => requests,
+                    state::SubmittedRequests::ToCancel { .. } => {
                         unreachable!("cancellation tx never has too many inputs!")
                     }
                 };
-                new_tx_requests = state::SubmittedRequests::ToCancel(requests, err);
+                new_tx_requests = state::SubmittedRequests::ToCancel {
+                    requests,
+                    reason: err,
+                };
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
@@ -823,7 +830,7 @@ pub async fn resubmit_transactions<
             }
             result => result,
         };
-        let (unsigned_tx, change_output) = match build_result {
+        let (unsigned_tx, change_output, total_fee) = match build_result {
             Ok(tx) => tx,
             // If it's impossible to build a new transaction, the fees probably became too high.
             // Let's ignore this transaction and wait for fees to go down.
@@ -887,6 +894,7 @@ pub async fn resubmit_transactions<
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
+                    total_fee: Some(total_fee),
                 };
 
                 replace_transaction(old_txid, new_tx);
@@ -1116,12 +1124,20 @@ pub fn build_unsigned_transaction(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
-) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        state::ChangeOutput,
+        WithdrawalFee,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
     match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
-        Ok((tx, change)) => Ok((tx, change, inputs)),
+        Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case
             for utxo in inputs {
@@ -1137,7 +1153,7 @@ pub fn build_unsigned_transaction_from_inputs(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
-) -> Result<(tx::UnsignedTransaction, state::ChangeOutput), BuildTxError> {
+) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
@@ -1241,7 +1257,14 @@ pub fn build_unsigned_transaction_from_inputs(
         fee + unsigned_tx.outputs.iter().map(|u| u.value).sum::<u64>()
     );
 
-    Ok((unsigned_tx, change_output))
+    Ok((
+        unsigned_tx,
+        change_output,
+        WithdrawalFee {
+            bitcoin_fee: fee,
+            minter_fee,
+        },
+    ))
 }
 
 pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
