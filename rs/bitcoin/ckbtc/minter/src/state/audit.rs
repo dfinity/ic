@@ -56,6 +56,7 @@ pub fn add_utxos<R: CanisterRuntime>(
 pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     request: RetrieveBtcRequest,
+    status: FinalizedStatus,
     runtime: &R,
 ) {
     record_event(
@@ -67,7 +68,7 @@ pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
 
     state.push_finalized_request(FinalizedBtcRetrieval {
         request,
-        state: FinalizedStatus::AmountTooLow,
+        state: status,
     });
 }
 

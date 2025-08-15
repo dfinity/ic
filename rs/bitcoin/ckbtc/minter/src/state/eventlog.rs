@@ -12,6 +12,7 @@ pub use event::EventType;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {
@@ -328,7 +329,7 @@ pub fn replay<I: CheckInvariants>(
                 change_output,
                 submitted_at,
             } => {
-                let mut retrieve_btc_requests = Vec::with_capacity(request_block_indices.len());
+                let mut retrieve_btc_requests = BTreeSet::new();
                 for block_index in request_block_indices {
                     let request = state.remove_pending_request(block_index).ok_or_else(|| {
                         ReplayLogError::InconsistentLog(format!(
@@ -336,7 +337,7 @@ pub fn replay<I: CheckInvariants>(
                             block_index
                         ))
                     })?;
-                    retrieve_btc_requests.push(request);
+                    retrieve_btc_requests.insert(request);
                 }
                 for utxo in utxos.iter() {
                     state.available_utxos.remove(utxo);

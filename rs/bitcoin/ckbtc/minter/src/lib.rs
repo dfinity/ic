@@ -185,14 +185,14 @@ struct SignTxRequest {
     change_output: state::ChangeOutput,
     /// The original requests that we keep around to place back to the queue
     /// if the signature fails.
-    requests: Vec<state::RetrieveBtcRequest>,
+    requests: BTreeSet<state::RetrieveBtcRequest>,
     /// The list of UTXOs we use as transaction inputs.
     utxos: Vec<Utxo>,
 }
 
 /// Undoes changes we make to the ckBTC state when we construct a pending transaction.
 /// We call this function if we fail to sign or send a Bitcoin transaction.
-fn undo_sign_request(requests: Vec<state::RetrieveBtcRequest>, utxos: Vec<Utxo>) {
+fn undo_sign_request(requests: BTreeSet<state::RetrieveBtcRequest>, utxos: Vec<Utxo>) {
     state::mutate_state(|s| {
         for utxo in utxos {
             assert!(s.available_utxos.insert(utxo));
@@ -288,25 +288,34 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
 
 fn reimburse_cancelled_requests<R: CanisterRuntime>(
     state: &mut state::CkBtcMinterState,
-    requests: impl Iterator<Item = state::RetrieveBtcRequest>,
+    requests: BTreeSet<state::RetrieveBtcRequest>,
     err: InvalidTransactionError,
+    total_fee: u64,
     runtime: &R,
 ) {
+    assert!(!requests.is_empty());
+    let fee = total_fee / requests.len() as u64;
+    // This assertion makes sure fee is smaller than all request amount
+    assert!(fee <= state.retrieve_btc_min_amount);
     for request in requests {
-        // TODO: deduct processing fee
         if let Some(account) = request.reimbursement_account {
             let reason =
                 reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
             state::audit::reimburse_withdrawal(
                 state,
                 request.block_index,
-                request.amount,
+                request.amount.saturating_sub(fee),
                 account,
                 reason,
                 runtime,
             );
         }
-        state::audit::remove_retrieve_btc_request(state, request, runtime);
+        state::audit::remove_retrieve_btc_request(
+            state,
+            request,
+            state::FinalizedStatus::AmountTooLow,
+            runtime,
+        );
     }
 }
 
@@ -316,10 +325,12 @@ pub fn confirm_transaction<R: CanisterRuntime>(
     runtime: &R,
 ) {
     if let Some(state::WithdrawalCancellation {
-        reason, requests, ..
+        reason,
+        requests,
+        fee,
     }) = state::audit::confirm_transaction(state, txid, runtime)
     {
-        reimburse_cancelled_requests(state, requests.into_iter(), reason, runtime)
+        reimburse_cancelled_requests(state, requests, reason, fee, runtime)
     }
 }
 
@@ -374,7 +385,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     change_output,
                     network: s.btc_network,
                     unsigned_tx,
-                    requests: batch,
+                    requests: batch.into_iter().collect(),
                     utxos,
                 })
             }
@@ -384,7 +395,8 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
-                reimburse_cancelled_requests(s, batch.into_iter(), err, runtime);
+                // TODO: charge a reasonable fee here, which is zero for now since we haven't spent any BTC.
+                reimburse_cancelled_requests(s, batch, err, 0, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -397,7 +409,12 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 // There is no point in retrying the request because the
                 // amount is too low.
                 for request in batch {
-                    state::audit::remove_retrieve_btc_request(s, request, runtime);
+                    state::audit::remove_retrieve_btc_request(
+                        s,
+                        request,
+                        state::FinalizedStatus::AmountTooLow,
+                        runtime,
+                    );
                 }
                 None
             }
@@ -407,15 +424,20 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                      tx::DisplayAmount(amount), address.display(s.btc_network)
                 );
 
-                let mut requests_to_put_back = vec![];
+                let mut requests_to_put_back = BTreeSet::new();
                 for request in batch {
                     if request.address == address && request.amount == amount {
                         // Finalize the request that we cannot fulfill.
-                        state::audit::remove_retrieve_btc_request(s, request, runtime);
+                        state::audit::remove_retrieve_btc_request(
+                            s,
+                            request,
+                            state::FinalizedStatus::AmountTooLow,
+                            runtime,
+                        );
                     } else {
                         // Keep the rest of the requests in the batch, we will
                         // try to build a new transaction on the next iteration.
-                        requests_to_put_back.push(request);
+                        requests_to_put_back.insert(request);
                     }
                 }
 

@@ -86,13 +86,13 @@ pub struct ChangeOutput {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SubmittedRequests {
-    ToConfirm(Vec<RetrieveBtcRequest>),
-    ToCancel(Vec<RetrieveBtcRequest>, InvalidTransactionError),
+    ToConfirm(BTreeSet<RetrieveBtcRequest>),
+    ToCancel(BTreeSet<RetrieveBtcRequest>, InvalidTransactionError),
 }
 
 impl From<Vec<RetrieveBtcRequest>> for SubmittedRequests {
     fn from(requests: Vec<RetrieveBtcRequest>) -> Self {
-        Self::ToConfirm(requests)
+        Self::ToConfirm(requests.into_iter().collect())
     }
 }
 
@@ -155,6 +155,7 @@ pub enum FinalizedStatus {
         /// The witness transaction identifier of the transaction.
         txid: Txid,
     },
+    // Reimbursed { amount: ,
 }
 
 /// The status of a Bitcoin transaction that the minter hasn't yet sent to the Bitcoin network.
@@ -764,9 +765,9 @@ impl CkBtcMinterState {
     }
 
     /// Forms a batch of retrieve_btc requests that the minter can fulfill.
-    pub fn build_batch(&mut self, max_size: usize) -> Vec<RetrieveBtcRequest> {
+    pub fn build_batch(&mut self, max_size: usize) -> BTreeSet<RetrieveBtcRequest> {
         let available_utxos_value = self.available_utxos.iter().map(|u| u.value).sum::<u64>();
-        let mut batch = vec![];
+        let mut batch = BTreeSet::new();
         let mut tx_amount = 0;
         for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
             if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
@@ -774,7 +775,7 @@ impl CkBtcMinterState {
                 self.pending_retrieve_btc_requests.push(req);
             } else {
                 tx_amount += req.amount;
-                batch.push(req);
+                batch.insert(req);
             }
         }
 
@@ -946,13 +947,11 @@ impl CkBtcMinterState {
                 for &utxo in tx_used_utxos.difference(&used_utxos) {
                     self.available_utxos.insert(utxo.clone());
                 }
-                let requests = match &tx.requests {
-                    SubmittedRequests::ToConfirm(requests) => requests,
-                    SubmittedRequests::ToCancel(_, _) => &vec![],
+                let mut requests = match &tx.requests {
+                    SubmittedRequests::ToConfirm(requests) => requests.clone(),
+                    SubmittedRequests::ToCancel(_, _) => BTreeSet::new(),
                 };
-                for request in requests.iter() {
-                    cancelled_requests.insert(request.clone());
-                }
+                cancelled_requests.append(&mut requests);
             }
         }
         // Drop all replaced txs before return
@@ -1047,13 +1046,13 @@ impl CkBtcMinterState {
     /// same identifier.
     pub fn push_from_in_flight_to_pending_requests(
         &mut self,
-        mut requests: Vec<RetrieveBtcRequest>,
+        requests: BTreeSet<RetrieveBtcRequest>,
     ) {
-        for req in requests.iter() {
+        for req in requests.into_iter() {
             assert!(!self.has_pending_request(req.block_index));
             self.requests_in_flight.remove(&req.block_index);
+            self.pending_retrieve_btc_requests.push(req);
         }
-        self.pending_retrieve_btc_requests.append(&mut requests);
         self.pending_retrieve_btc_requests
             .sort_by_key(|r| r.received_at);
     }
