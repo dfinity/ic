@@ -1884,10 +1884,10 @@ impl PocketIcSubnets {
                 new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
                 openid_google: Some(Some(OpenIdConfig {
                     client_id:
-                        "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com"
+                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
                             .to_string(),
-                })),
-                analytics_config: None,     // DIFFERENT FROM ICP MAINNET
+                })), // DIFFERENT FROM ICP MAINNET
+                analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
