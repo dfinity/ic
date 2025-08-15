@@ -376,6 +376,25 @@ impl ConsensusBlockChainImpl {
         Self { blocks }
     }
 
+    pub(crate) fn new_from_cache(
+        consensus_pool: &dyn ConsensusPool,
+        start_height: Height,
+        tip: Block,
+    ) -> Self {
+        let iter = CachedChainIterator::new(
+            consensus_pool,
+            consensus_pool.as_block_cache().finalized_chain(),
+            tip,
+            None,
+        )
+        .take_while(|block| block.height() >= start_height)
+        .map(|block| (block.height(), block));
+
+        Self {
+            blocks: BTreeMap::from_iter(iter),
+        }
+    }
+
     /// Updates the blocks based on the new summary_block/tip.
     fn update(&mut self, consensus_pool: &dyn ConsensusPool, summary_block: &Block, tip: &Block) {
         // The map can never be empty, hence these unwraps are safe.

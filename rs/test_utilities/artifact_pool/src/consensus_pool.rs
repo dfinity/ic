@@ -839,8 +839,8 @@ impl ConsensusPool for TestConsensusPool {
         self.pool.as_block_cache()
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        self.pool.build_block_chain(start, end)
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain> {
+        self.pool.build_block_chain(start_height, end)
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
