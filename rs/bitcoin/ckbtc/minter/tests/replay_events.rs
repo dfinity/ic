@@ -13,9 +13,11 @@ use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::{
     build_unsigned_transaction_from_inputs, sign_transaction, ECDSAPublicKey, Network,
-    SignTransactionError,
+    SignTransactionError, MIN_RELAY_FEE_PER_VBYTE,
 };
-use std::collections::BTreeMap;
+use maplit::btreeset;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -29,7 +31,40 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
+}
+
+#[tokio::test]
+async fn should_have_not_many_transactions_with_many_used_utxos() {
+    let mut txs_by_used_utxos: BTreeMap<_, Vec<String>> = BTreeMap::new();
+    for event in Mainnet.deserialize().events.into_iter() {
+        // Note: this does not consider resubmitted transactions (event `ReplacedBtcTransaction`)
+        // which use the same UTXOs set as the replaced transaction.
+        if let EventType::SentBtcTransaction { utxos, txid, .. } = event.payload {
+            txs_by_used_utxos
+                .entry(std::cmp::Reverse(utxos.len()))
+                .and_modify(|txs| txs.push(txid.to_string()))
+                .or_insert(vec![txid.to_string()]);
+        }
+    }
+
+    let mut iter = txs_by_used_utxos.into_iter();
+
+    assert_eq!(
+        iter.next(),
+        Some((
+            Reverse(1799),
+            vec!["87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30".to_string()]
+        ))
+    );
+
+    assert_eq!(
+        iter.next(),
+        Some((
+            Reverse(725),
+            vec!["201e83d0f5b35bd658b4dc87a70936d8d750532da46f5a635d403246d41cc032".to_string()]
+        ))
+    );
 }
 
 #[tokio::test]
@@ -40,13 +75,13 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_332_249_778);
+    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
 
     let tx_id = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
 
-    let submitted_tx = {
+    let stuck_tx = {
         let mut txs: Vec<_> = state
-            .submitted_transactions
+            .stuck_transactions
             .iter()
             .filter(|tx| tx.txid.to_string() == tx_id)
             .collect();
@@ -54,30 +89,62 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         txs.pop().unwrap()
     };
 
-    assert_eq!(submitted_tx.requests.len(), 43);
+    assert_eq!(stuck_tx.submitted_at, 1_755_022_419_795_766_424);
+    assert_eq!(stuck_tx.requests.len(), 43);
     assert_eq!(
-        submitted_tx
-            .requests
-            .iter()
-            .map(|req| req.amount)
-            .sum::<u64>(),
+        stuck_tx.requests.iter().map(|req| req.amount).sum::<u64>(),
         3_316_317_017_u64 //33 BTC!
     );
-    assert_eq!(submitted_tx.used_utxos.len(), 1_799);
-    assert_eq!(submitted_tx.fee_per_vbyte, Some(7_486));
+    assert_eq!(stuck_tx.used_utxos.len(), 1_799);
+    assert_eq!(stuck_tx.fee_per_vbyte, Some(7_486));
 
-    let outputs = submitted_tx
+    let principals: BTreeSet<_> = stuck_tx
+        .requests
+        .iter()
+        .map(|req| req.reimbursement_account.unwrap())
+        .map(|account| account.owner)
+        .collect();
+    assert_eq!(
+        principals,
+        btreeset! {Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap()}
+    );
+
+    assert_eq!(state.replacement_txid.len(), 1);
+    let resubmitted_tx_id = state.replacement_txid.get(&stuck_tx.txid).unwrap();
+    let resubmitted_tx = {
+        let mut txs: Vec<_> = state
+            .submitted_transactions
+            .iter()
+            .filter(|tx| tx.txid == *resubmitted_tx_id)
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs.pop().unwrap()
+    };
+    assert_eq!(
+        resubmitted_tx.txid.to_string(),
+        "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
+    );
+    assert_eq!(resubmitted_tx.submitted_at, 1_755_116_484_667_101_556);
+
+    assert_eq!(stuck_tx.used_utxos, resubmitted_tx.used_utxos);
+    assert_eq!(
+        stuck_tx.fee_per_vbyte.unwrap() + MIN_RELAY_FEE_PER_VBYTE,
+        resubmitted_tx.fee_per_vbyte.unwrap()
+    );
+    assert_eq!(stuck_tx.requests, resubmitted_tx.requests);
+
+    let outputs = resubmitted_tx
         .requests
         .iter()
         .map(|req| (req.address.clone(), req.amount))
         .collect();
-    let input_utxos = &submitted_tx.used_utxos;
+    let input_utxos = &resubmitted_tx.used_utxos;
     let main_address = BitcoinAddress::parse(
         "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
         Network::Mainnet,
     )
     .unwrap();
-    let tx_fee_per_vbyte = submitted_tx.fee_per_vbyte.unwrap();
+    let tx_fee_per_vbyte = resubmitted_tx.fee_per_vbyte.unwrap();
     let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
         input_utxos,
         outputs,

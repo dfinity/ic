@@ -29,6 +29,7 @@ pub mod management;
 pub mod memo;
 pub mod metrics;
 pub mod queries;
+pub mod reimbursement;
 pub mod signature;
 pub mod state;
 pub mod storage;
