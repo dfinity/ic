@@ -540,6 +540,10 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 }
             }
             Err(err) => {
+                ic_cdk::println!(
+                    "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
+                    err
+                );
                 log!(
                     P0,
                     "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",

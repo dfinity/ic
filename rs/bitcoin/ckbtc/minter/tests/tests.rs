@@ -2373,6 +2373,63 @@ fn test_retrieve_btc_with_approval_fail() {
 }
 
 #[test]
+fn should_cancel_non_standard_transaction() {
+    let ckbtc = CkBtcSetup::new();
+    let user = Principal::from(ckbtc.caller);
+
+    // Step 1: deposit a lot of small UTXOs
+    let num_uxtos = 2_000;
+    let deposit_value = 100_000_u64;
+    let utxos = (0..num_uxtos)
+        .map(|i| {
+            let mut txid = vec![0; 32];
+            txid[0] = (i % 256) as u8;
+            txid[1] = (i / 256) as u8;
+            Utxo {
+                height: 0,
+                outpoint: OutPoint {
+                    txid: vec_to_txid(txid),
+                    vout: 1,
+                },
+                value: deposit_value,
+            }
+        })
+        .collect::<Vec<_>>();
+    ckbtc.deposit_utxos(user, utxos);
+
+    assert_eq!(
+        ckbtc.balance_of(user),
+        Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
+    );
+
+    // Step 2: request a withdrawal
+    let withdrawal_amount = 1_800 * deposit_value;
+    ckbtc.approve_minter(user, withdrawal_amount, None);
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc_with_approval(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount, None)
+        .expect("retrieve_btc failed");
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Pending
+    );
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        0,
+        "no transaction should appear when being reimbursed"
+    );
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Pending
+    );
+}
+
+#[test]
 fn should_reimburse_withdrawals_in_non_standard_transaction() {
     let ckbtc = CkBtcSetup::new();
     ckbtc.upload_mainnet_events();
