@@ -26,7 +26,7 @@ use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
     address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
-    Timestamp,
+    Timestamp, WithdrawalFee,
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
@@ -49,7 +49,9 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, candid::CandidType,
+)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
     /// The minter withdraws BTC transfer fees from this amount.
@@ -82,11 +84,53 @@ pub struct ChangeOutput {
     pub value: u64,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubmittedWithdrawalRequests {
+    ToConfirm {
+        requests: BTreeSet<RetrieveBtcRequest>,
+    },
+    ToCancel {
+        requests: BTreeSet<RetrieveBtcRequest>,
+        reason: InvalidTransactionError,
+    },
+}
+
+impl From<Vec<RetrieveBtcRequest>> for SubmittedWithdrawalRequests {
+    fn from(requests: Vec<RetrieveBtcRequest>) -> Self {
+        Self::ToConfirm {
+            requests: requests.into_iter().collect(),
+        }
+    }
+}
+
+impl SubmittedWithdrawalRequests {
+    pub fn iter(&self) -> impl Iterator<Item = &RetrieveBtcRequest> {
+        match self {
+            Self::ToConfirm { requests } => requests.iter(),
+            Self::ToCancel { requests, .. } => requests.iter(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::ToConfirm { requests } => requests.is_empty(),
+            Self::ToCancel { requests, .. } => requests.is_empty(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::ToConfirm { requests } => requests.len(),
+            Self::ToCancel { requests, .. } => requests.len(),
+        }
+    }
+}
+
 /// Represents a transaction sent to the Bitcoin network.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
-    pub requests: Vec<RetrieveBtcRequest>,
+    pub requests: SubmittedWithdrawalRequests,
     /// The identifier of the unconfirmed transaction.
     pub txid: Txid,
     /// The list of UTXOs we used in the transaction.
@@ -94,11 +138,11 @@ pub struct SubmittedBtcTransaction {
     /// The IC time at which we submitted the Bitcoin transaction.
     pub submitted_at: u64,
     /// The tx output from the submitted transaction that the minter owns.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub change_output: Option<ChangeOutput>,
     /// Fee per vbyte in millisatoshi.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_per_vbyte: Option<u64>,
+    /// Include both the fee paid for the transaction and the minter fee.
+    pub withdrawal_fee: Option<WithdrawalFee>,
 }
 
 /// Pairs a retrieve_btc request with its outcome.
@@ -447,6 +491,12 @@ pub enum ReimbursementReason {
     CallFailed,
 }
 
+pub struct WithdrawalCancellation {
+    pub fee: u64,
+    pub reason: InvalidTransactionError,
+    pub requests: BTreeSet<RetrieveBtcRequest>,
+}
+
 impl CkBtcMinterState {
     #[allow(deprecated)]
     pub fn reinit(
@@ -667,9 +717,16 @@ impl CkBtcMinterState {
             };
         }
 
-        if let Some(txid) = self.submitted_transactions.iter().find_map(|tx| {
-            (tx.requests.iter().any(|r| r.block_index == block_index)).then_some(tx.txid)
-        }) {
+        if let Some(txid) = self
+            .submitted_transactions
+            .iter()
+            .find_map(|tx| match &tx.requests {
+                SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                    (requests.iter().any(|r| r.block_index == block_index)).then_some(tx.txid)
+                }
+                SubmittedWithdrawalRequests::ToCancel { .. } => None,
+            })
+        {
             return RetrieveBtcStatus::Submitted { txid };
         }
 
@@ -679,14 +736,10 @@ impl CkBtcMinterState {
             .find(|finalized_request| finalized_request.request.block_index == block_index)
             .map(|final_req| final_req.state.clone())
         {
-            Some(FinalizedStatus::AmountTooLow) => return RetrieveBtcStatus::AmountTooLow,
-            Some(FinalizedStatus::Confirmed { txid }) => {
-                return RetrieveBtcStatus::Confirmed { txid }
-            }
-            None => (),
+            Some(FinalizedStatus::AmountTooLow) => RetrieveBtcStatus::AmountTooLow,
+            Some(FinalizedStatus::Confirmed { txid }) => RetrieveBtcStatus::Confirmed { txid },
+            None => RetrieveBtcStatus::Unknown,
         }
-
-        RetrieveBtcStatus::Unknown
     }
 
     /// Returns true if the pending requests queue has enough requests to form a
@@ -716,9 +769,9 @@ impl CkBtcMinterState {
     }
 
     /// Forms a batch of retrieve_btc requests that the minter can fulfill.
-    pub fn build_batch(&mut self, max_size: usize) -> Vec<RetrieveBtcRequest> {
+    pub fn build_batch(&mut self, max_size: usize) -> BTreeSet<RetrieveBtcRequest> {
         let available_utxos_value = self.available_utxos.iter().map(|u| u.value).sum::<u64>();
-        let mut batch = vec![];
+        let mut batch = BTreeSet::new();
         let mut tx_amount = 0;
         for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
             if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
@@ -726,7 +779,7 @@ impl CkBtcMinterState {
                 self.pending_retrieve_btc_requests.push(req);
             } else {
                 tx_amount += req.amount;
-                batch.push(req);
+                batch.insert(req);
             }
         }
 
@@ -775,7 +828,9 @@ impl CkBtcMinterState {
         }
     }
 
-    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) {
+    // Because finalizing a transaction may trigger a replaced transaction to be canceled,
+    // the return value here is the corresponding canceled requests.
+    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) -> Option<WithdrawalCancellation> {
         let finalized_tx = if let Some(pos) = self
             .submitted_transactions
             .iter()
@@ -798,18 +853,43 @@ impl CkBtcMinterState {
         for utxo in finalized_tx.used_utxos.iter() {
             self.forget_utxo(utxo);
         }
-        self.finalized_requests_count += finalized_tx.requests.len() as u64;
-        for request in finalized_tx.requests {
-            self.push_finalized_request(FinalizedBtcRetrieval {
-                request,
-                state: FinalizedStatus::Confirmed { txid: *txid },
-            });
-        }
+        match finalized_tx.requests {
+            SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                self.finalized_requests_count += requests.len() as u64;
+                for request in requests {
+                    self.push_finalized_request(FinalizedBtcRetrieval {
+                        request,
+                        state: FinalizedStatus::Confirmed { txid: *txid },
+                    });
+                }
 
-        self.cleanup_tx_replacement_chain(txid);
+                self.cleanup_tx_replacement_chain(txid);
+                None
+            }
+            SubmittedWithdrawalRequests::ToCancel { requests, reason } => {
+                let requests = requests.into_iter().collect::<BTreeSet<_>>();
+                let fee = finalized_tx.withdrawal_fee.unwrap_or_default();
+                let fee = fee.bitcoin_fee + fee.minter_fee;
+                assert!(fee > 0, "withdraw_fee is zero");
+                let canceled_requests = self.cancel_tx_replacement(
+                    txid,
+                    finalized_tx.used_utxos.iter().collect::<BTreeSet<_>>(),
+                );
+                debug_assert_eq!(
+                    canceled_requests, requests,
+                    "Cancelled requests set does not match what was in cancellation tx {txid}"
+                );
+                Some(WithdrawalCancellation {
+                    reason,
+                    fee,
+                    requests,
+                })
+            }
+        }
     }
 
-    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) {
+    // Return removed txids
+    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) -> BTreeSet<Txid> {
         let mut txids_to_remove = BTreeSet::new();
 
         // Collect transactions preceding the confirmed transaction.
@@ -834,14 +914,50 @@ impl CkBtcMinterState {
             self.rev_replacement_txid.remove(txid);
         }
 
-        if txids_to_remove.is_empty() {
-            return;
+        if !txids_to_remove.is_empty() {
+            self.submitted_transactions
+                .retain(|tx| !txids_to_remove.contains(&tx.txid));
+            self.stuck_transactions
+                .retain(|tx| !txids_to_remove.contains(&tx.txid));
         }
 
-        self.submitted_transactions
-            .retain(|tx| !txids_to_remove.contains(&tx.txid));
-        self.stuck_transactions
-            .retain(|tx| !txids_to_remove.contains(&tx.txid));
+        txids_to_remove
+    }
+
+    fn cancel_tx_replacement(
+        &mut self,
+        confirmed_txid: &Txid,
+        used_utxos: BTreeSet<&Utxo>,
+    ) -> BTreeSet<RetrieveBtcRequest> {
+        // At this point, confirmed_txid has already been removed from submitted_transactions/stuck_transactions.
+        // Any other transaction in there with input UTXOs overlapping with `used_utxos` should be
+        // considered for cancellation, their input UTXOs (non-overlapping with `used_utxos`) should be returned to the available set, and
+        // corresponding requests should be refunded.
+        let mut txids_to_remove = BTreeSet::new();
+        let mut canceled_requests = BTreeSet::new();
+        for tx in self
+            .submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+        {
+            let tx_used_utxos = tx.used_utxos.iter().collect::<BTreeSet<_>>();
+            if !tx_used_utxos.is_disjoint(&used_utxos) {
+                debug_assert!(&tx.txid != confirmed_txid);
+                txids_to_remove.insert(tx.txid);
+                for &utxo in tx_used_utxos.difference(&used_utxos) {
+                    self.available_utxos.insert(utxo.clone());
+                }
+                let mut requests = match &tx.requests {
+                    SubmittedWithdrawalRequests::ToConfirm { requests } => requests.clone(),
+                    SubmittedWithdrawalRequests::ToCancel { .. } => BTreeSet::new(),
+                };
+                canceled_requests.append(&mut requests);
+            }
+        }
+        // Drop all replaced txs before return
+        let txids_removed = self.cleanup_tx_replacement_chain(confirmed_txid);
+        assert_eq!(txids_to_remove, txids_removed);
+        canceled_requests
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {
@@ -930,13 +1046,13 @@ impl CkBtcMinterState {
     /// same identifier.
     pub fn push_from_in_flight_to_pending_requests(
         &mut self,
-        mut requests: Vec<RetrieveBtcRequest>,
+        requests: BTreeSet<RetrieveBtcRequest>,
     ) {
-        for req in requests.iter() {
+        for req in requests.into_iter() {
             assert!(!self.has_pending_request(req.block_index));
             self.requests_in_flight.remove(&req.block_index);
+            self.pending_retrieve_btc_requests.push(req);
         }
-        self.pending_retrieve_btc_requests.append(&mut requests);
         self.pending_retrieve_btc_requests
             .sort_by_key(|r| r.received_at);
     }
