@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
@@ -39,7 +39,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -1364,6 +1364,59 @@ impl CkBtcSetup {
     pub fn check_minter_metrics(self) -> MetricsAssert<Self> {
         MetricsAssert::from_http_query(self)
     }
+
+    pub fn upload_events_v1(&self, events: &Vec<Event>) {
+        self.env
+            .execute_ingress_as(
+                Principal::anonymous().into(),
+                self.minter_id,
+                "upload_events_v1",
+                Encode!(events).unwrap(),
+            )
+            .unwrap();
+    }
+
+    pub fn upload_mainnet_events(&self) {
+        use serde::Deserialize as SerdeDeserialize;
+
+        #[derive(Clone, Debug, CandidType, SerdeDeserialize)]
+        pub struct GetEventsResult {
+            pub events: Vec<Event>,
+            pub total_event_count: u64,
+        }
+
+        fn path_to_events_file() -> PathBuf {
+            let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            path.push(format!("test_resources/{}", "mainnet_events.gz"));
+            path
+        }
+
+        fn read_events_file(file_name: &Path) -> GetEventsResult {
+            use candid::Decode;
+            use flate2::read::GzDecoder;
+            use std::fs::File;
+            use std::io::Read;
+
+            let file = File::open(file_name).unwrap();
+            let mut gz = GzDecoder::new(file);
+            let mut decompressed_buffer = Vec::new();
+            gz.read_to_end(&mut decompressed_buffer)
+                .expect("BUG: failed to decompress events");
+            Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
+        }
+
+        let events = read_events_file(&path_to_events_file());
+        let total = events.events.len();
+        let mut start = 0;
+        while start < total {
+            let mut end = start + 2000;
+            if end > total {
+                end = total;
+            };
+            self.upload_events_v1(&events.events[start..end].to_vec());
+            start = end;
+        }
+    }
 }
 
 impl CanisterHttpQuery<UserError> for CkBtcSetup {
@@ -2310,4 +2363,10 @@ fn test_retrieve_btc_with_approval_fail() {
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
     );
+}
+
+#[test]
+fn should_reimburse_withdrawal() {
+    let ckbtc = CkBtcSetup::new();
+    ckbtc.upload_mainnet_events();
 }

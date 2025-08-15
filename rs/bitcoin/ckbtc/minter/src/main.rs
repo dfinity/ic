@@ -206,6 +206,14 @@ async fn upload_events(events: Vec<Event>) {
     }
 }
 
+#[cfg(feature = "self_check")]
+#[update]
+async fn upload_events_v1(events: Vec<Event>) {
+    for event in events {
+        storage::record_event_v1(event);
+    }
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
