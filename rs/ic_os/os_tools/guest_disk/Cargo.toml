@@ -7,11 +7,10 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
-grub = { path = "../../grub" }
 libcryptsetup-rs = { workspace = true }
-linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 ic_device = { path = "../../device" }
 ic_sev = { path = "../../sev" }
+ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
 nix = { workspace = true }
 rand = { workspace = true }

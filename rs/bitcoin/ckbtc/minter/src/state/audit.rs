@@ -1,9 +1,10 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus,
+    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex,
     RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
 };
+use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::storage::record_event;
 use crate::{CanisterRuntime, Timestamp};
@@ -227,4 +228,59 @@ pub fn distributed_kyt_fee<R: CanisterRuntime>(
         runtime,
     );
     state.distribute_kyt_fee(kyt_provider, amount)
+}
+
+pub fn reimburse_withdrawal<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    burn_block_index: LedgerBurnIndex,
+    reimbursed_amount: u64,
+    reimbursement_account: Account,
+    reason: WithdrawalReimbursementReason,
+    runtime: &R,
+) {
+    record_event(
+        EventType::ScheduleWithdrawalReimbursement {
+            account: reimbursement_account,
+            amount: reimbursed_amount,
+            reason: reason.clone(),
+            burn_block_index,
+        },
+        runtime,
+    );
+    state.schedule_withdrawal_reimbursement(
+        burn_block_index,
+        ReimburseWithdrawalTask {
+            account: reimbursement_account,
+            amount: reimbursed_amount,
+            reason,
+        },
+    )
+}
+
+pub fn quarantine_withdrawal_reimbursement<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    burn_block_index: LedgerBurnIndex,
+    runtime: &R,
+) {
+    record_event(
+        EventType::QuarantinedWithdrawalReimbursement { burn_block_index },
+        runtime,
+    );
+    state.quarantine_withdrawal_reimbursement(burn_block_index)
+}
+
+pub fn reimburse_withdrawal_completed<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    burn_block_index: LedgerBurnIndex,
+    mint_block_index: LedgerBurnIndex,
+    runtime: &R,
+) {
+    record_event(
+        EventType::ReimbursedWithdrawal {
+            burn_block_index,
+            mint_block_index,
+        },
+        runtime,
+    );
+    state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
 }

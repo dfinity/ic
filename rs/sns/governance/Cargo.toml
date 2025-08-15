@@ -30,6 +30,7 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
+candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 hex = { workspace = true }

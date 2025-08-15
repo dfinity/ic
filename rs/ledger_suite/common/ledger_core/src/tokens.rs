@@ -231,6 +231,10 @@ impl Tokens {
     pub fn saturating_sub(self, other: Tokens) -> Tokens {
         Tokens::from_e8s(self.e8s.saturating_sub(other.e8s))
     }
+
+    pub fn checked_div(self, other: u64) -> Option<Tokens> {
+        self.e8s.checked_div(other).map(Tokens::from_e8s)
+    }
 }
 
 impl CheckedAdd for Tokens {
