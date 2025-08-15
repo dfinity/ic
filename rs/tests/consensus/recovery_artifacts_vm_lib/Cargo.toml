@@ -1,0 +1,11 @@
+[package]
+name = "ic_consensus_system_test_recovery_artifacts_vm_lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+ic-consensus-system-test-utils = { path = "../../consensus/utils" }
+ic-system-test-driver = { path = "../../driver" }
+slog = "0.2"
+ssh2 = "0.9"

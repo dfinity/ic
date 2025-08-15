@@ -101,6 +101,21 @@ rust_library(
     ],
 )
 
+rust_library(
+    name = "recovery_artifacts_vm_lib",
+    testonly = True,
+    srcs = ["recovery_artifacts_vm_lib/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_recovery_artifacts_vm_lib",
+    deps = [
+        # Keep sorted.
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+    ],
+)
+
 system_test(
     name = "liveness_with_equivocation_test",
     env = UNIVERSAL_CANISTER_ENV,
@@ -264,6 +279,7 @@ system_test(
     ],
     deps = [
         # Keep sorted.
+        ":recovery_artifacts_vm_lib",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
