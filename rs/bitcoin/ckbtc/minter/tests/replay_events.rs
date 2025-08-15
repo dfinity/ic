@@ -16,6 +16,7 @@ use ic_ckbtc_minter::{
     SignTransactionError, MIN_RELAY_FEE_PER_VBYTE,
 };
 use maplit::btreeset;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -34,59 +35,35 @@ async fn should_replay_events_for_mainnet() {
 }
 
 #[tokio::test]
-async fn find_transactions_with_large_utxos() {
-    Mainnet.retrieve_and_store_events_if_env().await;
-    let state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
-        .expect("Failed to replay events");
+async fn should_have_not_many_transactions_with_many_used_utxos() {
+    let mut txs_by_used_utxos: BTreeMap<_, Vec<String>> = BTreeMap::new();
+    for event in Mainnet.deserialize().events.into_iter() {
+        // Note: this does not consider resubmitted transactions (event `ReplacedBtcTransaction`)
+        // which use the same UTXOs set as the replaced transaction.
+        if let EventType::SentBtcTransaction { utxos, txid, .. } = event.payload {
+            txs_by_used_utxos
+                .entry(std::cmp::Reverse(utxos.len()))
+                .and_modify(|txs| txs.push(txid.to_string()))
+                .or_insert(vec![txid.to_string()]);
+        }
+    }
 
-    assert_eq!(state.stuck_transactions.len(), 1);
-    let submitted_tx_0 = state.stuck_transactions.first().unwrap();
+    let mut iter = txs_by_used_utxos.into_iter();
+
     assert_eq!(
-        submitted_tx_0.txid.to_string(),
-        "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30"
+        iter.next(),
+        Some((
+            Reverse(1799),
+            vec!["87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30".to_string()]
+        ))
     );
-    assert_eq!(submitted_tx_0.submitted_at, 1_755_022_419_795_766_424);
 
-    assert_eq!(state.replacement_txid.len(), 1);
-    let resubmitted_tx_id = state.replacement_txid.get(&submitted_tx_0.txid).unwrap();
-    let submitted_tx_1 = {
-        let mut txs: Vec<_> = state
-            .submitted_transactions
-            .iter()
-            .filter(|tx| tx.txid == *resubmitted_tx_id)
-            .collect();
-        assert_eq!(txs.len(), 1);
-        txs.pop().unwrap()
-    };
     assert_eq!(
-        submitted_tx_1.txid.to_string(),
-        "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
-    );
-    assert_eq!(submitted_tx_1.submitted_at, 1_755_116_484_667_101_556);
-
-    assert_eq!(submitted_tx_0.used_utxos, submitted_tx_1.used_utxos);
-    assert_eq!(
-        submitted_tx_0.fee_per_vbyte.unwrap() + MIN_RELAY_FEE_PER_VBYTE,
-        submitted_tx_1.fee_per_vbyte.unwrap()
-    );
-    assert_eq!(submitted_tx_0.requests, submitted_tx_1.requests);
-
-    let block_indexes: BTreeSet<_> = submitted_tx_0
-        .requests
-        .iter()
-        .map(|req| req.block_index)
-        .collect();
-    assert_eq!(block_indexes.len(), submitted_tx_0.requests.len());
-
-    let principals: BTreeSet<_> = submitted_tx_0
-        .requests
-        .iter()
-        .map(|req| req.reimbursement_account.unwrap())
-        .map(|account| account.owner)
-        .collect();
-    assert_eq!(
-        principals,
-        btreeset! {Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap()}
+        iter.next(),
+        Some((
+            Reverse(725),
+            vec!["201e83d0f5b35bd658b4dc87a70936d8d750532da46f5a635d403246d41cc032".to_string()]
+        ))
     );
 }
 
@@ -121,18 +98,53 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     assert_eq!(stuck_tx.used_utxos.len(), 1_799);
     assert_eq!(stuck_tx.fee_per_vbyte, Some(7_486));
 
-    let outputs = stuck_tx
+    let principals: BTreeSet<_> = stuck_tx
+        .requests
+        .iter()
+        .map(|req| req.reimbursement_account.unwrap())
+        .map(|account| account.owner)
+        .collect();
+    assert_eq!(
+        principals,
+        btreeset! {Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap()}
+    );
+
+    assert_eq!(state.replacement_txid.len(), 1);
+    let resubmitted_tx_id = state.replacement_txid.get(&stuck_tx.txid).unwrap();
+    let resubmitted_tx = {
+        let mut txs: Vec<_> = state
+            .submitted_transactions
+            .iter()
+            .filter(|tx| tx.txid == *resubmitted_tx_id)
+            .collect();
+        assert_eq!(txs.len(), 1);
+        txs.pop().unwrap()
+    };
+    assert_eq!(
+        resubmitted_tx.txid.to_string(),
+        "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
+    );
+    assert_eq!(resubmitted_tx.submitted_at, 1_755_116_484_667_101_556);
+
+    assert_eq!(stuck_tx.used_utxos, resubmitted_tx.used_utxos);
+    assert_eq!(
+        stuck_tx.fee_per_vbyte.unwrap() + MIN_RELAY_FEE_PER_VBYTE,
+        resubmitted_tx.fee_per_vbyte.unwrap()
+    );
+    assert_eq!(stuck_tx.requests, resubmitted_tx.requests);
+
+    let outputs = resubmitted_tx
         .requests
         .iter()
         .map(|req| (req.address.clone(), req.amount))
         .collect();
-    let input_utxos = &stuck_tx.used_utxos;
+    let input_utxos = &resubmitted_tx.used_utxos;
     let main_address = BitcoinAddress::parse(
         "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
         Network::Mainnet,
     )
     .unwrap();
-    let tx_fee_per_vbyte = stuck_tx.fee_per_vbyte.unwrap();
+    let tx_fee_per_vbyte = resubmitted_tx.fee_per_vbyte.unwrap();
     let (unsigned_tx, _change_output) = build_unsigned_transaction_from_inputs(
         input_utxos,
         outputs,
