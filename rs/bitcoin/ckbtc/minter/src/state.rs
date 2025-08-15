@@ -604,7 +604,7 @@ impl CkBtcMinterState {
     }
 
     pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
-        // Hack to avoid Candid breaking change in ReimbursementReason
+        // Hack to avoid a Candid breaking change in `ReimbursementReason`
         // which is in the return type of `retrieve_btc_status_v2`
         fn map_reimbursement_reason(reason: &WithdrawalReimbursementReason) -> ReimbursementReason {
             match reason {
