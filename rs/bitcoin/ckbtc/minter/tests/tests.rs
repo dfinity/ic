@@ -2373,17 +2373,28 @@ fn test_retrieve_btc_with_approval_fail() {
 }
 
 #[test]
-fn should_reimburse_withdrawal() {
+fn should_reimburse_withdrawals_in_non_standard_transaction() {
     let ckbtc = CkBtcSetup::new();
     ckbtc.upload_mainnet_events();
-    ckbtc.upgrade(); //replay events to repopulate state
+    ckbtc.upgrade(); //replay events to repopulate the minter's state
 
+    // transaction 5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847
+    // is non-standard end hence stuck
+    let stuck_status = RetrieveBtcStatusV2::Submitted {
+        txid: "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
+            .parse()
+            .unwrap(),
+    };
+    assert_eq!(ckbtc.retrieve_btc_status_v2(2952170), stuck_status);
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    let mempool = ckbtc.mempool();
     assert_eq!(
-        ckbtc.retrieve_btc_status_v2(2952170),
-        RetrieveBtcStatusV2::Submitted {
-            txid: "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
-                .parse()
-                .unwrap()
-        }
+        mempool.len(),
+        0,
+        "no transaction should appear when being reimbursed"
     );
+
+    assert_eq!(ckbtc.retrieve_btc_status_v2(2952170), stuck_status);
 }
