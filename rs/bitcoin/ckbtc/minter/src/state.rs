@@ -155,7 +155,12 @@ pub enum FinalizedStatus {
         /// The witness transaction identifier of the transaction.
         txid: Txid,
     },
-    // Reimbursed { amount: ,
+    /// The transaction was reimbursed
+    Reimbursed {
+        amount: u64,
+        fee: u64,
+        reason: InvalidTransactionError,
+    },
 }
 
 /// The status of a Bitcoin transaction that the minter hasn't yet sent to the Bitcoin network.
@@ -728,14 +733,12 @@ impl CkBtcMinterState {
             .find(|finalized_request| finalized_request.request.block_index == block_index)
             .map(|final_req| final_req.state.clone())
         {
-            Some(FinalizedStatus::AmountTooLow) => return RetrieveBtcStatus::AmountTooLow,
-            Some(FinalizedStatus::Confirmed { txid }) => {
-                return RetrieveBtcStatus::Confirmed { txid }
-            }
-            None => (),
+            Some(FinalizedStatus::AmountTooLow) => RetrieveBtcStatus::AmountTooLow,
+            Some(FinalizedStatus::Confirmed { txid }) => RetrieveBtcStatus::Confirmed { txid },
+            // For compatibility reason, we can only return Unknown for this case
+            Some(FinalizedStatus::Reimbursed { .. }) => RetrieveBtcStatus::Unknown,
+            None => RetrieveBtcStatus::Unknown,
         }
-
-        RetrieveBtcStatus::Unknown
     }
 
     /// Returns true if the pending requests queue has enough requests to form a

@@ -299,6 +299,7 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
     assert!(fee <= state.retrieve_btc_min_amount);
     for request in requests {
         if let Some(account) = request.reimbursement_account {
+            let amount = request.amount.saturating_sub(fee);
             let reason =
                 reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
             state::audit::reimburse_withdrawal(
@@ -306,16 +307,26 @@ fn reimburse_cancelled_requests<R: CanisterRuntime>(
                 request.block_index,
                 request.amount.saturating_sub(fee),
                 account,
-                reason,
+                reason.clone(),
                 runtime,
             );
+            state::audit::remove_retrieve_btc_request(
+                state,
+                request,
+                state::FinalizedStatus::Reimbursed {
+                    amount,
+                    fee,
+                    reason: err.clone(),
+                },
+                runtime,
+            );
+        } else {
+            log!(
+                P0,
+                "[reimburse_cancelled_requests]: account is not found for retrieve_btc request ({:?})",
+                request
+            );
         }
-        state::audit::remove_retrieve_btc_request(
-            state,
-            request,
-            state::FinalizedStatus::AmountTooLow,
-            runtime,
-        );
     }
 }
 
