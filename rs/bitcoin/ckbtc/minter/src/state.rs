@@ -759,7 +759,7 @@ impl CkBtcMinterState {
                 .change_output
                 .map(|c| c.value)
                 .unwrap_or_default();
-            let fee = input_value - change;
+            let fee = input_value.saturating_sub(change);
             let requests = self.cancel_tx_replacement(
                 txid,
                 finalized_tx.used_utxos.into_iter().collect::<BTreeSet<_>>(),

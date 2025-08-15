@@ -244,6 +244,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     let replaced = replaced.borrow();
     assert_eq!(replaced.len(), 1);
     assert_eq!(replaced[0].0, tx_id);
+    assert_eq!(replaced[0].1.used_utxos.len(), 1);
     let sent = transactions_sent.read().unwrap();
     assert_eq!(sent.len(), 1);
 }
