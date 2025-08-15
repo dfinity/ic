@@ -18,6 +18,10 @@ pub mod invariants;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
+use crate::reimbursement::{
+    InvalidTransactionError, ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal,
+    ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
+};
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
@@ -272,6 +276,12 @@ pub struct CheckedUtxo {
 #[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
 
+/// Type alias for a ledger burn block index
+pub type LedgerBurnIndex = u64;
+
+/// Type alias for a ledger mint block index
+pub type LedgerMintIndex = u64;
+
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
@@ -396,6 +406,20 @@ pub struct CkBtcMinterState {
 
     /// Map from burn block index to the the reimbursed request.
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
+
+    /// Map from burn block index to the pending reimbursed withdrawal request.
+    ///
+    /// # Requirement
+    ///
+    /// A withdrawal request should only be reimbursed
+    /// when it is certain that no Bitcoin transactions for that withdrawal will ever make it. That means,
+    /// 1. Either the minter never issued a Bitcoin transaction including that withdrawal request;
+    /// 2. Or it's guaranteed that such a transaction is no longer valid because some of its UTXOs
+    ///    have been used by another transaction that is considered finalized in the meantime.
+    pub pending_withdrawal_reimbursements: BTreeMap<LedgerBurnIndex, ReimburseWithdrawalTask>,
+
+    /// Map from burn block index to the reimbursed withdrawal request.
+    pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawalResult>,
 
     /// Cache of get_utxos call results
     pub get_utxos_cache: GetUtxosCache,
@@ -587,12 +611,44 @@ impl CkBtcMinterState {
     }
 
     pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
+        // Hack to avoid a Candid breaking change in `ReimbursementReason`
+        // which is in the return type of `retrieve_btc_status_v2`
+        fn map_reimbursement_reason(reason: &WithdrawalReimbursementReason) -> ReimbursementReason {
+            match reason {
+                WithdrawalReimbursementReason::InvalidTransaction(
+                    InvalidTransactionError::TooManyInputs { .. },
+                ) => ReimbursementReason::CallFailed,
+            }
+        }
+
         if let Some(reimbursement) = self.pending_reimbursements.get(&block_index) {
             return RetrieveBtcStatusV2::WillReimburse(reimbursement.clone());
         }
 
+        if let Some(reimbursement) = self.pending_withdrawal_reimbursements.get(&block_index) {
+            return RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
+                account: reimbursement.account,
+                amount: reimbursement.amount,
+                reason: map_reimbursement_reason(&reimbursement.reason),
+            });
+        }
+
         if let Some(reimbursement) = self.reimbursed_transactions.get(&block_index) {
             return RetrieveBtcStatusV2::Reimbursed(reimbursement.clone());
+        }
+
+        if let Some(maybe_reimbursed) = self.reimbursed_withdrawals.get(&block_index) {
+            return match maybe_reimbursed {
+                Ok(reimbursement) => RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
+                    account: reimbursement.account,
+                    amount: reimbursement.amount,
+                    reason: map_reimbursement_reason(&reimbursement.reason),
+                    mint_block_index: reimbursement.mint_block_index,
+                }),
+                Err(err) => match err {
+                    ReimbursedError::Quarantined => RetrieveBtcStatusV2::Unknown,
+                },
+            };
         }
 
         let status_v2: RetrieveBtcStatusV2 = self.retrieve_btc_status(block_index).into();
@@ -1213,6 +1269,41 @@ impl CkBtcMinterState {
             .insert(burn_block_index, reimburse_deposit_task);
     }
 
+    pub fn schedule_withdrawal_reimbursement(
+        &mut self,
+        ledger_burn_index: LedgerBurnIndex,
+        reimburse_deposit_task: ReimburseWithdrawalTask,
+    ) {
+        self.pending_retrieve_btc_requests
+            .retain(|req| req.block_index != ledger_burn_index);
+
+        if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
+            panic!(
+                "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
+                ledger_burn_index,
+                tx_status)
+        }
+
+        for submitted_tx in self
+            .submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+        {
+            if submitted_tx
+                .requests
+                .iter()
+                .any(|req| req.block_index == ledger_burn_index)
+            {
+                panic!(
+                    "BUG: Cannot reimburse withdrawal request {} since there is a submitted transaction for that withdrawal: {:?}",
+                    ledger_burn_index,
+                    submitted_tx);
+            }
+        }
+        self.pending_withdrawal_reimbursements
+            .insert(ledger_burn_index, reimburse_deposit_task);
+    }
+
     /// Checks whether the internal state of the minter matches the other state
     /// semantically (the state holds the same data, but maybe in a slightly
     /// different form).
@@ -1419,6 +1510,50 @@ impl CkBtcMinterState {
             Network::Testnet => 1_000,
             Network::Regtest => 0,
         }
+    }
+
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn quarantine_withdrawal_reimbursement(&mut self, burn_index: LedgerBurnIndex) {
+        self.pending_withdrawal_reimbursements.remove(&burn_index);
+        self.reimbursed_withdrawals
+            .insert(burn_index, Err(ReimbursedError::Quarantined));
+    }
+
+    /// The reimbursement of withdrawal request with id `burn_index` was successfully completed.
+    pub fn reimburse_withdrawal_completed(
+        &mut self,
+        burn_index: LedgerBurnIndex,
+        mint_index: LedgerMintIndex,
+    ) {
+        assert_ne!(
+            burn_index, mint_index,
+            "BUG: mint index cannot be the same as the burn index"
+        );
+
+        let reimbursement = self
+            .pending_withdrawal_reimbursements
+            .remove(&burn_index)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: missing pending reimbursement of withdrawal {}.",
+                    burn_index
+                )
+            });
+        let reimbursed = ReimbursedWithdrawal {
+            account: reimbursement.account,
+            amount: reimbursement.amount,
+            reason: reimbursement.reason.clone(),
+            mint_block_index: mint_index,
+        };
+        assert_eq!(
+            self.reimbursed_withdrawals
+                .insert(burn_index, Ok(reimbursed)),
+            None,
+            "BUG: Reimbursement of withdrawal {:?} was already completed!",
+            reimbursement
+        );
     }
 }
 
@@ -1631,6 +1766,8 @@ impl From<InitArgs> for CkBtcMinterState {
             get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
                 args.get_utxos_cache_expiration_seconds.unwrap_or_default(),
             )),
+            pending_withdrawal_reimbursements: Default::default(),
+            reimbursed_withdrawals: Default::default(),
         }
     }
 }
