@@ -1004,6 +1004,13 @@ impl CkBtcMinterState {
         self.stuck_transactions.push(tx);
         self.replacement_txid.insert(*old_txid, new_txid);
         self.rev_replacement_txid.insert(new_txid, *old_txid);
+        ic_cdk::println!(
+            "[replace_transaction]: replaced {old_txid}. Submitted transactions: {:?}",
+            self.submitted_transactions
+                .iter()
+                .map(|tx| tx.txid.to_string())
+                .collect::<Vec<_>>()
+        )
     }
 
     /// Returns the identifier of the most recent replacement transaction for the given stuck

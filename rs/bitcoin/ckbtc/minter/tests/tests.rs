@@ -2504,6 +2504,10 @@ fn should_cancel_non_standard_transaction() {
         .get(&txid)
         .expect("the mempool does not contain the withdrawal transaction");
     assert_eq!(non_standard_tx.input.len(), 80);
+    assert_eq!(
+        non_standard_tx.txid().to_string(),
+        "0e6c95d5f1d8271d3312492ac99fcb02c0cb4a6706deecf08f451e22dd3da523"
+    );
     // assert_eq!(
     //     non_standard_tx.txid().to_string(),
     //     "c729d4a443158e70a4a3f550f0c88df865c05ca92d8048830a8585c7a7ffa09f"
@@ -2548,6 +2552,10 @@ fn should_cancel_non_standard_transaction() {
         assert_eq!(txs.len(), 1);
         txs[0].clone()
     };
+    assert_eq!(
+        cancel_tx_id.to_string(),
+        "3ee9c4368b7f6c64b1b18f204290b20a4b6377e1acc8a129ce28c816d40f6e4e"
+    );
 
     println!("Found cancel transaction {cancel_tx_id}: {cancel_tx:?}");
 
@@ -2589,22 +2597,15 @@ fn should_cancel_non_standard_transaction() {
 
     ckbtc.finalize_transaction(&cancel_tx);
 
-    ckbtc.env.advance_time(Duration::from_secs(5));
     for _ in 0..10 {
+        ckbtc.env.advance_time(Duration::from_secs(5));
         ckbtc.env.tick();
     }
-    ckbtc.env.advance_time(Duration::from_secs(5));
-    for _ in 0..10 {
-        ckbtc.env.tick();
-    }
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
-    ckbtc.env.checkpointed_tick();
-    ckbtc.env.advance_time(Duration::from_secs(5));
-    for _ in 0..10 {
-        ckbtc.env.tick();
-    }
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Unknown
+    );
 
     let reimbursement_block_index = block_index + 1;
 

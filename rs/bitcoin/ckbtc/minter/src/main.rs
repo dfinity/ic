@@ -48,7 +48,7 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic(true), &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic(false), &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
 }
 

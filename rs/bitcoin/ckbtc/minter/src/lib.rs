@@ -3,6 +3,7 @@ use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
 use crate::reimbursement::InvalidTransactionError;
+use crate::state::SubmittedWithdrawalRequests;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
@@ -631,6 +632,14 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
 }
 
 async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool) {
+    ic_cdk::println!(
+        "[finalize_requests]: force_resubmit: {force_resubmit}. Submitted transactions {:?}",
+        state::read_state(|s| s
+            .submitted_transactions
+            .iter()
+            .map(|tx| tx.txid.to_string())
+            .collect::<Vec<_>>())
+    );
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
     }
@@ -649,6 +658,18 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
                 .collect()
         });
 
+    state::read_state(|s| {
+        if s.submitted_transactions
+            .iter()
+            .any(|tx| matches!(tx.requests, SubmittedWithdrawalRequests::ToCancel { .. }))
+        {
+            panic!(
+                "[finalize_requests]: {maybe_finalized_transactions:?}, {:?}",
+                s.submitted_transactions
+            );
+        };
+    });
+
     if maybe_finalized_transactions.is_empty() {
         return;
     }
@@ -660,6 +681,8 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
 
     let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
     let new_utxos = fetch_main_utxos(&main_account, &main_address, runtime).await;
+
+    ic_cdk::println!("[finalize_requests]: New UTXOs {new_utxos:?}");
 
     state::mutate_state(|state| {
         process_maybe_finalized_transactions(
