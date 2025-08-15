@@ -5377,6 +5377,7 @@ dependencies = [
 name = "grub"
 version = "1.0.0"
 dependencies = [
+ "ic-sys",
  "regex",
  "strum 0.26.3",
  "tempfile",
@@ -5391,12 +5392,11 @@ dependencies = [
  "clap 4.5.27",
  "config",
  "config_types",
- "grub",
+ "ic-sys",
  "ic_device",
  "ic_sev",
  "itertools 0.12.1",
  "libcryptsetup-rs",
- "linux_kernel_command_line",
  "nix 0.24.3",
  "parking_lot",
  "rand 0.8.5",
