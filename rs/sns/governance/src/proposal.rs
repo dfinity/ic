@@ -1603,6 +1603,12 @@ async fn validate_and_render_register_extension(
 
 {extension_init}
 
+## Disclaimer
+
+Some Decentralized Exchanges do not provide the users with a slippage protection upon deposit.
+It means that the actual values that are going to be deposited to the exchange, could be significantly
+different from the asset ratio defined in the proposal.
+
 ## Extension Configuration
 
 The extension will be deployed and configured according to the provided parameters.",
