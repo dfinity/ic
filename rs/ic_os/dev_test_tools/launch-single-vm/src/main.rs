@@ -168,6 +168,10 @@ fn main() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        None,
         Vec::new(),
     );
     let initialized_ic = ic_config.initialize().unwrap();

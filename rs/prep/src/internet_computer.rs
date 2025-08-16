@@ -260,13 +260,22 @@ pub struct IcConfig {
     /// topology of the network.
     ///
     /// The version id of the initial replica.
-    initial_replica_version_id: ReplicaVersion,
+    initial_release_replica_version_id: ReplicaVersion,
     /// The URL of the initial release package.
     initial_release_package_url: Option<Url>,
     /// The hash of the initial release package.
     initial_release_package_sha256_hex: Option<String>,
     /// The guest launch measurements of the initial release package.
-    guest_launch_measurements: Option<GuestLaunchMeasurements>,
+    initial_release_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+    /// The version id of the initial unassigned nodes replica.
+    /// If not provided, falls back to `initial_release_replica_version_id`.
+    initial_unassigned_nodes_release_version_id: Option<ReplicaVersion>,
+    /// The URL of the initial unassigned nodes release package.
+    initial_unassigned_nodes_release_package_url: Option<Url>,
+    /// The hash of the initial unassigned nodes release package.
+    initial_unassigned_nodes_release_package_sha256_hex: Option<String>,
+    /// The guest launch measurements of the initial unassigned nodes release package.
+    initial_unassigned_nodes_release_guest_launch_measurements: Option<GuestLaunchMeasurements>,
     /// Should the tool generate the subnet records.
     generate_subnet_records: bool,
     /// The index of the NNS subnet, if any.
@@ -383,12 +392,16 @@ impl IcConfig {
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
         topology_config: TopologyConfig,
-        replica_version_id: ReplicaVersion,
+        initial_release_replica_version_id: ReplicaVersion,
         generate_subnet_records: bool,
         nns_subnet_index: Option<u64>,
-        release_package_url: Option<Url>,
-        release_package_sha256_hex: Option<String>,
-        guest_launch_measurements: Option<GuestLaunchMeasurements>,
+        initial_release_package_url: Option<Url>,
+        initial_release_package_sha256_hex: Option<String>,
+        initial_release_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+        initial_unassigned_nodes_release_version_id: Option<ReplicaVersion>,
+        initial_unassigned_nodes_release_package_url: Option<Url>,
+        initial_unassigned_nodes_release_package_sha256_hex: Option<String>,
+        initial_unassigned_nodes_release_guest_launch_measurements: Option<GuestLaunchMeasurements>,
         provisional_whitelist: Option<ProvisionalWhitelist>,
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
@@ -397,14 +410,18 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
-            initial_replica_version_id: replica_version_id,
+            initial_release_replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
-            initial_release_package_url: release_package_url,
-            initial_release_package_sha256_hex: release_package_sha256_hex,
+            initial_release_package_url,
+            initial_release_package_sha256_hex,
             initial_registry_node_operator_entries: Vec::new(),
             initial_dc_records: Vec::new(),
-            guest_launch_measurements,
+            initial_release_guest_launch_measurements,
+            initial_unassigned_nodes_release_version_id,
+            initial_unassigned_nodes_release_package_url,
+            initial_unassigned_nodes_release_package_sha256_hex,
+            initial_unassigned_nodes_release_guest_launch_measurements,
             provisional_whitelist,
             initial_mutations: Vec::new(),
             initial_node_operator,
@@ -524,7 +541,7 @@ impl IcConfig {
 
             // create the API boundary node registry entry
             let api_bn_record = ApiBoundaryNodeRecord {
-                version: self.initial_replica_version_id.to_string(),
+                version: self.initial_release_replica_version_id.to_string(),
             };
             write_registry_entry(
                 &data_provider,
@@ -615,21 +632,49 @@ impl IcConfig {
             opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
 
-        let initial_replica_version = self.initial_replica_version_id.to_string();
+        let initial_release_replica_version = self.initial_release_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
-            guest_launch_measurements: self.guest_launch_measurements,
+            guest_launch_measurements: self.initial_release_guest_launch_measurements,
         };
 
+        let mut blessed_version_ids = vec![initial_release_replica_version.clone()];
+
+        // If unassigned nodes version is provided, create its record and add to blessed versions
+        if let Some(unassigned_nodes_version_id) = &self.initial_unassigned_nodes_release_version_id
+        {
+            let unassigned_nodes_version = unassigned_nodes_version_id.to_string();
+            let unassigned_nodes_replica_version_record = ReplicaVersionRecord {
+                release_package_sha256_hex: self
+                    .initial_unassigned_nodes_release_package_sha256_hex
+                    .unwrap_or_default(),
+                release_package_urls: opturl_to_string_vec(
+                    self.initial_unassigned_nodes_release_package_url,
+                ),
+                guest_launch_measurements: self
+                    .initial_unassigned_nodes_release_guest_launch_measurements,
+            };
+
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                make_replica_version_key(unassigned_nodes_version_id.clone()).as_ref(),
+                version,
+                unassigned_nodes_replica_version_record,
+            );
+
+            blessed_version_ids.push(unassigned_nodes_version);
+        }
+
         let blessed_replica_versions_record = BlessedReplicaVersions {
-            blessed_version_ids: vec![initial_replica_version],
+            blessed_version_ids,
         };
 
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
-            make_replica_version_key(self.initial_replica_version_id.clone()).as_ref(),
+            make_replica_version_key(self.initial_release_replica_version_id.clone()).as_ref(),
             version,
             replica_version_record,
         );
@@ -684,8 +729,17 @@ impl IcConfig {
             );
         }
 
+        // Use unassigned nodes version if provided, otherwise fall back to main release version
+        let unassigned_nodes_replica_version = if let Some(unassigned_nodes_version_id) =
+            &self.initial_unassigned_nodes_release_version_id
+        {
+            unassigned_nodes_version_id.to_string()
+        } else {
+            self.initial_release_replica_version_id.to_string()
+        };
+
         let unassigned_nodes_config = UnassignedNodesConfigRecord {
-            replica_version: self.initial_replica_version_id.to_string(),
+            replica_version: unassigned_nodes_replica_version,
             ssh_readonly_access: self.ssh_readonly_access_to_unassigned_nodes,
         };
 

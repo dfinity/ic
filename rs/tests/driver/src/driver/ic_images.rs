@@ -49,6 +49,40 @@ pub fn get_guestos_initial_launch_measurements() -> Result<Option<GuestLaunchMea
     read_guest_launch_measurements("ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE")
 }
 
+/// Pull the version of the initial unassigned nodes GuestOS update image from the environment.
+///
+/// This is the version that unassigned nodes will use for their initial update image.
+/// Falls back to the regular GuestOS initial update image version if not specified.
+pub fn get_guestos_initial_unassigned_update_img_version() -> Result<ReplicaVersion> {
+    let env_var = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UNASSIGNED_UPDATE_IMG_VERSION")
+        .or_else(|_| std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_VERSION"))?;
+    let replica_version = ReplicaVersion::try_from(env_var)?;
+
+    Ok(replica_version)
+}
+
+/// Pull the URL of the initial unassigned nodes GuestOS update image from the environment.
+///
+/// This is the URL that unassigned nodes will use to download their initial update image.
+/// Falls back to the regular GuestOS initial update image URL if not specified.
+pub fn get_guestos_initial_unassigned_update_img_url() -> Result<Url> {
+    let env_var = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UNASSIGNED_UPDATE_IMG_URL")
+        .or_else(|_| std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"))?;
+    let url = Url::parse(&env_var)?;
+
+    Ok(url)
+}
+
+/// Pull the hash of the initial unassigned nodes GuestOS update image from the environment.
+///
+/// This is the hash that unassigned nodes will use to verify their initial update image.
+/// Falls back to the regular GuestOS initial update image hash if not specified.
+pub fn get_guestos_initial_unassigned_update_img_sha256() -> Result<String> {
+    let env_var = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UNASSIGNED_UPDATE_IMG_HASH")
+        .or_else(|_| std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"))?;
+    Ok(env_var)
+}
+
 /// Pull the version of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_version() -> Result<ReplicaVersion> {
     let replica_version =

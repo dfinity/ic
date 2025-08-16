@@ -70,8 +70,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
@@ -134,8 +132,6 @@ system_test_nns(
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
     uses_hostos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
