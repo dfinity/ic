@@ -171,9 +171,10 @@ pub mod mock {
 pub mod arbitrary {
     use crate::{
         address::BitcoinAddress,
+        reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            eventlog::{Event, EventType},
+            eventlog::{Event, EventType, ReplacedReason},
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
         },
         tx,
@@ -281,6 +282,28 @@ pub mod arbitrary {
             bitcoin_fee,
             minter_fee,
         })
+    }
+
+    fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
+        (any::<usize>(), any::<usize>()).prop_map(|(n, m)| {
+            WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: n + m + 1,
+                    max_num_inputs: n,
+                },
+            )
+        })
+    }
+
+    fn replaced_reason() -> impl Strategy<Value = ReplacedReason> {
+        prop_oneof![
+            Just(ReplacedReason::ToRetry),
+            (
+                withdrawal_reimbursement_reason(),
+                option::of(pvec(utxo(amount()), 0..10_000))
+            )
+                .prop_map(|(reason, used_utxos)| ReplacedReason::ToCancel { reason, used_utxos })
+        ]
     }
 
     fn change_output() -> impl Strategy<Value = ChangeOutput> {
@@ -433,6 +456,7 @@ pub mod arbitrary {
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: any::<u64>(),
                     withdrawal_fee: option::of(withdrawal_fee()),
+                    reason: option::of(replaced_reason())
                 }),
                 prop_struct!(EventType::ConfirmedBtcTransaction { txid: txid() }),
                 prop_struct!(EventType::CheckedUtxo {

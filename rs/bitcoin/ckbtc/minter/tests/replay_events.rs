@@ -254,7 +254,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
                 subaccount: None,
             })
         },
-        |old_txid, new_tx| replaced.borrow_mut().push((old_txid, new_tx)),
+        |old_txid, new_tx, reason| replaced.borrow_mut().push((old_txid, new_tx, reason)),
         &runtime,
         false,
     )
@@ -263,6 +263,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     assert_eq!(replaced.len(), 1);
     assert_eq!(replaced[0].0, resubmitted_txid);
     let cancellation_tx = replaced[0].1.clone();
+    let replaced_reason = replaced[0].2.clone();
     let cancellation_txid = cancellation_tx.txid;
     assert_eq!(cancellation_tx.used_utxos.len(), 1);
     let used_utxo = cancellation_tx.used_utxos[0].clone();
@@ -277,6 +278,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         &mut state,
         resubmitted_txid,
         cancellation_tx.clone(),
+        Some(replaced_reason),
         &runtime,
     );
     assert!(!state

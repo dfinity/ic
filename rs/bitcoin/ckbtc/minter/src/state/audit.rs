@@ -1,8 +1,9 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
+    eventlog::{EventType, ReplacedReason},
+    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
+    SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
@@ -194,6 +195,7 @@ pub fn replace_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     old_txid: Txid,
     new_tx: SubmittedBtcTransaction,
+    reason: Option<ReplacedReason>,
     runtime: &R,
 ) {
     record_event(
@@ -209,6 +211,7 @@ pub fn replace_transaction<R: CanisterRuntime>(
                 .fee_per_vbyte
                 .expect("bug: all replacement transactions must have the fee"),
             withdrawal_fee: new_tx.withdrawal_fee,
+            reason,
         },
         runtime,
     );
