@@ -413,6 +413,13 @@ pub fn replay<I: CheckInvariants>(
                             panic!("Cannot cancel a cancelation request")
                         }
                         SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                            assert!(new_utxos.is_some(), "BUG: Cancel transaction {new_txid} must have `new_utxos` to use different UTXOs than the transaction it tries to cancel");
+                            debug_assert!(new_utxos.as_ref()
+                                .unwrap()
+                                .iter()
+                                .collect::<BTreeSet<_>>()
+                                .is_subset(&old_utxos.iter().collect::<BTreeSet<_>>()),
+                            "BUG: UTXOs from cancel transaction must be a subset of the UTXOS from the transaction to cancel. New UTXOs {new_utxos:?}. Old UTXOs: {old_utxos:?}");
                             SubmittedWithdrawalRequests::ToCancel { requests, reason }
                         }
                     },
