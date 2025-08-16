@@ -746,7 +746,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
         |old_txid, new_tx, reason| {
             state::mutate_state(|s| {
-                state::audit::replace_transaction(s, old_txid, new_tx, Some(reason), runtime);
+                state::audit::replace_transaction(s, old_txid, new_tx, reason, runtime);
             })
         },
         &IC_CANISTER_RUNTIME,
@@ -892,12 +892,6 @@ pub async fn resubmit_transactions<
                     &old_txid,
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
-                match &mut replaced_reason {
-                    state::eventlog::ReplacedReason::ToCancel { used_utxos, .. } => {
-                        *used_utxos = Some(input_utxos.clone())
-                    }
-                    state::eventlog::ReplacedReason::ToRetry => {}
-                }
                 let new_tx = state::SubmittedBtcTransaction {
                     requests: new_tx_requests,
                     used_utxos: input_utxos,

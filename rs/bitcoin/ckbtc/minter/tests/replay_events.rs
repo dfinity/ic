@@ -276,7 +276,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         &mut state,
         resubmitted_txid,
         cancellation_tx.clone(),
-        Some(replaced_reason),
+        replaced_reason,
         &runtime,
     );
     assert!(!state

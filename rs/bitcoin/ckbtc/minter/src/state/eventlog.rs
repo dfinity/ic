@@ -34,9 +34,15 @@ mod event {
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
     pub enum ReplacedReason {
+        /// Indicates the old transaction has to be resend with a higher fee.
+        #[serde(rename = "to_retry")]
         ToRetry,
+        /// Indicates the old transaction has to be to canceled.
+        #[serde(rename = "to_cancel")]
         ToCancel {
+            /// Reason why the old transaction has to be canceled.
             reason: WithdrawalReimbursementReason,
+            /// The utxos in the new transaction that cancels the old one.
             used_utxos: Option<Vec<Utxo>>,
         },
     }
