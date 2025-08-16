@@ -178,7 +178,7 @@ jobs:
               targets_args+=("--skip_long_tests")
             fi
             if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--commit_range=$BASE_SHA..$HEAD_SHA")
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
             "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
             # if bazel targets is empty we don't need to run any tests
@@ -479,7 +479,7 @@ jobs:
             targets_args=()
             commit_range_arg=""
             if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--commit_range=$BASE_SHA..$HEAD_SHA")
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
             ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
 
