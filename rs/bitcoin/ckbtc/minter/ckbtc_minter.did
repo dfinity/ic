@@ -349,6 +349,14 @@ type ReimbursementReason = variant {
     };
 };
 
+type ReplacedReason = variant {
+  ToRetry;
+  ToCancel : record {
+    used_utxos : opt vec Utxo;
+    reason : WithdrawalReimbursementReason;
+  };
+};
+
 type WithdrawalReimbursementReason = variant {
     invalid_transaction : InvalidTransactionError;
 };
@@ -412,6 +420,7 @@ type EventType = variant {
         submitted_at : nat64;
         fee: nat64;
         withdrawal_fee : opt WithdrawalFee;
+        reason : opt ReplacedReason;
     };
     confirmed_transaction : record { txid : blob };
     checked_utxo : record {
