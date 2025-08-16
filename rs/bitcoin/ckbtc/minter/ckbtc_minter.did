@@ -350,8 +350,8 @@ type ReimbursementReason = variant {
 };
 
 type ReplacedReason = variant {
-  ToRetry;
-  ToCancel : record {
+  to_retry;
+  to_cancel : record {
     reason : WithdrawalReimbursementReason;
   };
 };
