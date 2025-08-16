@@ -30,6 +30,7 @@ ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
+ic_consensus_system_test_recovery_artifacts_vm_lib = { path = "./recovery_artifacts_vm_lib" }
 ic_consensus_system_test_utils = { path = "./utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "./tecdsa/utils" }
 k256 = { workspace = true }
