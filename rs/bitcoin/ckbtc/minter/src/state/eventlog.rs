@@ -9,7 +9,7 @@ use crate::state::{
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use crate::WithdrawalFee;
 use candid::Principal;
-pub use event::EventType;
+pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,15 @@ mod event {
     use super::*;
     use crate::reimbursement::WithdrawalReimbursementReason;
     use crate::state::SuspendedReason;
+
+    #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+    pub enum ReplacedReason {
+        ToRetry,
+        ToCancel {
+            reason: WithdrawalReimbursementReason,
+            used_utxos: Option<Vec<Utxo>>,
+        },
+    }
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
     pub enum EventType {
@@ -126,6 +135,8 @@ mod event {
             #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
             withdrawal_fee: Option<WithdrawalFee>,
+            /// The reason why it was replaced
+            reason: Option<ReplacedReason>,
         },
 
         /// Indicates that the minter received enough confirmations for a bitcoin
@@ -371,8 +382,9 @@ pub fn replay<I: CheckInvariants>(
                 submitted_at,
                 fee_per_vbyte,
                 withdrawal_fee,
+                reason,
             } => {
-                let (requests, used_utxos) = match state
+                let (prev_requests, prev_used_utxos) = match state
                     .submitted_transactions
                     .iter()
                     .find(|tx| tx.txid == old_txid)
@@ -384,6 +396,18 @@ pub fn replay<I: CheckInvariants>(
                             &old_txid
                         )))
                     }
+                };
+                let (requests, used_utxos) = match reason {
+                    Some(ReplacedReason::ToCancel { reason, used_utxos }) => match prev_requests {
+                        SubmittedWithdrawalRequests::ToCancel { .. } => {
+                            panic!("Cannot cancel a cancelation request")
+                        }
+                        SubmittedWithdrawalRequests::ToConfirm { requests } => (
+                            SubmittedWithdrawalRequests::ToCancel { requests, reason },
+                            used_utxos.unwrap_or(prev_used_utxos),
+                        ),
+                    },
+                    Some(ReplacedReason::ToRetry) | None => (prev_requests, prev_used_utxos),
                 };
 
                 state.replace_transaction(

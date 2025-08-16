@@ -744,9 +744,9 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         state::read_state(|s| s.retrieve_btc_min_amount),
         maybe_finalized_transactions,
         |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
-        |old_txid, new_tx| {
+        |old_txid, new_tx, reason| {
             state::mutate_state(|s| {
-                state::audit::replace_transaction(s, old_txid, new_tx, runtime);
+                state::audit::replace_transaction(s, old_txid, new_tx, Some(reason), runtime);
             })
         },
         &IC_CANISTER_RUNTIME,
@@ -757,7 +757,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
 pub async fn resubmit_transactions<
     R: CanisterRuntime,
     F: Fn(&OutPoint) -> Option<Account>,
-    G: Fn(Txid, state::SubmittedBtcTransaction),
+    G: Fn(Txid, state::SubmittedBtcTransaction, state::eventlog::ReplacedReason),
 >(
     key_name: &str,
     fee_per_vbyte: u64,
@@ -791,6 +791,7 @@ pub async fn resubmit_transactions<
         };
 
         let mut input_utxos = submitted_tx.used_utxos;
+        let mut replaced_reason = state::eventlog::ReplacedReason::ToRetry;
         let mut new_tx_requests = submitted_tx.requests;
         let build_result = match build_unsigned_transaction_from_inputs(
             &input_utxos,
@@ -819,6 +820,10 @@ pub async fn resubmit_transactions<
                     }
                 };
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
+                replaced_reason = state::eventlog::ReplacedReason::ToCancel {
+                    reason: reason.clone(),
+                    used_utxos: None,
+                };
                 new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel { requests, reason };
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
@@ -887,6 +892,12 @@ pub async fn resubmit_transactions<
                     &old_txid,
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
+                match &mut replaced_reason {
+                    state::eventlog::ReplacedReason::ToCancel { used_utxos, .. } => {
+                        *used_utxos = Some(input_utxos.clone())
+                    }
+                    state::eventlog::ReplacedReason::ToRetry => {}
+                }
                 let new_tx = state::SubmittedBtcTransaction {
                     requests: new_tx_requests,
                     used_utxos: input_utxos,
@@ -896,8 +907,7 @@ pub async fn resubmit_transactions<
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
                     withdrawal_fee: Some(total_fee),
                 };
-
-                replace_transaction(old_txid, new_tx);
+                replace_transaction(old_txid, new_tx, replaced_reason);
             }
             Err(err) => {
                 log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
