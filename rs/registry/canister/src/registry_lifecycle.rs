@@ -170,7 +170,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "No routing table in snapshot")]
+    #[should_panic(expected = "[Registry] invariant check failed with message: no system subnet")]
     fn post_upgrade_fails_on_global_state_invariant_check_failure() {
         // We only check a single failure mode here,
         // since the rest should be under other test coverage
