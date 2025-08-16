@@ -13339,6 +13339,7 @@ dependencies = [
  "ic-sns-governance-protobuf-generator",
  "ic-sns-governance-token-valuation",
  "ic-sns-test-utils",
+ "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
  "ic-types",
