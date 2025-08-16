@@ -57,7 +57,6 @@ use ic_system_test_driver::util::{block_on, create_canister};
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
-    set_icp_xdr_exchange_rate,
 };
 use std::env;
 use std::str::FromStr;
@@ -130,9 +129,6 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-
-    // sets the exchange rate to 12 XDR per 1 ICP
-    set_icp_xdr_exchange_rate(&env, 12_0000);
 
     // sets the application subnets as "authorized" for canister creation by CMC
     set_authorized_subnets(&env);

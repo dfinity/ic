@@ -15,6 +15,8 @@ on the process that this file is part of, see
 
 ## Removed
 
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+
 ## Fixed
 
 ## Security
