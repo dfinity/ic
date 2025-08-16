@@ -195,12 +195,12 @@ pub fn replace_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     old_txid: Txid,
     new_tx: SubmittedBtcTransaction,
-    mut reason: ReplacedReason,
+    reason: ReplacedReason,
     runtime: &R,
 ) {
     // when reason is ToCancel, the utxos of new_tx has to be persisted,
     // because it is different than that of old_tx.
-    let new_utxos = match &mut reason {
+    let new_utxos = match reason {
         ReplacedReason::ToCancel { .. } => Some(new_tx.used_utxos.clone()),
         ReplacedReason::ToRetry => None,
     };
