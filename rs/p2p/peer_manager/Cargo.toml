@@ -22,6 +22,11 @@ slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-p2p-test-utils = { path = "../test_utils" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
