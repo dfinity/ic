@@ -2536,10 +2536,9 @@ fn should_cancel_non_standard_transaction() {
         RetrieveBtcStatusV2::Submitted { .. }
     );
 
-    //TODO: should not be needed
     ckbtc
         .env
-        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+        .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
 
     let mempool = ckbtc.tick_until(
         "mempool contains a replacement transaction",
@@ -2626,7 +2625,6 @@ fn should_cancel_non_standard_transaction() {
     assert!(ckbtc.balance_of(user) + margin > balance_before_withdrawal);
 
     ckbtc.minter_self_check();
-    //TODO XC-450: cancel Bitcoin transaction + reimbursement flow
 }
 
 #[test]
