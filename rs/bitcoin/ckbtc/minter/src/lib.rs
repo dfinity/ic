@@ -1156,7 +1156,13 @@ pub fn build_unsigned_transaction(
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
-    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte, enable_non_standard_tx) {
+    match build_unsigned_transaction_from_inputs(
+        &inputs,
+        outputs,
+        main_address,
+        fee_per_vbyte,
+        enable_non_standard_tx,
+    ) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case

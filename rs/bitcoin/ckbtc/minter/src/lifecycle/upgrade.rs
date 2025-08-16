@@ -54,7 +54,6 @@ pub struct UpgradeArgs {
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: Option<String>,
-
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
