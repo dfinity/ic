@@ -285,7 +285,7 @@ pub mod arbitrary {
     }
 
     fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
-        (any::<usize>(), any::<usize>()).prop_map(|(n, m)| {
+        (0..2000usize, 500..1000usize).prop_map(|(n, m)| {
             WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: n + m + 1,
