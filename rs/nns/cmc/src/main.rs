@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
@@ -8,7 +9,8 @@ use exchange_rate_canister::{
 };
 use ic_cdk::{
     api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
-    heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn, update,
+    futures::{in_executor_context, spawn_017_compat},
+    heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
@@ -858,7 +860,7 @@ fn convert_conversion_rate_to_payload(
     serializer.self_describe().unwrap();
     mixed_hash_tree
         .serialize(&mut serializer)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to serialize a hash tree: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("failed to serialize a hash tree: {}", e)));
 
     serializer.into_inner()
 }
@@ -1126,20 +1128,21 @@ fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubn
 
 #[export_name = "canister_update transaction_notification_pb"]
 fn transaction_notification_pb() {
-    let input = arg_data_raw();
-    spawn(async move {
-        ic_cdk::setup();
-        let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
-            .expect("Could not decode TransactionNotification")
-            .into_inner();
+    in_executor_context(|| {
+        let input = arg_data_raw();
+        spawn_017_compat(async move {
+            let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
+                .expect("Could not decode TransactionNotification")
+                .into_inner();
 
-        match do_transaction_notification(request).await {
-            Ok(response) => match ProtoBuf::new(response).into_bytes() {
-                Ok(buf) => reply_raw(&buf),
+            match do_transaction_notification(request).await {
+                Ok(response) => match ProtoBuf::new(response).into_bytes() {
+                    Ok(buf) => reply_raw(&buf),
+                    Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
+                },
                 Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-            },
-            Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-        }
+            }
+        })
     })
 }
 
@@ -2638,7 +2641,10 @@ async fn update_exchange_rate() {
     }
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

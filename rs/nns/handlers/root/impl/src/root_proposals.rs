@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
 use ic_cdk::call;

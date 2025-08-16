@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{

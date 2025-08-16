@@ -6,22 +6,27 @@ benches:
       stable_memory_increase: 256
     scopes:
       icrc1_transfer:
+        calls: 1
         instructions: 3067348446
         heap_increase: 24
         stable_memory_increase: 0
       icrc2_approve:
+        calls: 1
         instructions: 4443523495
         heap_increase: 23
         stable_memory_increase: 128
       icrc2_transfer_from:
+        calls: 1
         instructions: 6832774956
         heap_increase: 2
         stable_memory_increase: 128
       query_blocks:
+        calls: 1
         instructions: 38072806
         heap_increase: 13
         stable_memory_increase: 0
       query_encoded_blocks:
+        calls: 1
         instructions: 7382133
         heap_increase: 0
         stable_memory_increase: 0

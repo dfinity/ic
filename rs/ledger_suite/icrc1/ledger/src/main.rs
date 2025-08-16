@@ -1,8 +1,9 @@
+#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
 use candid::types::number::Nat;
-use candid::{candid_method, Principal};
+use candid::Principal;
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -119,7 +120,6 @@ impl LedgerAccess for Access {
 }
 
 #[cfg(not(feature = "canbench-rs"))]
-#[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
@@ -556,7 +556,10 @@ fn tokens_to_f64(tokens: Tokens) -> f64 {
     tokens.to_u256().as_f64()
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -594,49 +597,41 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_name() -> String {
     Access::with_ledger(|ledger| ledger.token_name().to_string())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_symbol() -> String {
     Access::with_ledger(|ledger| ledger.token_symbol().to_string())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_decimals() -> u8 {
     Access::with_ledger(|ledger| ledger.decimals())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_fee() -> Nat {
     Access::with_ledger(|ledger| ledger.transfer_fee().into())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
     Access::with_ledger(|ledger| Some(*ledger.minting_account()))
 }
 
 #[query(name = "icrc1_balance_of")]
-#[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(account: Account) -> Nat {
     Access::with_ledger(|ledger| ledger.balances().account_balance(&account).into())
 }
 
 #[query(name = "icrc1_total_supply")]
-#[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
     Access::with_ledger(|ledger| ledger.balances().total_supply().into())
 }
@@ -683,7 +678,7 @@ fn execute_transfer_not_async(
 
         match memo.as_ref() {
             Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "the memo field size of {} bytes is above the allowed limit of {} bytes",
                     memo.0.len(),
                     ledger.max_memo_length()
@@ -773,7 +768,6 @@ fn execute_transfer_not_async(
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     panic_if_not_ready();
     let from_account = Account {
@@ -801,7 +795,6 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
     let spender_account = Account {
@@ -853,7 +846,6 @@ fn archives() -> Vec<ArchiveInfo> {
 }
 
 #[query(name = "icrc1_supported_standards")]
-#[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
     let standards = vec![
         StandardRecord {
@@ -889,7 +881,6 @@ fn supported_standards() -> Vec<StandardRecord> {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     panic_if_not_ready();
     let (start, length) = req
@@ -900,7 +891,6 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 
 #[cfg(not(feature = "get-blocks-disabled"))]
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
     panic_if_not_ready();
     let (start, length) = req
@@ -910,7 +900,6 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
     panic_if_not_ready();
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
@@ -997,7 +986,6 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
@@ -1010,7 +998,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
@@ -1025,13 +1012,11 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
     Access::with_ledger(|ledger| ledger.icrc3_get_archives(args))
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     panic_if_not_ready();
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
@@ -1045,7 +1030,6 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
@@ -1079,20 +1063,17 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
     panic_if_not_ready();
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     supported_standards()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
     Access::with_ledger(|ledger| match ledger.index_principal() {
         None => Err(Icrc106Error::IndexPrincipalNotSet),
@@ -1101,7 +1082,6 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
 }
 
 #[update]
-#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
@@ -1122,13 +1102,11 @@ fn icrc21_canister_call_consent_message(
 }
 
 #[query]
-#[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
     let from_account = arg.from_account.unwrap_or_else(|| Account {
         owner: ic_cdk::api::caller(),

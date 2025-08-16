@@ -4,7 +4,7 @@ use candid::Principal;
 use certificate_orchestrator_interface::{
     EncryptedPair, ExportPackage, Id, Name, NameError, Registration, State, UpdateType,
 };
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller;
 use mockall::automock;
 use priority_queue::PriorityQueue;
 use prometheus::labels;
@@ -116,7 +116,7 @@ impl Create for Creator {
 
 impl<T: Create, A: Authorize> Create for WithAuthorize<T, A> {
     fn create(&self, domain: &str, canister: &Principal) -> Result<Id, CreateError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => CreateError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => CreateError::UnexpectedError(err),
@@ -185,7 +185,7 @@ impl Get for Getter {
 
 impl<T: Get, A: Authorize> Get for WithAuthorize<T, A> {
     fn get(&self, id: &Id) -> Result<Registration, GetError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => GetError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => GetError::UnexpectedError(err),
@@ -346,7 +346,7 @@ impl<T: Update> Update for UpdateWithIcCertification<T> {
 
 impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
     fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => UpdateError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => UpdateError::UnexpectedError(err),
@@ -416,7 +416,7 @@ impl List for Lister {
 
 impl<T: List, A: Authorize> List for WithAuthorize<T, A> {
     fn list(&self) -> Result<Vec<(String, Registration)>, ListError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => ListError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => ListError::UnexpectedError(err),
@@ -501,7 +501,7 @@ impl Remove for Remover {
 
 impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
     fn remove(&self, id: &Id) -> Result<(), RemoveError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => RemoveError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => RemoveError::UnexpectedError(err),

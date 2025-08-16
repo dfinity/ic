@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;

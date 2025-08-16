@@ -1,4 +1,4 @@
-use candid::{candid_method, Principal};
+use candid::Principal;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
@@ -132,7 +132,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
     Block::<Tokens>::decode(EncodedBlock::from(bytes))
-        .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
+        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {}: {}", txid, e)))
         .into()
 }
 
@@ -142,7 +142,6 @@ fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> IcrcBlock {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(
     ledger_id: Principal,
     block_index_offset: u64,
@@ -189,11 +188,10 @@ fn post_upgrade() {
 }
 
 #[update]
-#[candid_method(update)]
 fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     let max_memory_size_bytes = with_archive_opts(|opts| {
-        if ic_cdk::api::caller() != opts.ledger_id {
-            ic_cdk::api::trap(&format!(
+        if ic_cdk::api::msg_caller() != opts.ledger_id {
+            ic_cdk::api::trap(format!(
                 "only {} can append blocks to this archive",
                 opts.ledger_id
             ));
@@ -215,7 +213,6 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
 }
 
 #[query]
-#[candid_method(query)]
 fn remaining_capacity() -> u64 {
     let total_block_size = with_blocks(|blocks| blocks.log_size_bytes());
     with_archive_opts(|opts| {
@@ -226,7 +223,6 @@ fn remaining_capacity() -> u64 {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
     let relative_idx = (idx_offset <= index).then_some(index - idx_offset)?;
@@ -238,7 +234,7 @@ fn get_transaction(index: BlockIndex) -> Option<Transaction> {
 fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
     let offset = with_archive_opts(|opts| {
         if start < opts.block_index_offset {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "requested index {} is less than the minimal index {} this archive serves",
                 start, opts.block_index_offset
             ));
@@ -256,7 +252,6 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
     let (start, length) = req
         .as_start_and_length()
@@ -268,7 +263,6 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
 
 /// Get length Blocks starting at start BlockIndex.
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
     let (start, length) = req
         .as_start_and_length()
@@ -279,20 +273,17 @@ fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_archives(_arg: GetArchivesArgs) -> GetArchivesResult {
     vec![]
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     // Only the Ledger certifies the tip of the chain.
     None
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
     vec![
         SupportedBlockType {
@@ -324,7 +315,6 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
     const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
 
@@ -365,12 +355,12 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "archive_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::stable::stable_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -379,7 +369,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
 
     w.encode_gauge(
         "archive_cycle_balance",
@@ -399,7 +389,10 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

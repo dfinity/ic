@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;

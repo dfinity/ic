@@ -92,7 +92,7 @@ registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 
 local_key = { path = "../../tla_instrumentation/local_key", optional = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }

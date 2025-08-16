@@ -7,8 +7,8 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-management-canister-types",
-    "@crate_index//:ic_cdk_next",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
     "@crate_index//:serde",

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     pb::v1::{
         add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,

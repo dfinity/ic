@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     ChangeCanisterControllersError, ChangeCanisterControllersRequest,
     ChangeCanisterControllersResponse, ChangeCanisterControllersResult,

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use bitcoin::consensus::deserialize;
 use bitcoin::Transaction;
 use candid::{Decode, Encode};

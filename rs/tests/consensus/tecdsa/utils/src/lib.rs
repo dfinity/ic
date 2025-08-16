@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;

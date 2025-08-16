@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};

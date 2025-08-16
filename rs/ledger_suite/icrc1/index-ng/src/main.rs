@@ -1,4 +1,5 @@
-use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
+#![allow(deprecated)]
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{measure_span, SpanName, SpanStats};
 use ic_cdk::trap;
@@ -295,7 +296,6 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(index_arg: Option<IndexArg>) {
     let InitArg {
         ledger_id,
@@ -792,7 +792,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 ..
             } => {
                 let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                    ic_cdk::trap(&format!(
+                    ic_cdk::trap(format!(
                         "Block {} is of type Transfer but has no fee or effective fee!",
                         block_index
                     ))
@@ -802,7 +802,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     block_index,
                     from,
                     amount.checked_add(&fee).unwrap_or_else(|| {
-                        ic_cdk::trap(&format!(
+                        ic_cdk::trap(format!(
                             "token amount overflow while indexing block {block_index}"
                         ))
                     }),
@@ -829,7 +829,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                             );
                             last_fee
                         }
-                        None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
+                        None => ic_cdk::trap(format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
                     }
                 };
 
@@ -848,7 +848,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
 fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
         balance.checked_sub(&amount).unwrap_or_else(|| {
-            ic_cdk::trap(&format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
+            ic_cdk::trap(format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
                 block_index, account, balance, amount));
         })
     })
@@ -857,7 +857,7 @@ fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
 fn credit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
         balance.checked_add(&amount).unwrap_or_else(|| {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
+            ic_cdk::trap(format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
                 block_index, account, balance, amount))
         })
     });
@@ -868,7 +868,7 @@ fn generic_block_to_encoded_block_or_trap(
     block: GenericBlock,
 ) -> EncodedBlock {
     generic_block_to_encoded_block(block).unwrap_or_else(|e| {
-        trap(&format!(
+        trap(format!(
             "Unable to decode generic block at index {}. Error: {}",
             block_index, e
         ))
@@ -877,7 +877,7 @@ fn generic_block_to_encoded_block_or_trap(
 
 fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block<Tokens> {
     Block::<Tokens>::decode(block).unwrap_or_else(|e| {
-        trap(&format!(
+        trap(format!(
             "Unable to decode encoded block at index {}. Error: {}",
             block_index, e
         ))
@@ -899,9 +899,9 @@ fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
         let block = get_decoded_block(fee_collector_block_index)
             .unwrap_or_else(||
-                ic_cdk::trap(&format!("Block at index {} has fee_collector_block_index {} but there is no block at that index", block_index, fee_collector_block_index)));
+                ic_cdk::trap(format!("Block at index {} has fee_collector_block_index {} but there is no block at that index", block_index, fee_collector_block_index)));
         if block.fee_collector.is_none() {
-            ic_cdk::trap(&format!("Block at index {} has fee_collector_block_index {} but that block has no fee_collector set", block_index, fee_collector_block_index))
+            ic_cdk::trap(format!("Block at index {} has fee_collector_block_index {} but that block has no fee_collector set", block_index, fee_collector_block_index))
         } else {
             block.fee_collector
         }
@@ -926,7 +926,6 @@ fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     let chain_length = with_blocks(|blocks| blocks.len());
     let (start, length) = req
@@ -951,13 +950,11 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 #[query]
-#[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     let length = arg
         .max_results
@@ -985,7 +982,7 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                trap(&format!(
+                trap(format!(
                     "Block {} not found in the block log, account blocks map is corrupted!",
                     id
                 ))
@@ -1012,7 +1009,7 @@ fn encoded_block_bytes_to_flat_transaction(
     block: Vec<u8>,
 ) -> Transaction {
     let block = Block::<Tokens>::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
-        trap(&format!(
+        trap(format!(
             "Unable to decode encoded block at index {}. Error: {}",
             block_index, e
         ))
@@ -1039,20 +1036,17 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> Nat {
     get_balance(account).into()
 }
 
 #[query]
-#[candid_method(query)]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
     Status { num_blocks_synced }
 }
 
 #[query]
-#[candid_method(query)]
 fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     let start_key = balance_key(Account {
         owner: args.owner,
@@ -1078,7 +1072,10 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     })
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -1163,7 +1160,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
     Ok(())
 }
 
-#[candid_method(query)]
 #[query]
 fn get_fee_collectors_ranges() -> FeeCollectorRanges {
     let ranges = with_state(|s| {

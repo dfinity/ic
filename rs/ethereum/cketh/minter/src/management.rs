@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;

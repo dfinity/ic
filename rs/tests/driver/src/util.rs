@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,

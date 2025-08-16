@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     canister_api::CanisterApi,
     pb::v1::{

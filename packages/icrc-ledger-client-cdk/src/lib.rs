@@ -20,6 +20,7 @@ impl Runtime for CdkRuntime {
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>,
     {
+        #[allow(deprecated)]
         ic_cdk::call(id, method, args)
             .await
             .map_err(|(code, msg)| (code as i32, msg))

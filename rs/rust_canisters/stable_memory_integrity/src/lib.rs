@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::CandidType;
 use ic_cdk::api::stable::{stable_grow, stable_read, stable_size, stable_write};
 use serde::{Deserialize, Serialize};

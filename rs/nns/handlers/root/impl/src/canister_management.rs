@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{

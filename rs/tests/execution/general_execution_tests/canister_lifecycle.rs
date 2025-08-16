@@ -27,6 +27,7 @@ AKA:: Testcase 2.4
 
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use candid::{Decode, Encode};
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};

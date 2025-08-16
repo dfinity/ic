@@ -81,7 +81,7 @@ struct Callback(Func);
 impl From<&str> for Callback {
     fn from(method: &str) -> Self {
         Callback(Func {
-            principal: ic_cdk::api::id(),
+            principal: ic_cdk::api::canister_self(),
             method: method.into(),
         })
     }

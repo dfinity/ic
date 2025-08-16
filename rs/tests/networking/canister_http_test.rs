@@ -14,6 +14,7 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::bail;
 use anyhow::Result;

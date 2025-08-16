@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterEnvironment,

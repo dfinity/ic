@@ -1,9 +1,8 @@
-use candid::candid_method;
+#![allow(deprecated)]
 use ic_cdk::update;
 use ic_sender_canister_lib::{SendArg, SendResult};
 
 #[update]
-#[candid_method(update)]
 async fn send(calls: Vec<SendArg>) -> Vec<SendResult> {
     let mut futures = vec![];
     for SendArg {

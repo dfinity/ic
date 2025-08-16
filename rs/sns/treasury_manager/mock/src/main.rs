@@ -42,7 +42,7 @@ declare_log_buffer!(name = LOG, capacity = 100);
 
 fn log(msg: &str) {
     let msg = format!("[MockTreasuryManager] {}", msg);
-    ic_cdk::print(&msg);
+    ic_cdk::api::debug_print(&msg);
     log!(LOG, "{}", msg);
 }
 
@@ -51,9 +51,9 @@ fn canister_state() -> MockTreasuryManager {
 }
 
 fn check_caller_is_controller_or_self() {
-    let caller = ic_cdk::api::caller();
+    let caller = ic_cdk::api::msg_caller();
 
-    if caller == ic_cdk::id() {
+    if caller == ic_cdk::api::canister_self() {
         return;
     }
 
@@ -108,7 +108,7 @@ async fn run_periodic_tasks() {
 
 fn init_periodic_tasks() {
     let _new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-        ic_cdk::spawn(run_periodic_tasks())
+        ic_cdk::futures::spawn_017_compat(run_periodic_tasks())
     });
 }
 

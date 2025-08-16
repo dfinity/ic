@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::logs::DEBUG;
 use async_trait::async_trait;
 use candid::{CandidType, Encode, Principal};

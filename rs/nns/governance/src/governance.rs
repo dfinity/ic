@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     are_nf_fund_proposals_disabled, decoder_config,
     governance::{

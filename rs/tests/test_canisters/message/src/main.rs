@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_cdk::api::call::ManualReply;
 use ic_message::ForwardParams;
 use std::cell::RefCell;

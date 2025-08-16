@@ -1,8 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_cdk::{
-    caller as ic_cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn,
-    update,
-};
+use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
@@ -79,7 +76,7 @@ fn schedule_timers() {
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
 fn schedule_spawn_neurons() {
     ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
-        spawn(async {
+        ic_cdk::futures::spawn_017_compat(async {
             governance_mut().maybe_spawn_neurons().await;
         });
     });
@@ -90,14 +87,16 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
-        spawn(governance_mut().process_voting_state_machines());
+        ic_cdk::futures::spawn_017_compat(async {
+            governance_mut().process_voting_state_machines().await;
+        });
     });
 }
 
 // We expect PrincipalId for all methods, but ic_cdk returns candid::Principal, so we need to
 // convert it.
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk_caller())
+    PrincipalId::from(ic_cdk::api::msg_caller())
 }
 
 fn debug_log(s: &str) {
@@ -553,7 +552,10 @@ fn get_restore_aging_summary() -> RestoreAgingSummary {
     RestoreAgingSummary::from(response)
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(|encoder| encode_metrics(governance(), encoder)),

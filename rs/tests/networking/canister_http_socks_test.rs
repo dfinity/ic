@@ -15,6 +15,7 @@ Success::
 2. Received failed to connect error from application subnet.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::bail;
 use anyhow::Result;

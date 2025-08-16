@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
 use candid::{Decode, Encode};
 use ic_cdk::api::management_canister::http_request::{

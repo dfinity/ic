@@ -15,6 +15,7 @@ Success::
 1. The proxy canister is left sending requests in batches of 500 to track the qps in grafana.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::bail;
 use anyhow::Result;
