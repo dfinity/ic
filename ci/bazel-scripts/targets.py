@@ -31,8 +31,10 @@ PULL_REQUEST_BAZEL_TARGETS = "PULL_REQUEST_BAZEL_TARGETS"
 # in case any file is modified matching any of the following globs:
 all_targets_globs = ["*.bazel", "*.bzl", ".bazelrc", ".bazelversion", "mainnet-*-revisions.json", ".github/*"]
 
+
 def log(msg: str):
     print(msg, file=sys.stderr)
+
 
 def load_explicit_targets() -> dict[str, Set[str]]:
     """
