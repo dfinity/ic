@@ -1,8 +1,9 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
+    eventlog::{EventType, ReplacedReason},
+    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
+    SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
@@ -194,8 +195,15 @@ pub fn replace_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     old_txid: Txid,
     new_tx: SubmittedBtcTransaction,
+    reason: ReplacedReason,
     runtime: &R,
 ) {
+    // when reason is ToCancel, the utxos of new_tx has to be persisted,
+    // because it is different than that of old_tx.
+    let new_utxos = match reason {
+        ReplacedReason::ToCancel { .. } => Some(new_tx.used_utxos.clone()),
+        ReplacedReason::ToRetry => None,
+    };
     record_event(
         EventType::ReplacedBtcTransaction {
             old_txid,
@@ -209,6 +217,8 @@ pub fn replace_transaction<R: CanisterRuntime>(
                 .fee_per_vbyte
                 .expect("bug: all replacement transactions must have the fee"),
             withdrawal_fee: new_tx.withdrawal_fee,
+            reason: Some(reason),
+            new_utxos,
         },
         runtime,
     );
