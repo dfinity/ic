@@ -3,6 +3,7 @@ use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
 use crate::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
+use crate::state::SubmittedWithdrawalRequests;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
@@ -651,13 +652,6 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
             let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
             s.submitted_transactions
                 .iter()
-                .chain(if force_resubmit {
-                    Box::new(s.stuck_transactions.iter())
-                        as Box<dyn Iterator<Item = &state::SubmittedBtcTransaction>>
-                } else {
-                    Box::new(std::iter::empty())
-                        as Box<dyn Iterator<Item = &state::SubmittedBtcTransaction>>
-                })
                 .filter(|&req| (req.submitted_at + (wait_time.as_nanos() as u64) < now))
                 .map(|req| (req.txid, req.clone()))
                 .collect()
