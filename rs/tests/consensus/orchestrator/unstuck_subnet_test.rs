@@ -66,14 +66,13 @@ fn test(test_env: TestEnv) {
     info!(logger, "node2: {:?}", nodes[1].get_ip_addr());
     info!(logger, "node3: {:?}", nodes[2].get_ip_addr());
 
-    let target_version =
-        get_guestos_update_img_version().expect("Failed to get target replica version");
+    let target_version = get_guestos_update_img_version();
     info!(logger, "Target version: {}", target_version);
 
     // Note: we're pulling a wrong URL on purpose to simulate a failed upgrade
-    let upgrade_url = get_guestos_initial_update_img_url().unwrap();
-    let sha256 = get_guestos_update_img_sha256().unwrap();
-    let guest_launch_measurements = get_guestos_initial_launch_measurements().unwrap();
+    let upgrade_url = get_guestos_initial_update_img_url();
+    let sha256 = get_guestos_update_img_sha256();
+    let guest_launch_measurements = get_guestos_initial_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
@@ -137,7 +136,7 @@ fn test(test_env: TestEnv) {
         sudo chmod --reference=. image.bin
         sudo chown --reference=. image.bin
         "#,
-        get_guestos_update_img_url().unwrap(),
+        get_guestos_update_img_url(),
     );
     for n in &nodes {
         let s = n

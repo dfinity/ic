@@ -64,9 +64,9 @@ fn test(env: TestEnv) {
     let original_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let target_version = get_guestos_update_img_version().expect("target IC version");
+    let target_version = get_guestos_update_img_version();
 
-    let upgrade_url = get_guestos_update_img_url().expect("no image URL");
+    let upgrade_url = get_guestos_update_img_url();
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:
@@ -86,13 +86,13 @@ fn test(env: TestEnv) {
         &nns_node,
         &target_version,
         release_package_urls,
-        get_guestos_update_img_sha256().expect("no SHA256 hash"),
-        get_guestos_launch_measurements().expect("no launch measurements"),
+        get_guestos_update_img_sha256(),
+        get_guestos_launch_measurements(),
         &logger,
     ));
 
     info!(logger, "Proposing to upgrade the subnet replica version");
-    let target_version = get_guestos_update_img_version().unwrap();
+    let target_version = get_guestos_update_img_version();
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
         &target_version,

@@ -103,14 +103,13 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version().expect("tip-of-branch IC version");
-    let target_version = get_guestos_update_img_version().expect("target IC version");
+    let binary_version = get_current_branch_version();
+    let target_version = get_guestos_update_img_version();
 
     // Bless target version
-    let sha256 = get_guestos_update_img_sha256().unwrap();
-    let upgrade_url = get_guestos_update_img_url().unwrap();
-    let guest_launch_measurements =
-        get_guestos_launch_measurements().expect("Failed to get guest launch measurements");
+    let sha256 = get_guestos_update_img_sha256();
+    let upgrade_url = get_guestos_update_img_url();
+    let guest_launch_measurements = get_guestos_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,

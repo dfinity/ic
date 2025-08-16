@@ -95,7 +95,7 @@ pub fn init_ic(
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
-    let replica_version = get_guestos_img_version()?;
+    let replica_version = get_guestos_img_version();
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -177,9 +177,9 @@ pub fn init_ic(
 
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
-        get_guestos_initial_update_img_sha256()?,
-        get_guestos_initial_update_img_url()?,
-        get_guestos_initial_launch_measurements()?,
+        get_guestos_initial_update_img_sha256(),
+        get_guestos_initial_update_img_url(),
+        get_guestos_initial_launch_measurements(),
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -553,8 +553,8 @@ pub fn setup_nested_vms(
         for node in nodes {
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
-                let url = get_setupos_img_url()?;
-                let hash = get_setupos_img_sha256()?;
+                let url = get_setupos_img_url();
+                let hash = get_setupos_img_sha256();
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =

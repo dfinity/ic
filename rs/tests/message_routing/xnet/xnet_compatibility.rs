@@ -171,16 +171,16 @@ pub async fn test_async(env: TestEnv) {
     // The test definition should specify `uses_guestos_mainnet_img` to choose
     // the mainnet image as the initial image, and `uses_guestos_update` to
     // choose the branch image as the upgrade target.
-    let mainnet_version = get_guestos_img_version().expect("initial IC version");
-    let branch_version = get_guestos_update_img_version().expect("target IC version");
+    let mainnet_version = get_guestos_img_version();
+    let branch_version = get_guestos_update_img_version();
 
     let (upgrade_subnet_id, _, upgrade_node) = app_subnets.first().unwrap();
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = get_guestos_update_img_sha256().unwrap();
-    let upgrade_url = get_guestos_update_img_url().unwrap();
-    let guest_launch_measurements = get_guestos_launch_measurements().unwrap();
+    let sha256 = get_guestos_update_img_sha256();
+    let upgrade_url = get_guestos_update_img_url();
+    let guest_launch_measurements = get_guestos_launch_measurements();
     bless_replica_version(
         &nns_node,
         &branch_version,

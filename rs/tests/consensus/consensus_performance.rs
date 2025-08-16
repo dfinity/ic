@@ -161,7 +161,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     )
     .unwrap();
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = get_current_branch_version().expect("tip-of-branch IC version");
+        let branch_version = get_current_branch_version();
 
         rt.block_on(persist_metrics(
             branch_version,
