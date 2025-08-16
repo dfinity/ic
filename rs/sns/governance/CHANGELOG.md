@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-11: Proposal 137819
+
+http://dashboard.internetcomputer.org/proposal/137819
+
+## Fixed
+
+* Fixed a bug with the topic follower index.
+
+
 # 2025-08-01: Proposal 137687
 
 http://dashboard.internetcomputer.org/proposal/137687

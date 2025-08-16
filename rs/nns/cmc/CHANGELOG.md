@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-15: Proposal 137918
+
+http://dashboard.internetcomputer.org/proposal/137918
+
+## Changed
+
+The CMC's `set_authorized_subnetwork_list` method is now also callable by the Subnet Rental Canister, in addition to the NNS Governance Canister.
+
+
 # 2025-07-25: Proposal 137583
 
 http://dashboard.internetcomputer.org/proposal/137583
