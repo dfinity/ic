@@ -31,6 +31,7 @@ pub mod v1 {
                 ErrorCodePublic::CanisterNotFound => ErrorCode::CanisterNotFound,
                 ErrorCodePublic::CanisterSnapshotNotFound => ErrorCode::CanisterSnapshotNotFound,
                 ErrorCodePublic::CanisterSnapshotImmutable => ErrorCode::CanisterSnapshotImmutable,
+                ErrorCodePublic::CanisterSnapshotMutable => ErrorCode::CanisterSnapshotMutable,
                 ErrorCodePublic::InsufficientMemoryAllocation => {
                     ErrorCode::InsufficientMemoryAllocation
                 }
@@ -104,6 +105,9 @@ pub mod v1 {
                 ErrorCodePublic::ReservedCyclesLimitIsTooLow => {
                     ErrorCode::ReservedCyclesLimitIsTooLow
                 }
+                ErrorCodePublic::CanisterSnapshotTransformFailed => {
+                    ErrorCode::CanisterSnapshotTransformFailed
+                }
                 ErrorCodePublic::DeadlineExpired => ErrorCode::DeadlineExpired,
                 ErrorCodePublic::ResponseDropped => ErrorCode::ResponseDropped,
             }
@@ -147,6 +151,7 @@ pub mod v1 {
                 ErrorCode::CanisterSnapshotImmutable => {
                     Ok(ErrorCodePublic::CanisterSnapshotImmutable)
                 }
+                ErrorCode::CanisterSnapshotMutable => Ok(ErrorCodePublic::CanisterSnapshotMutable),
                 ErrorCode::InsufficientMemoryAllocation => {
                     Ok(ErrorCodePublic::InsufficientMemoryAllocation)
                 }
@@ -237,6 +242,9 @@ pub mod v1 {
                 }
                 ErrorCode::ReservedCyclesLimitIsTooLow => {
                     Ok(ErrorCodePublic::ReservedCyclesLimitIsTooLow)
+                }
+                ErrorCode::CanisterSnapshotTransformFailed => {
+                    Ok(ErrorCodePublic::CanisterSnapshotTransformFailed)
                 }
                 ErrorCode::DeadlineExpired => Ok(ErrorCodePublic::DeadlineExpired),
                 ErrorCode::ResponseDropped => Ok(ErrorCodePublic::ResponseDropped),

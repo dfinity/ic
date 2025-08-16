@@ -26,7 +26,9 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
+use ic_wasm_types::{
+    CanisterModule, CanisterModuleImpl, MemoryMappableWasmFile, SnapshotMutability, WasmHash,
+};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom};
@@ -215,6 +217,9 @@ pub struct CanisterSnapshotBits {
     pub global_timer: Option<CanisterTimer>,
     /// The state of the low memory hook.
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
+    /// Whether this snapshot can be mutated via snapshot data upload.
+    /// Distinguishes `CanisterSnapshotImpl<()>` from `CanisterSnapshotImpl<Mutable>`.
+    pub is_partial: bool,
 }
 
 #[derive(Clone)]
@@ -2547,16 +2552,16 @@ where
     /// passing it into the function avoids fetching the file's metadata, which can
     /// be a relatively expensive operation when dealing with a large number of files.
     /// This is similar to providing the `module_hash` upfront to avoid recomputing it.
-    pub fn lazy_load_with_module_hash(
+    pub fn lazy_load_with_module_hash<Mut: SnapshotMutability>(
         self,
         module_hash: WasmHash,
         len: Option<usize>,
-    ) -> Result<CanisterModule, LayoutError>
+    ) -> Result<CanisterModuleImpl<Mut>, LayoutError>
     where
         T: Send + Sync + 'static,
     {
         let path = self.path.clone();
-        CanisterModule::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
+        CanisterModuleImpl::<Mut>::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
             LayoutError::IoError {
                 path,
                 message: "Failed to load wasm file lazily".to_string(),

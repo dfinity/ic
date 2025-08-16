@@ -315,9 +315,14 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     assert!(test.state().canister_snapshots.contains(&snapshot_id));
 
-    let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
+    let snapshot = test
+        .state()
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap()
+        .unwrap_left();
     assert_eq!(
-        *snapshot.canister_module(),
+        *snapshot.canister_module_impl(),
         test.canister_state(canister_id)
             .execution_state
             .as_ref()
@@ -418,9 +423,14 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
 
     assert!(test.state().canister_snapshots.contains(&snapshot_id));
 
-    let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
+    let snapshot = test
+        .state()
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap()
+        .unwrap_left();
     assert_eq!(
-        *snapshot.canister_module(),
+        *snapshot.canister_module_impl(),
         test.canister_state(canister_id)
             .execution_state
             .as_ref()

@@ -624,6 +624,7 @@ ed25519-dalek = { version = "2.1.1", features = [
     "pem",
     "hazmat",
 ] }
+either = "1.15"
 ethnum = { version = "1.3.2", features = ["serde"] }
 evm_rpc_types = { version = "2.0.0" }
 flate2 = "1.0.31"

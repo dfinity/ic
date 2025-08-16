@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/utils",
     "//rs/utils/thread",
     "//rs/utils/validate_eq",
+    "@crate_incdex//:either",
     "@crate_index//:bit-vec",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hex",

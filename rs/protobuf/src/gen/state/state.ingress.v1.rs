@@ -159,6 +159,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     CanisterSnapshotImmutable = 409,
+    CanisterSnapshotMutable = 410,
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -193,6 +194,7 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
+    CanisterSnapshotTransformFailed = 541,
     /// 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -229,6 +231,7 @@ impl ErrorCode {
             Self::UnknownManagementMessage => "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE",
             Self::InvalidManagementPayload => "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD",
             Self::CanisterSnapshotImmutable => "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE",
+            Self::CanisterSnapshotMutable => "ERROR_CODE_CANISTER_SNAPSHOT_MUTABLE",
             Self::CanisterTrapped => "ERROR_CODE_CANISTER_TRAPPED",
             Self::CanisterCalledTrap => "ERROR_CODE_CANISTER_CALLED_TRAP",
             Self::CanisterContractViolation => "ERROR_CODE_CANISTER_CONTRACT_VIOLATION",
@@ -283,6 +286,9 @@ impl ErrorCode {
                 "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
             }
             Self::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
+            Self::CanisterSnapshotTransformFailed => {
+                "ERROR_CODE_CANISTER_SNAPSHOT_TRANSFORM_FAILED"
+            }
             Self::DeadlineExpired => "ERROR_CODE_DEADLINE_EXPIRED",
             Self::ResponseDropped => "ERROR_CODE_RESPONSE_DROPPED",
         }
@@ -319,6 +325,7 @@ impl ErrorCode {
             "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE" => Some(Self::UnknownManagementMessage),
             "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD" => Some(Self::InvalidManagementPayload),
             "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE" => Some(Self::CanisterSnapshotImmutable),
+            "ERROR_CODE_CANISTER_SNAPSHOT_MUTABLE" => Some(Self::CanisterSnapshotMutable),
             "ERROR_CODE_CANISTER_TRAPPED" => Some(Self::CanisterTrapped),
             "ERROR_CODE_CANISTER_CALLED_TRAP" => Some(Self::CanisterCalledTrap),
             "ERROR_CODE_CANISTER_CONTRACT_VIOLATION" => Some(Self::CanisterContractViolation),
@@ -376,6 +383,9 @@ impl ErrorCode {
             }
             "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW" => {
                 Some(Self::ReservedCyclesLimitIsTooLow)
+            }
+            "ERROR_CODE_CANISTER_SNAPSHOT_TRANSFORM_FAILED" => {
+                Some(Self::CanisterSnapshotTransformFailed)
             }
             "ERROR_CODE_DEADLINE_EXPIRED" => Some(Self::DeadlineExpired),
             "ERROR_CODE_RESPONSE_DROPPED" => Some(Self::ResponseDropped),

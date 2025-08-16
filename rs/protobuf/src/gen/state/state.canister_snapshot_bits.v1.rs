@@ -44,4 +44,6 @@ pub struct CanisterSnapshotBits {
         tag = "14"
     )]
     pub source: i32,
+    #[prost(bool, tag = "15")]
+    pub is_partial: bool,
 }

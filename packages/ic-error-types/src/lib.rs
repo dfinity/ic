@@ -92,6 +92,7 @@ impl From<ErrorCode> for RejectCode {
             InvalidManagementPayload => CanisterReject,
             CanisterNotHostedBySubnet => CanisterReject,
             CanisterSnapshotImmutable => CanisterReject,
+            CanisterSnapshotMutable => CanisterReject,
             // Canister errors.
             CanisterInvalidController => CanisterError,
             CanisterFunctionNotFound => CanisterError,
@@ -127,6 +128,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterWasmModuleNotFound => CanisterError,
             CanisterAlreadyInstalled => CanisterError,
             CanisterWasmMemoryLimitExceeded => CanisterError,
+            CanisterSnapshotTransformFailed => CanisterError,
             // Response unknown (best-effort calls only).
             DeadlineExpired => SysUnknown,
             ResponseDropped => SysUnknown,
@@ -171,6 +173,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     CanisterSnapshotImmutable = 409,
+    CanisterSnapshotMutable = 410,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -206,6 +209,7 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
+    CanisterSnapshotTransformFailed = 541,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -327,8 +331,10 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
             | ErrorCode::CanisterSnapshotImmutable
+            | ErrorCode::CanisterSnapshotMutable
             | ErrorCode::CanisterHeapDeltaRateLimited
             | ErrorCode::CanisterWasmMemoryLimitExceeded
+            | ErrorCode::CanisterSnapshotTransformFailed
             | ErrorCode::DeadlineExpired
             | ErrorCode::ResponseDropped => false,
         }

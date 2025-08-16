@@ -7,6 +7,7 @@ use crate::{
     page_map::{Buffer, PageAllocatorFileDescriptor},
     CanisterState, NumWasmPages, PageMap,
 };
+use either::Either;
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
     Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
@@ -19,7 +20,7 @@ use ic_types::{
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use ic_wasm_types::CanisterModule;
+use ic_wasm_types::{CanisterModuleImpl, Mutable, SnapshotMutability};
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -34,6 +35,9 @@ use std::{
 pub struct CanisterSnapshots {
     #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+    /// Snapshots created via metadata upload, mutable via data upload.
+    #[validate_eq(CompareWithValidateEq)]
+    partial_snapshots: BTreeMap<SnapshotId, Arc<PartialCanisterSnapshot>>,
     /// The set of snapshots ids grouped by canisters.
     snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
     /// Memory usage of all canister snapshots in bytes.
@@ -45,7 +49,10 @@ pub struct CanisterSnapshots {
 }
 
 impl CanisterSnapshots {
-    pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
+    pub fn new(
+        snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+        partial_snapshots: BTreeMap<SnapshotId, Arc<PartialCanisterSnapshot>>,
+    ) -> Self {
         let mut snapshot_ids = BTreeMap::default();
         let mut memory_usage = NumBytes::from(0);
         for (snapshot_id, snapshot) in snapshots.iter() {
@@ -55,24 +62,62 @@ impl CanisterSnapshots {
             canister_snapshot_ids.insert(*snapshot_id);
             memory_usage += snapshot.size();
         }
+        for (snapshot_id, snapshot) in partial_snapshots.iter() {
+            let canister_id = snapshot_id.get_canister_id();
+            let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
+                snapshot_ids.entry(canister_id).or_default();
+            canister_snapshot_ids.insert(*snapshot_id);
+            memory_usage += snapshot.size();
+        }
         Self {
             snapshots,
+            partial_snapshots,
             snapshot_ids,
             memory_usage,
         }
     }
 
+    // During load_snapshot, an uploaded snapshot becomes immutable.
+    #[allow(clippy::result_unit_err)]
+    pub fn make_snapshot_immutable(&mut self, snapshot_id: SnapshotId) -> Result<(), ()> {
+        let snapshot = self.partial_snapshots.remove(&snapshot_id).ok_or(())?;
+        let snapshot = Arc::into_inner(snapshot).ok_or(())?.into_immutable();
+        self.snapshots.insert(snapshot_id, Arc::new(snapshot));
+        Ok(())
+    }
+
+    // If load_snapshot of an uploaded snapshot fails, it has to be reverted to mutable.
+    #[allow(clippy::result_unit_err)]
+    pub fn make_snapshot_mutable(&mut self, snapshot_id: SnapshotId) -> Result<(), ()> {
+        let snapshot = self.snapshots.remove(&snapshot_id).ok_or(())?;
+        let snapshot = Arc::into_inner(snapshot).ok_or(())?.into_mutable();
+        self.partial_snapshots
+            .insert(snapshot_id, Arc::new(snapshot));
+        Ok(())
+    }
+
+    pub fn strip_page_map_deltas(&mut self, fd_factory: &Arc<dyn PageAllocatorFileDescriptor>) {
+        for (_id, snapshot) in self.snapshots.iter_mut() {
+            let new_snapshot = Arc::make_mut(snapshot);
+            new_snapshot.strip_page_map_deltas(fd_factory);
+        }
+        for (_id, partial_snapshot) in self.partial_snapshots.iter_mut() {
+            let new_snapshot = Arc::make_mut(partial_snapshot);
+            new_snapshot.strip_page_map_deltas(fd_factory);
+        }
+    }
+
     /// Inserts a chunk into a snaphot's chunk store and updates its `size` and
     /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
-    /// Returns an error if the given snapshot ID could not be found. In this case,
-    /// the method has no effect.
+    /// Returns an error if the given snapshot ID could not be found or is immutable.
+    /// In this case, the method has no effect.
     #[allow(clippy::result_unit_err)]
     pub fn insert_chunk(
         &mut self,
         snapshot_id: SnapshotId,
         validated_chunk: ValidatedChunk,
     ) -> Result<(), ()> {
-        let snapshot = self.get_mut(snapshot_id).ok_or(())?;
+        let snapshot = self.get_partial_mut(snapshot_id).ok_or(())?;
         let snapshot_inner = Arc::make_mut(snapshot);
         snapshot_inner
             .chunk_store_mut()
@@ -87,27 +132,52 @@ impl CanisterSnapshots {
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
     ///
     /// External callers should call `ReplicatedState::take_snapshot` instead.
-    pub(crate) fn push(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) -> SnapshotId {
+    pub(crate) fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) {
         let canister_id = snapshot.canister_id();
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
         let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
         snapshot_ids.insert(snapshot_id);
-        snapshot_id
+    }
+
+    pub(crate) fn push_partial(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<PartialCanisterSnapshot>,
+    ) {
+        let canister_id = snapshot.canister_id();
+        self.memory_usage += snapshot.size();
+        self.partial_snapshots.insert(snapshot_id, snapshot);
+        let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
+        snapshot_ids.insert(snapshot_id);
     }
 
     /// Returns a reference of the canister snapshot identified by `snapshot_id`.
-    pub fn get(&self, snapshot_id: SnapshotId) -> Option<&Arc<CanisterSnapshot>> {
-        self.snapshots.get(&snapshot_id)
+    #[allow(clippy::type_complexity)]
+    pub fn get(
+        &self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<&Arc<CanisterSnapshotImpl<()>>, &Arc<CanisterSnapshotImpl<Mutable>>>> {
+        match self.snapshots.get(&snapshot_id) {
+            Some(x) => Some(Either::Left(x)),
+            None => match self.partial_snapshots.get(&snapshot_id) {
+                Some(x) => Some(Either::Right(x)),
+                None => None,
+            },
+        }
     }
 
     /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.
     pub fn get_mut(&mut self, snapshot_id: SnapshotId) -> Option<&mut Arc<CanisterSnapshot>> {
         self.snapshots.get_mut(&snapshot_id)
+    }
+
+    /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.
+    pub fn get_partial_mut(
+        &mut self,
+        snapshot_id: SnapshotId,
+    ) -> Option<&mut Arc<PartialCanisterSnapshot>> {
+        self.partial_snapshots.get_mut(&snapshot_id)
     }
 
     /// Iterate over all snapshots.
@@ -120,14 +190,35 @@ impl CanisterSnapshots {
         self.snapshots.iter_mut()
     }
 
+    /// Mutably iterate over all partial snapshots.
+    pub fn iter_mut_partial(
+        &mut self,
+    ) -> impl Iterator<Item = (&SnapshotId, &mut Arc<PartialCanisterSnapshot>)> {
+        self.partial_snapshots.iter_mut()
+    }
+
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
     /// External callers should call `ReplicatedState::delete_snapshot` instead.
-    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
-        let removed_snapshot = self.snapshots.remove(&snapshot_id);
+    pub(crate) fn remove(
+        &mut self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<Arc<CanisterSnapshot>, Arc<PartialCanisterSnapshot>>> {
+        let removed_snapshot = self
+            .snapshots
+            .remove(&snapshot_id)
+            .map(Either::Left)
+            .or_else(|| {
+                self.partial_snapshots
+                    .remove(&snapshot_id)
+                    .map(Either::Right)
+            });
+
         match removed_snapshot {
             Some(snapshot) => {
-                let canister_id = snapshot.canister_id();
+                let canister_id = snapshot
+                    .as_ref()
+                    .either(|s| s.canister_id(), |s| s.canister_id());
 
                 // The snapshot ID if present in the `self.snapshots`,
                 // must also be present in the `self.snapshot_ids`.
@@ -138,7 +229,7 @@ impl CanisterSnapshots {
                 if snapshot_ids.is_empty() {
                     self.snapshot_ids.remove(&canister_id);
                 }
-                self.memory_usage -= snapshot.size();
+                self.memory_usage -= snapshot.as_ref().either(|s| s.size(), |s| s.size());
 
                 Some(snapshot)
             }
@@ -154,6 +245,7 @@ impl CanisterSnapshots {
     ///
     /// External callers should call `ReplicatedState::delete_snapshots` instead.
     pub(crate) fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
+        // TODO: remove from partials
         let mut result = Vec::default();
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
@@ -167,22 +259,26 @@ impl CanisterSnapshots {
     }
 
     /// Selects the snapshots associated with the provided canister ID.
-    /// Returns a list of tuples containing the ID and the canister snapshot.
-    pub fn list_snapshots(
-        &self,
-        canister_id: CanisterId,
-    ) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
-        let mut snapshots = vec![];
+    /// Returns a list of tuples (snapshot_id, taken_at_timestamp, size).
+    pub fn list_snapshot_info(&self, canister_id: CanisterId) -> Vec<(SnapshotId, Time, NumBytes)> {
+        let mut res = vec![];
 
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
             for snapshot_id in snapshot_ids {
                 // The snapshot ID if present in the `self.snapshot_ids`,
                 // must also be present in the `self.snapshot`.
-                let snapshot = self.snapshots.get(snapshot_id).unwrap();
-                snapshots.push((*snapshot_id, snapshot.clone()))
+                let tuple = self
+                    .snapshots
+                    .get(snapshot_id)
+                    .map(|s| (*snapshot_id, *s.taken_at_timestamp(), s.size()));
+                let partial_tuple = self
+                    .partial_snapshots
+                    .get(snapshot_id)
+                    .map(|s| (*snapshot_id, *s.taken_at_timestamp(), s.size()));
+                res.push(tuple.or(partial_tuple).unwrap())
             }
         }
-        snapshots
+        res
     }
 
     /// Returns the number of snapshots stored for the given canister id.
@@ -207,8 +303,20 @@ impl CanisterSnapshots {
         let mut memory_size = NumBytes::new(0);
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
             for snapshot_id in snapshot_ids {
-                debug_assert!(self.snapshots.contains_key(snapshot_id));
-                memory_size += self.snapshots.get(snapshot_id).unwrap().size();
+                debug_assert!(
+                    self.snapshots.contains_key(snapshot_id)
+                        || self.partial_snapshots.contains_key(snapshot_id)
+                );
+                memory_size += self
+                    .snapshots
+                    .get(snapshot_id)
+                    .map(|x| x.size())
+                    .unwrap_or(0.into())
+                    + self
+                        .partial_snapshots
+                        .get(snapshot_id)
+                        .map(|x| x.size())
+                        .unwrap_or(0.into());
             }
         }
         memory_size
@@ -217,6 +325,11 @@ impl CanisterSnapshots {
     /// Returns true if snapshot ID can be found in the collection.
     pub fn contains(&self, snapshot_id: &SnapshotId) -> bool {
         self.snapshots.contains_key(snapshot_id)
+    }
+
+    /// Returns true if snapshot ID can be found in the collection of partial snapshots.
+    pub fn contains_partial(&self, snapshot_id: &SnapshotId) -> bool {
+        self.partial_snapshots.contains_key(snapshot_id)
     }
 
     /// Splits the `CanisterSnapshots` as part of subnet splitting phase 1.
@@ -253,6 +366,7 @@ impl CanisterSnapshots {
         // decisions whenever new fields are added.
         let CanisterSnapshots {
             snapshots: _,
+            partial_snapshots: _, // TODO
             snapshot_ids: _,
             memory_usage: _,
         } = self;
@@ -269,7 +383,12 @@ impl CanisterSnapshots {
             self.snapshots
                 .values()
                 .map(|snapshot| snapshot.size())
-                .sum::<NumBytes>(),
+                .sum::<NumBytes>()
+                + self
+                    .partial_snapshots
+                    .values()
+                    .map(|snapshot| snapshot.size())
+                    .sum::<NumBytes>(),
             self.memory_usage
         );
 
@@ -303,12 +422,15 @@ impl From<&PageMemory> for Memory {
     }
 }
 
+pub type ExecutionStateSnapshot = ExecutionStateSnapshotImpl<()>;
+pub type MutableExecutionStateSnapshot = ExecutionStateSnapshotImpl<Mutable>;
+
 /// Contains all information related to a canister's execution state.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct ExecutionStateSnapshot {
+pub struct ExecutionStateSnapshotImpl<T: SnapshotMutability> {
     /// The raw canister module.
     #[validate_eq(Ignore)]
-    pub wasm_binary: CanisterModule,
+    pub wasm_binary: CanisterModuleImpl<T>,
     /// The Wasm global variables.
     /// Note: The hypervisor instrumentations exports all global variables,
     /// including originally internal global variables.
@@ -326,9 +448,18 @@ pub struct ExecutionStateSnapshot {
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
+/// Immutable CanisterSnapshot
+pub type CanisterSnapshot = CanisterSnapshotImpl<()>;
+
+/// Snapshots created via metadata upload are incomplete, as they have no binary data.
+/// Such `PartialCanisterSnapshots` must be mutable (whereas regular snapshots should be immutable).
+/// Once the data upload is finished, a call to `load_snapshot` validates and transforms a
+/// `PartialCanisterSnapshot` into a regular, immutable `CanisterSnapshot`.
+pub type PartialCanisterSnapshot = CanisterSnapshotImpl<Mutable>;
+
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
-pub struct CanisterSnapshot {
+pub struct CanisterSnapshotImpl<T: SnapshotMutability> {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
     /// Whether this snapshot was created from the canister or uploaded manually.
@@ -345,31 +476,33 @@ pub struct CanisterSnapshot {
     #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
     #[validate_eq(CompareWithValidateEq)]
-    execution_snapshot: ExecutionStateSnapshot,
+    execution_snapshot: ExecutionStateSnapshotImpl<T>,
 }
 
+/// Impl specific to immutable snapshots.
 impl CanisterSnapshot {
-    pub fn new(
-        canister_id: CanisterId,
-        source: SnapshotSource,
-        taken_at_timestamp: Time,
-        canister_version: u64,
-        certified_data: Vec<u8>,
-        chunk_store: WasmChunkStore,
-        execution_snapshot: ExecutionStateSnapshot,
-        size: NumBytes,
-    ) -> CanisterSnapshot {
-        Self {
-            canister_id,
-            source,
-            taken_at_timestamp,
-            canister_version,
-            certified_data,
-            chunk_store,
-            execution_snapshot,
-            size,
-        }
-    }
+    // TODO
+    // pub fn new(
+    //     canister_id: CanisterId,
+    //     source: SnapshotSource,
+    //     taken_at_timestamp: Time,
+    //     canister_version: u64,
+    //     certified_data: Vec<u8>,
+    //     chunk_store: WasmChunkStore,
+    //     execution_snapshot: ExecutionStateSnapshot,
+    //     size: NumBytes,
+    // ) -> CanisterSnapshot {
+    //     Self {
+    //         canister_id,
+    //         source,
+    //         taken_at_timestamp,
+    //         canister_version,
+    //         certified_data,
+    //         chunk_store,
+    //         execution_snapshot,
+    //         size,
+    //     }
+    // }
 
     /// Creates a snapshot from a canister.
     ///
@@ -409,6 +542,36 @@ impl CanisterSnapshot {
         })
     }
 
+    pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
+        &self.execution_snapshot
+    }
+
+    /// Only use for reverting state after a failed load_snapshot.
+    pub fn into_mutable(self) -> CanisterSnapshotImpl<Mutable> {
+        CanisterSnapshotImpl {
+            canister_id: self.canister_id,
+            source: self.source,
+            taken_at_timestamp: self.taken_at_timestamp,
+            canister_version: self.canister_version,
+            size: self.size,
+            certified_data: self.certified_data,
+            chunk_store: self.chunk_store,
+            execution_snapshot: ExecutionStateSnapshotImpl {
+                wasm_binary: self.execution_snapshot.wasm_binary.into_mutable(),
+                exported_globals: self.execution_snapshot.exported_globals,
+                stable_memory: self.execution_snapshot.stable_memory,
+                wasm_memory: self.execution_snapshot.wasm_memory,
+                global_timer: self.execution_snapshot.global_timer,
+                on_low_wasm_memory_hook_status: self
+                    .execution_snapshot
+                    .on_low_wasm_memory_hook_status,
+            },
+        }
+    }
+}
+
+/// Impl specific to mutable/partial snapshots.
+impl PartialCanisterSnapshot {
     pub fn from_metadata(
         metadata: &ValidatedSnapshotMetadata,
         taken_at_timestamp: Time,
@@ -423,9 +586,12 @@ impl CanisterSnapshot {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
             size: metadata.wasm_memory_size,
         };
-        let execution_snapshot = ExecutionStateSnapshot {
-            // This is an invalid module now, but will be written to via `upload_canister_snapshot_data`.
-            wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size.get() as usize]),
+        let execution_snapshot = ExecutionStateSnapshotImpl::<Mutable> {
+            wasm_binary: CanisterModuleImpl::<Mutable>::new(vec![
+                0;
+                metadata.wasm_module_size.get()
+                    as usize
+            ]),
             exported_globals: metadata.exported_globals.clone(),
             stable_memory,
             wasm_memory,
@@ -442,6 +608,93 @@ impl CanisterSnapshot {
             certified_data: metadata.certified_data.clone(),
             chunk_store,
             execution_snapshot,
+        }
+    }
+
+    pub fn into_immutable(self) -> CanisterSnapshotImpl<()> {
+        CanisterSnapshotImpl {
+            canister_id: self.canister_id,
+            source: self.source,
+            taken_at_timestamp: self.taken_at_timestamp,
+            canister_version: self.canister_version,
+            size: self.size,
+            certified_data: self.certified_data,
+            chunk_store: self.chunk_store,
+            execution_snapshot: ExecutionStateSnapshotImpl {
+                wasm_binary: self.execution_snapshot.wasm_binary.into_immutable(),
+                exported_globals: self.execution_snapshot.exported_globals,
+                stable_memory: self.execution_snapshot.stable_memory,
+                wasm_memory: self.execution_snapshot.wasm_memory,
+                global_timer: self.execution_snapshot.global_timer,
+                on_low_wasm_memory_hook_status: self
+                    .execution_snapshot
+                    .on_low_wasm_memory_hook_status,
+            },
+        }
+    }
+
+    /// Overwrites the module bytes from `offset` with `chunk`.
+    /// Returns an error if `offset` + `chunk.len()` exceeds the
+    /// length of the module.
+    pub fn write_to_wasm_module(&mut self, offset: usize, chunk: &[u8]) -> Result<(), String> {
+        let end = offset.saturating_add(chunk.len());
+        if self.execution_snapshot.wasm_binary.len() < end {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds module length {}.",
+                offset,
+                chunk.len(),
+                self.execution_snapshot.wasm_binary.len()
+            ));
+        }
+        self.execution_snapshot.wasm_binary.write(chunk, offset)
+    }
+
+    /// Writes to one of the page-backed memories (main or stable).
+    /// Returns an error if `offset` + `chunk.len()` exceeds the
+    /// length of the memory.
+    pub fn write_to_page_memory(
+        page_memory: &mut PageMemory,
+        offset: u64,
+        chunk: &[u8],
+    ) -> Result<(), String> {
+        let max_size_bytes = page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES;
+        if max_size_bytes < chunk.len().saturating_add(offset as usize) {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds page memory length {}.",
+                offset,
+                chunk.len(),
+                max_size_bytes,
+            ));
+        }
+        let mut buffer = Buffer::new(page_memory.page_map.clone());
+        buffer.write(chunk, offset as usize);
+        let delta = buffer.dirty_pages().collect::<Vec<_>>();
+        page_memory.page_map.update(&delta);
+        Ok(())
+    }
+}
+
+/// Impl for both immutable and partial snapshots.
+impl<T: SnapshotMutability> CanisterSnapshotImpl<T> {
+    pub fn new(
+        canister_id: CanisterId,
+        source: SnapshotSource,
+        taken_at_timestamp: Time,
+        canister_version: u64,
+        certified_data: Vec<u8>,
+        chunk_store: WasmChunkStore,
+        execution_snapshot: ExecutionStateSnapshotImpl<T>,
+        size: NumBytes,
+    ) -> CanisterSnapshotImpl<T> {
+        Self {
+            canister_id,
+            source,
+            taken_at_timestamp,
+            canister_version,
+            certified_data,
+            chunk_store,
+            execution_snapshot,
+            size,
         }
     }
 
@@ -465,48 +718,86 @@ impl CanisterSnapshot {
         self.size
     }
 
-    pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
+    pub fn exported_globals(&self) -> &Vec<Global> {
+        &self.execution_snapshot.exported_globals
+    }
+
+    pub fn execution_snapshot_impl(&self) -> &ExecutionStateSnapshotImpl<T> {
         &self.execution_snapshot
     }
 
-    pub fn stable_memory(&self) -> &PageMemory {
-        &self.execution_snapshot.stable_memory
-    }
-
-    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
-        &mut self.execution_snapshot.stable_memory
+    pub fn canister_module_impl(&self) -> &CanisterModuleImpl<T> {
+        &self.execution_snapshot.wasm_binary
     }
 
     pub fn wasm_memory(&self) -> &PageMemory {
         &self.execution_snapshot.wasm_memory
     }
 
-    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
-        &mut self.execution_snapshot.wasm_memory
-    }
-
-    pub fn canister_module(&self) -> &CanisterModule {
-        &self.execution_snapshot.wasm_binary
-    }
-
-    pub fn exported_globals(&self) -> &Vec<Global> {
-        &self.execution_snapshot.exported_globals
+    pub fn stable_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.stable_memory
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
         &self.chunk_store
     }
 
-    pub fn certified_data(&self) -> &Vec<u8> {
-        &self.certified_data
+    // Needed for both mutable and immutable Snapshots because of page delta
+    // processing during checkpoints.
+    pub fn wasm_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.wasm_memory
     }
 
+    // Needed for both mutable and immutable Snapshots because of page delta
+    // processing during checkpoints.
+    pub fn stable_memory_mut(&mut self) -> &mut PageMemory {
+        &mut self.execution_snapshot.stable_memory
+    }
+
+    // Needed for both mutable and immutable Snapshots because of page delta
+    // processing during checkpoints.
     pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
         &mut self.chunk_store
     }
 
-    pub fn execution_snapshot_mut(&mut self) -> &mut ExecutionStateSnapshot {
-        &mut self.execution_snapshot
+    pub fn strip_page_map_deltas(&mut self, fd_factory: &Arc<dyn PageAllocatorFileDescriptor>) {
+        self.chunk_store
+            .page_map_mut()
+            .strip_all_deltas(Arc::clone(fd_factory));
+        self.execution_snapshot
+            .wasm_memory
+            .page_map
+            .strip_all_deltas(Arc::clone(fd_factory));
+        self.execution_snapshot
+            .stable_memory
+            .page_map
+            .strip_all_deltas(Arc::clone(fd_factory));
+    }
+
+    /// See state_manager/src/tip.rs:switch_to_checkpoint
+    pub fn switch_to_checkpoint(
+        &mut self,
+        chunk_store_page_map: &PageMap,
+        wasm_memory_page_map: &PageMap,
+        stable_memory_page_map: &PageMap,
+        wasm_binary: CanisterModuleImpl<T>,
+    ) {
+        self.chunk_store
+            .page_map_mut()
+            .switch_to_checkpoint(chunk_store_page_map);
+        self.execution_snapshot
+            .wasm_memory
+            .page_map
+            .switch_to_checkpoint(wasm_memory_page_map);
+        self.execution_snapshot
+            .stable_memory
+            .page_map
+            .switch_to_checkpoint(stable_memory_page_map);
+        self.execution_snapshot.wasm_binary = wasm_binary;
+    }
+
+    pub fn certified_data(&self) -> &Vec<u8> {
+        &self.certified_data
     }
 
     /// Returns the heap delta produced by this snapshot.
@@ -705,6 +996,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
+    use ic_wasm_types::CanisterModule;
     use maplit::{btreemap, btreeset};
 
     fn fake_canister_snapshot(
@@ -779,7 +1071,7 @@ mod tests {
         .into_iter()
         .map(|(i, s)| (i, Arc::new(s)))
         .collect();
-        let snapshot_manager = CanisterSnapshots::new(snapshots);
+        let snapshot_manager = CanisterSnapshots::new(snapshots, BTreeMap::new());
 
         let expected_snapshot_ids = btreemap! {
             canister_test_id(0) => btreeset!{
@@ -803,7 +1095,7 @@ mod tests {
             first_snapshot_id,
             Arc::<CanisterSnapshot>::new(first_snapshot),
         );
-        let mut snapshot_manager = CanisterSnapshots::new(snapshots);
+        let mut snapshot_manager = CanisterSnapshots::new(snapshots, BTreeMap::new());
         assert_eq!(snapshot_manager.snapshots.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
         assert_eq!(

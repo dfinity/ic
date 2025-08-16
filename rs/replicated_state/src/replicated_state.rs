@@ -6,7 +6,7 @@ use super::{
     },
 };
 use crate::{
-    canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshots, PartialCanisterSnapshot},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
@@ -14,6 +14,7 @@ use crate::{
     metadata_state::subnet_call_context_manager::PreSignatureStash,
     CanisterQueues, DroppedMessageMetrics,
 };
+use either::Either;
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
@@ -1299,27 +1300,23 @@ impl ReplicatedState {
     ///
     /// This function is used by the management canister's TakeSnapshot function to change the state.
     /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
-    pub fn take_snapshot(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) -> SnapshotId {
+    pub fn take_snapshot(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) {
         self.metadata
             .unflushed_checkpoint_ops
             .take_snapshot(snapshot.canister_id(), snapshot_id);
         self.canister_snapshots.push(snapshot_id, snapshot)
     }
 
-    /// Adds a new snapshot to the list of snapshots.
+    /// Adds a new snapshot to the list of partial snapshots.
     pub fn create_snapshot_from_metadata(
         &mut self,
         snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
+        snapshot: Arc<PartialCanisterSnapshot>,
     ) {
         self.metadata
             .unflushed_checkpoint_ops
             .create_snapshot_from_metadata(snapshot_id);
-        self.canister_snapshots.push(snapshot_id, snapshot);
+        self.canister_snapshots.push_partial(snapshot_id, snapshot);
     }
 
     /// This records a data upload event such that the data can be flushed to disk before a checkpoint.
@@ -1330,7 +1327,10 @@ impl ReplicatedState {
     }
 
     /// Delete a snapshot from the list of snapshots.
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+    pub fn delete_snapshot(
+        &mut self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<Arc<CanisterSnapshot>, Arc<PartialCanisterSnapshot>>> {
         let result = self.canister_snapshots.remove(snapshot_id);
         if result.is_some() {
             self.metadata

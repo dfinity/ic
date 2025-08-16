@@ -1560,14 +1560,14 @@ fn canister_snapshots_after_split() {
     assert_eq!(
         test.state()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
+            .list_snapshot_info(canister_id_1)
             .len(),
         0
     );
     assert_eq!(
         test.state()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
+            .list_snapshot_info(canister_id_2)
             .len(),
         0
     );
@@ -1593,14 +1593,14 @@ fn canister_snapshots_after_split() {
     assert_eq!(
         test.state()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
+            .list_snapshot_info(canister_id_1)
             .len(),
         1
     );
     assert_eq!(
         test.state()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
+            .list_snapshot_info(canister_id_2)
             .len(),
         1
     );
@@ -1645,14 +1645,14 @@ fn canister_snapshots_after_split() {
     assert_eq!(
         state_a
             .canister_snapshots
-            .list_snapshots(canister_id_1)
+            .list_snapshot_info(canister_id_1)
             .len(),
         1
     );
     assert_eq!(
         state_a
             .canister_snapshots
-            .list_snapshots(canister_id_2)
+            .list_snapshot_info(canister_id_2)
             .len(),
         0
     );
@@ -1660,14 +1660,14 @@ fn canister_snapshots_after_split() {
     assert_eq!(
         state_b
             .canister_snapshots
-            .list_snapshots(canister_id_2)
+            .list_snapshot_info(canister_id_2)
             .len(),
         1
     );
     assert_eq!(
         state_b
             .canister_snapshots
-            .list_snapshots(canister_id_1)
+            .list_snapshot_info(canister_id_1)
             .len(),
         0
     );

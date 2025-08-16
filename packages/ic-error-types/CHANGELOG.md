@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added 
+- `CanisterSnapshotMutable`
+- `CanisterSnapshotTransformFailed`
+
 # 0.2.0 - 2025-05-14
 
 ### Added

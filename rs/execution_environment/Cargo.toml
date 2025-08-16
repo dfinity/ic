@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+either = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
