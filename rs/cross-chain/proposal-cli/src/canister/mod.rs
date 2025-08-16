@@ -321,6 +321,34 @@ impl TargetCanister {
         const EMPTY_UPGRADE_ARGS: &str = "()";
         EMPTY_UPGRADE_ARGS.to_string()
     }
+
+    pub fn forum_discussion(&self) -> &str {
+        const NNS_UPDATES_AGGREGATION_THREAD: &str =
+            "\nForum discussion: https://forum.dfinity.org/t/nns-updates-aggregation-thread/23551\n";
+
+        match self {
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::LedgerSuiteOrchestrator
+            | TargetCanister::EvmRpc
+            | TargetCanister::ExchangeRateCanister
+            | TargetCanister::SolRpc => "",
+            TargetCanister::CyclesLedger
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger => NNS_UPDATES_AGGREGATION_THREAD,
+        }
+    }
 }
 
 impl FromStr for TargetCanister {

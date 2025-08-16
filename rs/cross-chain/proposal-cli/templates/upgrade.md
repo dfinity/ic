@@ -11,7 +11,7 @@ Upgrade args hash: `{{upgrade_args.args_sha256_hex()}}`
 Target canister: `{{canister_id}}`
 
 Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
-
+{{canister.forum_discussion()}}
 ---
 
 ## Motivation
