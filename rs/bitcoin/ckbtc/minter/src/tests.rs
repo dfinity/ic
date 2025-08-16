@@ -257,6 +257,7 @@ fn should_have_same_input_and_output_count() {
         vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
         minter_addr.clone(),
         fee_per_vbyte,
+        false,
     )
     .expect("failed to build a transaction");
 
@@ -304,6 +305,7 @@ fn test_min_change_amount() {
         ],
         minter_addr.clone(),
         fee_per_vbyte,
+        false,
     )
     .expect("failed to build a transaction");
     let change_value = 1;
@@ -374,6 +376,7 @@ fn test_no_dust_outputs() {
                 vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
                 minter_addr.clone(),
                 fee_per_vbyte,
+                false,
             ),
             Err(BuildTxError::DustOutput {
                 address: out2_addr.clone(),
@@ -389,6 +392,7 @@ fn test_no_dust_outputs() {
                 vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
                 minter_addr.clone(),
                 fee_per_vbyte,
+                false,
             ),
             Err(BuildTxError::DustOutput {
                 address: out2_addr.clone(),
@@ -421,6 +425,7 @@ fn test_no_dust_in_change_output() {
             vec![(out1_addr.clone(), utxo.value - change)],
             minter_addr.clone(),
             fee_per_vbyte,
+            false,
         )
         .expect("failed to build a transaction");
         let fee = evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
@@ -610,7 +615,8 @@ proptest! {
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address,
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
 
@@ -649,7 +655,8 @@ proptest! {
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
 
@@ -676,7 +683,8 @@ proptest! {
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address.clone(),
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
 
@@ -721,7 +729,8 @@ proptest! {
                 &mut utxos,
                 vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), total_value * 2)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                fee_per_vbyte
+            fee_per_vbyte,
+            false
             ).expect_err("build transaction should fail because the amount is too high"),
             BuildTxError::NotEnoughFunds
         );
@@ -732,7 +741,8 @@ proptest! {
                 &mut utxos,
                 vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), 1)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                fee_per_vbyte
+            fee_per_vbyte,
+            false
             ).expect_err("build transaction should fail because the amount is too low to pay the fee"),
             BuildTxError::AmountTooLow
         );
@@ -809,7 +819,8 @@ proptest! {
             &mut state.available_utxos,
             requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
             BitcoinAddress::P2wpkhV0(main_pkhash),
-            fee_per_vbyte
+            fee_per_vbyte,
+            false
         )
         .expect("failed to build transaction");
         let mut txids = vec![tx.txid()];
@@ -835,6 +846,7 @@ proptest! {
                 requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
                 BitcoinAddress::P2wpkhV0(main_pkhash),
                 fee_per_vbyte + 1000 * i as u64,
+                false
             )
             .expect("failed to build transaction");
 

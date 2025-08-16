@@ -179,6 +179,24 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
 
 /// This function is only called by update_events when the canister
 /// is compiled with the `self_check` feature (only used by debug build).
+pub fn record_event_v1(event: Event) {
+    // The timestamp below could be a source of non-reprodicibilty.
+    // However, this function is only used for the purpose of dumping
+    // stable memory after uploading v0 events from local file to the
+    // canister, and the memory dump is used in a canbench to measure
+    // instruction counts. So the actual value of timestamps shouldn't
+    // matter.
+    let bytes = encode_event(&event);
+    V1_EVENTS.with(|events| {
+        events
+            .borrow()
+            .append(&bytes)
+            .expect("failed to append an entry to the event log");
+    })
+}
+
+/// This function is only called by update_events when the canister
+/// is compiled with the `self_check` feature (only used by debug build).
 pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     // The timestamp below could be a source of non-reprodicibilty.
     // However, this function is only used for the purpose of dumping
