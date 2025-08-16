@@ -8,10 +8,9 @@ mod tests;
 mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject,
+    BitcoinReject, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
@@ -67,21 +66,17 @@ impl GetPayloadError {
     }
 }
 
+type AdapterClient = Box<
+    dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
+>;
+
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
-    bitcoin_mainnet_adapter_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
-    bitcoin_testnet_adapter_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
+    bitcoin_mainnet_adapter_client: AdapterClient,
+    bitcoin_testnet_adapter_client: AdapterClient,
+    dogecoin_mainnet_adapter_client: AdapterClient,
+    dogecoin_testnet_adapter_client: AdapterClient,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
     config: Config,
@@ -92,18 +87,10 @@ impl BitcoinPayloadBuilder {
     pub fn new(
         state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
-        bitcoin_mainnet_adapter_client: Box<
-            dyn RpcAdapterClient<
-                BitcoinAdapterRequestWrapper,
-                Response = BitcoinAdapterResponseWrapper,
-            >,
-        >,
-        bitcoin_testnet_adapter_client: Box<
-            dyn RpcAdapterClient<
-                BitcoinAdapterRequestWrapper,
-                Response = BitcoinAdapterResponseWrapper,
-            >,
-        >,
+        bitcoin_mainnet_adapter_client: AdapterClient,
+        bitcoin_testnet_adapter_client: AdapterClient,
+        dogecoin_mainnet_adapter_client: AdapterClient,
+        dogecoin_testnet_adapter_client: AdapterClient,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient + Send + Sync>,
         config: Config,
@@ -114,6 +101,8 @@ impl BitcoinPayloadBuilder {
             metrics: Arc::new(BitcoinPayloadBuilderMetrics::new(metrics_registry)),
             bitcoin_mainnet_adapter_client,
             bitcoin_testnet_adapter_client,
+            dogecoin_mainnet_adapter_client,
+            dogecoin_testnet_adapter_client,
             subnet_id,
             registry,
             config,
@@ -148,6 +137,10 @@ impl BitcoinPayloadBuilder {
             let adapter_client = match request.network() {
                 Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
                 Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
+                Network::DogecoinMainnet => &self.dogecoin_mainnet_adapter_client,
+                Network::DogecoinTestnet | Network::DogecoinRegtest => {
+                    &self.dogecoin_testnet_adapter_client
+                }
             };
 
             // Send request to the adapter.

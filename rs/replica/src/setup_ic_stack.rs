@@ -262,6 +262,8 @@ pub fn construct_ic_stack(
     let BitcoinAdapterClients {
         btc_testnet_client,
         btc_mainnet_client,
+        doge_testnet_client,
+        doge_mainnet_client,
     } = setup_bitcoin_adapter_clients(
         log.clone(),
         metrics_registry,
@@ -273,6 +275,8 @@ pub fn construct_ic_stack(
         metrics_registry,
         btc_mainnet_client,
         btc_testnet_client,
+        doge_mainnet_client,
+        doge_testnet_client,
         subnet_id,
         registry.clone(),
         config.bitcoin_payload_builder_config,
