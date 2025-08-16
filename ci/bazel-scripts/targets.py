@@ -92,7 +92,6 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     log("Calculating targets for the following {n} modified files:".format(n=len(modified_files)))
     for file in modified_files:
         log(file)
-    log("")
 
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
