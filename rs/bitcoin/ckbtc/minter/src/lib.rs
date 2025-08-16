@@ -2,7 +2,7 @@ use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
-use crate::reimbursement::InvalidTransactionError;
+use crate::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use crate::state::SubmittedWithdrawalRequests;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
@@ -294,7 +294,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
 fn reimburse_canceled_requests<R: CanisterRuntime>(
     state: &mut state::CkBtcMinterState,
     requests: BTreeSet<state::RetrieveBtcRequest>,
-    err: InvalidTransactionError,
+    reason: WithdrawalReimbursementReason,
     total_fee: u64,
     runtime: &R,
 ) {
@@ -306,8 +306,6 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
             if amount > 0 {
-                let reason =
-                    reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err.clone());
                 state::audit::reimburse_withdrawal(
                     state,
                     request.block_index,
@@ -410,7 +408,8 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
                 // is reasonable to charge a fee based on it.
                 let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
-                reimburse_canceled_requests(s, batch, err, fee, runtime);
+                let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
+                reimburse_canceled_requests(s, batch, reason, fee, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -851,10 +850,8 @@ pub async fn resubmit_transactions<
                         unreachable!("cancellation tx never has too many inputs!")
                     }
                 };
-                new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel {
-                    requests,
-                    reason: err,
-                };
+                let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
+                new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel { requests, reason };
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
