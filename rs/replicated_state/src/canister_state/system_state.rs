@@ -1,9 +1,6 @@
 mod call_context_manager;
 pub mod proto;
-mod task_queue;
 pub mod wasm_chunk_store;
-
-pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::{can_push, CanisterInput};
@@ -22,7 +19,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2,
+    LogVisibilityV2, OnLowWasmMemoryHookStatus,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
@@ -42,6 +39,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
+use num_traits::SaturatingSub;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -260,10 +258,7 @@ pub struct SystemState {
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: `Running`, `Stopping`, or `Stopped`.
     /// Different statuses allow for different behaviors on the `SystemState`.
-    ///
-    /// Must remain private, to ensure that the `CallContextManager` is consistent
-    /// with `queues`.
-    status: CanisterStatus,
+    pub status: CanisterStatus,
     /// Certified data blob allows canisters to certify parts of their state to
     /// securely answer queries from a single machine.
     ///
@@ -310,10 +305,6 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
-    /// Queue of tasks to be executed next. If a paused or aborted execution task is
-    /// present, it must be executed before any other tasks or messages.
-    pub task_queue: TaskQueue,
-
     /// Canister global timer.
     pub global_timer: CanisterTimer,
 
@@ -354,6 +345,498 @@ pub struct SystemState {
     pub environment_variables: EnvironmentVariables,
 }
 
+/// The id of a paused execution stored in the execution environment.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct PausedExecutionId(pub u64);
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ExecutionRoundTask {
+    /// A heartbeat task exists only within an execution round. It is never
+    /// serialized.
+    Heartbeat,
+    /// Canister global timer task.
+    /// The task exists only within an execution round, it never gets serialized.
+    GlobalTimer,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CanisterStatus {
+    Running(Running),
+    Stopping(Stopping),
+    Stopped(Stopped),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Running {
+    call_context_manager: CallContextManager,
+    /// A queue of execution tasks during a round, i.e. a heartbeat or a global timer.
+    task_queue: VecDeque<ExecutionRoundTask>,
+    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub(super) status: RunningStatus,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum RunningStatus {
+    Idle,
+    PausedMessageOrTask(PausedMessageOrTask),
+    AbortedMessageOrTask(AbortedMessageOrTask),
+    PausedInstallCode(PausedInstallCode),
+    AbortedInstallCode(AbortedInstallCode),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PausedMessageOrTask {
+    id: PausedExecutionId,
+    /// A copy of the message or task whose execution is being paused.
+    input: CanisterMessageOrTask,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AbortedMessageOrTask {
+    input: CanisterMessageOrTask,
+    /// The execution cost that has already been charged from the canister.
+    /// Retried execution does not have to pay for it again.
+    prepaid_execution_cycles: Cycles,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct PausedInstallCode(PausedExecutionId);
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AbortedInstallCode {
+    message: CanisterCall,
+    /// The call ID used by the subnet to identify long running install
+    /// code messages.
+    call_id: InstallCodeCallId,
+    /// The execution cost that has already been charged from the canister.
+    /// Retried execution does not have to pay for it again.
+    prepaid_execution_cycles: Cycles,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Stopping {
+    call_context_manager: CallContextManager,
+    /// Info about the messages that requested the canister to stop.
+    /// The reason this is a vec is because it's possible to receive
+    /// multiple requests to stop the canister while it is stopping. All
+    /// of them would be tracked here so that they can all get a response.
+    stop_contexts: Vec<StopCanisterContext>,
+    pub(super) status: StoppingStatus,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum StoppingStatus {
+    Idle,
+    PausedResponse(PausedResponse),
+    AbortedResponse(AbortedResponse),
+    PausedInstallCode(PausedInstallCode),
+    AbortedInstallCode(AbortedInstallCode),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PausedResponse {
+    id: PausedExecutionId,
+    /// A copy of the response whose execution is being paused.
+    response: Arc<Response>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AbortedResponse(Arc<Response>);
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Stopped {
+    pub(super) status: StoppedStatus,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum StoppedStatus {
+    Idle,
+    PausedInstallCode(PausedInstallCode),
+    AbortedInstallCode(AbortedInstallCode),
+}
+
+impl AbortedMessageOrTask {
+    fn to_aborted_response(self) -> Result<AbortedResponse, Option<CanisterCall>> {
+        match self.input {
+            CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+                Ok(AbortedResponse(response))
+            }
+            CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+                Err(Some(CanisterCall::Request(request)))
+            }
+            CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
+                Err(Some(CanisterCall::Ingress(ingress)))
+            }
+            CanisterMessageOrTask::Task(_) => Err(None),
+        }
+    }
+}
+
+impl AbortedResponse {
+    fn to_aborted_message_or_task(self) -> AbortedMessageOrTask {
+        AbortedMessageOrTask {
+            input: CanisterMessageOrTask::Message(CanisterMessage::Response(self.0)),
+            prepaid_execution_cycles: Cycles::zero(),
+        }
+    }
+}
+
+impl Running {
+    fn new_idle() -> Self {
+        Self {
+            call_context_manager: CallContextManager::default(),
+            task_queue: VecDeque::new(),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            status: RunningStatus::Idle,
+        }
+    }
+
+    /// Returns `CanisterTask::OnLowWasmMemory` if the condition on the low wasm memory hook is satisfied,
+    /// otherwise a heartbeat or a global timer task if one is scheduled.
+    pub fn pop_task(&mut self) -> Option<CanisterTask> {
+        if self.on_low_wasm_memory_hook_status.is_ready() {
+            self.on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Executed;
+            Some(CanisterTask::OnLowWasmMemory)
+        } else {
+            self.task_queue.pop_front().map(|task| match task {
+                ExecutionRoundTask::Heartbeat => CanisterTask::Heartbeat,
+                ExecutionRoundTask::GlobalTimer => CanisterTask::GlobalTimer,
+            })
+        }
+    }
+
+    pub fn to_stopping(
+        self,
+        stop_context: StopCanisterContext,
+    ) -> Result<(Stopping, Option<CanisterCall>), Self> {
+        // Try to convert `RunningStatus` to `StoppingStatus`.
+        let stopping_status = match self.status {
+            // Changing status with a paused task present is forbidden.
+            RunningStatus::PausedMessageOrTask(_) | RunningStatus::PausedInstallCode(_) => {
+                Err(self.status)
+            }
+            RunningStatus::Idle => Ok((StoppingStatus::Idle, None)),
+            RunningStatus::AbortedMessageOrTask(AbortedMessageOrTask {
+                input: CanisterMessageOrTask::Message(message),
+                ..
+            }) => match message {
+                // An aborted response is kept as is.
+                CanisterMessage::Response(response) => Ok((
+                    StoppingStatus::AbortedResponse(AbortedResponse(response)),
+                    None,
+                )),
+                // An aborted request is returned as a residual call for the caller to reject.
+                CanisterMessage::Request(request) => {
+                    Ok((StoppingStatus::Idle, Some(CanisterCall::Request(request))))
+                }
+                // An aborted ingress is returned as a residual call for the caller to reject.
+                CanisterMessage::Ingress(ingress) => {
+                    Ok((StoppingStatus::Idle, Some(CanisterCall::Ingress(ingress))))
+                }
+            },
+            // An aborted task doesn't need to be rejected and can be silently dropped.
+            RunningStatus::AbortedMessageOrTask(AbortedMessageOrTask {
+                input: CanisterMessageOrTask::Task(_),
+                ..
+            }) => Ok((StoppingStatus::Idle, None)),
+            RunningStatus::AbortedInstallCode(code) => {
+                Ok((StoppingStatus::AbortedInstallCode(code), None))
+            }
+        };
+
+        match stopping_status {
+            Ok((status, residual_call)) => Ok((
+                Stopping {
+                    call_context_manager: self.call_context_manager,
+                    stop_contexts: vec![stop_context],
+                    status,
+                },
+                residual_call,
+            )),
+            Err(status) => Err(Self { status, ..self }),
+        }
+    }
+}
+
+impl Stopping {
+    pub fn to_running(self) -> Result<(Running, Vec<StopCanisterContext>), Self> {
+        let running_status = match self.status {
+            // Changing the canister status with a paused task present is not allowed.
+            StoppingStatus::PausedResponse(_) | StoppingStatus::PausedInstallCode(_) => {
+                return Err(self);
+            }
+            StoppingStatus::Idle => RunningStatus::Idle,
+            StoppingStatus::AbortedResponse(response) => {
+                RunningStatus::AbortedMessageOrTask(response.to_aborted_message_or_task())
+            }
+            StoppingStatus::AbortedInstallCode(code) => RunningStatus::AbortedInstallCode(code),
+        };
+        let running = Running {
+            call_context_manager: self.call_context_manager,
+            task_queue: VecDeque::new(),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            status: running_status,
+        };
+        Ok((running, self.stop_contexts))
+    }
+
+    pub fn try_to_stopped(
+        mut self,
+        is_expired: impl Fn(&StopCanisterContext) -> bool,
+    ) -> Result<
+        (Stopped, Vec<StopCanisterContext>, Option<Arc<Response>>),
+        (Self, Vec<StopCanisterContext>),
+    > {
+        let mut expire_stop_contexts = || -> Vec<StopCanisterContext> {
+            let mut expired_stop_contexts = Vec::new();
+            self.stop_contexts.retain(|stop_context| {
+                if is_expired(stop_context) {
+                    expired_stop_contexts.push(stop_context.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            expired_stop_contexts
+        };
+
+        if self.call_context_manager.is_empty() {
+            // Canister is ready to stop.
+            match self.status {
+                // Changing the canister status with a paused task is not allowed.
+                StoppingStatus::PausedInstallCode(_) => {
+                    let expired_stop_contexts = expire_stop_contexts();
+                    Err((self, expired_stop_contexts))
+                }
+
+                // These cases should be unreachable since you can't have an empty call context manager
+                // and paused or aborted response at the same time. Without a callback it cannot be executed
+                // anyways so we should return it and stop the canister as usual.
+                StoppingStatus::PausedResponse(PausedResponse { response, .. })
+                | StoppingStatus::AbortedResponse(AbortedResponse(response)) => {
+                    Ok((Stopped::new_idle(), self.stop_contexts, Some(response)))
+                }
+
+                StoppingStatus::Idle => Ok((Stopped::new_idle(), self.stop_contexts, None)),
+                StoppingStatus::AbortedInstallCode(code) => Ok((
+                    Stopped {
+                        status: StoppedStatus::AbortedInstallCode(code),
+                    },
+                    self.stop_contexts,
+                    None,
+                )),
+            }
+        } else {
+            // Not ready to stop; return any stop contexts that have timed out.
+            let expired_stop_contexts = expire_stop_contexts();
+            Err((self, expired_stop_contexts))
+        }
+    }
+}
+
+impl Stopped {
+    fn new_idle() -> Self {
+        Self {
+            status: StoppedStatus::Idle,
+        }
+    }
+
+    pub fn to_running(self) -> Result<Running, Self> {
+        Ok(Running {
+            call_context_manager: CallContextManager::default(),
+            task_queue: VecDeque::new(),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            status: match self.status {
+                StoppedStatus::PausedInstallCode(_) => {
+                    return Err(self);
+                }
+                StoppedStatus::Idle => RunningStatus::Idle,
+                StoppedStatus::AbortedInstallCode(code) => RunningStatus::AbortedInstallCode(code),
+            },
+        })
+    }
+}
+
+impl CanisterStatus {
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    ///
+    /// Note: Since the subnet is started from a catch up package, paused executions
+    ///       indicate a serious bug. The case is handled anyway to prevent panicking.
+    pub(super) fn drop_in_progress_management_calls_after_split(&mut self) {
+        match self {
+            Self::Running(Running { ref mut status, .. }) => match status {
+                RunningStatus::PausedMessageOrTask(_) | RunningStatus::PausedInstallCode(_) => {
+                    debug_assert!(false, "There shouldn't be a paused execution or install code after a split in a running canister.");
+                }
+                RunningStatus::Idle | RunningStatus::AbortedMessageOrTask(_) => {}
+
+                // Remove aborted install code task.
+                RunningStatus::AbortedInstallCode(_) => {
+                    *status = RunningStatus::Idle;
+                }
+            },
+
+            Self::Stopped(Stopped { ref mut status }) => match status {
+                StoppedStatus::PausedInstallCode(_) => {
+                    debug_assert!(false, "There shouldn't be a paused install code after a split in a stopped canister.");
+                }
+
+                // Remove aborted install code task.
+                StoppedStatus::Idle | StoppedStatus::AbortedInstallCode(_) => {
+                    *status = StoppedStatus::Idle;
+                }
+            },
+
+            Self::Stopping(Stopping {
+                status,
+                call_context_manager,
+                ..
+            }) => {
+                let running_status = match status {
+                    StoppingStatus::PausedInstallCode(code) => {
+                        debug_assert!(false, "There shouldn't be a paused install code after a split in a stopping canister.");
+                        RunningStatus::PausedInstallCode(*code)
+                    }
+                    StoppingStatus::PausedResponse(PausedResponse { id, response }) => {
+                        debug_assert!(false, "There shouldn't be a paused response after a split in a stopping canister.");
+                        RunningStatus::PausedMessageOrTask(PausedMessageOrTask {
+                            id: *id,
+                            input: CanisterMessageOrTask::Message(CanisterMessage::Response(
+                                response.clone(),
+                            )),
+                        })
+                    }
+                    StoppingStatus::AbortedResponse(response) => {
+                        RunningStatus::AbortedMessageOrTask(
+                            response.clone().to_aborted_message_or_task(),
+                        )
+                    }
+
+                    // Remove aborted install code task.
+                    StoppingStatus::Idle | StoppingStatus::AbortedInstallCode(_) => {
+                        RunningStatus::Idle
+                    }
+                };
+
+                *self = CanisterStatus::Running(Running {
+                    call_context_manager: std::mem::take(call_context_manager),
+                    task_queue: VecDeque::new(),
+                    on_low_wasm_memory_hook_status:
+                        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+                    status: running_status,
+                });
+            }
+        }
+    }
+
+    pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        match self {
+            Self::Running(running) => running.on_low_wasm_memory_hook_status,
+            Self::Stopping(_) | Self::Stopped(_) => {
+                OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+            }
+        }
+    }
+}
+
+/// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
+///
+/// 1. In the case of `memory_allocation`
+///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+/// 2. Without memory allocation
+///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+///
+/// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
+pub fn is_low_wasm_memory_hook_condition_satisfied(
+    memory_usage: NumBytes,
+    wasm_memory_usage: NumBytes,
+    memory_allocation: Option<NumBytes>,
+    wasm_memory_limit: Option<NumBytes>,
+    wasm_memory_threshold: NumBytes,
+) -> bool {
+    // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
+    // limit is ignored for query methods, response callback handlers,
+    // global timers, heartbeats, and canister pre_upgrade.
+    let wasm_memory_limit =
+        wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
+
+    debug_assert!(
+        wasm_memory_usage <= memory_usage,
+        "Wasm memory usage {} is greater that memory usage {}.",
+        wasm_memory_usage,
+        memory_usage
+    );
+
+    let memory_usage_without_wasm_memory = memory_usage.saturating_sub(&wasm_memory_usage);
+
+    // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
+    // as min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit).
+    let wasm_capacity = memory_allocation.map_or_else(
+        || wasm_memory_limit,
+        |memory_allocation| {
+            std::cmp::min(
+                memory_allocation.saturating_sub(&memory_usage_without_wasm_memory),
+                wasm_memory_limit,
+            )
+        },
+    );
+
+    // Conceptually we can think that the remaining Wasm memory is
+    // equal to `wasm_capacity - wasm_memory_usage` and that should
+    // be compared with `wasm_memory_threshold` when checking for
+    // the condition for the hook. However, since `wasm_memory_limit`
+    // is ignored in some executions as stated above it is possible
+    // that `wasm_memory_usage` is greater than `wasm_capacity` to
+    // avoid overflowing subtraction we adopted inequality.
+    wasm_capacity < wasm_memory_usage + wasm_memory_threshold
+}
+
+/*
+    fn remove_aborted_install_code_task(&mut self) {
+        match self {
+            Self::Idle(IdleStatus {
+                paused_or_aborted_task: task @ Some(PausedOrAbortedTask::AbortedInstallCode(_)),
+                ..
+            })
+            | Self::Stopped {
+                paused_or_aborted_task: task @ Some(PausedOrAbortedTask::AbortedInstallCode(_)),
+            } => {
+                *task = None;
+            }
+            Self::Idle(_) | Self::Stopped { .. } => {}
+        }
+    }
+
+    fn paused_or_aborted_execution_input(&self) -> Option<&CanisterMessageOrTask> {
+        match self {
+            Self::Idle {
+                paused_or_aborted_task,
+                ..
+            }
+            | Self::Stopped {
+                paused_or_aborted_task,
+                ..
+            } => match paused_or_aborted_task {
+                PausedOrAbortedExecution::PausedExecution(PausedExecution { input, .. })
+                | PausedOrAbortedExecution::AbortedExecution(AbortedExecution { input, .. }) => {
+                    Some(input)
+                }
+            },
+        }
+    }
+*/
+
+/*
 /// A wrapper around the different canister statuses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
@@ -378,11 +861,12 @@ impl CanisterStatus {
         }
     }
 }
-
+*/
+/*
 /// The id of a paused execution stored in the execution environment.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PausedExecutionId(pub u64);
-
+*/
 /// Represents a task that needs to be executed before processing canister
 /// inputs.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -478,7 +962,7 @@ impl SystemState {
             controller,
             initial_cycles,
             freeze_threshold,
-            CanisterStatus::new_running(),
+            CanisterStatus::Running(Running::new_idle()),
             WasmChunkStore::new(fd_factory),
         )
     }
@@ -506,7 +990,6 @@ impl SystemState {
             status,
             certified_data: Default::default(),
             canister_metrics: CanisterMetrics::default(),
-            task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
             canister_history: CanisterHistory::default(),
@@ -534,7 +1017,6 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
@@ -562,7 +1044,6 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue,
             global_timer,
             canister_version,
             canister_history,
@@ -594,7 +1075,7 @@ impl SystemState {
             controller,
             initial_cycles,
             freeze_threshold,
-            CanisterStatus::new_running(),
+            CanisterStatus::Running(Running::new_idle()),
         )
     }
 
@@ -609,10 +1090,11 @@ impl SystemState {
             controller,
             initial_cycles,
             freeze_threshold,
-            CanisterStatus::Stopping {
+            CanisterStatus::Stopping(Stopping {
                 call_context_manager: CallContextManager::default(),
-                stop_contexts: Vec::default(),
-            },
+                stop_contexts: Vec::new(),
+                status: StoppingStatus::Idle,
+            }),
         )
     }
 
@@ -627,7 +1109,7 @@ impl SystemState {
             controller,
             initial_cycles,
             freeze_threshold,
-            CanisterStatus::Stopped,
+            CanisterStatus::Stopped(Stopped::new_idle()),
         )
     }
 
@@ -769,14 +1251,15 @@ impl SystemState {
     /// canister.
     pub fn call_context_manager(&self) -> Option<&CallContextManager> {
         match &self.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => Some(call_context_manager),
-            CanisterStatus::Stopping {
+            CanisterStatus::Running(Running {
                 call_context_manager,
                 ..
-            } => Some(call_context_manager),
-            CanisterStatus::Stopped => None,
+            })
+            | CanisterStatus::Stopping(Stopping {
+                call_context_manager,
+                ..
+            }) => Some(call_context_manager),
+            CanisterStatus::Stopped(_) => None,
         }
     }
 
@@ -1035,14 +1518,14 @@ impl SystemState {
 
         match (&msg, &self.status) {
             // Best-effort responses are silently dropped when stopped.
-            (RequestOrResponse::Response(response), CanisterStatus::Stopped)
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
                 if response.is_best_effort() =>
             {
                 Ok(false)
             }
 
             // Requests and guaranteed responses are both rejected when stopped.
-            (_, CanisterStatus::Stopped) => {
+            (_, CanisterStatus::Stopped { .. }) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
 
@@ -1054,22 +1537,20 @@ impl SystemState {
             // Everything else is accepted iff there is available memory and queue slots.
             (
                 _,
-                CanisterStatus::Running {
-                    call_context_manager,
-                },
-            )
-            | (
-                RequestOrResponse::Response(_),
-                CanisterStatus::Stopping {
+                CanisterStatus::Running(Running {
                     call_context_manager,
                     ..
-                },
+                })
+                | CanisterStatus::Stopping(Stopping {
+                    call_context_manager,
+                    ..
+                }),
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
                     if !should_enqueue_input(
                         response,
                         call_context_manager,
-                        self.aborted_or_paused_response(),
+                        self.paused_or_aborted_response(),
                     )
                     .map_err(|err| (err, msg.clone()))?
                     {
@@ -1118,140 +1599,25 @@ impl SystemState {
         &self.queues
     }
 
-    /// Transitions the canister into `Running` state. Returns the pending stop
-    /// contexts if the canister was previously in `Stopping` state.
-    pub fn start_canister(&mut self) -> Vec<StopCanisterContext> {
-        match &mut self.status {
-            CanisterStatus::Running { .. } => Vec::new(),
-
-            CanisterStatus::Stopping {
-                call_context_manager,
-                stop_contexts,
-            } => {
-                let stop_contexts = std::mem::take(stop_contexts);
-                self.status = CanisterStatus::Running {
-                    call_context_manager: std::mem::take(call_context_manager),
-                };
-                stop_contexts
-            }
-
-            CanisterStatus::Stopped => {
-                self.status = CanisterStatus::new_running();
-                Vec::new()
-            }
-        }
-    }
-
-    /// Transitions the canister into `Stopping` state.
-    ///
-    /// If the canister was `Running` or `Stopping`, remembers the stop context, so
-    /// that it can be responded to once the canister has fully stopped. If the
-    /// canister was already `Stopped`, returns the stop context.
-    pub fn begin_stopping(
-        &mut self,
-        stop_context: StopCanisterContext,
-    ) -> Option<StopCanisterContext> {
-        match &mut self.status {
-            // Return the stop context, nothing to do here.
-            CanisterStatus::Stopped => Some(stop_context),
-
-            CanisterStatus::Stopping {
-                ref mut stop_contexts,
-                ..
-            } => {
-                // Add the message so we can respond to it once the canister has fully stopped.
-                stop_contexts.push(stop_context);
-                None
-            }
-
-            CanisterStatus::Running {
-                call_context_manager,
-            } => {
-                // Transition the canister into the stopping state.
-                self.status = CanisterStatus::Stopping {
-                    call_context_manager: std::mem::take(call_context_manager),
-                    // Track the stop message to respond to it once the canister is fully stopped.
-                    stop_contexts: vec![stop_context],
-                };
-                None
-            }
-        }
-    }
-
-    /// Tries to transition a `Stopping` canister into the `Stopped` state. No-op if
-    /// the canister is `Running` or already `Stopped`.
-    ///
-    /// Returns a tuple of:
-    ///  * a boolean indicating whether the canister has stopped,
-    ///  * all stop contexts if the canister has stopped; or the expired stop
-    ///    contexts only if the canister is still stopping.
-    #[must_use]
-    pub fn try_stop_canister(
-        &mut self,
-        is_expired: impl Fn(&StopCanisterContext) -> bool,
-    ) -> (bool, Vec<StopCanisterContext>) {
-        match self.status {
-            // Canister is not stopping so we can skip it.
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => (false, Vec::new()),
-
-            // Canister is ready to stop.
-            CanisterStatus::Stopping {
-                ref call_context_manager,
-                ref mut stop_contexts,
-            } if call_context_manager.callbacks().is_empty()
-                && call_context_manager.call_contexts().is_empty() =>
-            {
-                let stop_contexts = std::mem::take(stop_contexts);
-
-                // Transition the canister to "stopped".
-                self.status = CanisterStatus::Stopped;
-
-                // Reply to all pending stop_canister requests.
-                (true, stop_contexts)
-            }
-
-            // Canister is stopping, but not yet ready to stop.
-            CanisterStatus::Stopping {
-                ref mut stop_contexts,
-                ..
-            } => {
-                // Return any stop contexts that have timed out.
-                let mut expired_stop_contexts = Vec::new();
-                stop_contexts.retain(|stop_context| {
-                    if is_expired(stop_context) {
-                        expired_stop_contexts.push(stop_context.clone());
-                        false
-                    } else {
-                        true
-                    }
-                });
-                (false, expired_stop_contexts)
-            }
-        }
-    }
-
     /// Tests whether the system state is ready to transition to `Stopped`.
     /// Only relevant for a `Stopping` system state.
     pub fn ready_to_stop(&self) -> bool {
         match &self.status {
-            CanisterStatus::Running { .. } => false,
-            CanisterStatus::Stopping {
+            CanisterStatus::Running(_) => false,
+            CanisterStatus::Stopping(Stopping {
                 call_context_manager,
                 ..
-            } => {
-                call_context_manager.callbacks().is_empty()
-                    && call_context_manager.call_contexts().is_empty()
-            }
-            CanisterStatus::Stopped => true,
+            }) => call_context_manager.is_empty(),
+            CanisterStatus::Stopped(_) => true,
         }
     }
 
     /// Returns the canister status as a `CanisterStatusType`.
     pub fn status(&self) -> CanisterStatusType {
         match self.status {
-            CanisterStatus::Running { .. } => CanisterStatusType::Running,
-            CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped => CanisterStatusType::Stopped,
+            CanisterStatus::Running(_) => CanisterStatusType::Running,
+            CanisterStatus::Stopping(_) => CanisterStatusType::Stopping,
+            CanisterStatus::Stopped(_) => CanisterStatusType::Stopped,
         }
     }
 
@@ -1263,40 +1629,9 @@ impl SystemState {
     /// Returns the canister status as a string.
     pub fn status_string(&self) -> &'static str {
         match self.status {
-            CanisterStatus::Running { .. } => "Running",
-            CanisterStatus::Stopping { .. } => "Stopping",
-            CanisterStatus::Stopped => "Stopped",
-        }
-    }
-
-    /// Silently discards in-progress subnet messages being executed by the
-    /// canister, in the second phase of a subnet split. This should only be called
-    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
-    /// have a matching call context.
-    ///
-    /// The other subnet (which must be *subnet A'*), produces reject responses (for
-    /// calls originating from canisters); and fails ingress messages (for calls
-    /// originating from ingress messages); for the matching subnet calls. This is
-    /// the only way to ensure consistency for messages that would otherwise be
-    /// executing on one subnet, but for which a response may only be produced by
-    /// another subnet.
-    pub fn drop_in_progress_management_calls_after_split(&mut self) {
-        // Remove aborted install code task.
-        self.task_queue.remove_aborted_install_code_task();
-
-        // Roll back `Stopping` canister states to `Running` and drop all their stop
-        // contexts (the calls corresponding to the dropped stop contexts will be
-        // rejected by subnet A').
-        match self.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
-            CanisterStatus::Stopping {
-                ref mut call_context_manager,
-                ..
-            } => {
-                self.status = CanisterStatus::Running {
-                    call_context_manager: std::mem::take(call_context_manager),
-                }
-            }
+            CanisterStatus::Running(_) => "Running",
+            CanisterStatus::Stopping(_) => "Stopping",
+            CanisterStatus::Stopped(_) => "Stopped",
         }
     }
 
@@ -1352,10 +1687,17 @@ impl SystemState {
     ) {
         // Bail out if the canister is not running.
         let call_context_manager = match &self.status {
-            CanisterStatus::Running {
+            CanisterStatus::Running(Running {
                 call_context_manager,
-            } => call_context_manager,
-            CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
+                ..
+            })
+            | CanisterStatus::Stopping(Stopping {
+                call_context_manager,
+                ..
+            }) => call_context_manager,
+            CanisterStatus::Stopped(_) => {
+                return;
+            }
         };
 
         let mut guaranteed_response_memory_usage =
@@ -1374,7 +1716,7 @@ impl SystemState {
                 match should_enqueue_input(
                     response,
                     call_context_manager,
-                    self.aborted_or_paused_response(),
+                    self.paused_or_aborted_response(),
                 ) {
                     // Safe to induct.
                     Ok(true) => {}
@@ -1462,13 +1804,13 @@ impl SystemState {
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) -> (usize, Vec<StateError>) {
-        if self.status == CanisterStatus::Stopped {
+        if matches!(self.status, CanisterStatus::Stopped(_)) {
             // Stopped canisters have no call context manager, so no callbacks.
             return (0, Vec::new());
         }
 
         let aborted_or_paused_callback_id = self
-            .aborted_or_paused_response()
+            .paused_or_aborted_response()
             .map(|response| response.originator_reply_callback);
 
         // Safe to unwrap because we just checked that the status is not `Stopped`.
@@ -1703,7 +2045,7 @@ impl SystemState {
         // Callbacks still awaiting a (potentially already enqueued) response.
         let pending_callbacks = self
             .call_context_manager()
-            .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
+            .map(|ccm| ccm.unresponded_callback_count(self.paused_or_aborted_response()))
             .unwrap_or_default();
 
         let input_queue_responses = self.queues.input_queues_response_count();
@@ -1721,7 +2063,7 @@ impl SystemState {
         let unresponded_call_contexts = self
             .call_context_manager()
             .map(|ccm| {
-                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
+                ccm.unresponded_canister_update_call_contexts(self.paused_or_aborted_request())
             })
             .unwrap_or_default();
 
@@ -1739,36 +2081,70 @@ impl SystemState {
 
         Ok(())
     }
-
-    /// Returns the aborted or paused `Response` at the head of the task queue, if
-    /// any.
-    fn aborted_or_paused_response(&self) -> Option<&Response> {
-        match self.task_queue.front() {
-            Some(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+    /*
+        /// Returns the aborted or paused `Response` at the head of the task queue, if
+        /// any.
+        fn aborted_or_paused_response(&self) -> Option<&Response> {
+            match self.task_queue.front() {
+                Some(ExecutionTask::AbortedExecution {
+                    input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                    ..
+                })
+                | Some(ExecutionTask::PausedExecution {
+                    input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                    ..
+                }) => Some(response),
+                _ => None,
+            }
+        }
+    */
+    /// Returns the paused or aborted `Response` if any in the canister status.
+    fn paused_or_aborted_response(&self) -> Option<&Response> {
+        match &self.status {
+            CanisterStatus::Running(Running {
+                status:
+                    RunningStatus::PausedMessageOrTask(PausedMessageOrTask {
+                        input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                        ..
+                    })
+                    | RunningStatus::AbortedMessageOrTask(AbortedMessageOrTask {
+                        input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                        ..
+                    }),
                 ..
             })
-            | Some(ExecutionTask::PausedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+            | CanisterStatus::Stopping(Stopping {
+                status:
+                    StoppingStatus::PausedResponse(PausedResponse { response, .. })
+                    | StoppingStatus::AbortedResponse(AbortedResponse(response)),
                 ..
-            }) => Some(response),
-            _ => None,
+            }) => Some(&**response),
+
+            CanisterStatus::Running(_)
+            | CanisterStatus::Stopping(_)
+            | CanisterStatus::Stopped(_) => None,
         }
     }
 
-    /// Returns the aborted or paused `Request` at the head of the task queue, if
-    /// any.
-    fn aborted_or_paused_request(&self) -> Option<&Request> {
-        match self.task_queue.front() {
-            Some(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+    /// Returns the paused or aborted `Request` if any in the canister status.
+    fn paused_or_aborted_request(&self) -> Option<&Request> {
+        match &self.status {
+            CanisterStatus::Running(Running {
+                status:
+                    RunningStatus::PausedMessageOrTask(PausedMessageOrTask {
+                        input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                        ..
+                    })
+                    | RunningStatus::AbortedMessageOrTask(AbortedMessageOrTask {
+                        input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                        ..
+                    }),
                 ..
-            })
-            | Some(ExecutionTask::PausedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
-                ..
-            }) => Some(request),
-            _ => None,
+            }) => Some(&**request),
+
+            CanisterStatus::Running(_)
+            | CanisterStatus::Stopping(_)
+            | CanisterStatus::Stopped(_) => None,
         }
     }
 
@@ -1786,10 +2162,14 @@ impl SystemState {
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
-        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
-            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-        } else {
-            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        let is_hook_condition_satisfied =
+            self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage);
+        match self.status {
+            CanisterStatus::Stopping(_) | CanisterStatus::Stopped(_) => {}
+            CanisterStatus::Running(Running {
+                ref mut on_low_wasm_memory_hook_status,
+                ..
+            }) => on_low_wasm_memory_hook_status.update(is_hook_condition_satisfied),
         }
     }
 
@@ -1918,15 +2298,15 @@ pub(crate) fn should_enqueue_input(
 /// `Running` or `Stopping`, `None` if `Stopped`.
 fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallContextManager> {
     match status {
-        CanisterStatus::Running {
-            call_context_manager,
-        }
-        | CanisterStatus::Stopping {
+        CanisterStatus::Running(Running {
             call_context_manager,
             ..
-        } => Some(call_context_manager),
-
-        CanisterStatus::Stopped => None,
+        })
+        | CanisterStatus::Stopping(Stopping {
+            call_context_manager,
+            ..
+        }) => Some(call_context_manager),
+        CanisterStatus::Stopped(_) => None,
     }
 }
 
@@ -2026,10 +2406,12 @@ pub mod testing {
 
         fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
             match &mut self.status {
-                CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+                CanisterStatus::Running(_) | CanisterStatus::Stopped(_) => {
                     panic!("Should never add_stop_context to a non-stopping canister.")
                 }
-                CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),
+                CanisterStatus::Stopping(Stopping { stop_contexts, .. }) => {
+                    stop_contexts.push(stop_context)
+                }
             }
         }
 
@@ -2069,14 +2451,13 @@ pub mod testing {
             memory_allocation: Default::default(),
             wasm_memory_threshold: Default::default(),
             freeze_threshold: Default::default(),
-            status: CanisterStatus::Stopped,
+            status: CanisterStatus::Stopped(Stopped::new_idle()),
             certified_data: Default::default(),
             canister_metrics: Default::default(),
             cycles_balance: Default::default(),
             ingress_induction_cycles_debit: Default::default(),
             reserved_balance: Default::default(),
             reserved_balance_limit: Default::default(),
-            task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: Default::default(),
             canister_history: Default::default(),
