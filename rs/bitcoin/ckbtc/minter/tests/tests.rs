@@ -1438,6 +1438,12 @@ impl CkBtcSetup {
             .unwrap();
     }
 
+    pub fn upgrade_with(&self, arg: Option<MinterArg>) {
+        self.env
+            .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&arg).unwrap())
+            .unwrap();
+    }
+
     pub fn enable_non_standard_tx(&self, enable: bool) {
         self.env
             .execute_ingress_as(
@@ -2626,8 +2632,14 @@ fn should_cancel_non_standard_transaction() {
 #[test]
 fn should_reimburse_withdrawals_in_non_standard_transaction() {
     let ckbtc = CkBtcSetup::new();
+    ckbtc.env.set_time(std::time::SystemTime::now());
     ckbtc.upload_mainnet_events();
-    ckbtc.upgrade(); //replay events to repopulate the minter's state
+    ckbtc.env.checkpointed_tick();
+    let upgrade_args = UpgradeArgs {
+        ecdsa_key_name: Some("master_ecdsa_public_key".to_string()),
+        ..Default::default()
+    };
+    ckbtc.upgrade_with(Some(MinterArg::Upgrade(Some(upgrade_args)))); //replay events to repopulate the minter's state
 
     // transaction 5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847
     // is non-standard end hence stuck
@@ -2640,14 +2652,34 @@ fn should_reimburse_withdrawals_in_non_standard_transaction() {
 
     ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
 
-    let mempool = ckbtc.mempool();
+    let mempool = ckbtc.tick_until("mempool contains a replacement transaction", 30, |ckbtc| {
+        // Need time for the canister to finish checking_invariants
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mempool = ckbtc.mempool();
+        (mempool.len() > 1).then_some(mempool)
+    });
+
+    assert_eq!(mempool.len(), 2);
+
     assert_eq!(
-        mempool.len(),
-        0,
-        "no transaction should appear when being reimbursed"
+        ckbtc.retrieve_btc_status_v2(2952170),
+        RetrieveBtcStatusV2::Unknown
     );
 
-    assert_eq!(ckbtc.retrieve_btc_status_v2(2952170), stuck_status);
+    for (_, tx) in mempool.iter() {
+        // assert_eq!(tx.input.len(), 1);
+        assert_eq!(tx.output.len(), 2);
+        ckbtc.finalize_transaction(tx);
+    }
+    for _ in 0..10 {
+        ckbtc.env.advance_time(Duration::from_secs(5));
+        ckbtc.env.tick();
+    }
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(2952170),
+        RetrieveBtcStatusV2::WillReimburse(_)
+    );
 }
 
 #[test]
