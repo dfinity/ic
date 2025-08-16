@@ -638,7 +638,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
             .map(|tx| tx.txid.to_string())
             .collect::<Vec<_>>())
     );
-    if state::read_state(|s| s.submitted_transactions.is_empty()) {
+    if !force_resubmit && state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
     }
 
