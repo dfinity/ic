@@ -285,6 +285,7 @@ def icos_build(
                 srcs = ["//ic-os/components/ovmf:ovmf_sev", boot_args, ":extracted_initrd.img", ":extracted_vmlinuz"],
                 visibility = visibility,
                 tools = ["//ic-os:sev-snp-measure"],
+                tags = ["manual"],
                 cmd = r"""
                     source $(execpath """ + boot_args + """)
                     # Create GuestLaunchMeasurements JSON
@@ -311,11 +312,13 @@ def icos_build(
     native.alias(
         name = "boot_args_template",
         actual = image_deps["boot_args_template"],
+        tags = ["manual"],
     )
 
     native.alias(
         name = "extra_boot_args_template",
         actual = image_deps["extra_boot_args_template"],
+        tags = ["manual"],
     )
 
     # -------------------- Assemble disk partitions ---------------

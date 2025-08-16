@@ -28,6 +28,7 @@ exports_files(
 
 write_info_file_var(
     name = "commit_timestamp_txt",
+    tags = ["manual"],
     varname = "STABLE_COMMIT_TIMESTAMP",
 )
 
