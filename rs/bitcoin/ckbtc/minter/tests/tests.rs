@@ -2604,13 +2604,14 @@ fn should_cancel_non_standard_transaction() {
 
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Unknown
+        RetrieveBtcStatusV2::Reimbursed(_)
     );
 
     let reimbursement_block_index = block_index + 1;
 
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
-    assert_eq!(ckbtc.balance_of(user), balance_before_withdrawal);
+    let margin = Nat::from(1111u64); // error margin for fees paid
+    assert!(ckbtc.balance_of(user) + margin > balance_before_withdrawal);
 
     ckbtc.minter_self_check();
     //TODO XC-450: cancel Bitcoin transaction + reimbursement flow

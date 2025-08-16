@@ -657,18 +657,6 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
                 .collect()
         });
 
-    state::read_state(|s| {
-        if s.submitted_transactions
-            .iter()
-            .any(|tx| matches!(tx.requests, SubmittedWithdrawalRequests::ToCancel { .. }))
-        {
-            panic!(
-                "[finalize_requests]: {maybe_finalized_transactions:?}, {:?}",
-                s.submitted_transactions
-            );
-        };
-    });
-
     if maybe_finalized_transactions.is_empty() {
         return;
     }
