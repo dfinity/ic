@@ -89,7 +89,7 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
         ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
     ).stdout.splitlines()
 
-    log("Calculating targets for the following {n} modified files:".format(n=len(modified_files)))
+    log("Calculating targets to test for the following {n} modified files:".format(n=len(modified_files)))
     for file in modified_files:
         log(file)
 
