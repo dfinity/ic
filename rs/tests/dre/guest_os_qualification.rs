@@ -11,6 +11,7 @@ use ic_system_test_driver::driver::{
 use ic_types::ReplicaVersion;
 use os_qualification_utils::{
     defs::QualificationExecutor,
+    mock_env_variables,
     steps::{
         ensure_elected_version::EnsureElectedVersion,
         retire_elected_version::RetireElectedVersions,
@@ -81,9 +82,11 @@ pub fn main() -> anyhow::Result<()> {
         target_version: target_version.clone(),
     };
 
+    // NOTE: This mocks the required IC OS image variables for testing.
+    mock_env_variables(&config);
+
     SystemTestGroup::new()
         .with_timeout_per_test(OVERALL_TIMEOUT)
-        // NOTE: This setup mocks the required IC OS image variables for testing.
         .with_setup(|env| os_qualification_utils::setup(env, config))
         .add_test(ic_system_test_driver::driver::dsl::TestFunction::new(
             "qualification",
