@@ -548,10 +548,6 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 }
             }
             Err(err) => {
-                ic_cdk::println!(
-                    "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
-                    err
-                );
                 log!(
                     P0,
                     "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
@@ -762,7 +758,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
         |old_txid, new_tx, reason| {
             state::mutate_state(|s| {
-                state::audit::replace_transaction(s, old_txid, new_tx, Some(reason), runtime);
+                state::audit::replace_transaction(s, old_txid, new_tx, reason, runtime);
             })
         },
         &IC_CANISTER_RUNTIME,
@@ -841,7 +837,6 @@ pub async fn resubmit_transactions<
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
                 replaced_reason = state::eventlog::ReplacedReason::ToCancel {
                     reason: reason.clone(),
-                    used_utxos: None,
                 };
                 new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel { requests, reason };
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
@@ -912,12 +907,6 @@ pub async fn resubmit_transactions<
                     &old_txid,
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
-                match &mut replaced_reason {
-                    state::eventlog::ReplacedReason::ToCancel { used_utxos, .. } => {
-                        *used_utxos = Some(input_utxos.clone())
-                    }
-                    state::eventlog::ReplacedReason::ToRetry => {}
-                }
                 let new_tx = state::SubmittedBtcTransaction {
                     requests: new_tx_requests,
                     used_utxos: input_utxos,
@@ -1167,13 +1156,7 @@ pub fn build_unsigned_transaction(
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
-    match build_unsigned_transaction_from_inputs(
-        &inputs,
-        outputs,
-        main_address,
-        fee_per_vbyte,
-        enable_non_standard_tx,
-    ) {
+    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte, enable_non_standard_tx) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case

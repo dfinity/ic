@@ -285,7 +285,7 @@ pub mod arbitrary {
     }
 
     fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
-        (any::<usize>(), any::<usize>()).prop_map(|(n, m)| {
+        (0..2000usize, 500..1000usize).prop_map(|(n, m)| {
             WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: n + m + 1,
@@ -298,11 +298,8 @@ pub mod arbitrary {
     fn replaced_reason() -> impl Strategy<Value = ReplacedReason> {
         prop_oneof![
             Just(ReplacedReason::ToRetry),
-            (
-                withdrawal_reimbursement_reason(),
-                option::of(pvec(utxo(amount()), 0..10_000))
-            )
-                .prop_map(|(reason, used_utxos)| ReplacedReason::ToCancel { reason, used_utxos })
+            withdrawal_reimbursement_reason()
+                .prop_map(|reason| ReplacedReason::ToCancel { reason })
         ]
     }
 
@@ -456,7 +453,8 @@ pub mod arbitrary {
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: any::<u64>(),
                     withdrawal_fee: option::of(withdrawal_fee()),
-                    reason: option::of(replaced_reason())
+                    reason: option::of(replaced_reason()),
+                    new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),
                 }),
                 prop_struct!(EventType::ConfirmedBtcTransaction { txid: txid() }),
                 prop_struct!(EventType::CheckedUtxo {

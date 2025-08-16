@@ -53,6 +53,7 @@ ic-nervous-system-collections-union-multi-map = { path = "../../nervous_system/c
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-stable-structures = { workspace = true }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-lock = { path = "../../nervous_system/lock" }
