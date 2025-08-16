@@ -5,6 +5,7 @@ use crate::{
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::RoundRobin;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
@@ -51,6 +52,7 @@ use std::{
     sync::Arc,
 };
 
+pub(crate) const MAX_PARALLELISM: usize = 16;
 pub const CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS: &str = "idkg_resolve_transcript_refs_error";
 
 #[derive(Clone, PartialEq, Debug)]
@@ -578,6 +580,24 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
     }
 
     (public_keys, pre_signatures)
+}
+
+pub(crate) struct IDkgSchedule<T> {
+    schedule: RoundRobin,
+    pub last_purge: RefCell<T>,
+}
+
+impl<T> IDkgSchedule<T> {
+    pub(crate) fn new(init: T) -> Self {
+        Self {
+            schedule: RoundRobin::default(),
+            last_purge: RefCell::new(init),
+        }
+    }
+
+    pub(crate) fn call_next<C>(&self, calls: &[&dyn Fn() -> Vec<C>]) -> Vec<C> {
+        self.schedule.call_next(calls)
+    }
 }
 
 /// Updates the latest purge height, and returns true if
