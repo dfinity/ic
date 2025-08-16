@@ -198,16 +198,12 @@ pub fn replace_transaction<R: CanisterRuntime>(
     mut reason: ReplacedReason,
     runtime: &R,
 ) {
-    // when reason is ToCancel, the used_utxos of new_tx must be persisted,
-    // otherwise we would have trouble recontruct this `new_tx` when replaying
-    // the persisted event, because it's used_utxos is actually different
-    // than the old tx that is in submitted_transactions in the state.
-    match &mut reason {
-        ReplacedReason::ToCancel { used_utxos, .. } => {
-            *used_utxos = Some(new_tx.used_utxos.clone())
-        }
-        ReplacedReason::ToRetry => {}
-    }
+    // when reason is ToCancel, the utxos of new_tx has to be persisted,
+    // because it is different than that of old_tx.
+    let new_utxos = match &mut reason {
+        ReplacedReason::ToCancel { .. } => Some(new_tx.used_utxos.clone()),
+        ReplacedReason::ToRetry => None,
+    };
     record_event(
         EventType::ReplacedBtcTransaction {
             old_txid,
@@ -222,6 +218,7 @@ pub fn replace_transaction<R: CanisterRuntime>(
                 .expect("bug: all replacement transactions must have the fee"),
             withdrawal_fee: new_tx.withdrawal_fee,
             reason: Some(reason),
+            new_utxos,
         },
         runtime,
     );

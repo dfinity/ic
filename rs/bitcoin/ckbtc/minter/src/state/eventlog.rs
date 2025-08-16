@@ -42,8 +42,6 @@ mod event {
         ToCancel {
             /// Reason why the old transaction has to be canceled.
             reason: WithdrawalReimbursementReason,
-            /// The utxos in the new transaction that cancels the old one.
-            used_utxos: Option<Vec<Utxo>>,
         },
     }
 
@@ -143,6 +141,11 @@ mod event {
             withdrawal_fee: Option<WithdrawalFee>,
             /// The reason why it was replaced
             reason: Option<ReplacedReason>,
+            /// The UTXOs of the new transaction. If not available, we'll use the same
+            /// UTXOs from the old transaction it replaces.
+            #[serde(rename = "new_utxos")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            new_utxos: Option<Vec<Utxo>>,
         },
 
         /// Indicates that the minter received enough confirmations for a bitcoin
@@ -389,8 +392,9 @@ pub fn replay<I: CheckInvariants>(
                 fee_per_vbyte,
                 withdrawal_fee,
                 reason,
+                new_utxos,
             } => {
-                let (prev_requests, prev_used_utxos) = match state
+                let (old_requests, old_utxos) = match state
                     .submitted_transactions
                     .iter()
                     .find(|tx| tx.txid == old_txid)
@@ -403,17 +407,16 @@ pub fn replay<I: CheckInvariants>(
                         )))
                     }
                 };
-                let (requests, used_utxos) = match reason {
-                    Some(ReplacedReason::ToCancel { reason, used_utxos }) => match prev_requests {
+                let requests = match reason {
+                    Some(ReplacedReason::ToCancel { reason }) => match old_requests {
                         SubmittedWithdrawalRequests::ToCancel { .. } => {
                             panic!("Cannot cancel a cancelation request")
                         }
-                        SubmittedWithdrawalRequests::ToConfirm { requests } => (
-                            SubmittedWithdrawalRequests::ToCancel { requests, reason },
-                            used_utxos.unwrap_or(prev_used_utxos),
-                        ),
+                        SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                            SubmittedWithdrawalRequests::ToCancel { requests, reason }
+                        }
                     },
-                    Some(ReplacedReason::ToRetry) | None => (prev_requests, prev_used_utxos),
+                    Some(ReplacedReason::ToRetry) | None => old_requests,
                 };
 
                 state.replace_transaction(
@@ -421,7 +424,7 @@ pub fn replay<I: CheckInvariants>(
                     SubmittedBtcTransaction {
                         txid: new_txid,
                         requests,
-                        used_utxos,
+                        used_utxos: new_utxos.unwrap_or(old_utxos),
                         change_output: Some(change_output),
                         submitted_at,
                         fee_per_vbyte: Some(fee_per_vbyte),

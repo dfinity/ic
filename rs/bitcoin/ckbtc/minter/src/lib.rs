@@ -822,7 +822,6 @@ pub async fn resubmit_transactions<
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
                 replaced_reason = state::eventlog::ReplacedReason::ToCancel {
                     reason: reason.clone(),
-                    used_utxos: None,
                 };
                 new_tx_requests = state::SubmittedWithdrawalRequests::ToCancel { requests, reason };
                 let outputs = vec![(main_address.clone(), retrieve_btc_min_amount)];
