@@ -119,6 +119,11 @@ impl<'a> Round<'a> {
         self
     }
 
+    pub fn with_blocks_to_notarize(mut self, n: u32) -> Self {
+        self.blocks_to_notarize = n;
+        self
+    }
+
     pub fn advance(&mut self) -> Height {
         self.pool.advance_round(
             self.max_replicas,
@@ -839,8 +844,8 @@ impl ConsensusPool for TestConsensusPool {
         self.pool.as_block_cache()
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        self.pool.build_block_chain(start, end)
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain> {
+        self.pool.build_block_chain(start_height, end)
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
