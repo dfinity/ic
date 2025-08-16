@@ -2522,6 +2522,9 @@ fn should_cancel_non_standard_transaction() {
     ckbtc.env.checkpointed_tick();
     ckbtc.upgrade();
 
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 100_000);
+
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
         RetrieveBtcStatusV2::Submitted { .. }
@@ -2561,6 +2564,10 @@ fn should_cancel_non_standard_transaction() {
 
     assert_eq!(cancel_tx.input.len(), 1);
     assert_eq!(cancel_tx.output.len(), 2);
+    assert_eq!(cancel_tx.output[0].value, 98_981,);
+    assert_eq!(cancel_tx.output[1].value, 300,);
+    let bitcoin_fee = deposit_value - cancel_tx.output.iter().map(|o| o.value).sum::<u64>();
+    assert_eq!(bitcoin_fee, 719);
     for output in &cancel_tx.output {
         assert_eq!(
             BtcAddress::from_script(&output.script_pubkey, BtcNetwork::Bitcoin).unwrap(),
@@ -2597,10 +2604,8 @@ fn should_cancel_non_standard_transaction() {
 
     ckbtc.finalize_transaction(&cancel_tx);
 
-    for _ in 0..10 {
-        ckbtc.env.advance_time(Duration::from_secs(5));
-        ckbtc.env.tick();
-    }
+    ckbtc.env.advance_time(Duration::from_secs(5));
+    ckbtc.env.tick();
 
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
