@@ -1,8 +1,8 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::Network;
-use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
+use bitcoin::{consensus::Decodable, Block, BlockHash};
 use clap::Parser;
+use ic_btc_adapter::AdapterNetwork;
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceGetSuccessorsResponse,
@@ -40,7 +40,7 @@ async fn setup_client(uds_path: PathBuf) -> BtcServiceClient<Channel> {
 #[clap(version = "0.0.0", author = "DFINITY team <team@dfinity.org>")]
 pub struct Cli {
     /// This field contains the path to the config file.
-    pub network: Network,
+    pub network: AdapterNetwork,
     pub uds_path: PathBuf,
 }
 
@@ -50,7 +50,7 @@ async fn main() {
     let interval_sleep_ms = Duration::from_millis(1000);
     let request_timeout_ms = Duration::from_millis(50);
 
-    let block_0 = genesis_block(cli.network);
+    let block_0 = cli.network.genesis_block_header();
     let mut total_processed_block_hashes: usize = 0;
     let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();

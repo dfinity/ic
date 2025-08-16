@@ -1,3 +1,9 @@
+use bitcoin::consensus::{Decodable, Encodable};
+use bitcoin::p2p::Magic;
+use ic_btc_validation::{HeaderStore, ValidateHeaderError};
+use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
+
 /// This const represents the default version that the adapter will support.
 /// This value will be used to filter out Bitcoin nodes that the adapter deems
 /// to far behind to interact with.
@@ -15,6 +21,196 @@ pub const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 64;
 
 /// This field contains the datatype used to store height of a Bitcoin block
 pub type BlockHeight = u32;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+/// AdapterNetwork selects between Bitcoin and Dogecoin Network.
+///
+/// The string representation for mainnet would be either "bitcoin" or "dogecoin".
+/// But for non-mainnet networks, they would have a prefix of either "bitcoin:" or "dogecoin:".
+///
+/// The parsing from string on the other hand favors Bitcoin network in order
+/// to maintain backward compatibility. It is only when a string fails to parse
+/// as a bitcoin network, it will try to parse as a Dogecoin network (with prefix "dogecoin:").
+///
+/// # Examples:
+///
+/// ```rust
+/// use ic_btc_adapter::AdapterNetwork;
+/// use std::str::FromStr;
+///
+/// let bitcoin_mainnet = AdapterNetwork::Bitcoin(bitcoin::Network::Bitcoin);
+/// let bitcoin_regtest = AdapterNetwork::Bitcoin(bitcoin::Network::Regtest);
+/// let dogecoin_mainnet = AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Dogecoin);
+/// let dogecoin_testnet = AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Testnet);
+///
+/// assert_eq!(bitcoin_mainnet.to_string(), "bitcoin");
+/// assert_eq!(bitcoin_regtest.to_string(), "bitcoin:regtest");
+/// assert_eq!(dogecoin_mainnet.to_string(), "dogecoin");
+/// assert_eq!(dogecoin_testnet.to_string(), "dogecoin:testnet");
+/// assert_eq!(AdapterNetwork::from_str("bitcoin"), Ok(bitcoin_mainnet));
+/// assert_eq!(AdapterNetwork::from_str("dogecoin"), Ok(dogecoin_mainnet));
+/// assert_eq!(AdapterNetwork::from_str("regtest"), Ok(bitcoin_regtest));
+/// assert_eq!(AdapterNetwork::from_str("bitcoin:regtest"), Ok(bitcoin_regtest));
+/// assert_eq!(AdapterNetwork::from_str("dogecoin:testnet"), Ok(dogecoin_testnet));
+/// assert!(matches!(AdapterNetwork::from_str("testnet4"), Ok(AdapterNetwork::Bitcoin(_))));
+/// assert!(matches!(AdapterNetwork::from_str("dogecoin:testnet4"), Err(_)));
+/// ```
+pub enum AdapterNetwork {
+    /// Bitcoin network.
+    Bitcoin(bitcoin::Network),
+    /// Dogecoin network.
+    Dogecoin(bitcoin::dogecoin::Network),
+}
+
+impl From<bitcoin::Network> for AdapterNetwork {
+    fn from(network: bitcoin::Network) -> Self {
+        Self::Bitcoin(network)
+    }
+}
+
+impl From<bitcoin::dogecoin::Network> for AdapterNetwork {
+    fn from(network: bitcoin::dogecoin::Network) -> Self {
+        Self::Dogecoin(network)
+    }
+}
+
+impl AdapterNetwork {
+    /// Return the network name in a format as explained above.
+    pub fn name(&self) -> String {
+        match self {
+            AdapterNetwork::Bitcoin(bitcoin::Network::Bitcoin) => "bitcoin".to_string(),
+            AdapterNetwork::Bitcoin(network) => format!("bitcoin:{network}"),
+            AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Dogecoin) => {
+                "dogecoin".to_string()
+            }
+            AdapterNetwork::Dogecoin(network) => format!("dogecoin:{network}"),
+        }
+    }
+    /// Call `magic()` function on the respective network.
+    pub fn magic(&self) -> Magic {
+        match self {
+            AdapterNetwork::Bitcoin(network) => network.magic(),
+            AdapterNetwork::Dogecoin(network) => network.magic(),
+        }
+    }
+    /// Call `genesis_block(network).header` function on the respective network.
+    pub fn genesis_block_header(&self) -> bitcoin::block::Header {
+        match self {
+            AdapterNetwork::Bitcoin(network) => {
+                bitcoin::blockdata::constants::genesis_block(network).header
+            }
+            AdapterNetwork::Dogecoin(network) => {
+                bitcoin::dogecoin::constants::genesis_block(network).header
+            }
+        }
+    }
+    /// Validate block header against the network type and known headers.
+    pub fn validate_header(
+        &self,
+        store: &impl HeaderStore,
+        header: &bitcoin::block::Header,
+    ) -> Result<(), ValidateHeaderError> {
+        match self {
+            AdapterNetwork::Bitcoin(network) => {
+                ic_btc_validation::validate_header(network, store, header)
+            }
+            AdapterNetwork::Dogecoin(_network) => {
+                // TODO(XC-422): use real dogecoin validation
+                Ok(())
+            }
+        }
+    }
+    /// Return the p2p protocol version.
+    pub fn p2p_protocol_version(&self) -> u32 {
+        match self {
+            AdapterNetwork::Bitcoin(_) => bitcoin::p2p::PROTOCOL_VERSION,
+            AdapterNetwork::Dogecoin(_) => 70015,
+        }
+    }
+}
+
+impl fmt::Display for AdapterNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.name(), f)
+    }
+}
+
+impl FromStr for AdapterNetwork {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // In parsing network names, we give priority to Bitcoin network.
+        // So both "testnet" and "bitcoin:testnet" will be parsed as bitcoin::Network::Testnet.
+        if let Ok(network) = bitcoin::Network::from_str(s) {
+            return Ok(network.into());
+        } else if s == "dogecoin" {
+            return Ok(bitcoin::dogecoin::Network::Dogecoin.into());
+        } else if let Some(s) = s.strip_prefix("dogecoin:") {
+            if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
+                return Ok(network.into());
+            }
+        } else if let Some(s) = s.strip_prefix("bitcoin:") {
+            if let Ok(network) = bitcoin::Network::from_str(s) {
+                return Ok(network.into());
+            }
+        }
+        Err(format!("unknown network name {s}"))
+    }
+}
+
+impl Serialize for AdapterNetwork {
+    fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for AdapterNetwork {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        AdapterNetwork::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+/// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
+pub trait BlockLike: Decodable + Encodable + Clone {
+    /// Return block hash.
+    fn block_hash(&self) -> bitcoin::BlockHash;
+    /// Compute merkle root.
+    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode>;
+    /// Check if the merkle root in block header matches what is computed.
+    fn check_merkle_root(&self) -> bool;
+    /// Return the block header.
+    fn header(&self) -> bitcoin::block::Header;
+}
+
+impl BlockLike for bitcoin::Block {
+    fn block_hash(&self) -> bitcoin::BlockHash {
+        bitcoin::Block::block_hash(self)
+    }
+    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
+        bitcoin::Block::compute_merkle_root(self)
+    }
+    fn check_merkle_root(&self) -> bool {
+        bitcoin::Block::check_merkle_root(self)
+    }
+    fn header(&self) -> bitcoin::block::Header {
+        self.header
+    }
+}
+
+impl BlockLike for bitcoin::dogecoin::Block {
+    fn block_hash(&self) -> bitcoin::BlockHash {
+        bitcoin::dogecoin::Block::block_hash(self)
+    }
+    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
+        bitcoin::dogecoin::Block::compute_merkle_root(self)
+    }
+    fn check_merkle_root(&self) -> bool {
+        bitcoin::dogecoin::Block::check_merkle_root(self)
+    }
+    fn header(&self) -> bitcoin::block::Header {
+        self.header
+    }
+}
 
 #[cfg(test)]
 pub mod test_common {
@@ -36,16 +232,16 @@ pub mod test_common {
     pub const BLOCK_2_ENCODED: &str = "010000004860eb18bf1b1620e37e9490fc8a427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36ef744ee42c316022c90f9bb0bc6649ffff001d08d2bd610101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d010bffffffff0100f2052a010000004341047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77ac00000000";
 
     /// This struct is used to capture Commands generated by managers.
-    pub struct TestChannel {
+    pub struct TestChannel<Network> {
         /// This field holds Commands that are generated by managers.
-        received_commands: VecDeque<Command>,
+        received_commands: VecDeque<Command<Network>>,
         /// The connections available for the test to interact with.
         available_connections: Vec<SocketAddr>,
         /// The addresses that disconnect was called on.
         disconnected_addresses: HashSet<SocketAddr>,
     }
 
-    impl TestChannel {
+    impl<Network> TestChannel<Network> {
         pub fn new(available_connections: Vec<SocketAddr>) -> Self {
             Self {
                 received_commands: VecDeque::new(),
@@ -55,16 +251,16 @@ pub mod test_common {
         }
     }
 
-    impl TestChannel {
+    impl<Network> TestChannel<Network> {
         pub fn command_count(&self) -> usize {
             self.received_commands.len()
         }
 
-        pub fn pop_front(&mut self) -> Option<Command> {
+        pub fn pop_front(&mut self) -> Option<Command<Network>> {
             self.received_commands.pop_front()
         }
 
-        pub fn pop_back(&mut self) -> Option<Command> {
+        pub fn pop_back(&mut self) -> Option<Command<Network>> {
             self.received_commands.pop_back()
         }
 
@@ -76,8 +272,8 @@ pub mod test_common {
         }
     }
 
-    impl Channel for TestChannel {
-        fn send(&mut self, command: Command) -> Result<(), ChannelError> {
+    impl<Network> Channel<Network> for TestChannel<Network> {
+        fn send(&mut self, command: Command<Network>) -> Result<(), ChannelError> {
             self.received_commands.push_back(command);
             Ok(())
         }

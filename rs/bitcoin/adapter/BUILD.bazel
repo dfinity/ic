@@ -7,7 +7,10 @@ rust_library(
         ["src/**"],
     ),
     crate_name = "ic_btc_adapter",
-    visibility = ["//rs/pocket_ic_server:__subpackages__"],
+    visibility = [
+        "//rs/bitcoin/adapter/test_utils:__subpackages__",
+        "//rs/pocket_ic_server:__subpackages__",
+    ],
     deps = [
         # Keep sorted.
         "//rs/bitcoin/service",
@@ -82,6 +85,7 @@ rust_binary(
     name = "adapter-stress-test",
     srcs = ["bin/adapter-stress-test.rs"],
     deps = [
+        ":adapter",
         "//rs/bitcoin/service",
         "@crate_index//:bitcoin",
         "@crate_index//:clap",

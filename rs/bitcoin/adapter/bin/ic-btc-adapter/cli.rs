@@ -55,7 +55,6 @@ impl Cli {
 pub mod test {
     use super::*;
     use crate::IncomingSource;
-    use bitcoin::Network;
     use std::io::Write;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -155,7 +154,7 @@ pub mod test {
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(config.network, Network::Bitcoin);
+        assert_eq!(config.network, bitcoin::Network::Bitcoin.into());
         assert_eq!(config.address_limits, (500, 2000));
         assert_eq!(config.dns_seeds.len(), 9);
         assert_eq!(config.socks_proxy, None);
@@ -171,7 +170,7 @@ pub mod test {
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(config.network, Network::Testnet);
+        assert_eq!(config.network, bitcoin::Network::Testnet.into());
         assert_eq!(config.address_limits, (100, 1000));
         assert_eq!(config.dns_seeds.len(), 4);
         assert_eq!(config.socks_proxy, None);
