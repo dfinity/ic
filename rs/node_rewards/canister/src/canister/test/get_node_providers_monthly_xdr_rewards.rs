@@ -131,7 +131,7 @@ fn setup_data_for_test_rewards_calculation(fake_registry: Arc<FakeRegistry>) {
 #[test]
 fn test_rewards_calculation() {
     let latest_version = 5;
-    let fake_registry = setup_thread_local_canister_for_test();
+    let (fake_registry, _) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry);
 
     let test_at_version =
@@ -270,7 +270,7 @@ fn update_node_rewards_table(
 
 #[test]
 fn test_get_node_providers_monthly_xdr_rewards_ignores_deleted_keys() {
-    let registry = setup_thread_local_canister_for_test();
+    let (registry, _) = setup_thread_local_canister_for_test();
     init_empty_registry(registry.clone());
 
     let node_operator = PrincipalId::new_user_test_id(1);
@@ -310,7 +310,7 @@ fn test_get_node_providers_monthly_xdr_rewards_ignores_deleted_keys() {
 
 #[test]
 fn test_get_node_providers_monthly_xdr_rewards_gen1() {
-    let registry = setup_thread_local_canister_for_test();
+    let (registry, _) = setup_thread_local_canister_for_test();
     init_empty_registry(registry.clone());
 
     let np1 = PrincipalId::new_user_test_id(1);
@@ -466,7 +466,7 @@ fn test_get_node_providers_monthly_xdr_rewards_gen1() {
 
 #[test]
 fn test_get_node_providers_monthly_xdr_rewards_type3() {
-    let registry = setup_thread_local_canister_for_test();
+    let (registry, _) = setup_thread_local_canister_for_test();
     init_empty_registry(registry.clone());
 
     let np1 = PrincipalId::new_user_test_id(1);

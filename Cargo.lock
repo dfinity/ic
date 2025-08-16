@@ -11974,21 +11974,20 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
+ "ic-node-rewards-canister-protobuf",
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
  "ic-stable-structures",
- "ic-state-machine-tests",
  "ic-types",
- "indexmap 2.10.0",
  "itertools 0.12.1",
  "maplit",
  "mockall",
  "pocket-ic",
+ "pretty_assertions",
  "prost 0.13.4",
  "rewards-calculation",
- "serde",
  "serde_json",
  "tokio",
 ]
@@ -11998,7 +11997,20 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk 0.17.2",
+ "serde",
+]
+
+[[package]]
+name = "ic-node-rewards-canister-protobuf"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-management-canister-types",
+ "ic-nervous-system-proto",
+ "ic-stable-structures",
+ "prost 0.13.4",
+ "rewards-calculation",
  "serde",
 ]
 
@@ -20794,6 +20806,7 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

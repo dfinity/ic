@@ -1,10 +1,12 @@
-use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
-use crate::KeyRange;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
+    SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
+};
+use ic_node_rewards_canister_protobuf::KeyRange;
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
 use rewards_calculation::rewards_calculator_results::DayUtc;
