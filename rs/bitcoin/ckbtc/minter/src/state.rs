@@ -91,7 +91,7 @@ pub enum SubmittedWithdrawalRequests {
     },
     ToCancel {
         requests: BTreeSet<RetrieveBtcRequest>,
-        reason: InvalidTransactionError,
+        reason: WithdrawalReimbursementReason,
     },
 }
 
@@ -493,7 +493,7 @@ pub enum ReimbursementReason {
 
 pub struct WithdrawalCancellation {
     pub fee: u64,
-    pub reason: InvalidTransactionError,
+    pub reason: WithdrawalReimbursementReason,
     pub requests: BTreeSet<RetrieveBtcRequest>,
 }
 
