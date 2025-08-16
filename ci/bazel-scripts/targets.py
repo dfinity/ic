@@ -31,7 +31,7 @@ PULL_REQUEST_BAZEL_TARGETS = "PULL_REQUEST_BAZEL_TARGETS"
 # in case any file is modified matching any of the following globs:
 all_targets_globs = ["*.bazel", "*.bzl", ".bazelrc", ".bazelversion", "mainnet-*-revisions.json", ".github/*"]
 
-def log_err(msg: str):
+def log(msg: str):
     print(msg, file=sys.stderr)
 
 def load_explicit_targets() -> dict[str, Set[str]]:
@@ -89,10 +89,10 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
         ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
     ).stdout.splitlines()
 
-    log_err("Calculating targets for the following {n} modified files:".format(n=len(modified_files)))
+    log("Calculating targets for the following {n} modified files:".format(n=len(modified_files)))
     for file in modified_files:
-        log_err(file)
-    log_err("")
+        log(file)
+    log("")
 
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
@@ -150,13 +150,13 @@ def main():
     # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
     query = f"({query}) except attr(tags, manual, //...)"
 
-    log_err(f"bazel query --keep_going '{query}'")
+    log(f"bazel query --keep_going '{query}'")
     result = subprocess.run(["bazel", "query", "--keep_going", query], stderr=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        log_err(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
+        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
         sys.exit(result.returncode)
 
 
