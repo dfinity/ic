@@ -1,9 +1,10 @@
 use crate::types::{Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
 use candid::CandidType;
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Display;
@@ -11,15 +12,40 @@ use std::fmt::Display;
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
 
-#[derive(
-    Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, CandidType, candid::Deserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, CandidType)]
 pub struct DayUtc(UnixTsNanos);
 
 impl From<UnixTsNanos> for DayUtc {
     fn from(value: UnixTsNanos) -> Self {
         let day_end = ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1;
         Self(day_end)
+    }
+}
+
+impl Serialize for DayUtc {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DayUtc {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let date = NaiveDate::parse_from_str(&s, "%d-%m-%Y").map_err(serde::de::Error::custom)?;
+        let unix_days = date
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| serde::de::Error::custom("Invalid time"))?
+            .and_utc()
+            .timestamp_nanos_opt()
+            .unwrap();
+
+        Ok(DayUtc::from(unix_days as u64))
     }
 }
 
@@ -79,7 +105,7 @@ impl DayUtc {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: SubnetId,
     pub subnet_assigned_fr: Percent,
@@ -93,11 +119,13 @@ pub struct NodeMetricsDaily {
     pub relative_fr: Percent,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum NodeStatus {
     Assigned { node_metrics: NodeMetricsDaily },
     Unassigned { extrapolated_fr: Percent },
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct DailyResults {
     pub day: DayUtc,
     pub node_status: NodeStatus,
@@ -107,6 +135,7 @@ pub struct DailyResults {
     pub adjusted_rewards: XDRPermyriad,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct NodeResults {
     pub node_id: NodeId,
     pub node_reward_type: NodeRewardType,
@@ -115,6 +144,7 @@ pub struct NodeResults {
     pub daily_results: Vec<DailyResults>,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct BaseRewards {
     pub node_reward_type: NodeRewardType,
     pub region: Region,
@@ -122,6 +152,7 @@ pub struct BaseRewards {
     pub daily: XDRPermyriad,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct DailyBaseRewardsType3 {
     pub day: DayUtc,
     pub region: Region,
@@ -131,6 +162,7 @@ pub struct DailyBaseRewardsType3 {
     pub value: XDRPermyriad,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: u64,
     pub base_rewards: Vec<BaseRewards>,

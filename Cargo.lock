@@ -11986,6 +11986,7 @@ dependencies = [
  "maplit",
  "mockall",
  "pocket-ic",
+ "pretty_assertions",
  "prost 0.13.4",
  "rewards-calculation",
  "serde",
@@ -20794,6 +20795,7 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
