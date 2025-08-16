@@ -1,22 +1,29 @@
 use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext, ReplicatedState,
+};
 use ic_types::{
     consensus::idkg::{
         self,
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
-        TranscriptAttributes, UnmaskedTranscriptWithAttributes,
+        HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgUIDGenerator,
+        PreSigId, TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
     crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, BinaryHeap},
+    sync::Arc,
+};
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -404,6 +411,181 @@ fn make_new_pre_signatures_if_needed_helper(
     }
 
     new_pre_signatures
+}
+
+/// Count the number of pre-signatures for each key ID in the given state,
+/// and all blocks above the state height.
+pub(super) fn count_pre_signatures_total(
+    state: &Labeled<Arc<ReplicatedState>>,
+    block_reader: &dyn IDkgBlockReader,
+) -> BTreeMap<IDkgMasterPublicKeyId, usize> {
+    let mut total = state
+        .get_ref()
+        .pre_signature_stashes()
+        .iter()
+        .map(|(key_id, stash)| (key_id.clone(), stash.pre_signatures.len()))
+        .collect::<BTreeMap<_, _>>();
+
+    block_reader
+        .iter_above(state.height())
+        .flat_map(|idkg| idkg.available_pre_signatures.values())
+        .for_each(|pre_sig| {
+            *total.entry(pre_sig.key_id()).or_default() += 1;
+        });
+
+    total
+}
+
+#[derive(Debug, Eq)]
+struct PrioritizedStash<'a> {
+    count: usize,
+    max: usize,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: &'a UnmaskedTranscriptWithAttributes,
+}
+
+impl PartialEq for PrioritizedStash<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.count * other.max == other.count * self.max
+    }
+}
+
+impl Ord for PrioritizedStash<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Handle zero max case: consider it "empty" (highest priority)
+        if self.max == 0 && other.max == 0 {
+            return Ordering::Equal;
+        } else if self.max == 0 {
+            return Ordering::Less;
+        } else if other.max == 0 {
+            return Ordering::Greater;
+        }
+
+        // Compare by cross-multiplying to avoid floating-point arithmetic
+        let self_ratio = self.count * other.max;
+        let other_ratio = other.count * self.max;
+
+        // Reverse the order to make the emptiest stash the greatest
+        other_ratio.cmp(&self_ratio)
+    }
+}
+
+impl PartialOrd for PrioritizedStash<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn start_pre_signature_in_creation(
+    key_id: &IDkgMasterPublicKeyId,
+    key_transcript: &UnmaskedTranscriptWithAttributes,
+    uid_generator: &mut IDkgUIDGenerator,
+) -> PreSignatureInCreation {
+    let registry_version = key_transcript.registry_version();
+    let subnet_nodes: Vec<_> = key_transcript.receivers().iter().copied().collect();
+    match key_id.inner() {
+        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
+            let kappa_config =
+                new_random_unmasked_config(key_id, &subnet_nodes, registry_version, uid_generator);
+            let lambda_config =
+                new_random_config(key_id, &subnet_nodes, registry_version, uid_generator);
+            PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
+                ecdsa_key_id.clone(),
+                kappa_config,
+                lambda_config,
+            ))
+        }
+        MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+            let blinder_config =
+                new_random_unmasked_config(key_id, &subnet_nodes, registry_version, uid_generator);
+            PreSignatureInCreation::Schnorr(TranscriptInCreation::new(
+                schnorr_key_id.clone(),
+                blinder_config,
+            ))
+        }
+        MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+            // vetKD does not have pre-signatures
+            unreachable!("Not an IDkg Key ID");
+        }
+    }
+}
+
+/// Creating new pre-signatures if necessary by updating pre_signatures_in_creation,
+/// considering currently available pre-signatures, pre-signatures in creation, and
+/// chain key configs.
+pub(super) fn make_new_pre_signatures_if_needed_new(
+    chain_key_config: &ChainKeyConfig,
+    idkg_payload: &mut idkg::IDkgPayload,
+    mut total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
+) {
+    idkg_payload
+        .available_pre_signatures
+        .values()
+        .for_each(|pre_sig| {
+            *total_pre_signatures.entry(pre_sig.key_id()).or_default() += 1;
+        });
+    idkg_payload
+        .pre_signatures_in_creation
+        .values()
+        .for_each(|pre_sig| {
+            *total_pre_signatures.entry(pre_sig.key_id()).or_default() += 1;
+        });
+
+    let mut min_heap = BinaryHeap::new();
+
+    for (key_id, key_transcript) in &idkg_payload.key_transcripts {
+        let Some(key_transcript) = key_transcript.current.as_ref() else {
+            continue;
+        };
+        let max_stash_size = chain_key_config
+            .key_config(key_id.inner())
+            .map(|config| config.pre_signatures_to_create_in_advance)
+            .unwrap_or_default();
+        min_heap.push(PrioritizedStash {
+            count: *total_pre_signatures.get(key_id).unwrap_or(&0),
+            max: max_stash_size as usize,
+            key_id: key_id.clone(),
+            key_transcript,
+        });
+    }
+
+    loop {
+        // There are no key transcipts to generate pre-signatures for
+        let Some(mut emptiest_stash) = min_heap.pop() else {
+            break;
+        };
+
+        // The emptiest stash is full -> all stashes are full
+        if emptiest_stash.count >= emptiest_stash.max {
+            break;
+        }
+
+        let max_capacity = chain_key_config
+            .max_parallel_pre_signature_transcripts_in_creation
+            .unwrap_or(20) as usize;
+        let available_pre_sig_capacity =
+            max_capacity.saturating_sub(idkg_payload.consumed_pre_sig_capacity());
+
+        // There isn't enough capacity to create a pre-signature of the highest
+        // priority. Note that there may be enough capacity to create a pre-signature
+        // of lower priority. However, we return and wait until enough capacity
+        // becomes available for the highest priority, so we don't starve their creation.
+        if emptiest_stash.key_id.required_pre_sig_capacity() > available_pre_sig_capacity {
+            return;
+        }
+
+        let uid_generator = &mut idkg_payload.uid_generator;
+        let pre_signature = start_pre_signature_in_creation(
+            &emptiest_stash.key_id,
+            emptiest_stash.key_transcript,
+            uid_generator,
+        );
+        idkg_payload
+            .pre_signatures_in_creation
+            .insert(uid_generator.next_pre_signature_id(), pre_signature);
+        emptiest_stash.count += 1;
+        min_heap.push(emptiest_stash);
+    }
 }
 
 /// Create a new masked random transcript config and advance the
@@ -1218,4 +1400,30 @@ pub(super) mod tests {
             pre_sig_ids[0]
         );
     }
+
+    /// Count the number of pre-signatures for each key ID in the given state,
+    /// and all blocks above the state height.
+    pub(super) fn count_pre_signatures_total(
+        state: &Labeled<Arc<ReplicatedState>>,
+        block_reader: &dyn IDkgBlockReader,
+    ) -> BTreeMap<IDkgMasterPublicKeyId, usize> {
+        let mut total = state
+            .get_ref()
+            .pre_signature_stashes()
+            .iter()
+            .map(|(key_id, stash)| (key_id.clone(), stash.pre_signatures.len()))
+            .collect::<BTreeMap<_, _>>();
+
+        block_reader
+            .iter_above(state.height())
+            .flat_map(|idkg| idkg.available_pre_signatures.values())
+            .for_each(|pre_sig| {
+                *total.entry(pre_sig.key_id()).or_default() += 1;
+            });
+
+        total
+    }
+
+    #[test]
+    fn test_count_pre_signatures_total() {}
 }

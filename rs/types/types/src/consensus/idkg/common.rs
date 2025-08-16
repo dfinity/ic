@@ -1,6 +1,8 @@
 //! Canister threshold transcripts and references related defininitions.
 use crate::{
-    consensus::idkg::{ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError},
+    consensus::idkg::{
+        ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError, IDkgPayload,
+    },
     crypto::{
         canister_threshold_sig::{
             error::{
@@ -670,6 +672,8 @@ pub trait IDkgBlockReader: Send + Sync {
         &self,
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError>;
+
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_>;
 }
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,

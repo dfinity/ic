@@ -92,6 +92,7 @@ pub enum IDkgPayloadValidationFailure {
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     NewSignatureBuildInputsError(BuildSignatureInputsError),
+    InvalidChainCacheError(InvalidChainCacheError),
 }
 
 #[derive(Debug)]
@@ -103,7 +104,6 @@ pub enum InvalidIDkgPayloadReason {
     // wrapper of other errors
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
-    InvalidChainCacheError(InvalidChainCacheError),
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
@@ -140,9 +140,9 @@ impl From<IDkgPayloadValidationFailure> for IDkgValidationError {
     }
 }
 
-impl From<InvalidChainCacheError> for InvalidIDkgPayloadReason {
+impl From<InvalidChainCacheError> for IDkgPayloadValidationFailure {
     fn from(err: InvalidChainCacheError) -> Self {
-        InvalidIDkgPayloadReason::InvalidChainCacheError(err)
+        IDkgPayloadValidationFailure::InvalidChainCacheError(err)
     }
 }
 
@@ -396,8 +396,12 @@ fn validate_data_payload(
                 parent_block.height()
             )
         });
-    let parent_chain = block_chain_cache(pool_reader, summary_block.height(), parent_block.clone())
-        .map_err(InvalidIDkgPayloadReason::from)?;
+    let start_height = context
+        .certified_height
+        .increment()
+        .min(summary_block.height());
+    let parent_chain = block_chain_cache(pool_reader, start_height, parent_block.clone())
+        .map_err(IDkgPayloadValidationFailure::from)?;
     let block_reader = IDkgBlockReaderImpl::new(parent_chain);
     let curr_height = parent_block.height().increment();
 
