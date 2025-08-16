@@ -30,17 +30,15 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::certification::Certification,
-    messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
-    },
+    messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
-use tokio::sync::watch;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
@@ -60,7 +58,7 @@ pub(crate) enum CallV3Response {
 #[derive(Clone)]
 struct SynchronousCallHandlerState {
     ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
@@ -131,11 +129,11 @@ pub(crate) fn new_router(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
-        delegation_from_nns,
+        nns_delegation_reader,
         ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
@@ -156,7 +154,7 @@ pub fn new_service(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
@@ -164,7 +162,7 @@ pub fn new_service(
         ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
     );
     BoxCloneService::new(router.into_service())
@@ -179,7 +177,7 @@ async fn call_sync_v3(
         metrics,
         ingress_message_certificate_timeout_seconds,
         state_reader,
-        delegation_from_nns,
+        nns_delegation_reader,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
@@ -202,7 +200,8 @@ async fn call_sync_v3(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = delegation_from_nns.borrow().clone();
+            let delegation_from_nns =
+                nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -307,7 +306,7 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
+    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {
