@@ -89,10 +89,10 @@ pub fn mock_transcript<R: RngCore + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: alg,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     }
 }
 
@@ -140,14 +140,16 @@ pub fn swap_two_dealings_in_transcript(
         .nodes
         .support_dealing_from_all_receivers(dealing_ba, params);
 
-    let mut transcript = transcript;
-
     assert!(transcript
         .verified_dealings
+        .as_ref()
+        .clone()
         .insert(a_idx, dealing_ba_signed)
         .is_some());
     assert!(transcript
         .verified_dealings
+        .as_ref()
+        .clone()
         .insert(b_idx, dealing_ab_signed)
         .is_some());
 
@@ -184,10 +186,10 @@ pub fn copy_dealing_in_transcript(
         .nodes
         .support_dealing_from_all_receivers(dealing_to, params);
 
-    let mut transcript = transcript;
-
     assert!(transcript
         .verified_dealings
+        .as_ref()
+        .clone()
         .insert(to_idx, dealing_to_signed)
         .is_some());
 
@@ -2553,10 +2555,10 @@ impl IDkgTranscriptBuilder {
             transcript_id: self.transcript_id,
             receivers: self.receivers,
             registry_version: self.registry_version,
-            verified_dealings: self.verified_dealings,
+            verified_dealings: Arc::new(self.verified_dealings),
             transcript_type: self.transcript_type,
             algorithm_id: self.algorithm_id,
-            internal_transcript_raw: self.internal_transcript_raw,
+            internal_transcript_raw: Arc::new(self.internal_transcript_raw),
         }
     }
 
@@ -2645,10 +2647,10 @@ impl IntoBuilder for IDkgTranscript {
             transcript_id: self.transcript_id,
             receivers: self.receivers,
             registry_version: self.registry_version,
-            verified_dealings: self.verified_dealings,
+            verified_dealings: self.verified_dealings.as_ref().clone(),
             transcript_type: self.transcript_type,
             algorithm_id: self.algorithm_id,
-            internal_transcript_raw: self.internal_transcript_raw,
+            internal_transcript_raw: self.internal_transcript_raw.to_vec(),
         }
     }
 }
@@ -2758,7 +2760,7 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
         .for_each(|index_to_corrupt| {
             corrupt_signed_dealing_for_one_receiver(
                 *index_to_corrupt,
-                &mut transcript.verified_dealings,
+                &mut transcript.verified_dealings.as_ref().clone(),
                 complainer_index,
                 rng,
             )

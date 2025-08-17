@@ -193,7 +193,7 @@ mod get_master_public_key_from_transcript {
         internal_transcript_raw: Vec<u8>,
     ) -> IDkgTranscript {
         IDkgTranscript {
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_id: dummy_transcript_id(),
             receivers: IDkgReceivers::new(set_of(&[NODE_1])).expect("failed to create receivers"),
             registry_version: REG_V1,

@@ -373,7 +373,7 @@ mod ensure_matching_transcript_ids_and_dealer_ids {
                 verified_dealings,
                 transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
                 algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                internal_transcript_raw: vec![],
+                internal_transcript_raw: Arc::new(vec![]),
             };
             let mut openings = BTreeMap::new();
             for (complaint_transcript_id, opening_ids) in self.complaint_transcript_ids {

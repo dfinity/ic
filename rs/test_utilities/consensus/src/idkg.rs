@@ -597,12 +597,12 @@ pub fn create_pre_sig_ref_with_height(
         transcript_id: key_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
             key_masked_id,
         )),
         algorithm_id: AlgorithmId::from(key_id.inner()),
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
     create_pre_sig_ref_with_args(caller, &receivers, key_unmasked, height, key_id)
 }
@@ -655,10 +655,10 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: kappa_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
     let kappa_unmasked_ref = UnmaskedTranscript::try_from((height, &kappa_unmasked)).unwrap();
     idkg_transcripts.insert(*kappa_unmasked_ref.as_ref(), kappa_unmasked);
@@ -667,10 +667,10 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: lambda_masked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
         algorithm_id,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
     let lambda_masked_ref = MaskedTranscript::try_from((height, &lambda_masked)).unwrap();
     idkg_transcripts.insert(*lambda_masked_ref.as_ref(), lambda_masked);
@@ -682,12 +682,12 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: kappa_unmasked_times_lambda_masked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_unmasked_id, lambda_masked_id),
         ),
         algorithm_id,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
     let kappa_unmasked_times_lambda_masked_ref =
         MaskedTranscript::try_from((height, &kappa_unmasked_times_lambda_masked)).unwrap();
@@ -700,12 +700,12 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: key_unmasked_times_lambda_masked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_unmasked_id, lambda_masked_id),
         ),
         algorithm_id,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
     let key_unmasked_times_lambda_masked_ref =
         MaskedTranscript::try_from((height, &key_unmasked_times_lambda_masked)).unwrap();
@@ -755,10 +755,10 @@ pub fn create_schnorr_pre_sig_ref_with_args(
         transcript_id: blinder_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
     let blinder_unmasked_ref = UnmaskedTranscript::try_from((height, &blinder_unmasked)).unwrap();
     idkg_transcripts.insert(*blinder_unmasked_ref.as_ref(), blinder_unmasked);

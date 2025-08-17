@@ -117,7 +117,7 @@ mod index_and_dealing_of_dealer {
             registry_version: REG_V1,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         }
     }
 }
