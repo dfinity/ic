@@ -177,14 +177,14 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
 
 pub(super) fn block_chain_reader(
     pool_reader: &PoolReader<'_>,
-    summary_block: &Block,
+    start: Height,
     parent_block: &Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<IDkgBlockReaderImpl, InvalidChainCacheError> {
     // Resolve the transcript refs pointing into the parent chain,
     // copy the resolved transcripts into the summary block.
-    block_chain_cache(pool_reader, summary_block, parent_block)
+    block_chain_cache(pool_reader, start, parent_block)
         .map(IDkgBlockReaderImpl::new)
         .map_err(|err| {
             warn!(
@@ -201,11 +201,11 @@ pub(super) fn block_chain_reader(
 /// Wrapper to build the chain cache and perform sanity checks on the returned chain
 pub(super) fn block_chain_cache(
     pool_reader: &PoolReader<'_>,
-    start: &Block,
+    start: Height,
     end: &Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
     let chain = pool_reader.pool().build_block_chain(start, end);
-    let expected_len = (end.height().get() - start.height().get() + 1) as usize;
+    let expected_len = (end.height().get() - start.get() + 1) as usize;
     let chain_len = chain.len();
     if chain_len == expected_len {
         Ok(chain)
@@ -216,7 +216,7 @@ pub(super) fn block_chain_cache(
              notarized_height = {:?}, finalized_height = {:?}, CUP height = {:?}",
             expected_len,
             chain_len,
-            start.height(),
+            start,
             end.height(),
             chain.tip().height(),
             pool_reader.get_notarized_height(),
@@ -493,7 +493,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
 
     let chain = pool
         .pool()
-        .build_block_chain(last_dkg_summary_block, current_block);
+        .build_block_chain(last_dkg_summary_block.height(), current_block);
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();

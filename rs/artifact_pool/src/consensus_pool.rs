@@ -388,10 +388,10 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         self
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+    fn build_block_chain(&self, start: Height, end: &Block) -> Arc<dyn ConsensusBlockChain> {
         Arc::new(ConsensusBlockChainImpl::new_from_cache(
             self,
-            start.clone(),
+            start,
             end.clone(),
         ))
     }
@@ -677,10 +677,10 @@ impl ConsensusPool for ConsensusPoolImpl {
         self.cache.as_ref()
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+    fn build_block_chain(&self, start: Height, end: &Block) -> Arc<dyn ConsensusBlockChain> {
         Arc::new(ConsensusBlockChainImpl::new_from_cache(
             self,
-            start.clone(),
+            start,
             end.clone(),
         ))
     }

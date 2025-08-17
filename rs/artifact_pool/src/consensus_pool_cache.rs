@@ -391,10 +391,9 @@ impl ConsensusBlockChainImpl {
 
     pub(crate) fn new_from_cache(
         consensus_pool: &dyn ConsensusPool,
-        start: Block,
+        start_height: Height,
         tip: Block,
     ) -> Self {
-        let start_height = start.height;
         let iter = CachedChainIterator::new(
             consensus_pool,
             consensus_pool.as_block_cache().finalized_chain(),

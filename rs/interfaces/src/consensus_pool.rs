@@ -288,7 +288,7 @@ pub trait ConsensusPool {
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
 
     /// Return the block chain between the given start/end.
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain>;
+    fn build_block_chain(&self, start: Height, end: &Block) -> Arc<dyn ConsensusBlockChain>;
 
     /// Return the first instant at which a block with the given hash was inserted
     /// into the validated pool. Returns None if no timestamp was found.

@@ -140,8 +140,6 @@ pub fn swap_two_dealings_in_transcript(
         .nodes
         .support_dealing_from_all_receivers(dealing_ba, params);
 
-    let mut transcript = transcript;
-
     assert!(transcript
         .verified_dealings
         .as_ref()
@@ -187,8 +185,6 @@ pub fn copy_dealing_in_transcript(
     let dealing_to_signed = env
         .nodes
         .support_dealing_from_all_receivers(dealing_to, params);
-
-    let mut transcript = transcript;
 
     assert!(transcript
         .verified_dealings
