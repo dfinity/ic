@@ -374,10 +374,10 @@ impl IDkgProtocol for CryptoReturningOk {
             transcript_id: dummy_values::dummy_idkg_transcript_id_for_tests(0),
             receivers: IDkgReceivers::new(receivers).unwrap(),
             registry_version: RegistryVersion::from(1),
-            verified_dealings: dealings_by_index,
+            verified_dealings: Arc::new(dealings_by_index),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::Placeholder,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         })
     }
 

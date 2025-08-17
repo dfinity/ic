@@ -190,7 +190,7 @@ mod retain_keys_for_transcripts {
             transcript_id: random_transcript_id(rng),
             receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
             registry_version: version,
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
             // from rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/tests/data/transcript_random.hex:
@@ -543,10 +543,10 @@ fn idkg_transcript_with_registry_version<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
         registry_version: version,
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     }
 }
 

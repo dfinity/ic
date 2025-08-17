@@ -878,10 +878,10 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
             transcript_id: random_transcript_id(rng),
             receivers: IDkgReceivers::new(previous_receivers).unwrap(),
             registry_version: RegistryVersion::from(314),
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type,
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         }
     };
     let dealers = set_of_nodes(&[35, 36, 38]);

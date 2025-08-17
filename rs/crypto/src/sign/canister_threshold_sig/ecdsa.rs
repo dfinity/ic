@@ -216,10 +216,11 @@ pub fn combine_sig_shares(
 
     ensure_sufficient_sig_shares_collected(inputs, shares)?;
 
-    let kappa_transcript = &inputs
+    let kappa_transcript = inputs
         .presig_quadruple()
         .kappa_unmasked()
-        .internal_transcript_raw;
+        .internal_transcript_raw
+        .as_slice();
 
     let kappa_unmasked = IDkgTranscriptInternal::deserialize(kappa_transcript)
         .map_err(|e| conv_error(e, "kappa_unmasked"))?;

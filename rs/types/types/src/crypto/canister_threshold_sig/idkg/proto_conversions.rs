@@ -35,6 +35,7 @@ use ic_protobuf::types::v1::SchnorrPreSignatureTranscript as SchnorrPreSignature
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::iter::FromIterator;
+use std::sync::Arc;
 
 use super::{IDkgComplaint, IDkgDealingSupport, IDkgOpening};
 
@@ -468,7 +469,7 @@ fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProt
         transcript_type: serde_cbor::to_vec(&idkg_transcript.transcript_type)
             .expect("failed to serialize IDkgTranscriptType to CBOR"),
         algorithm_id: idkg_transcript.algorithm_id as i32,
-        raw_transcript: idkg_transcript.internal_transcript_raw.clone(),
+        raw_transcript: idkg_transcript.internal_transcript_raw.to_vec(),
     }
 }
 
@@ -500,10 +501,10 @@ fn idkg_transcript_struct(proto: &IDkgTranscriptProto) -> Result<IDkgTranscript,
         transcript_id,
         receivers,
         registry_version: RegistryVersion::new(proto.registry_version),
-        verified_dealings,
+        verified_dealings: Arc::new(verified_dealings),
         transcript_type,
         algorithm_id: AlgorithmId::from(proto.algorithm_id),
-        internal_transcript_raw: proto.raw_transcript.clone(),
+        internal_transcript_raw: Arc::new(proto.raw_transcript.clone()),
     })
 }
 

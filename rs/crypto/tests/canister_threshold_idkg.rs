@@ -1498,6 +1498,8 @@ mod verify_transcript {
 
             assert!(transcript
                 .verified_dealings
+                .as_ref()
+                .clone()
                 .insert(dealer1_idx, dealing)
                 .is_some());
 

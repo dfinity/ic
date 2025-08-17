@@ -576,10 +576,10 @@ pub(crate) fn create_transcript(
         transcript_id,
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::from(key_id.inner()),
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     }
 }
 

@@ -112,7 +112,7 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
 const PRE_SIGNATURES_TO_CREATE: u32 = 30;
 const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 4.5;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -182,15 +182,19 @@ pub fn setup(env: TestEnv) {
     };
 
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
+                .with_required_host_features(vec![
+                    HostFeature::Performance,
+                    HostFeature::Supermicro,
+                ])
                 .add_nodes(1),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
+                .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: key_ids
