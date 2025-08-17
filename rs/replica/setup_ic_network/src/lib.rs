@@ -27,7 +27,7 @@ use ic_https_outcalls_consensus::{
 use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
+    consensus_pool::ConsensusPoolCache,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::{artifact_manager::JoinGuard, state_sync::StateSyncClient},
