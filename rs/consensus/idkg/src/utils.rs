@@ -52,7 +52,7 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) const MAX_PARALLELISM: usize = 16;
+pub(crate) const MAX_PARALLELISM: usize = 32;
 pub const CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS: &str = "idkg_resolve_transcript_refs_error";
 
 #[derive(Clone, PartialEq, Debug)]

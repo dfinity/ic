@@ -37,10 +37,10 @@ fn should_fail_on_transcript_id_mismatch() {
             transcript_id: transcript_id_1,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id: transcript_id_2,
@@ -74,7 +74,7 @@ fn should_fail_if_dealing_missing_in_transcript() {
             verified_dealings: verified_dealings_missing_complaint_dealer_id,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -115,7 +115,7 @@ fn should_fail_if_complainer_missing_in_transcript() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -151,7 +151,7 @@ fn should_fail_if_deserializing_complaint_fails() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -186,7 +186,7 @@ fn should_fail_if_deserializing_dealing_fails() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -221,7 +221,7 @@ fn should_fail_if_complainer_mega_pubkey_not_in_registry() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -261,7 +261,7 @@ fn should_fail_if_complainer_mega_pubkey_is_malformed() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -302,7 +302,7 @@ fn should_fail_if_complainer_mega_pubkey_algorithm_is_unsupported() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,
@@ -341,7 +341,7 @@ fn should_fail_if_registry_client_returns_error() {
             verified_dealings,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
-            internal_transcript_raw: vec![],
+            internal_transcript_raw: Arc::new(vec![]),
         };
         let complaint = IDkgComplaint {
             transcript_id,

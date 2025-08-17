@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::num::TryFromIntError;
+use std::sync::Arc;
 
 pub mod conversions;
 pub mod proto_conversions;
@@ -721,11 +722,10 @@ pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
-    pub verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    pub verified_dealings: Arc<BTreeMap<NodeIndex, BatchSignedIDkgDealing>>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
-    #[serde(with = "serde_bytes")]
-    pub internal_transcript_raw: Vec<u8>,
+    pub internal_transcript_raw: Arc<Vec<u8>>,
 }
 
 impl AsRef<IDkgReceivers> for IDkgTranscript {
@@ -938,7 +938,7 @@ impl IDkgTranscript {
                 ));
             }
         }
-        for (dealer_index, signed_dealing) in &self.verified_dealings {
+        for (dealer_index, signed_dealing) in self.verified_dealings.as_ref() {
             let signers: BTreeSet<NodeId> = signed_dealing.signers();
             let ineligible_signers: BTreeSet<NodeId> = signers
                 .difference(params.receivers.get())
@@ -967,7 +967,7 @@ impl IDkgTranscript {
     /// Returns a copy of the raw internal transcript.
     #[inline]
     pub fn transcript_to_bytes(&self) -> Vec<u8> {
-        self.internal_transcript_raw.clone()
+        self.internal_transcript_raw.to_vec()
     }
 }
 
@@ -987,7 +987,7 @@ impl Debug for IDkgTranscript {
         write!(
             f,
             ", internal_transcript_raw: 0x{}",
-            hex::encode(&self.internal_transcript_raw)
+            hex::encode(self.internal_transcript_raw.as_slice())
         )?;
         write!(f, " }}")?;
         Ok(())
@@ -1301,10 +1301,10 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
         transcript_id: random_transcript_id(rng),
         receivers,
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     };
 
     let dummy_transcript_masked = {

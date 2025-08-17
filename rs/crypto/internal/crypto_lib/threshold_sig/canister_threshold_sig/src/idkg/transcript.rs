@@ -48,7 +48,7 @@ impl TryFrom<&IDkgTranscript> for IDkgTranscriptInternal {
     fn try_from(
         idkm_transcript: &IDkgTranscript,
     ) -> Result<Self, CanisterThresholdSerializationError> {
-        Self::deserialize(&idkm_transcript.internal_transcript_raw)
+        Self::deserialize(idkm_transcript.internal_transcript_raw.as_slice())
     }
 }
 

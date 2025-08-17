@@ -68,9 +68,9 @@ pub fn mock_transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
+        internal_transcript_raw: Arc::new(vec![]),
     }
 }

@@ -106,17 +106,30 @@ impl<'a> CachedChainIterator<'a> {
                 return Some(block.clone());
             }
         }
-        self.consensus_pool
+        for proposal in self
+            .consensus_pool
             .validated()
             .block_proposal()
             .get_by_height(parent_height)
-            .find_map(|proposal| {
-                if proposal.content.get_hash() == parent_hash {
-                    Some(proposal.content.into_inner())
-                } else {
-                    None
-                }
-            })
+        {
+            if proposal.content.get_hash() == parent_hash {
+                return Some(proposal.content.into_inner());
+            }
+        }
+
+        if let Ok(cup) = self
+            .consensus_pool
+            .validated()
+            .catch_up_package()
+            .get_only_by_height(parent_height)
+        {
+            let (hash, block) = cup.content.block.decompose();
+            if hash == *parent_hash {
+                return Some(block);
+            }
+        }
+
+        None
     }
 }
 
@@ -374,6 +387,26 @@ impl ConsensusBlockChainImpl {
         }
 
         Self { blocks }
+    }
+
+    pub(crate) fn new_from_cache(
+        consensus_pool: &dyn ConsensusPool,
+        start: Block,
+        tip: Block,
+    ) -> Self {
+        let start_height = start.height;
+        let iter = CachedChainIterator::new(
+            consensus_pool,
+            consensus_pool.as_block_cache().finalized_chain(),
+            tip,
+            None,
+        )
+        .take_while(|block| block.height() >= start_height)
+        .map(|block| (block.height(), block));
+
+        Self {
+            blocks: BTreeMap::from_iter(iter),
+        }
     }
 
     /// Updates the blocks based on the new summary_block/tip.
