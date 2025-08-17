@@ -149,7 +149,6 @@ impl Bouncers {
         time_source: Arc<dyn TimeSource>,
         message_router: Arc<dyn MessageRouting>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let ingress = Arc::new(IngressBouncer::new(time_source.clone()));
@@ -162,7 +161,7 @@ impl Bouncers {
         let idkg = Arc::new(IDkgBouncer::new(
             metrics_registry,
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache.clone(),
             state_reader.clone(),
         ));
 
@@ -206,7 +205,6 @@ impl AbortableBroadcastChannels {
         artifact_pools: &ArtifactPools,
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-        let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
         let bouncers = Bouncers::new(
             log,
             metrics_registry,
@@ -214,7 +212,6 @@ impl AbortableBroadcastChannels {
             time_source.clone(),
             message_router.clone(),
             consensus_pool_cache.clone(),
-            consensus_block_cache,
             state_reader.clone(),
         );
 
