@@ -298,9 +298,11 @@ def system_test(
     # Environment variable names to targets (targets are resolved)
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps = {}
+    icos_images = dict()
+    info_file_vars = dict()
 
     if uses_branch_version:
-        _env_deps["ENV_DEPS__IC_VERSION_FILE"] = "//bazel:version.txt"
+        info_file_vars["ENV_DEPS__IC_VERSION"] = ["STABLE_VERSION"]
 
     _guestos = "//ic-os/guestos/envs/dev:"
     _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"
@@ -317,9 +319,6 @@ def system_test(
 
     if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_mainnet_update) >= 2:
         fail("More than one target HostOS (upgrade) image was specified!")
-
-    icos_images = dict()
-    info_file_vars = dict()
 
     if uses_guestos_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
