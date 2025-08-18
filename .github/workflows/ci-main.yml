@@ -108,6 +108,7 @@ jobs:
     needs: [config]
     runs-on:
       labels: dind-large
+      group: zh1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
@@ -332,6 +333,7 @@ jobs:
     name: Upload external artifacts
     runs-on:
       labels: dind-large
+      group: zh1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
@@ -376,6 +378,7 @@ jobs:
     name: Bazel Run Fuzzers
     runs-on:
       labels: dind-large
+      group: zh1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
@@ -559,6 +562,7 @@ jobs:
     if: ${{ needs.config.outputs.skip_long_tests != 'true' }} # GHA output quirk, 'true' is a string
     runs-on:
       labels: dind-large
+      group: zh1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
