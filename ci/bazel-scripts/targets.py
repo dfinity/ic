@@ -182,6 +182,8 @@ def check():
             # Log successful matches which is useful for debugging
             # or can be linked to on github.com to inform users of
             # potentially too wide or otherwise incorrect patterns.
+            # Note that the final ' ' is necessary for GitHub not
+            # to filter the empty line which would hurt readability.
             log(f"Pattern '{pattern}' matches {n} files:\n" + "\n".join(matches) + "\n ")
 
         if len(explicit_targets_for_pattern) == 0:
