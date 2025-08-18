@@ -27,7 +27,11 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
 
     match test.subnet_message(Method::UpdateSettings, update_settings_args.encode()) {
         Ok(_) => {
-            let controllers = &test.canister_state(canister_id).system_state.controllers;
+            let controllers = &test
+                .canister_state(canister_id)
+                .system_state
+                .metadata
+                .controllers;
             let compute_allocation = test
                 .canister_state(canister_id)
                 .scheduler_state
@@ -42,6 +46,7 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
             let freezing_threshold = test
                 .canister_state(canister_id)
                 .system_state
+                .metadata
                 .freeze_threshold
                 .get();
 
