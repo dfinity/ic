@@ -74,7 +74,7 @@ pub enum CreateInstanceResponse {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy, JsonSchema)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -564,6 +564,18 @@ impl IcpFeatures {
     }
 }
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum InitialTime {
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    Timestamp(RawTime),
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    AutoProgress(AutoProgressConfig),
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
@@ -573,6 +585,7 @@ pub struct InstanceConfig {
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
     pub allow_incomplete_state: Option<bool>,
+    pub initial_time: Option<InitialTime>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]

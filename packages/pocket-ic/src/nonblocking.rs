@@ -1,11 +1,11 @@
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InstanceConfig, InstanceId,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
+    InstanceId, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest,
+    RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -139,6 +139,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -205,6 +206,7 @@ impl PocketIc {
             bitcoind_addr,
             icp_features: Some(icp_features),
             allow_incomplete_state: Some(false),
+            initial_time,
         };
 
         let test_driver_pid = std::process::id();
