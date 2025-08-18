@@ -60,7 +60,11 @@ fn get_orchestrator_info() -> OrchestratorInfo {
 
 #[export_name = "canister_global_timer"]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    // ic_ledger_suite_orchestrator::scheduler::timer invokes ic_cdk::futures::spawn_017_compat
+    // which must be wrapped in in_executor_context as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[init]
