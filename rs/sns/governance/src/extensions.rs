@@ -33,14 +33,11 @@ use crate::storage::{with_registered_extensions_map, with_registered_extensions_
 use futures::future::BoxFuture;
 use ic_ledger_core::Tokens;
 use std::cell::RefCell;
+use std::fmt::Formatter;
 use std::{collections::BTreeMap, fmt::Display};
 
 lazy_static! {
     static ref ALLOWED_EXTENSIONS: BTreeMap<[u8; 32], ExtensionSpec> = btreemap! {};
-}
-
-thread_local! {
-    static REGISTERED_EXTENSIONS: RefCell<BTreeMap<CanisterId, ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
 }
 
 #[derive(Clone)]
@@ -126,20 +123,35 @@ impl RenderablePayload for Precise {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OperationType {
+    TreasuryManagerDeposit,
+    TreasuryManagerWithdraw,
+    Custom(String),
+}
+
+impl Display for OperationType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OperationType::TreasuryManagerDeposit => write!(f, "deposit"),
+            OperationType::TreasuryManagerWithdraw => write!(f, "withdraw"),
+            OperationType::Custom(name) => write!(f, "{}", name),
+        }
+    }
+}
+
 /// Specification for an extension operation
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionOperationSpec {
-    pub name: String,
+    pub operation_type: OperationType,
     pub description: String,
     pub extension_type: ExtensionType,
     pub topic: Topic,
-    pub validate_arg:
-        fn(&Governance, ExtensionOperationArg) -> BoxFuture<Result<ValidatedOperationArg, String>>,
 }
 
 impl ExtensionOperationSpec {
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn name(&self) -> String {
+        format!("{}", &self.operation_type)
     }
 
     pub fn description(&self) -> &str {
@@ -151,7 +163,18 @@ impl ExtensionOperationSpec {
         governance: &Governance,
         arg: ExtensionOperationArg,
     ) -> Result<ValidatedOperationArg, String> {
-        (self.validate_arg)(governance, arg).await
+        match &self.operation_type {
+            OperationType::TreasuryManagerDeposit => {
+                validate_deposit_operation(governance, arg).await
+            }
+            OperationType::TreasuryManagerWithdraw => {
+                validate_withdraw_operation(governance, arg).await
+            }
+            OperationType::Custom(operation_name) => Err(format!(
+                "Custom operation '{}' validation not yet implemented",
+                operation_name
+            )),
+        }
     }
 }
 
@@ -219,21 +242,33 @@ async fn validate_deposit_operation_impl(
 
 // This map contains the ExtensionOperationSpecs for operations supported by governance.
 lazy_static! {
-    pub static ref EXTENSION_OPERATION_SPECS: BTreeMap<String, ExtensionOperationSpec> = btreemap! {
-       "deposit".to_string() => ExtensionOperationSpec {
-                        name: "deposit".to_string(),
-                        description: "Deposit funds into the treasury manager.".to_string(),
-                        extension_type: ExtensionType::TreasuryManager,
-                        topic: Topic::TreasuryAssetManagement,
-                        validate_arg: validate_deposit_operation,
-                    },
-       "withdraw".to_string() =>  ExtensionOperationSpec {
-                        name: "withdraw".to_string(),
-                        description: "Withdraw funds from the treasury manager.".to_string(),
-                        extension_type: ExtensionType::TreasuryManager,
-                        topic: Topic::TreasuryAssetManagement,
-                        validate_arg: validate_withdraw_operation,
-                    },
+    pub static ref EXTENSION_OPERATION_SPECS: BTreeMap<String, ExtensionOperationSpec> = {
+        let specs = vec![
+            ExtensionOperationSpec {
+                operation_type: OperationType::TreasuryManagerDeposit,
+                description: "Deposit funds into the treasury manager.".to_string(),
+                extension_type: ExtensionType::TreasuryManager,
+                topic: Topic::TreasuryAssetManagement,
+            },
+            ExtensionOperationSpec {
+                operation_type: OperationType::TreasuryManagerWithdraw,
+                description: "Withdraw funds from the treasury manager.".to_string(),
+                extension_type: ExtensionType::TreasuryManager,
+                topic: Topic::TreasuryAssetManagement,
+            },
+        ];
+
+        let mut map = BTreeMap::new();
+        for spec in specs {
+            let key = spec.name();
+            assert!(
+                !map.contains_key(&key),
+                "Duplicate operation name detected: '{}'. Each operation must have a unique name.",
+                key
+            );
+            map.insert(key, spec);
+        }
+        map
     };
 }
 

@@ -1,7 +1,9 @@
 use crate::extensions::ExtensionSpec;
 use ic_base_types::CanisterId;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{BTreeMap, DefaultMemoryImpl};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::{BTreeMap, DefaultMemoryImpl, Storable};
+use std::borrow::Cow;
 use std::cell::RefCell;
 
 /// Constants to define memory segments.  Must not change.
@@ -38,4 +40,23 @@ pub fn with_registered_extensions_map_mut<R>(
     f: impl FnOnce(&mut BTreeMap<CanisterId, ExtensionSpec, VM>) -> R,
 ) -> R {
     REGISTERED_EXTENSIONS.with_borrow_mut(f)
+}
+
+// TODO - how should we handle this?  The extension spec has to come from somewhere.
+// Eventually it will not come from our local machine.  It needs to be serializable.  And so do
+// the validation functions.
+// But currently, we are creating specs for operations and extensions that use types and
+// function pointers.  How is that going to be something that we can transfer into SNS Governance?
+// If we cache them with a reference to a hash, we can work well until such time as that hash
+// goes away.  Using the data tree of references seems like a less than ideal solution.
+impl Storable for ExtensionSpec {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        todo!()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        todo!()
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
