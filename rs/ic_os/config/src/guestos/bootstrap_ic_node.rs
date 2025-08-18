@@ -27,7 +27,6 @@ pub fn process_bootstrap(
         anyhow::bail!("tar extraction failed with status: {}", status);
     }
 
-    // take injected config bits and move them to state directories
     let ic_crypto_src = tmpdir.path().join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
     if ic_crypto_src.exists() {
@@ -49,7 +48,6 @@ pub fn process_bootstrap(
         copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
     }
 
-    // set up initial nns_public_key.pem
     let nns_key_src = tmpdir.path().join("nns_public_key.pem");
     let nns_key_dst = state_root.join("data/nns_public_key.pem");
     if nns_key_src.exists() {
@@ -58,7 +56,6 @@ pub fn process_bootstrap(
         fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
     }
 
-    // set up initial node_operator_private_key.pem
     let node_op_key_src = tmpdir.path().join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
