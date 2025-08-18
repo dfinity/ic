@@ -495,8 +495,11 @@ fn can_create_canister_with_cycles_from_another_canister() {
         // Create a universal canister.
         let canister_id = test.create_universal_canister_with_args(vec![], num_cycles.get());
 
-        let old_canister_cycles_balance_before =
-            test.canister_state(&canister_id).system_state.balance();
+        let old_canister_cycles_balance_before = test
+            .canister_state(&canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         // Create another canister with some cycles.
         let config = CyclesAccountManagerConfig::application_subnet();
@@ -519,14 +522,20 @@ fn can_create_canister_with_cycles_from_another_canister() {
             .unwrap()
             .get_canister_id();
 
-        let old_canister_cycles_balance_after =
-            test.canister_state(&canister_id).system_state.balance();
+        let old_canister_cycles_balance_after = test
+            .canister_state(&canister_id)
+            .system_state
+            .metadata
+            .balance();
         println!(
             "old canister balance after: {}",
             old_canister_cycles_balance_after
         );
-        let new_canister_cycles_balance =
-            test.canister_state(&new_canister_id).system_state.balance();
+        let new_canister_cycles_balance = test
+            .canister_state(&new_canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         // Check that the balance of the sending canister after creating a new canister
         // is at most its previous balance minus the cycles transferred.
@@ -564,6 +573,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
         let canister_a_cycles_before: u128 = test
             .canister_state(&canister_a_id)
             .system_state
+            .metadata
             .balance()
             .get();
         let canister_b_cycles_init = canister_a_cycles_before / 2; // Create with 1/2 * cycles of canister_a
@@ -596,6 +606,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
         let canister_b_cycles: u128 = test
             .canister_state(&canister_b_id)
             .system_state
+            .metadata
             .balance()
             .get();
 
@@ -623,6 +634,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
         let canister_b_cycles_after_top_up: u128 = test
             .canister_state(&canister_b_id)
             .system_state
+            .metadata
             .balance()
             .get();
 
