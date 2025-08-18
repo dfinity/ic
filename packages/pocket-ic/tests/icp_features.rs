@@ -49,16 +49,32 @@ fn resolving_client(pic: &PocketIc, host: String) -> Client {
 fn test_ii() {
     let mut pic = PocketIcBuilder::new().with_all_icp_features().build();
 
+    // Start HTTP gateway and derive an endpoint to request II via the HTTP gateway.
     let mut endpoint = pic.make_live(Some(8080));
     assert_eq!(endpoint.host_str().unwrap(), "localhost");
     let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
     let host = format!("{}.localhost", ii_canister_id);
     endpoint.set_host(Some(&host)).unwrap();
 
+    // A basic smoke test.
     let client = resolving_client(&pic, host);
     let resp = client.get(endpoint).send().unwrap();
     let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(body.contains("<title>Internet Identity</title>"));
+}
+
+#[test]
+fn test_ii_makes_no_canister_http() {
+    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    // No canister http outcalls should be made
+    // (because we did not enable auto progress when creating the PocketIC instance).
+    // We execute a few more rounds and advance time in case they were only made on timers.
+    for _ in 0..10 {
+        pic.tick();
+        pic.advance_time(Duration::from_secs(1));
+    }
+    assert!(pic.get_canister_http().is_empty());
 }
 
 #[test]

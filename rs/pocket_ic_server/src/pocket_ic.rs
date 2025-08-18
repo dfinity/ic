@@ -521,6 +521,7 @@ struct PocketIcSubnets {
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
+    auto_progress_enabled: bool,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
@@ -600,6 +601,7 @@ impl PocketIcSubnets {
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
+        auto_progress_enabled: bool,
         synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -626,6 +628,7 @@ impl PocketIcSubnets {
             bitcoind_addr,
             icp_features,
             initial_time,
+            auto_progress_enabled,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
         }
@@ -1871,6 +1874,18 @@ impl PocketIcSubnets {
             //     time_per_token_ns = 1_000_000_000 : nat64;
             //   };
             // },
+            let openid_google = if self.auto_progress_enabled {
+                // II makes canister http outcalls if an `OpenIdConfig` is provided
+                // and thus we should only provide one if auto progress is enabled
+                // (and canister http outcalls are handled by PocketIC automically).
+                Some(Some(OpenIdConfig {
+                    client_id:
+                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
+                            .to_string(),
+                }))
+            } else {
+                None
+            };
             let internet_identity_test_args = InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
@@ -1883,14 +1898,10 @@ impl PocketIcSubnets {
                     max_unsolved_captchas: 500,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
-                related_origins: None,  // DIFFERENT FROM ICP MAINNET
-                new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
-                openid_google: Some(Some(OpenIdConfig {
-                    client_id:
-                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
-                            .to_string(),
-                })), // DIFFERENT FROM ICP MAINNET
-                analytics_config: None, // DIFFERENT FROM ICP MAINNET
+                related_origins: None,      // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None,     // DIFFERENT FROM ICP MAINNET
+                openid_google,              // DIFFERENT FROM ICP MAINNET
+                analytics_config: None,     // DIFFERENT FROM ICP MAINNET
                 fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
@@ -2047,6 +2058,7 @@ impl PocketIc {
         icp_features: Option<IcpFeatures>,
         allow_incomplete_state: Option<bool>,
         initial_time: Option<Time>,
+        auto_progress_enabled: bool,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
@@ -2289,6 +2301,7 @@ impl PocketIc {
             bitcoind_addr,
             icp_features,
             initial_time,
+            auto_progress_enabled,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
@@ -4199,6 +4212,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -4215,6 +4229,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());
