@@ -38,6 +38,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
+      group: zh1
     container:
       <<: *image
       options: >-
