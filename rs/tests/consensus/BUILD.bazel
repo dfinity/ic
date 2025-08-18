@@ -218,7 +218,6 @@ system_test_nns(
 system_test_nns(
     name = "subnet_splitting_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -359,7 +358,6 @@ system_test_nns(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
-    extra_head_nns_tags = [],
     tags = [
         "experimental_system_test_colocation",
         "manual",
@@ -386,7 +384,6 @@ system_test_nns(
 system_test_nns(
     name = "adding_nodes_to_subnet_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

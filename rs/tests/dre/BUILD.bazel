@@ -12,7 +12,6 @@ system_test(
         "manual",
     ],
     uses_branch_version = True,
-    uses_guestos_test_update = True,
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_NNS_CANISTER_RUNTIME_DEPS +
