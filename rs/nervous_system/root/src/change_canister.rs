@@ -8,12 +8,7 @@ use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
     IC_00,
 };
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{
-        canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
-    },
-};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
