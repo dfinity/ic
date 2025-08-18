@@ -703,7 +703,7 @@ impl CanisterManager {
 
         let fee = self
             .cycles_account_manager
-            .canister_creation_fee(subnet_size, state.metadata.cost_schedule);
+            .canister_creation_fee(subnet_size, state.get_own_cost_schedule());
         if cycles < fee {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -731,7 +731,7 @@ impl CanisterManager {
             &subnet_memory_saturation,
             cycles - fee,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         ) {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
@@ -1245,7 +1245,7 @@ impl CanisterManager {
             &subnet_memory_saturation,
             cycles,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
@@ -1878,7 +1878,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -1888,7 +1888,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             cycles_for_instructions,
@@ -1909,7 +1909,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             round_limits,
@@ -2082,7 +2082,7 @@ impl CanisterManager {
             &mut canister_clone,
             self.config.canister_snapshot_baseline_instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `load_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2127,7 +2127,7 @@ impl CanisterManager {
             };
 
             // If the snapshot was uploaded, make sure the snapshot's exported globals match the wasm module's.
-            if snapshot.source() == SnapshotSource::MetadataUpload
+            if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved)
                 && !globals_match(
                     &new_execution_state.exported_globals,
                     &execution_snapshot.exported_globals,
@@ -2163,7 +2163,7 @@ impl CanisterManager {
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
         // Otherwise, the snapshot is invalid.
-        if snapshot.source() == SnapshotSource::MetadataUpload {
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
             let hook_condition = new_canister.is_low_wasm_memory_hook_condition_satisfied();
             let snapshot_hook_status = snapshot.execution_snapshot().on_low_wasm_memory_hook_status;
             if !snapshot_hook_status
@@ -2184,7 +2184,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // In this case, when the canister is actually created from the snapshot, we need to check
             // if the canister is in wasm64 mode to account for its instruction usage.
             wasm_execution_mode,
@@ -2192,7 +2192,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = match self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             &new_canister,
             sender,
             cycles_for_instructions,
@@ -2209,7 +2209,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             &mut new_canister,
             sender,
             round_limits,
@@ -2225,6 +2225,7 @@ impl CanisterManager {
                 snapshot.canister_version(),
                 snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                snapshot.source(),
             ),
         );
         state
@@ -2377,7 +2378,7 @@ impl CanisterManager {
                 .canister_snapshot_data_baseline_instructions
                 .saturating_add(&NumInstructions::new(num_response_bytes)),
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
             WasmExecutionMode::Wasm32,
         ) {
@@ -2509,7 +2510,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2519,7 +2520,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             cycles_for_instructions,
@@ -2544,7 +2545,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             round_limits,
@@ -2591,12 +2592,12 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
 
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let snapshot: &mut Arc<CanisterSnapshot> =
             self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload {
+        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 
@@ -2691,7 +2692,7 @@ impl CanisterManager {
                 let new_memory_usage = canister.memory_usage() + chunk_bytes;
                 let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
                     subnet_size,
-                    state.metadata.cost_schedule,
+                    state.get_own_cost_schedule(),
                     canister,
                     sender,
                     Cycles::zero(),
@@ -2702,7 +2703,7 @@ impl CanisterManager {
                 )?;
                 self.cycles_and_memory_usage_updates(
                     subnet_size,
-                    state.metadata.cost_schedule,
+                    state.get_own_cost_schedule(),
                     canister,
                     sender,
                     round_limits,

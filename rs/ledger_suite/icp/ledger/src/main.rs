@@ -865,7 +865,27 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 if let Some(upgrade_args) = upgrade_args {
                     ledger.upgrade(upgrade_args);
                 }
-        }
+                // FIXME(FI-1729): Remove this burn once a ledger version allowing the anonymous principal
+                //  to perform transactions has been released.
+                let anonymous_account = AccountIdentifier::from(PrincipalId::new_anonymous());
+                let anonymous_balance = ledger.balances().account_balance(&anonymous_account);
+                if anonymous_balance > Tokens::ZERO {
+                    ledger.add_payment(
+                        Memo::default(),
+                        Operation::Burn {
+                            from: anonymous_account,
+                            amount: anonymous_balance,
+                            spender: None,
+                        },
+                        None,
+                    )
+                        .expect("Burning tokens during upgrade failed");
+                    print(format!(
+                        "[ledger] post_upgrade(): burned {} from default account of the anonymous principal ({})",
+                        anonymous_balance, anonymous_account
+                    ));
+                }
+            }
     }
         }
         set_certified_data(
@@ -1016,7 +1036,7 @@ async fn icrc1_transfer(
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     let from_account = Account {
@@ -1053,7 +1073,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1520,7 +1540,7 @@ fn icrc2_approve_not_async(
     override_spender: Option<AccountIdentifier>,
 ) -> Result<Nat, ApproveError> {
     if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
-        trap("Anonymous principal cannot approve token transfers on the ledger.");
+        trap("Caller cannot approve token transfers on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1695,6 +1715,7 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = caller();
     let ledger_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
     let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+    let token_name = LEDGER.read().unwrap().token_name.clone();
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -1702,6 +1723,7 @@ fn icrc21_canister_call_consent_message(
         caller_principal,
         ledger_fee,
         token_symbol,
+        token_name,
         decimals,
     )
 }

@@ -47,6 +47,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, StateLayout};
+use ic_sys::fs::Clobber;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
@@ -1112,19 +1113,24 @@ fn persist_metadata_or_die(
     let started_at = Instant::now();
     let tmp = state_layout.tmp().join("tmp_states_metadata.pb");
 
-    ic_sys::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
-        let mut pb_meta = pb::StatesMetadata::default();
-        for (h, m) in metadata.iter() {
-            pb_meta.by_height.insert(h.get(), m.into());
-        }
+    ic_sys::fs::write_atomically_using_tmp_file(
+        state_layout.states_metadata(),
+        &tmp,
+        Clobber::Yes,
+        |w| {
+            let mut pb_meta = pb::StatesMetadata::default();
+            for (h, m) in metadata.iter() {
+                pb_meta.by_height.insert(h.get(), m.into());
+            }
 
-        let mut buf = vec![];
-        pb_meta.encode(&mut buf).unwrap_or_else(|e| {
-            fatal!(log, "Failed to encode states metadata to protobuf: {}", e);
-        });
-        metrics.states_metadata_pbuf_size.set(buf.len() as i64);
-        w.write_all(&buf[..])
-    })
+            let mut buf = vec![];
+            pb_meta.encode(&mut buf).unwrap_or_else(|e| {
+                fatal!(log, "Failed to encode states metadata to protobuf: {}", e);
+            });
+            metrics.states_metadata_pbuf_size.set(buf.len() as i64);
+            w.write_all(&buf[..])
+        },
+    )
     .unwrap_or_else(|err| {
         fatal!(
             log,

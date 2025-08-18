@@ -511,7 +511,7 @@ impl IngressManager {
             msg,
             effective_canister_id,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -527,7 +527,7 @@ impl IngressManager {
                         canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
-                        state.metadata.cost_schedule,
+                        state.get_own_cost_schedule(),
                         false, // error here is not returned back to the user => no need to reveal top up balance
                     ) {
                         return Err(ValidationError::InvalidArtifact(

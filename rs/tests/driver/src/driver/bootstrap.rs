@@ -1,3 +1,4 @@
+use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
@@ -14,10 +15,10 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
-            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-            get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, NodesInfo,
+            get_build_setupos_config_image_tool, get_create_setupos_config_tool,
+            get_guestos_img_version, get_guestos_initial_update_img_sha256,
+            get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
+            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -39,7 +40,6 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -96,7 +96,6 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = get_guestos_img_version()?;
-    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -177,9 +176,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = (
+    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
         get_guestos_initial_update_img_sha256()?,
         get_guestos_initial_update_img_url()?,
+        get_guestos_initial_launch_measurements()?,
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -194,6 +194,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
+        ic_os_launch_measurements,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -263,7 +264,6 @@ pub fn setup_and_start_vms(
                 ipv4_config,
                 domain,
                 &t_env,
-                &group_name,
             )?;
 
             let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
@@ -354,7 +354,6 @@ fn create_config_disk_image(
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
     test_env: &TestEnv,
-    group_name: &str,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
     let mut config = GenerateTestnetConfigArgs {
@@ -371,8 +370,6 @@ fn create_config_disk_image(
         node_reward_type: None,
         mgmt_mac: None,
         deployment_environment: Some(DeploymentEnvironment::Testnet),
-        elasticsearch_hosts: None,
-        elasticsearch_tags: Some(format!("system_test {}", group_name)),
         use_nns_public_key: Some(true),
         nns_urls: None,
         enable_trusted_execution_environment: None,
@@ -468,15 +465,6 @@ fn create_config_disk_image(
         config.domain_name = Some(domain_name.to_string());
     }
 
-    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
-    info!(
-        test_env.logger(),
-        "ElasticSearch hosts are {:?}", elasticsearch_hosts
-    );
-    if !elasticsearch_hosts.is_empty() {
-        config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
-    }
-
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         config.bitcoind_addr = Some(bitcoind_addr.clone());
@@ -570,7 +558,7 @@ pub fn setup_nested_vms(
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =
-                    create_setupos_config_image(env, group_name, vm_name, nns_url, nns_public_key)?;
+                    create_setupos_config_image(env, vm_name, nns_url, nns_public_key)?;
                 let config_image_spec = AttachImageSpec::new(farm.upload_file(
                     group_name,
                     config_image,
@@ -614,7 +602,6 @@ pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow:
 
 fn create_setupos_config_image(
     env: &TestEnv,
-    group_name: &str,
     name: &str,
     nns_url: &Url,
     nns_public_key: &str,
@@ -628,8 +615,8 @@ fn create_setupos_config_image(
     let tmp_dir = env.get_path(format!("setupos_config_{}", name));
     fs::create_dir_all(&tmp_dir)?;
 
-    let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
-    let create_setupos_config = get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG");
+    let build_setupos_config_image = get_build_setupos_config_image_tool();
+    let create_setupos_config = get_create_setupos_config_tool();
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -687,15 +674,7 @@ fn create_setupos_config_image(
         .arg("--node-reward-type")
         .arg("type3.1")
         .arg("--admin-keys")
-        .arg(ssh_authorized_pub_keys_dir.join("admin"))
-        .arg("--elasticsearch-tags")
-        .arg(format!("system_test {}", group_name));
-
-    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
-    if !elasticsearch_hosts.is_empty() {
-        cmd.arg("--elasticsearch-hosts")
-            .arg(elasticsearch_hosts.join(" "));
-    }
+        .arg(ssh_authorized_pub_keys_dir.join("admin"));
 
     if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
         if !node_key.trim().is_empty() {

@@ -55,6 +55,7 @@ candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 ic-cdk = { workspace = true }
+icrc-ledger-types = { path = "../icrc-ledger-types" }
 ic-error-types = { path = "../ic-error-types" }
 ic-vetkeys = { workspace = true }
 k256 = { workspace = true }

@@ -40,7 +40,6 @@ use sns_treasury_manager::Asset;
 use sns_treasury_manager::AuditTrailRequest;
 use sns_treasury_manager::BalanceBook;
 use sns_treasury_manager::BalancesRequest;
-use sns_treasury_manager::WithdrawRequest;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -146,6 +145,8 @@ async fn test_treasury_manager() {
         ledger_fee_decimals: Nat::from(ICP_FEE),
     };
 
+    // These numbers just happen to be what is going on in deploy_sns() above.  They're not particularly
+    // special in any way.
     let initial_icp_balance_e8s = 650_000 * E8 - ICP_FEE;
     let initial_sns_balance_e8s = 400 * E8;
 
@@ -160,10 +161,11 @@ async fn test_treasury_manager() {
     .unwrap();
 
     let initial_treasury_allocation_icp_e8s = 100 * E8;
-    let initial_treasury_allocation_sns_e8s = 300 * E8;
+    let initial_treasury_allocation_sns_e8s = 200 * E8;
 
     let topup_treasury_allocation_icp_e8s = 50 * E8;
-    let topup_treasury_allocation_sns_e8s = 50 * E8;
+    // This cannot be 100, b/c there will be slightly less than 200 left in the treasury at the point where this is called.
+    let topup_treasury_allocation_sns_e8s = 99 * E8;
 
     fn make_deposit_allowances(
         treasury_allocation_icp_e8s: u64,
@@ -338,7 +340,7 @@ async fn test_treasury_manager() {
             &pocket_ic,
             sns.governance.canister_id,
             sender,
-            neuron_id,
+            neuron_id.clone(),
             proposal,
         )
         .await
@@ -358,20 +360,30 @@ async fn test_treasury_manager() {
 
     // Testing the withdraw operation.
     {
-        let ledger_id_to_account = btreemap! {
-            sns.ledger.canister_id.0 => treasury_sns_account,
-            LEDGER_CANISTER_ID.get().0 => treasury_icp_account,
+        let proposal = Proposal {
+            title: "Test withdraw".to_string(),
+            summary: "test".to_string(),
+            url: "https://example.com".to_string(),
+            action: Some(Action::ExecuteExtensionOperation(
+                ExecuteExtensionOperation {
+                    extension_canister_id: Some(extension_canister_id),
+                    operation_name: Some("withdraw".to_string()),
+                    operation_arg: Some(ExtensionOperationArg { value: None }),
+                },
+            )),
         };
+        let proposal_data = propose_and_wait(
+            &pocket_ic,
+            sns.governance.canister_id,
+            sender,
+            neuron_id,
+            proposal,
+        )
+        .await
+        .unwrap();
 
-        let request = WithdrawRequest {
-            withdraw_accounts: Some(ledger_id_to_account),
-        };
-
-        let response = PocketIcAgent::new(&pocket_ic, sns.root.canister_id)
-            .call(extension_canister_id, request)
-            .await
-            .unwrap()
-            .unwrap();
+        assert_eq!(proposal_data.failure_reason, None);
+        assert!(proposal_data.executed_timestamp_seconds > 0);
 
         {
             let request = AuditTrailRequest {};
@@ -392,6 +404,12 @@ async fn test_treasury_manager() {
         let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s
             + topup_treasury_allocation_icp_e8s
             - expected_fees_icp_e8s;
+
+        let response = pocket_ic
+            .call(extension_canister_id, BalancesRequest {})
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(
             response.asset_to_balances,

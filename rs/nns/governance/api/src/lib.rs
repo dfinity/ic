@@ -98,6 +98,13 @@ impl NetworkEconomics {
             voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
         }
     }
+
+    pub fn with_mainnet_values() -> Self {
+        let mut network_economics = Self::with_default_values();
+        network_economics.reject_cost_e8s = 25 * E8S_PER_ICP; // 25 ICP
+        network_economics.maximum_node_provider_rewards_e8s = 100_000 * E8S_PER_ICP; // 100k ICP
+        network_economics
+    }
 }
 
 impl VotingPowerEconomics {
