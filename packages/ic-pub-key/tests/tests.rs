@@ -11,7 +11,10 @@ fn test_ed25519_derivation_key1() {
     let args = SchnorrPublicKeyArgs {
         canister_id: Some(canister_id),
         derivation_path: vec![hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
-        key_id: SchnorrKeyId { algorithm: SchnorrAlgorithm::Ed25519, name: "key_1".to_string() }
+        key_id: SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "key_1".to_string(),
+        },
     };
 
     let dpk = derive_schnorr_key(args).unwrap();
@@ -31,8 +34,15 @@ fn test_ed25519_derivation_test_key1() {
 
     let args = SchnorrPublicKeyArgs {
         canister_id: Some(canister_id),
-        derivation_path: vec!["Hello".as_bytes().to_vec(), "Threshold".as_bytes().to_vec(), "Signatures".as_bytes().to_vec()],
-        key_id: SchnorrKeyId { algorithm: SchnorrAlgorithm::Ed25519, name: "test_key_1".to_string() }
+        derivation_path: vec![
+            "Hello".as_bytes().to_vec(),
+            "Threshold".as_bytes().to_vec(),
+            "Signatures".as_bytes().to_vec(),
+        ],
+        key_id: SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "test_key_1".to_string(),
+        },
     };
 
     let dpk = derive_schnorr_key(args).unwrap();
@@ -53,7 +63,10 @@ fn test_bip340_derivation_key1() {
     let args = SchnorrPublicKeyArgs {
         canister_id: Some(canister_id),
         derivation_path: vec![hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
-        key_id: SchnorrKeyId { algorithm: SchnorrAlgorithm::Bip340secp256k1, name: "key_1".to_string() }
+        key_id: SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340secp256k1,
+            name: "key_1".to_string(),
+        },
     };
 
     let dpk = derive_schnorr_key(args).unwrap();
@@ -73,8 +86,15 @@ fn test_bip340_derivation_test_key1() {
 
     let args = SchnorrPublicKeyArgs {
         canister_id: Some(canister_id),
-        derivation_path: vec!["Hello".as_bytes().to_vec(), "Threshold".as_bytes().to_vec(), "Signatures".as_bytes().to_vec()],
-        key_id: SchnorrKeyId { algorithm: SchnorrAlgorithm::Bip340secp256k1, name: "test_key_1".to_string() }
+        derivation_path: vec![
+            "Hello".as_bytes().to_vec(),
+            "Threshold".as_bytes().to_vec(),
+            "Signatures".as_bytes().to_vec(),
+        ],
+        key_id: SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340secp256k1,
+            name: "test_key_1".to_string(),
+        },
     };
 
     let dpk = derive_schnorr_key(args).unwrap();
@@ -95,7 +115,10 @@ fn test_ecdsa_secp256k1_derivation_key1() {
     let args = EcdsaPublicKeyArgs {
         canister_id: Some(canister_id),
         derivation_path: vec![hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
-        key_id: EcdsaKeyId { curve: EcdsaCurve::Secp256k1, name: "key_1".to_string() }
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "key_1".to_string(),
+        },
     };
 
     let dpk = derive_ecdsa_key(args).unwrap();
@@ -115,8 +138,15 @@ fn test_ecdsa_secp256k1_derivation_test_key1() {
 
     let args = EcdsaPublicKeyArgs {
         canister_id: Some(canister_id),
-        derivation_path: vec!["Hello".as_bytes().to_vec(), "Threshold".as_bytes().to_vec(), "Signatures".as_bytes().to_vec()],
-        key_id: EcdsaKeyId { curve: EcdsaCurve::Secp256k1, name: "test_key_1".to_string() }
+        derivation_path: vec![
+            "Hello".as_bytes().to_vec(),
+            "Threshold".as_bytes().to_vec(),
+            "Signatures".as_bytes().to_vec(),
+        ],
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "test_key_1".to_string(),
+        },
     };
 
     let dpk = derive_ecdsa_key(args).unwrap();
