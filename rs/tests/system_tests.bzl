@@ -524,9 +524,7 @@ def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     extra_head_nns_tags = (
         # Disable the head_nns variant if requested
         ["manual"] if not enable_head_nns_variant else
-        # Without the following, when a system_test_nns is tagged as a long_test it will run both on the daily
-        # "Release Testing / CI Main / Bazel Test All" and "Release Testing / Release System Tests" which would be redundant.
-        # So we don't include the default "system_test_large" tag for the head_nns variant such that it only runs on "Bazel Test All".
+        # Don't include the default "system_test_large" tag for the head_nns variant of long_tests to ensure it only runs once.
         [] if "long_test" in original_tags else
         # Run the head_nns variant daily.
         ["system_test_large"]
