@@ -57,8 +57,9 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -155,6 +156,8 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -890,6 +893,7 @@ impl PocketIcSubnets {
                 cycles_token,
                 nns_governance,
                 sns,
+                ii,
             } = icp_features;
             if registry {
                 self.update_registry();
@@ -908,6 +912,9 @@ impl PocketIcSubnets {
             }
             if sns {
                 self.deploy_sns();
+            }
+            if ii {
+                self.deploy_ii();
             }
         }
 
@@ -1694,6 +1701,206 @@ impl PocketIcSubnets {
                     CanisterInstallMode::Install,
                     SNS_AGGREGATOR_TEST_CANISTER_WASM.to_vec(),
                     Encode!(&Some(sns_aggregator_init_payload)).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_ii(&self) {
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(IDENTITY_CANISTER_ID)
+        {
+            // Create the cycles ledger with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"rdmx6-jaaaa-aaaaa-aaadq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // Create the II canister.
+            // Although the II canister is created on a system subnet, it always attaches cycles to canister http outcalls and thus it needs cycles:
+            // - the canister should have enough cycles to never run out of cycles;
+            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(IDENTITY_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, IDENTITY_CANISTER_ID);
+
+            // Install the II canister.
+            type AnchorNumber = u64;
+            #[derive(CandidType)]
+            struct ArchiveConfig {
+                module_hash: [u8; 32],
+                entries_buffer_limit: u64,
+                polling_interval_ns: u64,
+                entries_fetch_limit: u16,
+            }
+            #[derive(CandidType)]
+            struct RateLimitConfig {
+                time_per_token_ns: u64,
+                max_tokens: u64,
+            }
+            #[derive(CandidType)]
+            enum StaticCaptchaTrigger {
+                #[allow(dead_code)]
+                CaptchaEnabled,
+                CaptchaDisabled,
+            }
+            #[derive(CandidType)]
+            enum CaptchaTrigger {
+                #[allow(dead_code)]
+                Dynamic {
+                    threshold_pct: u16,
+                    current_rate_sampling_interval_s: u64,
+                    reference_rate_sampling_interval_s: u64,
+                },
+                Static(StaticCaptchaTrigger),
+            }
+            #[derive(CandidType)]
+            struct CaptchaConfig {
+                max_unsolved_captchas: u64,
+                captcha_trigger: CaptchaTrigger,
+            }
+            #[derive(CandidType)]
+            struct OpenIdConfig {
+                client_id: String,
+            }
+            #[allow(dead_code)]
+            #[derive(CandidType)]
+            enum AnalyticsConfig {
+                Plausible {
+                    domain: Option<String>,
+                    hash_mode: Option<bool>,
+                    track_localhost: Option<bool>,
+                    api_host: Option<String>,
+                },
+            }
+            #[derive(CandidType)]
+            struct DummyAuthConfig {
+                prompt_for_index: bool,
+            }
+            #[derive(CandidType)]
+            struct InternetIdentityInit {
+                assigned_user_number_range: Option<(AnchorNumber, AnchorNumber)>,
+                archive_config: Option<ArchiveConfig>,
+                canister_creation_cycles_cost: Option<u64>,
+                register_rate_limit: Option<RateLimitConfig>,
+                captcha_config: Option<CaptchaConfig>,
+                related_origins: Option<Vec<String>>,
+                new_flow_origins: Option<Vec<String>>,
+                openid_google: Option<Option<OpenIdConfig>>,
+                analytics_config: Option<Option<AnalyticsConfig>>,
+                fetch_root_key: Option<bool>,
+                enable_dapps_explorer: Option<bool>,
+                is_production: Option<bool>,
+                dummy_auth: Option<Option<DummyAuthConfig>>,
+                feature_flag_continue_from_another_device: Option<bool>,
+            }
+            // The initial values have been adapted from the mainnet values obtained by calling
+            // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
+            // record {
+            //   fetch_root_key = null;
+            //   openid_google = opt opt record {
+            //     client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //   };
+            //   is_production = opt true;
+            //   enable_dapps_explorer = opt false;
+            //   assigned_user_number_range = opt record {
+            //     10_000 : nat64;
+            //     7_569_744 : nat64;
+            //   };
+            //   new_flow_origins = opt vec { "https://id.ai" };
+            //   archive_config = opt record {
+            //     polling_interval_ns = 15_000_000_000 : nat64;
+            //     entries_buffer_limit = 10_000 : nat64;
+            //     module_hash = blob "\17\4d\7e\2c\3d\4d\3b\0f\34\61\63\4d\49\ea\c2\85\55\5a\97\48\de\7c\c7\a8\53\cf\ea\00\41\52\a1\97";
+            //     entries_fetch_limit = 1_000 : nat16;
+            //   };
+            //   canister_creation_cycles_cost = opt (0 : nat64);
+            //   analytics_config = opt opt variant {
+            //     Plausible = record {
+            //       domain = opt "identity.internetcomputer.org";
+            //       track_localhost = null;
+            //       hash_mode = null;
+            //       api_host = null;
+            //     }
+            //   };
+            //   related_origins = opt vec {
+            //     "https://id.ai";
+            //     "https://identity.ic0.app";
+            //     "https://identity.internetcomputer.org";
+            //     "https://identity.icp0.io";
+            //   };
+            //   feature_flag_continue_from_another_device = null;
+            //   captcha_config = opt record {
+            //     max_unsolved_captchas = 500 : nat64;
+            //     captcha_trigger = variant { Static = variant { CaptchaDisabled } };
+            //   };
+            //   dummy_auth = opt null;
+            //   register_rate_limit = opt record {
+            //     max_tokens = 25_000 : nat64;
+            //     time_per_token_ns = 1_000_000_000 : nat64;
+            //   };
+            // },
+            let internet_identity_test_args = InternetIdentityInit {
+                assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
+                archive_config: None,             // DIFFERENT FROM ICP MAINNET
+                canister_creation_cycles_cost: Some(0),
+                register_rate_limit: Some(RateLimitConfig {
+                    max_tokens: 25_000,
+                    time_per_token_ns: 1_000_000_000,
+                }),
+                captcha_config: Some(CaptchaConfig {
+                    max_unsolved_captchas: 500,
+                    captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
+                }),
+                related_origins: None,  // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
+                openid_google: Some(Some(OpenIdConfig {
+                    client_id:
+                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
+                            .to_string(),
+                })), // DIFFERENT FROM ICP MAINNET
+                analytics_config: None, // DIFFERENT FROM ICP MAINNET
+                fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
+                enable_dapps_explorer: Some(false),
+                is_production: Some(false), // DIFFERENT FROM ICP MAINNET
+                dummy_auth: Some(None),
+                feature_flag_continue_from_another_device: None,
+            };
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&internet_identity_test_args).unwrap(),
                 )
                 .unwrap();
         }
