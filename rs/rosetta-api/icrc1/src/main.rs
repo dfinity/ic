@@ -22,7 +22,6 @@ use ic_icrc_rosetta::{
 };
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
-use lazy_static::lazy_static;
 use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::watchdog::WatchdogThread;
 use std::collections::HashMap;
@@ -41,16 +40,26 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
-lazy_static! {
-    static ref MAINNET_DEFAULT_URL: &'static str = "https://ic0.app";
-    static ref TESTNET_DEFAULT_URL: &'static str = "https://exchanges.testnet.dfinity.network";
-    static ref MAXIMUM_BLOCKS_PER_REQUEST: u64 = 2000;
-}
+const MAINNET_DEFAULT_URL: &str = "https://ic0.app";
+const TESTNET_DEFAULT_URL: &str = "https://exchanges.testnet.dfinity.network";
+const MAXIMUM_BLOCKS_PER_REQUEST: u64 = 2000;
+const TEST_ICRC1_CANISTER_ID: &str = "3jkp5-oyaaa-aaaaj-azwqa-cai";
 
 #[derive(Clone, Debug, ValueEnum)]
 enum StoreType {
     InMemory,
     File,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Default)]
+enum Environment {
+    #[clap(help = "Production environment on mainnet")]
+    Production,
+    #[clap(help = "Test environment on mainnet")]
+    Test,
+    #[clap(name = "deprecated-testnet", help = "Testnet environment (deprecated)")]
+    #[default]
+    DeprecatedTestnet,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -116,6 +125,14 @@ impl TokenDef {
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(
+        short = 'e',
+        long = "environment",
+        default_value = "deprecated-testnet",
+        help = "Environment preset that configures network and canister settings."
+    )]
+    environment: Environment,
+
     #[arg(short, long)]
     ledger_id: Option<CanisterId>,
 
@@ -155,9 +172,9 @@ struct Args {
     #[arg(short = 'f', long, default_value = "/data/db.sqlite")]
     store_file: PathBuf,
 
-    /// The network type that rosetta connects to.
-    #[arg(short = 'n', long, value_enum)]
-    network_type: NetworkType,
+    /// The network type that rosetta connects to (deprecated, use --environment instead).
+    #[arg(short = 'n', long, value_enum, help = "Deprecated: use --environment instead")]
+    network_type: Option<NetworkType>,
 
     /// URL of the IC to connect to.
     /// Default Mainnet URL is: https://ic0.app,
@@ -194,19 +211,40 @@ impl Args {
             (Some(port), _) => *port,
         }
     }
+
+    /// Resolve the effective environment, handling backward compatibility.
+    fn effective_environment(&self) -> Environment {
+        // Check for conflicting flags
+        if let Some(network_type) = &self.network_type {
+            if self.environment != Environment::DeprecatedTestnet {
+                eprintln!("Cannot specify both --network-type and --environment flags. Please use --environment instead of --network-type.");
+                process::exit(1);
+            }
+
+            // Handle network_type flag by converting it to environment
+            match network_type {
+                NetworkType::Mainnet => Environment::Production,
+                NetworkType::Testnet => Environment::DeprecatedTestnet,
+            }
+        } else {
+            self.environment
+        }
+    }
+
     fn is_mainnet(&self) -> bool {
-        match self.network_type {
-            NetworkType::Mainnet => true,
-            NetworkType::Testnet => false,
+        let environment = self.effective_environment();
+        match environment {
+            Environment::Production | Environment::Test => true,
+            Environment::DeprecatedTestnet => false,
         }
     }
 
     fn effective_network_url(&self) -> String {
         self.network_url.clone().unwrap_or_else(|| {
             if self.is_mainnet() {
-                (*MAINNET_DEFAULT_URL).to_string()
+                MAINNET_DEFAULT_URL.to_string()
             } else {
-                (*TESTNET_DEFAULT_URL).to_string()
+                TESTNET_DEFAULT_URL.to_string()
             }
         })
     }
@@ -354,23 +392,34 @@ async fn load_metadata(
 fn extract_token_defs(args: &Args) -> Result<Vec<TokenDef>> {
     let mut input_tokens = args.multi_tokens.clone();
 
-    // If no tokens are provided, use the legacy arguments
+    // If no tokens are provided, use the legacy arguments or environment defaults
     if input_tokens.is_empty() {
-        if args.ledger_id.is_none() {
-            bail!("No token definitions provided");
+        if let Some(ledger_id) = args.ledger_id {
+            // Use legacy ledger_id argument
+            let mut token_dec = format!("{}", ledger_id);
+
+            if args.icrc1_symbol.is_some() {
+                token_dec.push_str(&format!(":s={}", args.icrc1_symbol.clone().unwrap()));
+            }
+
+            if args.icrc1_decimals.is_some() {
+                token_dec.push_str(&format!(":d={}", args.icrc1_decimals.unwrap()));
+            }
+
+            input_tokens.push(token_dec);
+        } else {
+            // No ledger_id provided, check for environment defaults
+            let environment = args.effective_environment();
+            match environment {
+                Environment::Test => {
+                    // Default TICRC1 token for test environment
+                    input_tokens.push(TEST_ICRC1_CANISTER_ID.to_string());
+                }
+                _ => {
+                    bail!("No token definitions provided");
+                }
+            }
         }
-
-        let mut token_dec = format!("{}", args.ledger_id.unwrap(),);
-
-        if args.icrc1_symbol.is_some() {
-            token_dec.push_str(&format!(":s={}", args.icrc1_symbol.clone().unwrap()));
-        }
-
-        if args.icrc1_decimals.is_some() {
-            token_dec.push_str(&format!(":d={}", args.icrc1_decimals.unwrap()));
-        }
-
-        input_tokens.push(token_dec);
     } else {
         if args.ledger_id.is_some() {
             bail!("Cannot provide both multi-tokens and ledger-id");
@@ -396,6 +445,13 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let _guard = init_logs(args.log_level, &args.log_file)?;
+
+    // Print deprecation warnings
+    if args.network_type.is_some() {
+        warn!("--network-type flag is deprecated. Please use --environment instead.");
+    } else if args.environment == Environment::DeprecatedTestnet {
+        warn!("deprecated-testnet environment is deprecated. Please use --environment test instead.");
+    }
 
     // Initialize rosetta metrics with a default canister ID
     // This will be updated for specific token operations but is required for middleware setup
@@ -515,7 +571,7 @@ async fn main() -> Result<()> {
                 start_synching_blocks(
                     shared_state.icrc1_agent.clone(),
                     shared_state.storage.clone(),
-                    *MAXIMUM_BLOCKS_PER_REQUEST,
+                    MAXIMUM_BLOCKS_PER_REQUEST,
                     shared_state.archive_canister_ids.clone(),
                     RecurrencyMode::OneShot,
                     Box::new(|| {}), // <-- no-op heartbeat
@@ -630,7 +686,7 @@ async fn main() -> Result<()> {
                                 if let Err(e) = start_synching_blocks(
                                     shared_state.icrc1_agent.clone(),
                                     shared_state.storage.clone(),
-                                    *MAXIMUM_BLOCKS_PER_REQUEST,
+                                    MAXIMUM_BLOCKS_PER_REQUEST,
                                     shared_state.archive_canister_ids.clone(),
                                     RecurrencyMode::Recurrent(RecurrencyConfig {
                                         min_recurrency_wait: Duration::from_secs(
