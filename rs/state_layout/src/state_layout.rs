@@ -26,9 +26,7 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{
-    CanisterModule, CanisterModuleImpl, MemoryMappableWasmFile, SnapshotMutability, WasmHash,
-};
+use ic_wasm_types::{CanisterModuleImpl, MemoryMappableWasmFile, SnapshotMutability, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom};
@@ -2608,7 +2606,10 @@ impl<T> WasmFile<T>
 where
     T: WritePolicy,
 {
-    pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
+    pub fn serialize<M: SnapshotMutability>(
+        &self,
+        wasm: &CanisterModuleImpl<M>,
+    ) -> Result<(), LayoutError> {
         // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
         self.try_delete_file()?;
 

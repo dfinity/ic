@@ -1528,11 +1528,18 @@ impl StateManagerImpl {
             .canister_snapshots
             .iter()
             .filter(|(_, snapshot)| {
-                snapshot
-                    .execution_snapshot()
-                    .wasm_binary
-                    .module_loading_status()
-                    == ModuleLoadingStatus::FileLoaded
+                snapshot.either(
+                    |s| {
+                        s.execution_snapshot_impl()
+                            .wasm_binary
+                            .module_loading_status()
+                    },
+                    |s| {
+                        s.execution_snapshot_impl()
+                            .wasm_binary
+                            .module_loading_status()
+                    },
+                ) == ModuleLoadingStatus::FileLoaded
             })
             .count();
 

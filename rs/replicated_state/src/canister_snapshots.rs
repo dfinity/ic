@@ -181,8 +181,22 @@ impl CanisterSnapshots {
     }
 
     /// Iterate over all snapshots.
-    pub fn iter(&self) -> impl Iterator<Item = (&SnapshotId, &Arc<CanisterSnapshot>)> {
-        self.snapshots.iter()
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &SnapshotId,
+            Either<&Arc<CanisterSnapshot>, &Arc<PartialCanisterSnapshot>>,
+        ),
+    > {
+        self.snapshots
+            .iter()
+            .map(|(id, s)| (id, Either::Left(s)))
+            .chain(
+                self.partial_snapshots
+                    .iter()
+                    .map(|(id, s)| (id, Either::Right(s))),
+            )
     }
 
     /// Mutably iterate over all snapshots.

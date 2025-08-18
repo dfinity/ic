@@ -10,6 +10,7 @@ use crate::{
     CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{bounded, unbounded, Sender};
+use either::Either;
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
 use ic_logger::{error, fatal, info, warn, ReplicaLogger};
@@ -19,11 +20,11 @@ use ic_protobuf::state::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshot,
-    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+    canister_snapshots::CanisterSnapshotImpl, canister_state::execution_state::SandboxMemory,
 };
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshotImpl, canister_state::execution_state::SandboxMemory,
+    canister_snapshots::{CanisterSnapshot, PartialCanisterSnapshot},
+    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
 };
 use ic_replicated_state::{
     metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
@@ -39,7 +40,7 @@ use ic_state_layout::{
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
-use ic_wasm_types::{CanisterModule, ModuleLoadingStatus, Mutable, SnapshotMutability};
+use ic_wasm_types::{CanisterModuleImpl, ModuleLoadingStatus, Mutable, SnapshotMutability};
 use prometheus::HistogramTimer;
 use std::collections::BTreeSet;
 use std::convert::identity;
@@ -577,8 +578,7 @@ fn switch_to_checkpoint(
         }
     }
 
-    // This block is duplicated because I could not create a closure that is parametric over
-    // the parameter T of `CanisterSnapshotImpl<T>`. Fixme, if you can.
+    // This block is duplicated because Rust has no parametric closures yet.
     for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
         let new_snapshot: &mut CanisterSnapshotImpl<_> = Arc::make_mut(tip_snapshot);
         let snapshot_layout = layout.snapshot(tip_id).unwrap();
@@ -620,8 +620,7 @@ fn switch_to_checkpoint(
             wasm_binary,
         );
     }
-    // This block is duplicated because I could not create a closure that is parametric over
-    // the parameter T of `CanisterSnapshotImpl<T>`. Fixme, if you can.
+    // This block is duplicated because Rust has no parametric closures yet.
     for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut_partial() {
         let new_snapshot: &mut CanisterSnapshotImpl<_> = Arc::make_mut(tip_snapshot);
         let snapshot_layout = layout.snapshot(tip_id).unwrap();
@@ -1111,7 +1110,6 @@ fn serialize_protos_to_checkpoint_readwrite(
         result?;
     }
 
-    // TODO(mwe)
     let results = parallel_map(
         thread_pool,
         state.canister_snapshots.iter(),
@@ -1160,9 +1158,9 @@ fn serialize_wasm_binaries_and_pagemaps(
     .try_for_each(identity)
 }
 
-fn serialize_wasm_binary(
+fn serialize_wasm_binary<T: SnapshotMutability>(
     wasm_file: &WasmFile<RwPolicy<TipHandler>>,
-    binary: &CanisterModule,
+    binary: &CanisterModuleImpl<T>,
 ) -> Result<(), CheckpointError> {
     if !binary.is_file() {
         // Canister was installed/upgraded. Persist the new wasm binary.
@@ -1226,33 +1224,58 @@ fn serialize_canister_wasm_binary_and_pagemaps(
 
 fn serialize_snapshot_wasm_binary_and_pagemaps(
     snapshot_id: &SnapshotId,
-    snapshot: &CanisterSnapshot,
+    snapshot: &Either<&Arc<CanisterSnapshot>, &Arc<PartialCanisterSnapshot>>,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let snapshot_layout = tip.snapshot(snapshot_id)?;
 
-    let execution_snapshot = snapshot.execution_snapshot();
-    serialize_wasm_binary(&snapshot_layout.wasm(), &execution_snapshot.wasm_binary)?;
-    execution_snapshot.wasm_memory.page_map.persist_delta(
+    let wasm_memory = snapshot.as_ref().either(
+        |s| &s.execution_snapshot_impl().wasm_memory,
+        |s| &s.execution_snapshot_impl().wasm_memory,
+    );
+    let stable_memory = snapshot.as_ref().either(
+        |s| &s.execution_snapshot_impl().stable_memory,
+        |s| &s.execution_snapshot_impl().stable_memory,
+    );
+    snapshot.either(
+        |s| {
+            serialize_wasm_binary(
+                &snapshot_layout.wasm(),
+                &s.execution_snapshot_impl().wasm_binary,
+            )
+        },
+        |s| {
+            serialize_wasm_binary(
+                &snapshot_layout.wasm(),
+                &s.execution_snapshot_impl().wasm_binary,
+            )
+        },
+    )?;
+    wasm_memory.page_map.persist_delta(
         &snapshot_layout.vmemory_0(),
         tip.height(),
         lsmt_config,
         metrics,
     )?;
-    execution_snapshot.stable_memory.page_map.persist_delta(
+    stable_memory.page_map.persist_delta(
         &snapshot_layout.stable_memory(),
         tip.height(),
         lsmt_config,
         metrics,
     )?;
-    snapshot.chunk_store().page_map().persist_delta(
-        &snapshot_layout.wasm_chunk_store(),
-        tip.height(),
-        lsmt_config,
-        metrics,
-    )?;
+    snapshot
+        .either(
+            |s| s.chunk_store().page_map(),
+            |s| s.chunk_store().page_map(),
+        )
+        .persist_delta(
+            &snapshot_layout.wasm_chunk_store(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
     Ok(())
 }
 
@@ -1357,36 +1380,54 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
     Ok(())
 }
 
-fn serialize_snapshot_protos_to_checkpoint_readwrite<T: SnapshotMutability>(
+fn serialize_snapshot_protos_to_checkpoint_readwrite(
     snapshot_id: &SnapshotId,
-    canister_snapshot: &CanisterSnapshotImpl<T>,
+    canister_snapshot: Either<&Arc<CanisterSnapshot>, &Arc<PartialCanisterSnapshot>>,
     checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     let snapshot_layout = checkpoint_readwrite.snapshot(snapshot_id)?;
 
     // The protobuf is written at each checkpoint.
+    // These duplicated closures are necessary because Rust has no parametric closures yet.
     snapshot_layout.snapshot().serialize(
         CanisterSnapshotBits {
             snapshot_id: *snapshot_id,
-            canister_id: canister_snapshot.canister_id(),
-            taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
-            canister_version: canister_snapshot.canister_version(),
-            binary_hash: canister_snapshot
-                .canister_module_impl()
-                .module_hash()
-                .into(),
-            certified_data: canister_snapshot.certified_data().clone(),
-            wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
-            stable_memory_size: canister_snapshot.stable_memory().size,
-            wasm_memory_size: canister_snapshot.wasm_memory().size,
-            total_size: canister_snapshot.size(),
-            exported_globals: canister_snapshot.exported_globals().clone(),
-            source: canister_snapshot.source(),
-            global_timer: canister_snapshot.execution_snapshot_impl().global_timer,
-            on_low_wasm_memory_hook_status: canister_snapshot
-                .execution_snapshot_impl()
-                .on_low_wasm_memory_hook_status,
-            is_partial: T::is_partial(),
+            canister_id: canister_snapshot.either(|s| s.canister_id(), |s| s.canister_id()),
+            taken_at_timestamp: *canister_snapshot
+                .either(|s| s.taken_at_timestamp(), |s| s.taken_at_timestamp()),
+            canister_version: canister_snapshot
+                .either(|s| s.canister_version(), |s| s.canister_version()),
+            binary_hash: canister_snapshot.either(
+                |s| s.canister_module_impl().module_hash().into(),
+                |s| s.canister_module_impl().module_hash().into(),
+            ),
+            certified_data: canister_snapshot.either(
+                |s| s.certified_data().clone(),
+                |s| s.certified_data().clone(),
+            ),
+            wasm_chunk_store_metadata: canister_snapshot.either(
+                |s| s.chunk_store().metadata().clone(),
+                |s| s.chunk_store().metadata().clone(),
+            ),
+            stable_memory_size: canister_snapshot
+                .either(|s| s.stable_memory().size, |s| s.stable_memory().size),
+            wasm_memory_size: canister_snapshot
+                .either(|s| s.wasm_memory().size, |s| s.wasm_memory().size),
+            total_size: canister_snapshot.either(|s| s.size(), |s| s.size()),
+            exported_globals: canister_snapshot.either(
+                |s| s.exported_globals().clone(),
+                |s| s.exported_globals().clone(),
+            ),
+            source: canister_snapshot.either(|s| s.source(), |s| s.source()),
+            global_timer: canister_snapshot.either(
+                |s| s.execution_snapshot_impl().global_timer,
+                |s| s.execution_snapshot_impl().global_timer,
+            ),
+            on_low_wasm_memory_hook_status: canister_snapshot.either(
+                |s| s.execution_snapshot_impl().on_low_wasm_memory_hook_status,
+                |s| s.execution_snapshot_impl().on_low_wasm_memory_hook_status,
+            ),
+            is_partial: canister_snapshot.either(|_| false, |_| true),
         }
         .into(),
     )?;

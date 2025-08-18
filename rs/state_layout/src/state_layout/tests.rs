@@ -15,6 +15,7 @@ use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, Response
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
+use ic_wasm_types::CanisterModule;
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
