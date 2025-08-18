@@ -1,10 +1,13 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
 use ic_management_canister_types_private::{
-    self as ic00, CanisterInstallMode, CanisterSettingsArgsBuilder, EmptyBlob, Payload,
+    self as ic00, CanisterInstallMode, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset,
+    EmptyBlob, LoadCanisterSnapshotArgs, Payload, ReadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -53,6 +56,8 @@ fn setup(subnet_memory_capacity: u64, initial_cycles: Option<u128>) -> (StateMac
     let subnet_config = SubnetConfig::new(subnet_type);
     let mut execution_config = ExecutionConfig {
         subnet_memory_capacity: NumBytes::new(subnet_memory_capacity),
+        canister_snapshot_download: FlagStatus::Enabled,
+        canister_snapshot_upload: FlagStatus::Enabled,
         ..Default::default()
     };
     // We want storage reservation to trigger upon every large enough memory allocation
@@ -116,7 +121,7 @@ fn test_storage_reservation_not_triggered() {
 }
 
 #[test]
-fn test_storage_reservation_not_triggered_in_noop_update_settings() {
+fn test_storage_reservation_not_triggered_with_reserved_memory_allocation() {
     let (env, canister_id) = setup(SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
@@ -165,7 +170,7 @@ fn test_storage_reservation_not_triggered_in_noop_update_settings() {
     assert_eq!(
         reserved_balance(&env, canister_id),
         initial_reserved_balance
-    ); // No extra storage reservation.
+    ); // No extra storage reservation while we have reserved memory allocation.
 }
 
 #[test]
@@ -244,7 +249,7 @@ fn test_storage_reservation_triggered_in_cleanup() {
 }
 
 #[test]
-fn test_storage_reservation_triggered_in_canister_snapshot_with_enough_cycles_available() {
+fn test_storage_reservation_triggered_in_take_canister_snapshot_with_enough_cycles_available() {
     let (env, canister_id) = setup(SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
@@ -264,7 +269,7 @@ fn test_storage_reservation_triggered_in_canister_snapshot_with_enough_cycles_av
 }
 
 #[test]
-fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles_available() {
+fn test_storage_reservation_triggered_in_take_canister_snapshot_without_enough_cycles_available() {
     // This test verifies that a canister cannot take a snapshot if it does not have enough
     // cycles to cover the storage reservation triggered by the snapshot operation. The main
     // point of the test is to verify that the error message is informative and includes the
@@ -309,4 +314,199 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
         cycles_needed > 0,
         "The amount of cycles needed is {cycles_needed} which is not positive."
     );
+}
+
+#[test]
+fn test_storage_reservation_triggered_in_upload_and_load_canister_snapshot_with_enough_cycles_available(
+) {
+    let (env, canister_id) = setup(SUBNET_MEMORY_CAPACITY, None);
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    // Take a canister snapshot to get valid snapshot metadata to upload later.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap()
+        .snapshot_id();
+    // The canister memory usage is low so far => the snapshot size is also low => no storage reservation is triggered.
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    let metadata = env
+        .read_canister_snapshot_metadata(&ReadCanisterSnapshotMetadataArgs {
+            canister_id: canister_id.get(),
+            snapshot_id,
+        })
+        .unwrap();
+    // Only reading data => no storage reservation triggered.
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    // Create a new canister snapshot by uploading metadata specifying large canister stable memory.
+    let new_snapshot_id = env
+        .upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs {
+            canister_id: canister_id.get(),
+            replace_snapshot: None,
+            wasm_module_size: metadata.wasm_module_size,
+            exported_globals: metadata.exported_globals,
+            wasm_memory_size: metadata.wasm_memory_size,
+            stable_memory_size: (1000 * PAGE_SIZE) as u64,
+            certified_data: metadata.certified_data,
+            global_timer: metadata.global_timer,
+            on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+        })
+        .unwrap()
+        .get_snapshot_id();
+
+    let reserved_balance_after_uploading_snapshot = reserved_balance(&env, canister_id);
+    assert_gt!(reserved_balance_after_uploading_snapshot, 0); // Storage reservation is now triggered.
+
+    // We upload the universal canister WASM to get a valid snapshot that can be loaded.
+    env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs {
+        canister_id: canister_id.get(),
+        snapshot_id: new_snapshot_id,
+        kind: CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+        chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
+    })
+    .unwrap();
+    // Uploading snapshot data does not trigger storage reservation anymore
+    // because memory for the snapshot was already reserved when uploading snapshot metadata.
+    assert_eq!(
+        reserved_balance(&env, canister_id),
+        reserved_balance_after_uploading_snapshot
+    );
+
+    // Load a snapshot to trigger more storage reservation.
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        new_snapshot_id,
+        None,
+    ))
+    .unwrap();
+    let reserved_balance_after_loading_snapshot = reserved_balance(&env, canister_id);
+    assert_gt!(
+        reserved_balance_after_loading_snapshot,
+        reserved_balance_after_uploading_snapshot,
+    );
+}
+
+fn instruction_and_reserved_cycles_exceed_canister_balance_setup() -> (StateMachine, CanisterId) {
+    // Create application subnet `StateMachine`.
+    let subnet_type = SubnetType::Application;
+    let subnet_config = SubnetConfig::new(subnet_type);
+    let execution_config = ExecutionConfig::default();
+    let config = StateMachineConfig::new(subnet_config, execution_config);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(config))
+        .with_subnet_type(subnet_type)
+        .build();
+
+    // Create multiple universal canisters:
+    // - the first few (`fillup_canisters`) are used to trigger storage reservation on the subnet;
+    // - the last one (`test_canister`) is used to test the case of instruction and reserved cycles exceeding the canister balance.
+    let initial_cycles = 10 * T;
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_reserved_cycles_limit(initial_cycles)
+        .with_freezing_threshold(0)
+        .build();
+    let mut fillup_canisters = vec![];
+    for _ in 0..2 {
+        let canister_id = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                Some(settings.clone()),
+                initial_cycles.into(),
+            )
+            .unwrap();
+        fillup_canisters.push(canister_id);
+    }
+    let test_canister = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(settings),
+            initial_cycles.into(),
+        )
+        .unwrap();
+
+    // Keep growing stable memory of the fillup canisters by 10 GiB (`10 << 14` WASM pages) at a time until cycles start getting reserved.
+    let mut iterations = 0;
+    loop {
+        for canister_id in &fillup_canisters {
+            env.execute_ingress(
+                *canister_id,
+                "update",
+                wasm().stable64_grow(10 << 14).reply().build(),
+            )
+            .unwrap();
+        }
+        if fillup_canisters
+            .iter()
+            .any(|canister_id| reserved_balance(&env, *canister_id) != 0)
+        {
+            break;
+        }
+        iterations += 1;
+        if iterations > 100 {
+            panic!("Could not trigger storage reservation after 100 steps - maybe the storage reservation threshold increased and more fillup canisters are needed?");
+        }
+    }
+
+    // Grow stable memory of the test canister by 10 GiB so that taking its snapshot grows memory usage significantly
+    // and many cycles are reserved (but still much less cycles are reserved than taking a snapshot of a fillup canister).
+    env.execute_ingress(
+        test_canister,
+        "update",
+        wasm().stable64_grow(10 << 14).reply().build(),
+    )
+    .unwrap();
+
+    (env, test_canister)
+}
+
+/// The amount of reserved cycles for storage when taking a snapshot in the test `instruction_and_reserved_cycles_exceed_canister_balance`.
+/// There is a dedicated test `reserved_by_snapshot_test` fixing the value of this constant.
+/// This value should be much more than 40B (instruction cycles prepayment as the prepayment amount can't be burned
+/// and we burn cycles to reach the target cycles balance).
+const RESERVED_BY_SNAPSHOT: u128 = 3_307_236_131_163;
+
+#[test]
+fn reserved_by_snapshot_test() {
+    let (env, canister_id) = instruction_and_reserved_cycles_exceed_canister_balance_setup();
+
+    let before = reserved_balance(&env, canister_id);
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs {
+        canister_id: canister_id.get(),
+        replace_snapshot: None,
+    })
+    .unwrap();
+    let after = reserved_balance(&env, canister_id);
+
+    let reserved_by_snapshot = after - before;
+    assert_eq!(reserved_by_snapshot, RESERVED_BY_SNAPSHOT);
+}
+
+#[test]
+fn instruction_and_reserved_cycles_exceed_canister_balance() {
+    let (env, canister_id) = instruction_and_reserved_cycles_exceed_canister_balance_setup();
+
+    // Burn cycles of the canister so that only
+    // `RESERVED_BY_SNAPSHOT` (reserved cycles for the snapshot) + 1B (slack; less than the base fee for a snapshot) are remaining.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    let balance = status.cycles();
+    let to_burn = balance
+        .checked_sub(RESERVED_BY_SNAPSHOT + 1_000_000_000)
+        .unwrap();
+    env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().cycles_burn128(to_burn).reply().build(),
+    )
+    .unwrap();
+
+    let err = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.get(),
+            replace_snapshot: None,
+        })
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
 }
