@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
-ic-consensus-system-test-utils = { path = "../../consensus/utils" }
+anyhow = { workspace = true }
+ic_consensus_system_test_utils = { path = "../utils" }
 ic-system-test-driver = { path = "../../driver" }
-slog = "0.2"
-ssh2 = "0.9"
+slog = { workspace = true }
+ssh2 = { workspace = true }
