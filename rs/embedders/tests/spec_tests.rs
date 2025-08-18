@@ -505,12 +505,9 @@ fn parse_and_encode(
             location(wat, text, path)
         )
     })?;
-    let module = ic_wasm_transform::Module::parse(&wasm, enable_multi_memory)
+    let mut module = wirm::Module::parse(&wasm, enable_multi_memory)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
-    module
-        .encode()
-        .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))
-        .unwrap();
+    module.encode();
     Ok(wasm)
 }
 

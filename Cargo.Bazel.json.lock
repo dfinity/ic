@@ -1,5 +1,5 @@
 {
-  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
+  "checksum": "a1add0e6f599d4dcd2f7aafee73f14f0693fab67ce13a231bdc44c27cd9f3df7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -949,7 +949,7 @@
               "target": "language_tags"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -1136,7 +1136,7 @@
               "target": "futures_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -4158,7 +4158,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -4820,7 +4820,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -7467,7 +7467,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -12486,7 +12486,7 @@
               "target": "lexical_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -15920,7 +15920,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -16252,7 +16252,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -19892,7 +19892,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -21924,6 +21924,10 @@
               "target": "which"
             },
             {
+              "id": "wirm 2.0.0",
+              "target": "wirm"
+            },
+            {
               "id": "wsl 0.1.0",
               "target": "wsl"
             },
@@ -23778,7 +23782,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -24197,7 +24201,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -24255,7 +24259,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -24333,7 +24337,7 @@
               "target": "humantime"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -24712,7 +24716,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -24865,7 +24869,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -26010,6 +26014,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "std"
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "0.3.0"
       },
@@ -29181,6 +29192,75 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "gimli 0.32.2": {
+      "name": "gimli",
+      "version": "0.32.2",
+      "package_url": "https://github.com/gimli-rs/gimli",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gimli/0.32.2/download",
+          "sha256": "cc6298e594375a7fead9efd5568f0a46e6a154fb6a9bdcbe3c06946ffd81a5f6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gimli",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gimli",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "endian-reader",
+            "fallible-iterator",
+            "read",
+            "read-all",
+            "read-core",
+            "std",
+            "write"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "fallible-iterator 0.3.0",
+              "target": "fallible_iterator"
+            },
+            {
+              "id": "indexmap 2.7.1",
+              "target": "indexmap"
+            },
+            {
+              "id": "stable_deref_trait 1.2.0",
+              "target": "stable_deref_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.32.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "glob 0.3.1": {
       "name": "glob",
       "version": "0.3.1",
@@ -29828,7 +29908,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -31653,7 +31733,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -32638,7 +32718,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -32749,7 +32829,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -35351,7 +35431,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -38290,7 +38370,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -38404,7 +38484,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -39636,7 +39716,7 @@
               "target": "jni_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -42359,7 +42439,7 @@
               "target": "libcryptsetup_rs_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -44521,14 +44601,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "log 0.4.20": {
+    "log 0.4.27": {
       "name": "log",
-      "version": "0.4.20",
+      "version": "0.4.27",
       "package_url": "https://github.com/rust-lang/log",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/log/0.4.20/download",
-          "sha256": "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+          "url": "https://static.crates.io/crates/log/0.4.27/download",
+          "sha256": "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
         }
       },
       "targets": [
@@ -44556,8 +44636,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.4.20"
+        "edition": "2021",
+        "version": "0.4.27"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -45408,7 +45488,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45726,7 +45806,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45791,7 +45871,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46451,7 +46531,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47018,7 +47098,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47110,7 +47190,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -47510,7 +47590,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47821,7 +47901,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47957,7 +48037,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -53875,7 +53955,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -54267,7 +54347,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -56620,7 +56700,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -57006,7 +57086,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -58936,7 +59016,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -59042,7 +59122,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -59852,7 +59932,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -60210,7 +60290,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -62856,7 +62936,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -63699,7 +63779,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -64056,7 +64136,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -66290,7 +66370,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -66444,7 +66524,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -66548,7 +66628,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66654,7 +66734,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66779,7 +66859,7 @@
               "target": "brotli_decompressor"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66916,7 +66996,7 @@
               "target": "http"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -67381,7 +67461,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -67448,7 +67528,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -69536,7 +69616,7 @@
               "target": "fxhash"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -72310,7 +72390,7 @@
               "target": "colored"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -72423,7 +72503,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -72800,7 +72880,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -73008,7 +73088,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -75122,7 +75202,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -76231,7 +76311,7 @@
               "target": "libsystemd_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -76995,7 +77075,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -79979,7 +80059,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -80047,7 +80127,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -81471,7 +81551,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -81773,7 +81853,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -82660,7 +82740,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -82754,7 +82834,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -82915,7 +82995,7 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
+              "id": "cfg-if 0.1.10",
               "target": "cfg_if"
             },
             {
@@ -85152,7 +85232,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85233,7 +85313,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85502,7 +85582,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85805,7 +85885,7 @@
               "target": "bumpalo"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -86401,7 +86481,8 @@
           "common": [
             "component-model",
             "default",
-            "std"
+            "std",
+            "wasmparser"
           ],
           "selects": {}
         },
@@ -86414,6 +86495,10 @@
             {
               "id": "wasm-encoder 0.235.0",
               "target": "build_script_build"
+            },
+            {
+              "id": "wasmparser 0.235.0",
+              "target": "wasmparser"
             }
           ],
           "selects": {}
@@ -87219,7 +87304,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -87479,7 +87564,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -87658,7 +87743,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -88063,7 +88148,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -92544,6 +92629,85 @@
       ],
       "license_file": "LICENSE"
     },
+    "wirm 2.0.0": {
+      "name": "wirm",
+      "version": "2.0.0",
+      "package_url": "https://github.com/thesuhas/wirm",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wirm/2.0.0/download",
+          "sha256": "fc2dd5551377bda630cba9e329fa3a210c6a68498e3ed10ff2bbfa3a881ba6c2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wirm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wirm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "parallel",
+            "rayon"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "gimli 0.32.2",
+              "target": "gimli"
+            },
+            {
+              "id": "log 0.4.27",
+              "target": "log"
+            },
+            {
+              "id": "rayon 1.10.0",
+              "target": "rayon"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "tempfile 3.20.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "wasm-encoder 0.235.0",
+              "target": "wasm_encoder"
+            },
+            {
+              "id": "wasmparser 0.235.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "wit-bindgen-rt 0.33.0": {
       "name": "wit-bindgen-rt",
       "version": "0.33.0",
@@ -95196,6 +95360,7 @@
     "wat 1.234.0",
     "wee_alloc 0.4.5",
     "which 4.4.0",
+    "wirm 2.0.0",
     "wsl 0.1.0",
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",

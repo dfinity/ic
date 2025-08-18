@@ -4301,7 +4301,7 @@ dependencies = [
  "criterion",
  "ic-test-utilities-execution-environment",
  "ic-types",
- "ic-wasm-transform",
+ "wirm",
 ]
 
 [[package]]
@@ -5241,6 +5241,17 @@ name = "gimli"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
+dependencies = [
+ "fallible-iterator 0.3.0",
+ "indexmap 2.10.0",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "gimli"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93563d740bc9ef04104f9ed6f86f1e3275c2cdafb95664e26584b9ca807a8ffe"
 dependencies = [
  "fallible-iterator 0.3.0",
  "indexmap 2.10.0",
@@ -9072,7 +9083,6 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
- "ic-wasm-transform",
  "ic-wasm-types",
  "insta",
  "itertools 0.12.1",
@@ -9105,6 +9115,7 @@ dependencies = [
  "wasmtime-environ",
  "wast 228.0.0",
  "wat",
+ "wirm",
 ]
 
 [[package]]
@@ -24141,7 +24152,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
@@ -25640,6 +25651,21 @@ name = "winsafe"
 version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
+
+[[package]]
+name = "wirm"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc2dd5551377bda630cba9e329fa3a210c6a68498e3ed10ff2bbfa3a881ba6c2"
+dependencies = [
+ "gimli 0.32.0",
+ "log",
+ "rayon",
+ "serde_json",
+ "tempfile",
+ "wasm-encoder 0.235.0",
+ "wasmparser 0.235.0",
+]
 
 [[package]]
 name = "wit-bindgen-rt"
