@@ -11,7 +11,7 @@
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=SSH_AUTH_SOCK --test_env=IMAGE_SIZE_GIB=5120 --test_env NUM_PERF_HOSTS=1
+//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
 //
 // The --output-dir=./io_perf_benchmark will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./io_perf_benchmark will store the remaining test output in the specified directory.
@@ -49,7 +49,7 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
@@ -66,7 +66,6 @@ use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 const NUM_IC_GATEWAYS: u64 = 1;
-const DEFAULT_IMAGE_SIZE_GIB: u64 = 5120;
 const DEFAULT_NUM_HOSTS: u64 = 1;
 
 fn main() -> Result<()> {
@@ -80,15 +79,7 @@ fn main() -> Result<()> {
         .ok()
         .and_then(|s| s.parse::<u64>().ok());
 
-    // By default, the image size is set to 5 TiB, which supports testing up to 2 TiB of state under heavy write workloads.
-    // Note: Migrating such a large image to the LVM partition on the hosts can be time-consuming.
-    // To use a different image size, set the `IMAGE_SIZE_GIB` environment variable.
-    let image_size_gib = std::env::var("IMAGE_SIZE_GIB")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_IMAGE_SIZE_GIB);
-
-    let config = Config::new(perf_hosts, num_hosts, image_size_gib);
+    let config = Config::new(perf_hosts, num_hosts);
 
     SystemTestGroup::new()
         .with_setup(config.build())
@@ -139,7 +130,30 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
         xmlstarlet ed --inplace -u "//domain/devices/disk[target[@dev='vda']]/@type" -v block "$CONFIG"
         xmlstarlet ed --inplace -d "//domain/devices/disk[target[@dev='vda']]/source/@file" "$CONFIG"
         xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/source" -t attr -n dev -v "/dev/hostlvm/guestos" "$CONFIG"
-        sudo dd if=$IMAGE of=/dev/hostlvm/guestos status=progress bs=512MiB oflag=direct iflag=direct
+
+        # NOTE: Taken from SetupOS
+        sudo vgscan --mknodes
+        loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
+        if [ "${loop_device}" != "" ]; then
+            sudo wipefs --all --force "${loop_device}"*
+            sudo losetup -d "${loop_device}"
+        fi
+        sudo wipefs --all --force /dev/mapper/hostlvm-guestos
+        sudo dd if=$IMAGE of=/dev/mapper/hostlvm-guestos bs=10M conv=sparse status=progress
+        sudo sync
+        loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
+        if [ "${loop_device}" != "" ]; then
+            sudo wipefs --all --force "${loop_device}"p6
+            sudo sfdisk --force --no-reread --delete "${loop_device}" 10
+
+            CONF_DIR=$(mktemp -d)
+            sudo mount "${loop_device}p3" "${CONF_DIR}"
+            sudo rm "${CONF_DIR}/CONFIGURED" "${CONF_DIR}/store.keyfile"
+            sudo umount "${CONF_DIR}"
+            sudo rm -rf "${CONF_DIR}"
+
+            sudo losetup -d "${loop_device}"
+        fi
 
         sudo virsh create $CONFIG
         echo "Migration done"
@@ -170,16 +184,11 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 pub struct Config {
     hosts: Option<Vec<String>>,
     num_hosts: Option<u64>,
-    image_size_gib: u64,
 }
 
 impl Config {
-    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>, image_size_gib: u64) -> Config {
-        Config {
-            hosts,
-            num_hosts,
-            image_size_gib,
-        }
+    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>) -> Config {
+        Config { hosts, num_hosts }
     }
 
     /// Builds the IC instance.
@@ -199,7 +208,7 @@ pub fn setup(env: TestEnv, config: Config) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(config.image_size_gib)),
+        ..Default::default()
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
