@@ -15230,6 +15230,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_system_test_recovery_artifacts_vm_lib"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "slog",
+ "ssh2",
+]
+
+[[package]]
 name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
@@ -15298,6 +15309,7 @@ dependencies = [
  "ic-universal-canister",
  "ic_consensus_system_test_catch_up_test_common",
  "ic_consensus_system_test_liveness_test_common",
+ "ic_consensus_system_test_recovery_artifacts_vm_lib",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "k256 0.13.4",
@@ -21746,7 +21758,7 @@ version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
 dependencies = [
- "bitcoin_hashes 0.12.0",
+ "bitcoin_hashes 0.14.0",
  "rand 0.8.5",
  "secp256k1-sys 0.10.1",
  "serde",
@@ -24298,7 +24310,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
