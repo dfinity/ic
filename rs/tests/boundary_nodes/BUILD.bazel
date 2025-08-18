@@ -7,7 +7,6 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 
 system_test_nns(
     name = "api_bn_integration_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
     ],
@@ -25,6 +24,7 @@ system_test_nns(
 system_test_nns(
     name = "api_bn_update_workload_test",
     tags = [
+        "experimental_system_test_colocation",
         "long_test",
     ],
     test_timeout = "long",

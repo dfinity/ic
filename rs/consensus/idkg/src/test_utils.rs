@@ -1111,9 +1111,9 @@ pub fn create_available_pre_signature_with_key_transcript_and_height(
     key_transcript: Option<UnmaskedTranscript>,
     height: Height,
 ) -> PreSigId {
-    let sig_inputs = create_sig_inputs_with_height(caller, height, key_id.inner().clone());
+    let inputs = create_pre_sig_ref_with_height(caller, height, &key_id);
     let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
-    let mut pre_signature_ref = sig_inputs.pre_signature_ref;
+    let mut pre_signature_ref = inputs.pre_signature_ref;
     if let Some(transcript) = key_transcript {
         match pre_signature_ref {
             PreSignatureRef::Ecdsa(ref mut pre_sig) => {
@@ -1128,7 +1128,7 @@ pub fn create_available_pre_signature_with_key_transcript_and_height(
         .available_pre_signatures
         .insert(pre_sig_id, pre_signature_ref);
 
-    for (t_ref, transcript) in sig_inputs.idkg_transcripts {
+    for (t_ref, transcript) in inputs.idkg_transcripts {
         idkg_payload
             .idkg_transcripts
             .insert(t_ref.transcript_id, transcript);
