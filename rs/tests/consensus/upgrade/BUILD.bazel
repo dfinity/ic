@@ -103,7 +103,6 @@ rust_binary(
 system_test_nns(
     name = "upgrade_app_subnet_test",
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,  # flakiness rate of over 2.27% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
@@ -121,7 +120,6 @@ system_test_nns(
 system_test_nns(
     name = "downgrade_app_subnet_test",
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,  # flakiness rate of over 2.97% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
