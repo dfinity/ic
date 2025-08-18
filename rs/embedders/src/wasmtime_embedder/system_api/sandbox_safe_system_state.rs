@@ -1539,7 +1539,7 @@ mod tests {
             NumSeconds::from(100_000),
         );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
@@ -1550,9 +1550,12 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance - removed, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance - removed,
+            system_state.metadata.balance()
+        );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(600_000);
@@ -1563,9 +1566,12 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance - removed, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance - removed,
+            system_state.metadata.balance()
+        );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let added = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
@@ -1576,9 +1582,12 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance + added, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance + added,
+            system_state.metadata.balance()
+        );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let added = Cycles::new(500_000);
         let consumed = Cycles::new(600_000);
@@ -1589,7 +1598,10 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance + added, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance + added,
+            system_state.metadata.balance()
+        );
     }
 
     fn helper_msg_deadline(call_context_deadline: Option<CoarseTime>) -> CoarseTime {
