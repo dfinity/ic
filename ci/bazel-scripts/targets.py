@@ -164,6 +164,7 @@ def check():
     Exit with 0 if PULL_REQUEST_BAZEL_TARGETS:
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
+    * each pattern has at least one explicit target.
     * each target is valid and exists.
     Otherwise print all errors to stderr and exit with 1.
     """
