@@ -13,8 +13,8 @@
   },
   "hostos": {
     "latest_release": {
-      "version": "047925dfd8386aca91d154054149727131766084",
-      "update_img_hash_dev": "0320a64139cd2a29296e7cc46dbc4803657f59dc2bab4baae23af9ee17488bc1"
+      "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
+      "update_img_hash_dev": "132f28a30bb97775734e64b09f6a0d04dca41b713229b95bd527d8ea90b2bed5"
     }
   }
 }
