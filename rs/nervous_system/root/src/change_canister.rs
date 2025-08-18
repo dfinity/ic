@@ -388,21 +388,10 @@ where
     )
     .await?;
 
-    loop {
-        let status: CanisterStatusResultFromManagementCanister =
-            canister_status::<Rt>(CanisterIdRecord::from(canister_id))
-                .await
-                .unwrap();
-
-        if status.status == CanisterStatusType::Stopped {
-            return Ok(());
-        }
-
-        println!(
-            "{}Waiting for {:?} to stop. Current status: {}",
-            LOG_PREFIX, canister_id, status.status
-        );
-    }
+    // If we successfully get here, we know the canister is stopped.  While a canister could be in
+    // "Stopping" state, "stop_canister" does not successfully return until it is "Stopped".
+    // Therefore, we do not check canister status.
+    Ok(())
 }
 
 // Use a serde field attribute to custom serialize the Nat candid type.
