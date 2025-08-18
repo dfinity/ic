@@ -1,5 +1,5 @@
 [package]
-name = "stable_memory_integrity"
+name = "ic_stable_memory_integrity"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -13,7 +13,8 @@ canister-test = { path = "../canister_test" }
 ic-cdk = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
-lazy-static = "1.4.0"
+ic-base-types = { path = "../../types/base_types" }
+lazy_static = "1.4.0"
 proptest = { workspace = true }
 serde = { workspace = true }
 

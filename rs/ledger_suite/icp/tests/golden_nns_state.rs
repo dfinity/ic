@@ -1,6 +1,6 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
@@ -12,10 +12,6 @@ use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_ledger_tip};
-use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
-};
 use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
@@ -24,6 +20,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, Instant};
 
 /// The number of instructions that can be executed in a single canister upgrade as per
@@ -242,6 +239,9 @@ impl LedgerState {
 fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
+    // Check the balance of the default account of the anonymous principal
+    setup.check_balance_of_anonymous_account(false);
+
     // Advance the time to make sure the ledger gets the current time for checking allowances.
     setup.state_machine.advance_time(Duration::from_secs(1u64));
     setup.state_machine.tick();
@@ -257,6 +257,17 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.upgrade_to_master();
     // Upgrade again to test the pre-upgrade
     setup.upgrade_to_master();
+
+    // Check the balance of the default account of the anonymous principal again
+    setup.check_balance_of_anonymous_account(true);
+    // Ingest the burn block from the ledger into the in-memory ledger
+    let mut previous_ledger_state = setup.previous_ledger_state.take().unwrap();
+    previous_ledger_state.fetch_and_ingest_next_ledger_and_archive_blocks(
+        &setup.state_machine,
+        LEDGER_CANISTER_ID,
+        None,
+    );
+    setup.previous_ledger_state = Some(previous_ledger_state);
 
     // Perform upgrade and downgrade testing
     setup.perform_upgrade_downgrade_testing(true, AllowancesRecentlyPurged::Yes);
@@ -290,15 +301,35 @@ impl Setup {
         let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
         let master_wasms = Wasms {
-            ledger: build_ledger_wasm(),
-            index: build_ledger_index_wasm(),
-            archive: build_ledger_archive_wasm(),
+            ledger: Wasm::from_bytes(
+                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                    .expect("Could not read ledger wasm"),
+            ),
+            index: Wasm::from_bytes(
+                std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read index wasm"),
+            ),
+            archive: Wasm::from_bytes(
+                std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read archive wasm"),
+            ),
         };
 
         let mainnet_wasms = Wasms {
-            ledger: build_mainnet_ledger_wasm(),
-            index: build_mainnet_ledger_index_wasm(),
-            archive: build_mainnet_ledger_archive_wasm(),
+            ledger: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet ledger wasm"),
+            ),
+            index: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet index wasm"),
+            ),
+            archive: Wasm::from_bytes(
+                std::fs::read(
+                    std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap(),
+                )
+                .expect("Could not read mainnet archive wasm"),
+            ),
         };
 
         Self {
@@ -369,6 +400,40 @@ impl Setup {
             should_verify_balances_and_allowances,
             allowances_recently_purged,
         ));
+    }
+
+    fn check_balance_of_anonymous_account(&self, should_be_zero: bool) -> Nat {
+        let anonymous = PrincipalId::new_anonymous();
+        let anonymous_default_account = Account {
+            owner: anonymous.0,
+            subaccount: None,
+        };
+        let balance = Decode!(
+            &self
+                .state_machine
+                .query(
+                    LEDGER_CANISTER_ID,
+                    "icrc1_balance_of",
+                    Encode!(&anonymous_default_account).unwrap()
+                )
+                .expect("failed to query balance")
+                .bytes(),
+            Nat
+        )
+        .expect("failed to decode balance_of response");
+        println!(
+            "Balance of anonymous principal's default account: {}",
+            balance
+        );
+        let modifier = if should_be_zero { "" } else { "not " };
+        assert_eq!(
+            should_be_zero,
+            balance == 0u64,
+            "Balance of anonymous principal's default account should {}be zero, but is {}",
+            modifier,
+            balance
+        );
+        balance
     }
 
     fn check_ledger_metrics(&self) {

@@ -270,11 +270,12 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
             };
 
         // Compute the cost of induction.
+        let cost_schedule = state.get_own_cost_schedule();
         let induction_cost = self.cycles_account_manager.ingress_induction_cost(
             &msg,
             effective_canister_id,
             subnet_size,
-            state.metadata.cost_schedule,
+            cost_schedule,
         );
 
         let ingress = Ingress::from((msg, effective_canister_id));
@@ -304,7 +305,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                     compute_allocation,
                     cost,
                     subnet_size,
-                    state.metadata.cost_schedule,
+                    cost_schedule,
                     reveal_top_up,
                 ) {
                     return Err(IngressInductionError::CanisterOutOfCycles(err));

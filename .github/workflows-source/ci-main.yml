@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:a5edec0ae2b045ef86bc957f9a3155a360edc2a273a700eabd0670dc489d809c
+    image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -150,51 +150,89 @@ jobs:
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
     steps:
       - <<: *checkout
-      - name: Set BAZEL_EXTRA_ARGS
-        shell: bash
-        id: bazel-extra-args
+      - name: "Node Name"
         run: |
-          set -xeuo pipefail
-          # Determine which tests to skip
-          EXCLUDED_TEST_TAGS=(
-              system_test_large
-              system_test_benchmark
-              fuzz_test
-              fi_tests_nightly
-              nns_tests_nightly
-          )
+          echo "::notice::Node Name: ${NODE_NAME}"
 
-          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
-            EXCLUDED_TEST_TAGS+=(long_test)
-          fi
-
-          # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
-          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
-          # Prepend tags with '-' and join them with commas for Bazel
-          TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
-          # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS=(
-            "--test_tag_filters=$TEST_TAG_FILTERS"
-            --config=lint # enable lint checks
-            )
-          if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
-              BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-          elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-              BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate )
-          else
-              BAZEL_EXTRA_ARGS+=( --keep_going )
-          fi
-          echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
-      - name: Run Bazel Test All
-        uses: ./.github/actions/bazel-test-all/
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
         with:
-          execlogs-artifact-name: execlogs-bazel-test-all
-          diff-only: ${{ needs.config.outputs.diff_only }}
-          stamp-build: ${{ needs.config.outputs.release-build }}
-          upload-artifacts: ${{ needs.config.outputs.release-build }}
-          extra-bazel-args: ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test-all
+          run: |
+            set -euo pipefail
+
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            SKIP_LONG_TESTS='${{ needs.config.outputs.skip_long_tests }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+            # Determine which tests to skip
+            EXCLUDED_TEST_TAGS=(
+                system_test_large
+                system_test_benchmark
+                fuzz_test
+                fi_tests_nightly
+                nns_tests_nightly
+            )
+
+            # Prepend tags with '-' and join them with commas for Bazel
+            TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
+            # Determine bazel_args based on event type or branch name
+            bazel_args=(
+              "--test_tag_filters=$TEST_TAG_FILTERS"
+              --config=lint # enable lint checks
+              --config=flaky_retry # auto retry eg systests
+              )
+            if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
+                bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
+            elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
+                bazel_args+=( --test_timeout_filters=short,moderate )
+            else
+                bazel_args+=( --keep_going )
+            fi
+
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
+            fi
+
+            # If there are targets to test, pass them as a file to bazel to avoid bash & the OS
+            # complaining about the argument list being too long.
+            target_pattern_file=$(mktemp)
+            trap "rm $target_pattern_file" INT TERM EXIT
+            targets_args=()
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
+            fi
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            fi
+            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
+            # if bazel targets is empty we don't need to run any tests
+            if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+              echo "No bazel targets to build"
+              exit 0
+            fi
+            bazel_args+=( --target_pattern_file="$target_pattern_file" )
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            bazel test "${bazel_args[@]}"
+
+      - name: Upload to S3
+        uses: ./.github/actions/upload-artifacts
+        if: needs.config.outputs.release-build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
@@ -419,16 +457,63 @@ jobs:
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
+      - name: "Node Name"
+        run: |
+          echo "::notice::Node Name: ${NODE_NAME}"
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
           execlogs-artifact-name: execlogs-build-ic
-          run: ./ci/scripts/run-build-ic.sh
-        env:
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
+          run: |
+            set -euo pipefail
+
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+            cd "$CI_PROJECT_DIR"
+
+            # run full release build on "protected" branches
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+                ci/container/build-ic.sh -i -c -b
+                exit 0
+            fi
+
+            # run full non-release build if not asked to diff
+            if ! [ "$DIFF_ONLY" == 'true' ]; then
+                ci/container/build-ic.sh -i -c -b --no-release
+                exit 0
+            fi
+
+            # otherwise, infer targets to build
+            targets=$(mktemp)
+            trap "rm $targets" INT TERM EXIT
+            targets_args=()
+            commit_range_arg=""
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            fi
+            ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
+
+            ARGS=()
+
+            if grep -q '^//ic-os' <"$targets"; then
+                ARGS+=(-i)
+            fi
+            if grep -q '^//publish/canisters' <"$targets"; then
+                ARGS+=(-c)
+            fi
+            if grep -q '^//publish/binaries' <"$targets"; then
+                ARGS+=(-b)
+            fi
+
+            if [[ ${#ARGS[@]} -eq 0 ]]; then
+                echo "No changes that require building IC-OS, binaries or canisters."
+                exit 0
+            fi
+
+            ci/container/build-ic.sh "${ARGS[@]}" --no-release
 
   build-determinism:
     name: Build Determinism

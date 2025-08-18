@@ -261,14 +261,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             };
 
                             if transform_result_size as u64 > max_response_size_bytes {
-                                info!(
-                                    log,
-                                    "Canister http transform result size {} on canister {} \
-                                    exceeds the `max_response_size` of {}.",
-                                    transform_result_size,
-                                    request_sender,
-                                    max_response_size_bytes
-                                );
                                 let err_msg = format!(
                                     "Transformed http response exceeds limit: {}",
                                     max_response_size_bytes

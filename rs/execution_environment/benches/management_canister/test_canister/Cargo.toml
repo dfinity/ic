@@ -12,7 +12,7 @@ documentation.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-candid = "0.9.6"
+candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
