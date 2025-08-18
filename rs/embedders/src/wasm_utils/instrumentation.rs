@@ -114,7 +114,6 @@ use super::system_api_replacements::replacement_functions;
 use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::embedders::MeteringType;
-use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
 use ic_types::methods::WasmMethod;
@@ -123,8 +122,7 @@ use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 
 use crate::wasmtime_embedder::{
-    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
-    WASM_HEAP_MEMORY_NAME,
+    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
@@ -951,7 +949,6 @@ fn export_table(mut module: Module) -> Module {
 /// stable memory here.
 fn update_memories(
     mut module: Module,
-    write_barrier: FlagStatus,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
 ) -> (Module, u32) {
@@ -986,23 +983,6 @@ fn update_memories(
             index: 0,
         };
         module.exports.push(memory_export);
-    }
-
-    let wasm_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_wasm_memory_size);
-    if write_barrier == FlagStatus::Enabled && !module.memories.is_empty() {
-        module.memories.push(MemoryType {
-            memory64: false,
-            shared: false,
-            initial: wasm_bytemap_size_in_wasm_pages,
-            maximum: Some(wasm_bytemap_size_in_wasm_pages),
-            page_size_log2: None,
-        });
-
-        module.exports.push(Export {
-            name: WASM_HEAP_BYTEMAP_MEMORY_NAME,
-            kind: ExternalKind::Memory,
-            index: 1,
-        });
     }
 
     let stable_index = module.memories.len() as u32;
@@ -1650,7 +1630,6 @@ fn replace_system_api_functions(
 pub(super) fn instrument(
     module: Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
-    write_barrier: FlagStatus,
     metering_type: MeteringType,
     dirty_page_overhead: NumInstructions,
     max_wasm_memory_size: NumBytes,
@@ -1660,12 +1639,8 @@ pub(super) fn instrument(
     let stable_memory_index;
     let mut module = inject_helper_functions(module, main_memory_type);
     module = export_table(module);
-    (module, stable_memory_index) = update_memories(
-        module,
-        write_barrier,
-        max_wasm_memory_size,
-        max_stable_memory_size,
-    );
+    (module, stable_memory_index) =
+        update_memories(module, max_wasm_memory_size, max_stable_memory_size);
 
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
@@ -1741,9 +1716,6 @@ pub(super) fn instrument(
         let func_bodies = &mut module.code_sections;
         for (func_ix, func_type) in func_types.into_iter() {
             inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type, main_memory_type);
-            if write_barrier == FlagStatus::Enabled {
-                inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
-            }
         }
     }
 
@@ -1763,11 +1735,7 @@ pub(super) fn instrument(
         .filter_map(|export| WasmMethod::try_from(export.name.to_string()).ok())
         .collect();
 
-    let expected_memories =
-        1 + match write_barrier {
-            FlagStatus::Enabled => 1,
-            FlagStatus::Disabled => 0,
-        } + 2;
+    let expected_memories = 3;
     if module.memories.len() > expected_memories {
         return Err(WasmInstrumentationError::IncorrectNumberMemorySections {
             expected: expected_memories,
@@ -1809,213 +1777,6 @@ pub(super) fn instrument(
         binary: BinaryEncodedWasm::new(result),
         compilation_cost: cost_to_compile_wasm_instruction * wasm_instruction_count,
     })
-}
-
-// This function adds mem barrier writes, assuming that arguments
-// of the original store operation are on the stack
-fn write_barrier_instructions<'a>(
-    offset: u64,
-    val_arg_idx: u32,
-    addr_arg_idx: u32,
-) -> Vec<Operator<'a>> {
-    use Operator::*;
-    let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
-    let tracking_mem_idx = 1;
-    if offset % PAGE_SIZE as u64 == 0 {
-        vec![
-            LocalSet {
-                local_index: val_arg_idx,
-            }, // value
-            LocalTee {
-                local_index: addr_arg_idx,
-            }, // address
-            I32Const {
-                value: page_size_shift,
-            },
-            I32ShrU,
-            I32Const { value: 1 },
-            I32Store8 {
-                memarg: wasmparser::MemArg {
-                    align: 0,
-                    max_align: 0,
-                    offset: offset >> page_size_shift,
-                    memory: tracking_mem_idx,
-                },
-            },
-            // Put original params on the stack
-            LocalGet {
-                local_index: addr_arg_idx,
-            },
-            LocalGet {
-                local_index: val_arg_idx,
-            },
-        ]
-    } else {
-        vec![
-            LocalSet {
-                local_index: val_arg_idx,
-            }, // value
-            LocalTee {
-                local_index: addr_arg_idx,
-            }, // address
-            I32Const {
-                value: offset as i32,
-            },
-            I32Add,
-            I32Const {
-                value: page_size_shift,
-            },
-            I32ShrU,
-            I32Const { value: 1 },
-            I32Store8 {
-                memarg: wasmparser::MemArg {
-                    align: 0,
-                    max_align: 0,
-                    offset: 0,
-                    memory: tracking_mem_idx,
-                },
-            },
-            // Put original params on the stack
-            LocalGet {
-                local_index: addr_arg_idx,
-            },
-            LocalGet {
-                local_index: val_arg_idx,
-            },
-        ]
-    }
-}
-
-fn inject_mem_barrier(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
-    use Operator::*;
-    let mut val_i32_needed = false;
-    let mut val_i64_needed = false;
-    let mut val_f32_needed = false;
-    let mut val_f64_needed = false;
-
-    let mut injection_points: Vec<usize> = Vec::new();
-    {
-        for (idx, instr) in func_body.instructions.iter().enumerate() {
-            match instr {
-                I32Store { .. } | I32Store8 { .. } | I32Store16 { .. } => {
-                    val_i32_needed = true;
-                    injection_points.push(idx)
-                }
-                I64Store { .. } | I64Store8 { .. } | I64Store16 { .. } | I64Store32 { .. } => {
-                    val_i64_needed = true;
-                    injection_points.push(idx)
-                }
-                F32Store { .. } => {
-                    val_f32_needed = true;
-                    injection_points.push(idx)
-                }
-                F64Store { .. } => {
-                    val_f64_needed = true;
-                    injection_points.push(idx)
-                }
-                _ => (),
-            }
-        }
-    }
-
-    // If we found some injection points, we need to instrument the code.
-    if !injection_points.is_empty() {
-        // We inject some locals to cache the arguments to `memory.store`.
-        // The locals are stored as a vector of (count, ValType), so summing over the first field gives
-        // the total number of locals.
-        let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
-        let mut next_local = func_type.params().len() as u32 + n_locals;
-        let arg_i32_addr_idx = next_local;
-        next_local += 1;
-
-        // conditionally add following locals
-        let arg_i32_val_idx;
-        let arg_i64_val_idx;
-        let arg_f32_val_idx;
-        let arg_f64_val_idx;
-
-        if val_i32_needed {
-            arg_i32_val_idx = next_local;
-            next_local += 1;
-            func_body.locals.push((2, ValType::I32)); // addr and val locals
-        } else {
-            arg_i32_val_idx = u32::MAX; // not used
-            func_body.locals.push((1, ValType::I32)); // only addr local
-        }
-
-        if val_i64_needed {
-            arg_i64_val_idx = next_local;
-            next_local += 1;
-            func_body.locals.push((1, ValType::I64));
-        } else {
-            arg_i64_val_idx = u32::MAX;
-        }
-
-        if val_f32_needed {
-            arg_f32_val_idx = next_local;
-            next_local += 1;
-            func_body.locals.push((1, ValType::F32));
-        } else {
-            arg_f32_val_idx = u32::MAX;
-        }
-
-        if val_f64_needed {
-            arg_f64_val_idx = next_local;
-            // next_local += 1;
-            func_body.locals.push((1, ValType::F64));
-        } else {
-            arg_f64_val_idx = u32::MAX;
-        }
-
-        let orig_elems = &func_body.instructions;
-        let mut elems: Vec<Operator> = Vec::new();
-        let mut last_injection_position = 0;
-        for point in injection_points {
-            let mem_instr = orig_elems[point].clone();
-            elems.extend_from_slice(&orig_elems[last_injection_position..point]);
-
-            match mem_instr {
-                I32Store { memarg } | I32Store8 { memarg } | I32Store16 { memarg } => {
-                    elems.extend_from_slice(&write_barrier_instructions(
-                        memarg.offset,
-                        arg_i32_val_idx,
-                        arg_i32_addr_idx,
-                    ));
-                }
-                I64Store { memarg }
-                | I64Store8 { memarg }
-                | I64Store16 { memarg }
-                | I64Store32 { memarg } => {
-                    elems.extend_from_slice(&write_barrier_instructions(
-                        memarg.offset,
-                        arg_i64_val_idx,
-                        arg_i32_addr_idx,
-                    ));
-                }
-                F32Store { memarg } => {
-                    elems.extend_from_slice(&write_barrier_instructions(
-                        memarg.offset,
-                        arg_f32_val_idx,
-                        arg_i32_addr_idx,
-                    ));
-                }
-                F64Store { memarg } => {
-                    elems.extend_from_slice(&write_barrier_instructions(
-                        memarg.offset,
-                        arg_f64_val_idx,
-                        arg_i32_addr_idx,
-                    ));
-                }
-                _ => {}
-            }
-            // add the original store instruction itself
-            elems.push(mem_instr);
-
-            last_injection_position = point + 1;
-        }
-        elems.extend_from_slice(&orig_elems[last_injection_position..]);
-        func_body.instructions = elems;
-    }
 }
 
 // Scans through the function and adds instrumentation after each `memory.grow`
