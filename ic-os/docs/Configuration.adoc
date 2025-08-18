@@ -48,8 +48,6 @@ The config partition stores information that must be preserved across system upg
 
 Currently, all contents in the config partition are stored as plain-text without integrity protection.
 
-These files are stored in `/boot/config` or `/var/lib/ic`. To see where each configuration file is stored, refer to link:../../components/init/bootstrap-ic-node/guestos/bootstrap-ic-node.sh[bootstrap-ic-node]
-
 Other config partition files produced by the GuestOS at runtime:
 
 === CONFIGURED file
@@ -73,7 +71,7 @@ To add a new configuration file/directory:
 
 1. Add handling to `guestos_bootstrap_image.rs` to include the new file/directory in the bootstrap config image.
 
-2. Add handling to `bootstrap-ic-node.sh` for the new file/directory.
+2. Add handling to `bootstrap_ic_node.rs` for the new file/directory.
 
 3. Add interpretation of configuration file/directory to suitable place, e.g. generate-ic-config.sh
 
@@ -92,11 +90,10 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 === Testing
 
 For testing, to add new configuration bits, you can modify the config tool located at
-link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *guestos_bootstrap_image.rs* and *bootstrap-ic-node.sh* directly,
+link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *guestos_bootstrap_image.rs* and *bootstrap_ic_node.rs* directly,
 particularly if you wish to add a new configuration file (as opposed to just a new configuration _field_).
 
 * *ic_os config tool* can be run stand-alone to verify that it produces the intended configuration object.
-* *bootstrap-ic-node.sh* can be temporarily tweaked (internally adapt paths; basically just running the process_bootstrap function of it) to run stand-alone and verify that the config image is unpacked and its files sorted into the correct locations.
 
 * *generate-ic-config.sh* can be run stand-alone to verify that it produces the intended ic.json5 configuration from the template.
 
