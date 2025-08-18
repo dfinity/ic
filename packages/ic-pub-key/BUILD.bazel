@@ -1,35 +1,21 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
-
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ed25519",
-    "//packages/ic-secp256k1",
-    "@crate_index//:ic-management-canister-types",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:hex",
-    "@crate_index//:hex-literal",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
 
 rust_library(
     name = "ic-pub-key",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
+    crate_features = [
+        "ed25519",
+        "secp256k1",
+    ],
     crate_name = "ic_pub_key",
-    crate_features = ["ed25519", "secp256k1"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.2.0",
-    deps = DEPENDENCIES,
+    deps = [
+        "//packages/ic-ed25519",
+        "//packages/ic-secp256k1",
+        "@crate_index//:ic-management-canister-types",
+    ],
 )
 
 rust_doc(
@@ -40,21 +26,15 @@ rust_doc(
 rust_doc_test(
     name = "doc_test",
     crate = ":ic-pub-key",
-    deps = [":ic-pub-key"] + DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test(
-    name = "test",
-    aliases = ALIASES,
-    crate = ":ic-pub-key",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic-pub-key"],
 )
 
 rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":ic-pub-key"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        ":ic-pub-key",
+        "@crate_index//:hex",
+        "@crate_index//:hex-literal",
+    ],
 )
