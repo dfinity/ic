@@ -175,4 +175,136 @@ mod tests {
         let result = copy_directory_recursive(Path::new("/nonexistent"), dst_dir.path());
         assert!(result.is_err());
     }
+
+    fn create_test_bootstrap_tar(temp_dir: &TempDir) -> std::path::PathBuf {
+        let bootstrap_dir = temp_dir.path().join("bootstrap");
+        fs::create_dir_all(&bootstrap_dir).unwrap();
+
+        // Create test files and directories
+        fs::create_dir_all(bootstrap_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            bootstrap_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(bootstrap_dir.join("ic_state")).unwrap();
+        fs::write(
+            bootstrap_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+
+        fs::create_dir_all(bootstrap_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            bootstrap_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
+        fs::write(bootstrap_dir.join("nns_public_key.pem"), "test_nns_key").unwrap();
+        fs::write(
+            bootstrap_dir.join("node_operator_private_key.pem"),
+            "test_node_op_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(bootstrap_dir.join("accounts_ssh_authorized_keys")).unwrap();
+        fs::write(
+            bootstrap_dir
+                .join("accounts_ssh_authorized_keys")
+                .join("authorized_keys"),
+            "ssh-rsa test_key",
+        )
+        .unwrap();
+
+        // Create tar file
+        let tar_path = temp_dir.path().join("bootstrap.tar");
+        let status = Command::new("tar")
+            .args(["cf", tar_path.to_str().unwrap()])
+            .current_dir(&bootstrap_dir)
+            .args([
+                "./ic_crypto",
+                "./ic_state",
+                "./ic_registry_local_store",
+                "./nns_public_key.pem",
+                "./node_operator_private_key.pem",
+                "./accounts_ssh_authorized_keys",
+            ])
+            .status()
+            .unwrap();
+
+        assert!(status.success());
+        tar_path
+    }
+
+    #[test]
+    fn test_process_bootstrap_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let bootstrap_tar = create_test_bootstrap_tar(&temp_dir);
+
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        let result = process_bootstrap(&bootstrap_tar, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify files were copied correctly
+        assert!(state_root.join("crypto").join("key.pem").exists());
+        assert!(state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(state_root
+            .join("data/ic_registry_local_store")
+            .join("registry.dat")
+            .exists());
+        assert!(state_root.join("data/nns_public_key.pem").exists());
+        assert!(state_root
+            .join("data/node_operator_private_key.pem")
+            .exists());
+        assert!(config_root
+            .join("accounts_ssh_authorized_keys")
+            .join("authorized_keys")
+            .exists());
+
+        // Verify file contents
+        assert_eq!(
+            fs::read_to_string(state_root.join("crypto").join("key.pem")).unwrap(),
+            "test_crypto_key"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
+            "test_state_data"
+        );
+    }
+
+    #[test]
+    fn test_process_bootstrap_missing_tar_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        let nonexistent_tar = temp_dir.path().join("nonexistent.tar");
+        let result = process_bootstrap(&nonexistent_tar, &config_root, &state_root);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_bootstrap_invalid_tar_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let invalid_tar = temp_dir.path().join("invalid.tar");
+        fs::write(&invalid_tar, "not a tar file").unwrap();
+
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        let result = process_bootstrap(&invalid_tar, &config_root, &state_root);
+        assert!(result.is_err());
+    }
 }
