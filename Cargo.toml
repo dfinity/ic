@@ -11,6 +11,7 @@ members = [
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
     "packages/ic-metrics-assert",
+    "packages/ic-pub-key",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",

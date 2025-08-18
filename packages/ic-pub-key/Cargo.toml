@@ -1,0 +1,28 @@
+[package]
+name = "ic-pub-key"
+version = "0.1.0"
+description = "A package created for the Internet Computer Protocol for offline key derivation"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["secp256k1", "ed25519"]
+
+secp256k1 = ["ic-secp256k1"]
+ed25519 = ["ic-ed25519"]
+
+[dependencies]
+ic-secp256k1 = { version = "0.2", optional = true }
+ic-ed25519 = { version = "0.3", optional = true }
+ic-management-canister-types = "0.3.2"
+
+[dev-dependencies]
+hex-literal = "0.4"
+hex = { workspace = true }
