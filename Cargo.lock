@@ -2654,6 +2654,7 @@ dependencies = [
  "clap 4.5.27",
  "config_types",
  "deterministic_ips",
+ "fs_extra",
  "ic-types",
  "ic_sev",
  "macaddr",

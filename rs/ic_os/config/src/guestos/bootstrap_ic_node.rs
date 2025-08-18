@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use fs_extra;
 use std::fs::{self, File};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -134,21 +135,13 @@ fn copy_directory_recursive(src: &Path, dst: &Path) -> Result<()> {
         anyhow::bail!("Source path is not a directory: {}", src.display());
     }
 
-    if !dst.exists() {
-        fs::create_dir_all(dst)?;
-    }
+    let mut options = fs_extra::dir::CopyOptions::new();
+    options.overwrite = true;
+    options.copy_inside = true;
+    options.content_only = true;
 
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-
-        if src_path.is_dir() {
-            copy_directory_recursive(&src_path, &dst_path)?;
-        } else {
-            fs::copy(&src_path, &dst_path)?;
-        }
-    }
+    fs_extra::dir::copy(src, dst, &options)
+        .map_err(|e| anyhow::anyhow!("Failed to copy directory: {}", e))?;
 
     Ok(())
 }
@@ -162,22 +155,25 @@ mod tests {
     #[test]
     fn test_copy_directory_recursive() {
         let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let dst_parent = TempDir::new().unwrap();
+        let dst_path = dst_parent.path().join("dst");
 
         fs::write(src_dir.path().join("file1.txt"), "content1").unwrap();
         fs::create_dir(src_dir.path().join("subdir")).unwrap();
         fs::write(src_dir.path().join("subdir").join("file2.txt"), "content2").unwrap();
 
-        copy_directory_recursive(src_dir.path(), dst_dir.path()).unwrap();
+        assert!(!dst_path.exists());
+        copy_directory_recursive(src_dir.path(), &dst_path).unwrap();
+        assert!(dst_path.exists());
 
-        assert!(dst_dir.path().join("file1.txt").exists());
-        assert!(dst_dir.path().join("subdir").join("file2.txt").exists());
+        assert!(dst_path.join("file1.txt").exists());
+        assert!(dst_path.join("subdir").join("file2.txt").exists());
         assert_eq!(
-            fs::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            fs::read_to_string(dst_path.join("file1.txt")).unwrap(),
             "content1"
         );
         assert_eq!(
-            fs::read_to_string(dst_dir.path().join("subdir").join("file2.txt")).unwrap(),
+            fs::read_to_string(dst_path.join("subdir").join("file2.txt")).unwrap(),
             "content2"
         );
     }
