@@ -26,12 +26,14 @@ When the HostOS launches the GuestOS, the bootstrap config image is attached to 
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
 
-GuestOS then reads from `ic-bootstrap.tar` (link:../components/init/bootstrap-ic-node[see bootstrap-ic-node]), and the contents are unpacked and distributed in one of two places:
+GuestOS then reads from `ic-bootstrap.tar` (link:../components/init/init-config/init-config.sh[see init-config.sh]) and only `config.json` is unpacked and copied into `/run/config`.
+
+On first boot, GuestOS then bootstraps the node by copying other config files from ic-bootstrap.tar (link:../components/init/bootstrap-ic-node/bootstrap-ic-node.sh[see bootstrap-ic-node.sh]) to one of two locations:
 
 * *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
-* *Config partition:* All other contents of the injected config are copied into the `/boot/config` directory. These configurations need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
-** The contents of `/boot/config` are then used in various ways to parameterize system services as they start. For example, ssh keys are installed to target accounts, network settings are applied by network set-up scripts, etc.
-** `generate-ic-config.sh` uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/boot/config`.
+* *Config partition:* Only the SSH authorized keys (`accounts_ssh_authorized_keys`) from the injected config are copied into the `/boot/config` directory. These keys need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
+
+`generate-ic-config.sh` uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/run/config`.
 
 [NOTE]
 GuestOS only reads a predefined set of files from the bootstrap config image (i.e., it "sanitizes" the bootstrap config image).
