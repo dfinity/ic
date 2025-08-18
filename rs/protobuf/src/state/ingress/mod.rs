@@ -105,9 +105,6 @@ pub mod v1 {
                 ErrorCodePublic::ReservedCyclesLimitIsTooLow => {
                     ErrorCode::ReservedCyclesLimitIsTooLow
                 }
-                ErrorCodePublic::CanisterSnapshotTransformFailed => {
-                    ErrorCode::CanisterSnapshotTransformFailed
-                }
                 ErrorCodePublic::DeadlineExpired => ErrorCode::DeadlineExpired,
                 ErrorCodePublic::ResponseDropped => ErrorCode::ResponseDropped,
             }
@@ -242,9 +239,6 @@ pub mod v1 {
                 }
                 ErrorCode::ReservedCyclesLimitIsTooLow => {
                     Ok(ErrorCodePublic::ReservedCyclesLimitIsTooLow)
-                }
-                ErrorCode::CanisterSnapshotTransformFailed => {
-                    Ok(ErrorCodePublic::CanisterSnapshotTransformFailed)
                 }
                 ErrorCode::DeadlineExpired => Ok(ErrorCodePublic::DeadlineExpired),
                 ErrorCode::ResponseDropped => Ok(ErrorCodePublic::ResponseDropped),

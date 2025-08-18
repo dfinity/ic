@@ -194,7 +194,6 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
-    CanisterSnapshotTransformFailed = 541,
     /// 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -286,9 +285,6 @@ impl ErrorCode {
                 "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
             }
             Self::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
-            Self::CanisterSnapshotTransformFailed => {
-                "ERROR_CODE_CANISTER_SNAPSHOT_TRANSFORM_FAILED"
-            }
             Self::DeadlineExpired => "ERROR_CODE_DEADLINE_EXPIRED",
             Self::ResponseDropped => "ERROR_CODE_RESPONSE_DROPPED",
         }
@@ -383,9 +379,6 @@ impl ErrorCode {
             }
             "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW" => {
                 Some(Self::ReservedCyclesLimitIsTooLow)
-            }
-            "ERROR_CODE_CANISTER_SNAPSHOT_TRANSFORM_FAILED" => {
-                Some(Self::CanisterSnapshotTransformFailed)
             }
             "ERROR_CODE_DEADLINE_EXPIRED" => Some(Self::DeadlineExpired),
             "ERROR_CODE_RESPONSE_DROPPED" => Some(Self::ResponseDropped),
