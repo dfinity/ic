@@ -298,8 +298,8 @@ system_test_nns(
 
 system_test_nns(
     name = "network_large_test",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
@@ -317,7 +317,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",

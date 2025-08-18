@@ -245,8 +245,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_large_with_chain_keys_test",
+    enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",

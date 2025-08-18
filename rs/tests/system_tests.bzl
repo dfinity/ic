@@ -481,7 +481,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -489,9 +489,10 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     * One with the given name which uses the NNS from mainnet as specified by mainnet-canisters.bzl.
     * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
 
-    The latter one is additionally tagged with "system_test_large" so that it can be excluded.
-    You can override the latter behaviour by specifying different `extra_head_nns_tags`.
-    If you set `extra_head_nns_tags` to `[]` the head_nns variant will have the same tags as the default variant.
+    The head_nns variant is additionally tagged with either:
+    * ["manual"] if enable_head_nns_variant is disabled.
+    * [] if "long_test" in tags to ensure the head_nns variant runs once on daily
+    * ["system_test_large"] otherwise.
 
     The idea being that for most system-tests which test the replica it's more realistic to test against the
     mainnet NNS since that version would be active when the replica would be released.
@@ -501,7 +502,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
 
     Args:
         name: the name of the system-tests.
-        extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
+        enable_head_nns_variant: whether to run the head_nns variant daily.
         **kwargs: the arguments of the system-tests.
 
     Returns:
@@ -520,11 +521,16 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
 
     original_tags = kwargs.pop("tags", [])
 
-    # Without the following, when a system_test_nns is tagged as a long_test it will run both on the nightly
-    # "Release Testing / CI Main / Bazel Test All" and "Release Testing / Release System Tests" which would be redundant.
-    # So we remove the default "system_test_large" tag from the head_nns variant such that it only runs on "Bazel Test All".
-    if "long_test" in original_tags and extra_head_nns_tags == ["system_test_large"]:
-        extra_head_nns_tags = []
+    extra_head_nns_tags = (
+        # Disable the head_nns variant if requested
+        ["manual"] if not enable_head_nns_variant else
+        # Without the following, when a system_test_nns is tagged as a long_test it will run both on the daily
+        # "Release Testing / CI Main / Bazel Test All" and "Release Testing / Release System Tests" which would be redundant.
+        # So we don't include the default "system_test_large" tag for the head_nns variant such that it only runs on "Bazel Test All".
+        [] if "long_test" in original_tags else
+        # Run the head_nns variant daily.
+        ["system_test_large"]
+    )
 
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
