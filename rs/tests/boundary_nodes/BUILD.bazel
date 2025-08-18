@@ -7,7 +7,6 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 
 system_test_nns(
     name = "api_bn_integration_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
     ],

@@ -993,6 +993,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         bitcoind_addr: None,
         icp_features: Some(IcpFeatures::all_icp_features()),
         allow_incomplete_state: None,
+        initial_time: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
