@@ -983,9 +983,6 @@ mod tests {
         // If there is no cup, all nodes should be selected
         let selected_without_cup = cup_provider.select_peers(SUBNET_0, registry_version, None);
         assert_eq!(nodes.len(), selected_without_cup.len());
-        assert!(selected_without_cup
-            .iter()
-            .find(|(id, _)| id == &node_id)
-            .is_none());
+        assert!(!selected_without_cup.iter().any(|(id, _)| id == &node_id));
     }
 }
