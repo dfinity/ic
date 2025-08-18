@@ -157,7 +157,7 @@ impl CanisterSnapshots {
     pub fn get(
         &self,
         snapshot_id: SnapshotId,
-    ) -> Option<Either<&Arc<CanisterSnapshotImpl<()>>, &Arc<CanisterSnapshotImpl<Mutable>>>> {
+    ) -> Option<Either<&Arc<CanisterSnapshot>, &Arc<PartialCanisterSnapshot>>> {
         match self.snapshots.get(&snapshot_id) {
             Some(x) => Some(Either::Left(x)),
             None => match self.partial_snapshots.get(&snapshot_id) {
@@ -168,8 +168,17 @@ impl CanisterSnapshots {
     }
 
     /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.
-    pub fn get_mut(&mut self, snapshot_id: SnapshotId) -> Option<&mut Arc<CanisterSnapshot>> {
-        self.snapshots.get_mut(&snapshot_id)
+    pub fn get_mut(
+        &mut self,
+        snapshot_id: SnapshotId,
+    ) -> Option<Either<&mut Arc<CanisterSnapshot>, &mut Arc<PartialCanisterSnapshot>>> {
+        match self.snapshots.get_mut(&snapshot_id) {
+            Some(x) => Some(Either::Left(x)),
+            None => match self.partial_snapshots.get_mut(&snapshot_id) {
+                Some(x) => Some(Either::Right(x)),
+                None => None,
+            },
+        }
     }
 
     /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.

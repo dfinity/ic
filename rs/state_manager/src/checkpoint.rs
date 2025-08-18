@@ -373,7 +373,10 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         // Only CanisterSnapshots that are new since the last flush and PartialCanisterSnapshots that have had binary data uploaded
         // will have PageMaps that need to be flushed. They will have a corresponding `CreateSnapshot` or `UploadSnapshotData`
         // in the unflushed operations list.
-        if let UnflushedCheckpointOp::TakeSnapshot(.., snapshot_id) = op {
+        if let UnflushedCheckpointOp::TakeSnapshot(.., snapshot_id)
+        | UnflushedCheckpointOp::UploadSnapshotData(snapshot_id)
+        | UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id) = op
+        {
             // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
             if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id) {
                 if processed_snapshots.contains(snapshot_id) {
@@ -382,48 +385,28 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
                     processed_snapshots.insert(*snapshot_id);
                 }
 
-                let new_snapshot = Arc::make_mut(canister_snapshot);
+                let mut new_snapshot = canister_snapshot.map_either(Arc::make_mut, Arc::make_mut);
 
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotWasmChunkStore(*snapshot_id),
-                    new_snapshot.chunk_store_mut().page_map_mut(),
+                    new_snapshot.as_mut().either(
+                        |s| s.chunk_store_mut().page_map_mut(),
+                        |s| s.chunk_store_mut().page_map_mut(),
+                    ),
                 );
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotWasmMemory(*snapshot_id),
-                    &mut new_snapshot.wasm_memory_mut().page_map,
+                    new_snapshot.as_mut().either(
+                        |s| &mut s.wasm_memory_mut().page_map,
+                        |s| &mut s.wasm_memory_mut().page_map,
+                    ),
                 );
                 add_to_pagemaps_and_strip(
                     PageMapType::SnapshotStableMemory(*snapshot_id),
-                    &mut new_snapshot.stable_memory_mut().page_map,
-                );
-            }
-        }
-        if let UnflushedCheckpointOp::UploadSnapshotData(snapshot_id)
-        | UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id) = op
-        {
-            // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
-            if let Some(canister_snapshot) =
-                tip_state.canister_snapshots.get_partial_mut(*snapshot_id)
-            {
-                if processed_snapshots.contains(snapshot_id) {
-                    continue;
-                } else {
-                    processed_snapshots.insert(*snapshot_id);
-                }
-
-                let new_snapshot = Arc::make_mut(canister_snapshot);
-
-                add_to_pagemaps_and_strip(
-                    PageMapType::SnapshotWasmChunkStore(*snapshot_id),
-                    new_snapshot.chunk_store_mut().page_map_mut(),
-                );
-                add_to_pagemaps_and_strip(
-                    PageMapType::SnapshotWasmMemory(*snapshot_id),
-                    &mut new_snapshot.wasm_memory_mut().page_map,
-                );
-                add_to_pagemaps_and_strip(
-                    PageMapType::SnapshotStableMemory(*snapshot_id),
-                    &mut new_snapshot.stable_memory_mut().page_map,
+                    new_snapshot.as_mut().either(
+                        |s| &mut s.stable_memory_mut().page_map,
+                        |s| &mut s.stable_memory_mut().page_map,
+                    ),
                 );
             }
         }
