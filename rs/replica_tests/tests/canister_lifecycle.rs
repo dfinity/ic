@@ -665,7 +665,11 @@ fn provisional_create_canister_with_cycles_and_top_up() {
             .unwrap()
             .get_canister_id();
 
-        let canister_c_cycles = test.canister_state(&canister_c_id).system_state.balance();
+        let canister_c_cycles = test
+            .canister_state(&canister_c_id)
+            .system_state
+            .metadata
+            .balance();
 
         assert_eq!(
             canister_c_cycles,

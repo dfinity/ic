@@ -124,10 +124,16 @@ fn can_deposit_cycles_via_the_management_canister() {
             .unwrap()
             .get_canister_id();
 
-        let old_canister_cycles_balance_before =
-            test.canister_state(&canister_id).system_state.balance();
-        let new_canister_cycles_balance_before =
-            test.canister_state(&new_canister_id).system_state.balance();
+        let old_canister_cycles_balance_before = test
+            .canister_state(&canister_id)
+            .system_state
+            .metadata
+            .balance();
+        let new_canister_cycles_balance_before = test
+            .canister_state(&new_canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         // Deposit cycles to the new canister.
         let cycles_to_deposit = Cycles::new(200_000_000);

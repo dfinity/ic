@@ -563,7 +563,7 @@ fn charge_canister_for_memory_usage() {
             .unwrap();
 
         let memory_usage = MEMORY_ALLOCATION + message_memory_usage.total();
-        let cycles_burned = INITIAL_BALANCE - canister.system_state..metadata.balance();
+        let cycles_burned = INITIAL_BALANCE - canister.system_state.metadata.balance();
         assert_eq!(
             cycles_account_manager.memory_cost(
                 memory_usage,
