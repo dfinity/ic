@@ -466,7 +466,7 @@ fn instruction_and_reserved_cycles_exceed_canister_balance_setup() -> (StateMach
 /// There is a dedicated test `reserved_by_snapshot_test` fixing the value of this constant.
 /// This value should be much more than 40B (instruction cycles prepayment as the prepayment amount can't be burned
 /// and we burn cycles to reach the target cycles balance).
-const RESERVED_BY_SNAPSHOT: u128 = 3_307_236_131_163;
+const RESERVED_BY_SNAPSHOT: u128 = 3_307_241_883_526;
 
 #[test]
 fn reserved_by_snapshot_test() {
