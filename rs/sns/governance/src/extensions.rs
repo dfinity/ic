@@ -29,6 +29,7 @@ use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
 
+use crate::storage::{with_registered_extensions_map, with_registered_extensions_map_mut};
 use futures::future::BoxFuture;
 use ic_ledger_core::Tokens;
 use std::cell::RefCell;
@@ -39,12 +40,7 @@ lazy_static! {
 }
 
 thread_local! {
-    static EXTENSION_SPEC_CACHE: RefCell<BTreeMap<CanisterId, ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
-}
-
-#[cfg(test)]
-pub fn with_extension_spec_cache_mut(f: impl FnOnce(&mut BTreeMap<CanisterId, ExtensionSpec>)) {
-    EXTENSION_SPEC_CACHE.with_borrow_mut(f)
+    static REGISTERED_EXTENSIONS: RefCell<BTreeMap<CanisterId, ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
 }
 
 #[derive(Clone)]
@@ -267,7 +263,7 @@ pub fn get_extension_operation_spec_from_cache(
         return Err("operation_name is required.".to_string());
     };
 
-    get_extension_spec_from_cache(extension_canister_id)
+    get_spec_for_registered_extension(extension_canister_id)
         .and_then(|spec| spec.get_operation(operation_name))
         .ok_or(format!(
             "No operation found called '{}' for extension with \
@@ -1004,16 +1000,20 @@ async fn get_extension_spec_and_update_cache(
     });
 
     if result.is_ok() {
-        EXTENSION_SPEC_CACHE.with_borrow_mut(|cache| {
-            cache.insert(extension_canister_id, result.as_ref().cloned().unwrap())
+        with_registered_extensions_map_mut(|registered_extensions| {
+            registered_extensions.insert(extension_canister_id, result.as_ref().cloned().unwrap())
         });
     }
 
     result
 }
 
-pub fn get_extension_spec_from_cache(extension_canister_id: CanisterId) -> Option<ExtensionSpec> {
-    EXTENSION_SPEC_CACHE.with_borrow(|cache| cache.get(&extension_canister_id).cloned())
+pub fn get_spec_for_registered_extension(
+    extension_canister_id: CanisterId,
+) -> Option<ExtensionSpec> {
+    with_registered_extensions_map(|registered_extensions| {
+        registered_extensions.get(&extension_canister_id)
+    })
 }
 
 /// Validates that this is a supported extension operation and runs any validation for that

@@ -1,4 +1,3 @@
-use crate::extensions::with_extension_spec_cache_mut;
 use crate::extensions::ExtensionType::TreasuryManager;
 use crate::extensions::{ExtensionSpec, ExtensionVersion, ValidatedExtensionInit};
 use crate::governance::test_helpers::basic_governance_proto;
@@ -8,6 +7,7 @@ use crate::pb::v1::Topic::TreasuryAssetManagement;
 use crate::pb::v1::{
     self as pb, nervous_system_function, ExecuteExtensionOperation, ExtensionInit,
 };
+use crate::storage::with_registered_extensions_map_mut;
 use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_canisters::cmc::FakeCmc;
@@ -215,8 +215,8 @@ fn test_all_topics() {
         extension_types: vec![TreasuryManager],
         validate_init_arg: unimplemented_validator,
     };
-    with_extension_spec_cache_mut(|spec_cache| {
-        spec_cache.insert(extension_canister_id, extension_spec);
+    with_registered_extensions_map_mut(|registered_extensions| {
+        registered_extensions.insert(extension_canister_id, extension_spec);
     });
     test_cases.push((
         pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
