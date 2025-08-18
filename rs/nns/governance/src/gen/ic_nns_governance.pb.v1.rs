@@ -4133,7 +4133,7 @@ pub enum Topic {
     /// The `Unspecified` topic is used as a fallback when
     /// following. That is, if no followees are specified for a given
     /// topic (other than the "Governance" and "SNS & Neurons' Fund" topics),
-    /// the followees for this topic are used instead. 
+    /// the followees for this topic are used instead.
     Unspecified = 0,
     /// A special topic by means of which a neuron can be managed by the
     /// followees for this topic (in this case, there is no fallback to
