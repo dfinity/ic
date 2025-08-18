@@ -519,6 +519,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
+        .metadata
         .balance();
 
     valid_set_rule.induct_messages(&mut state, vec![msg]);
@@ -528,6 +529,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
+        .metadata
         .balance();
 
     assert_eq!(balance_after, balance_before - cost_of_ingress);
@@ -566,6 +568,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
+        .metadata
         .balance();
 
     let msg = SignedIngressBuilder::new()
@@ -579,6 +582,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
+        .metadata
         .balance();
 
     assert_eq!(balance_after, balance_before);
@@ -673,7 +677,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
-        let balance_before = canister.system_state.balance();
+        let balance_before = canister.system_state.metadata.balance();
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
@@ -693,6 +697,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             .canister_state(&canister_id)
             .unwrap()
             .system_state
+            .metadata
             .balance();
 
         assert_eq!(balance_after, balance_before - cost);
@@ -723,7 +728,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::System);
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
-        let balance_before = canister.system_state.balance();
+        let balance_before = canister.system_state.metadata.balance();
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
@@ -733,6 +738,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
             .canister_state(&canister_id)
             .unwrap()
             .system_state
+            .metadata
             .balance();
 
         assert_eq!(balance_after, balance_before);
@@ -820,7 +826,7 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
     let mut state = ReplicatedStateBuilder::new().build();
     let canister_id = canister_test_id(0);
     let canister = get_running_canister(canister_id);
-    let balance_before = canister.system_state.balance();
+    let balance_before = canister.system_state.metadata.balance();
     state.put_canister_state(canister);
 
     let payload = UpdateSettingsArgs {
@@ -845,6 +851,7 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .balance();
 
     assert_eq!(balance_after, balance_before);

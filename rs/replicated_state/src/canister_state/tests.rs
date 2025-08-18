@@ -653,7 +653,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     let input_queue_type = InputQueueType::RemoteSubnet;
 
     // Tiny explicit allocation, not enough for a request.
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
+    canister_state.system_state.metadata.memory_allocation =
+        MemoryAllocation::Reserved(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
         Default::default(),
@@ -790,44 +791,47 @@ fn canister_state_push_output_response_mismatched_respondent() {
 #[test]
 fn canister_state_ingress_induction_cycles_debit() {
     let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
-    let initial_balance = system_state.balance();
+    let initial_balance = system_state.metadata.balance();
     let ingress_induction_debit = Cycles::new(42);
-    system_state.add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
+    system_state
+        .metadata
+        .add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
     assert_eq!(
         ingress_induction_debit,
-        system_state.ingress_induction_cycles_debit()
+        system_state.metadata.ingress_induction_cycles_debit()
     );
-    assert_eq!(initial_balance, system_state.balance());
+    assert_eq!(initial_balance, system_state.metadata.balance());
     assert_eq!(
         initial_balance - ingress_induction_debit,
-        system_state.debited_balance()
+        system_state.metadata.debited_balance()
     );
 
-    system_state.apply_ingress_induction_cycles_debit(
-        system_state.canister_id(),
+    system_state.metadata.apply_ingress_induction_cycles_debit(
+        system_state.metadata.canister_id(),
         &no_op_logger(),
         &mock_metrics(),
     );
     assert_eq!(
         Cycles::zero(),
-        system_state.ingress_induction_cycles_debit()
+        system_state.metadata.ingress_induction_cycles_debit()
     );
     assert_eq!(
         initial_balance - ingress_induction_debit,
-        system_state.balance()
+        system_state.metadata.balance()
     );
     assert_eq!(
         initial_balance - ingress_induction_debit,
-        system_state.debited_balance()
+        system_state.metadata.debited_balance()
     );
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
+        system_state.metadata.canister_metrics.consumed_cycles,
         ingress_induction_debit.into()
     );
     assert_eq!(
         *system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
@@ -841,13 +845,15 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
+    system_state.metadata.canister_metrics.consumed_cycles = initial_consumed_cycles;
 
     let cycles = Cycles::new(100);
-    system_state.add_cycles(cycles, CyclesUseCase::Memory);
-    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
+    system_state
+        .metadata
+        .add_cycles(cycles, CyclesUseCase::Memory);
+    assert_eq!(system_state.metadata.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
+        system_state.metadata.canister_metrics.consumed_cycles,
         initial_consumed_cycles - NominalCycles::from(cycles)
     );
 }
@@ -856,16 +862,21 @@ fn update_balance_and_consumed_cycles_correctly() {
 fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cycles_to_consume = Cycles::from(1000u128);
-    system_state.remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
+    system_state
+        .metadata
+        .remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
 
     let cycles_to_add = Cycles::from(100u128);
-    system_state.add_cycles(cycles_to_add, CyclesUseCase::Memory);
+    system_state
+        .metadata
+        .add_cycles(cycles_to_add, CyclesUseCase::Memory);
     assert_eq!(
-        system_state.balance(),
+        system_state.metadata.balance(),
         INITIAL_CYCLES - cycles_to_consume + cycles_to_add
     );
     assert_eq!(
         *system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)

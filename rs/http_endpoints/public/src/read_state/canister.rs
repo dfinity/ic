@@ -369,7 +369,11 @@ fn can_read_canister_metadata(
 
             // Only the controller can request this custom section.
             if custom_section.visibility() == CustomSectionType::Private
-                && !canister.system_state.controllers.contains(&user.get())
+                && !canister
+                    .system_state
+                    .metadata
+                    .controllers
+                    .contains(&user.get())
             {
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,

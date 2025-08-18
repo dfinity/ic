@@ -544,6 +544,7 @@ fn switch_to_checkpoint(
         let canister_layout = layout.canister(tip_id).unwrap();
         tip_canister
             .system_state
+            .metadata
             .wasm_chunk_store
             .page_map_mut()
             .switch_to_checkpoint(
@@ -1179,6 +1180,7 @@ fn serialize_canister_wasm_binary_and_pagemaps(
 
     canister_state
         .system_state
+        .metadata
         .wasm_chunk_store
         .page_map()
         .persist_delta(
@@ -1248,36 +1250,53 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
 
     canister_layout.canister().serialize(
         CanisterStateBits {
-            controllers: canister_state.system_state.controllers.clone(),
+            controllers: canister_state.system_state.metadata.controllers.clone(),
             last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
             compute_allocation: canister_state.scheduler_state.compute_allocation,
             priority_credit: canister_state.scheduler_state.priority_credit,
             long_execution_mode: canister_state.scheduler_state.long_execution_mode,
             accumulated_priority: canister_state.scheduler_state.accumulated_priority,
-            memory_allocation: canister_state.system_state.memory_allocation,
-            wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
-            freeze_threshold: canister_state.system_state.freeze_threshold,
-            cycles_balance: canister_state.system_state.balance(),
-            cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),
-            reserved_balance: canister_state.system_state.reserved_balance(),
-            reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
+            memory_allocation: canister_state.system_state.metadata.memory_allocation,
+            wasm_memory_threshold: canister_state.system_state.metadata.wasm_memory_threshold,
+            freeze_threshold: canister_state.system_state.metadata.freeze_threshold,
+            cycles_balance: canister_state.system_state.metadata.balance(),
+            cycles_debit: canister_state
+                .system_state
+                .metadata
+                .ingress_induction_cycles_debit(),
+            reserved_balance: canister_state.system_state.metadata.reserved_balance(),
+            reserved_balance_limit: canister_state
+                .system_state
+                .metadata
+                .reserved_balance_limit(),
             execution_state_bits,
             status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
+                .metadata
                 .canister_metrics
                 .scheduled_as_first,
             skipped_round_due_to_no_messages: canister_state
                 .system_state
+                .metadata
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
-            executed: canister_state.system_state.canister_metrics.executed,
+            executed: canister_state
+                .system_state
+                .metadata
+                .canister_metrics
+                .executed,
             interrupted_during_execution: canister_state
                 .system_state
+                .metadata
                 .canister_metrics
                 .interrupted_during_execution,
-            certified_data: canister_state.system_state.certified_data.clone(),
-            consumed_cycles: canister_state.system_state.canister_metrics.consumed_cycles,
+            certified_data: canister_state.system_state.metadata.certified_data.clone(),
+            consumed_cycles: canister_state
+                .system_state
+                .metadata
+                .canister_metrics
+                .consumed_cycles,
             stable_memory_size: canister_state
                 .execution_state
                 .as_ref()
@@ -1292,28 +1311,36 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             task_queue: canister_state.system_state.task_queue.clone(),
             global_timer_nanos: canister_state
                 .system_state
+                .metadata
                 .global_timer
                 .to_nanos_since_unix_epoch(),
-            canister_version: canister_state.system_state.canister_version,
+            canister_version: canister_state.system_state.metadata.canister_version,
             consumed_cycles_by_use_cases: canister_state
                 .system_state
+                .metadata
                 .canister_metrics
                 .get_consumed_cycles_by_use_cases()
                 .clone(),
-            canister_history: canister_state.system_state.get_canister_history().clone(),
+            canister_history: canister_state
+                .system_state
+                .metadata
+                .get_canister_history()
+                .clone(),
             wasm_chunk_store_metadata: canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .metadata()
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
-            log_visibility: canister_state.system_state.log_visibility.clone(),
-            canister_log: canister_state.system_state.canister_log.clone(),
-            wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
-            next_snapshot_id: canister_state.system_state.next_snapshot_id,
-            snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            log_visibility: canister_state.system_state.metadata.log_visibility.clone(),
+            canister_log: canister_state.system_state.metadata.canister_log.clone(),
+            wasm_memory_limit: canister_state.system_state.metadata.wasm_memory_limit,
+            next_snapshot_id: canister_state.system_state.metadata.next_snapshot_id,
+            snapshots_memory_usage: canister_state.system_state.metadata.snapshots_memory_usage,
             environment_variables: canister_state
                 .system_state
+                .metadata
                 .environment_variables
                 .clone()
                 .into(),

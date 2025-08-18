@@ -461,20 +461,20 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
-            canister.system_state.freeze_threshold,
-            canister.system_state.memory_allocation,
+            canister.system_state.metadata.freeze_threshold,
+            canister.system_state.metadata.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             cost_schedule,
-            canister.system_state.reserved_balance(),
+            canister.system_state.metadata.reserved_balance(),
         );
         if canister.has_paused_execution() || canister.has_paused_install_code() {
-            if canister.system_state.debited_balance() < cycles + threshold {
+            if canister.system_state.metadata.debited_balance() < cycles + threshold {
                 return Err(CanisterOutOfCyclesError {
                     canister_id: canister.canister_id(),
-                    available: canister.system_state.debited_balance(),
+                    available: canister.system_state.metadata.debited_balance(),
                     requested: cycles,
                     threshold,
                     reveal_top_up,
@@ -482,6 +482,7 @@ impl CyclesAccountManager {
             }
             canister
                 .system_state
+                .metadata
                 .add_postponed_charge_to_ingress_induction_cycles_debit(cycles);
             Ok(())
         } else {
@@ -519,14 +520,14 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
-            system_state.freeze_threshold,
-            system_state.memory_allocation,
+            system_state.metadata.freeze_threshold,
+            system_state.metadata.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             cost_schedule,
-            system_state.reserved_balance(),
+            system_state.metadata.reserved_balance(),
         );
         self.consume_with_threshold(
             system_state,
@@ -595,14 +596,14 @@ impl CyclesAccountManager {
             system_state,
             cost,
             self.freeze_threshold_cycles(
-                system_state.freeze_threshold,
-                system_state.memory_allocation,
+                system_state.metadata.freeze_threshold,
+                system_state.metadata.memory_allocation,
                 canister_current_memory_usage,
                 canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 cost_schedule,
-                system_state.reserved_balance(),
+                system_state.metadata.reserved_balance(),
             ),
             CyclesUseCase::Instructions,
             reveal_top_up,
@@ -645,7 +646,9 @@ impl CyclesAccountManager {
                 cost_schedule,
             )
             .min(prepaid_execution_cycles);
-        system_state.add_cycles(cycles_to_refund, CyclesUseCase::Instructions);
+        system_state
+            .metadata
+            .add_cycles(cycles_to_refund, CyclesUseCase::Instructions);
     }
 
     /// Returns the cost of compute allocation for the given duration.
@@ -1042,20 +1045,20 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
-            system_state.freeze_threshold,
-            system_state.memory_allocation,
+            system_state.metadata.freeze_threshold,
+            system_state.metadata.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             cost_schedule,
-            system_state.reserved_balance(),
+            system_state.metadata.reserved_balance(),
         );
 
-        if threshold + requested > system_state.balance() {
+        if threshold + requested > system_state.metadata.balance() {
             Err(CanisterOutOfCyclesError {
-                canister_id: system_state.canister_id(),
-                available: system_state.balance(),
+                canister_id: system_state.metadata.canister_id(),
+                available: system_state.metadata.balance(),
                 requested,
                 threshold,
                 reveal_top_up,
@@ -1085,7 +1088,7 @@ impl CyclesAccountManager {
                     | CyclesUseCase::Uninstall => {
                         // The resource use cases first drain the `reserved_balance` and
                         // after that the main balance.
-                        system_state.balance() + system_state.reserved_balance()
+                        system_state.metadata.balance() + system_state.metadata.reserved_balance()
                     }
                     CyclesUseCase::IngressInduction
                     | CyclesUseCase::Instructions
@@ -1098,11 +1101,11 @@ impl CyclesAccountManager {
                     | CyclesUseCase::DeletedCanisters
                     | CyclesUseCase::NonConsumed
                     | CyclesUseCase::BurnedCycles
-                    | CyclesUseCase::DroppedMessages => system_state.balance(),
+                    | CyclesUseCase::DroppedMessages => system_state.metadata.balance(),
                 };
 
                 self.verify_cycles_balance_with_threshold(
-                    system_state.canister_id,
+                    system_state.metadata.canister_id,
                     effective_cycles_balance,
                     cycles,
                     threshold,
@@ -1110,7 +1113,7 @@ impl CyclesAccountManager {
                 )?;
 
                 debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-                system_state.remove_cycles(cycles, use_case);
+                system_state.metadata.remove_cycles(cycles, use_case);
             }
         }
         Ok(())

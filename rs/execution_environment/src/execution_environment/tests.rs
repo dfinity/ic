@@ -776,7 +776,10 @@ fn get_running_canister_status_from_another_canister() {
     assert_eq!(csr.controllers(), vec![controller.get()]);
     assert_eq!(
         Cycles::new(csr.cycles()),
-        test.canister_state(canister).system_state.balance()
+        test.canister_state(canister)
+            .system_state
+            .metadata
+            .balance()
     );
     assert_eq!(csr.freezing_threshold(), 2_592_000);
     assert_eq!(
@@ -2106,10 +2109,18 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
     let run = wasm().message_payload().append_and_reply().build();
-    let balance_before = test.canister_state(canister).system_state.balance();
+    let balance_before = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
     let execution_cost_before = test.canister_execution_cost(canister);
     test.ingress(canister, "update", run).unwrap();
-    let balance_after = test.canister_state(canister).system_state.balance();
+    let balance_after = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
     let execution_cost_after = test.canister_execution_cost(canister);
     assert_eq!(
         balance_before - balance_after,
@@ -2140,7 +2151,10 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             Cycles::from(1_000_000u128),
         )
         .build();
-    test.canister_state_mut(b_id).system_state.freeze_threshold = NumSeconds::from(0);
+    test.canister_state_mut(b_id)
+        .system_state
+        .metadata
+        .freeze_threshold = NumSeconds::from(0);
     test.canister_state_mut(b_id)
         .system_state
         .set_balance(Cycles::new(1_000));
@@ -2158,7 +2172,10 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
 fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
     let mut test = ExecutionTestBuilder::new().build();
     let id = test.universal_canister().unwrap();
-    test.canister_state_mut(id).system_state.freeze_threshold = NumSeconds::from(0);
+    test.canister_state_mut(id)
+        .system_state
+        .metadata
+        .freeze_threshold = NumSeconds::from(0);
     test.canister_state_mut(id)
         .system_state
         .set_balance(Cycles::new(1_000));
@@ -2167,7 +2184,7 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
     assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
     assert_eq!(
         Cycles::new(1_000),
-        test.canister_state(id).system_state.balance()
+        test.canister_state(id).system_state.metadata.balance()
     );
 }
 
@@ -2732,7 +2749,11 @@ fn can_refund_cycles_after_successful_provisional_create_canister() {
         )
         .build();
 
-    let initial_cycles_balance = test.canister_state(canister).system_state.balance();
+    let initial_cycles_balance = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
 
     let result = test.ingress(canister, "update", create_canister).unwrap();
     let new_canister = match result {
@@ -2748,7 +2769,10 @@ fn can_refund_cycles_after_successful_provisional_create_canister() {
     );
     assert_balance_equals(
         initial_cycles_balance,
-        test.canister_state(canister).system_state.balance(),
+        test.canister_state(canister)
+            .system_state
+            .metadata
+            .balance(),
         BALANCE_EPSILON,
     );
 }
@@ -2945,21 +2969,35 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
         )
         .build();
 
-    let initial_cycles_balance_1 = test.canister_state(canister_1).system_state.balance();
-    let initial_cycles_balance_2 = test.canister_state(canister_2).system_state.balance();
+    let initial_cycles_balance_1 = test
+        .canister_state(canister_1)
+        .system_state
+        .metadata
+        .balance();
+    let initial_cycles_balance_2 = test
+        .canister_state(canister_2)
+        .system_state
+        .metadata
+        .balance();
 
     let result = test.ingress(canister_1, "update", top_up_canister).unwrap();
 
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_balance_equals(
         initial_cycles_balance_1,
-        test.canister_state(canister_1).system_state.balance(),
+        test.canister_state(canister_1)
+            .system_state
+            .metadata
+            .balance(),
         BALANCE_EPSILON,
     );
 
     assert_balance_equals(
         initial_cycles_balance_2 + Cycles::new(top_up),
-        test.canister_state(canister_2).system_state.balance(),
+        test.canister_state(canister_2)
+            .system_state
+            .metadata
+            .balance(),
         BALANCE_EPSILON,
     );
 }
@@ -3045,7 +3083,7 @@ fn replicated_query_refunds_all_sent_cycles() {
 
     // Canister A gets a refund for all transferred cycles.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("query", &b_callback)
@@ -3054,7 +3092,7 @@ fn replicated_query_refunds_all_sent_cycles() {
 
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
 }
@@ -3129,7 +3167,7 @@ fn replicated_query_can_accept_cycles() {
 
     // Canister A loses `transferred_cycles` since B accepted all cycles.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("query", &b_callback)
@@ -3139,7 +3177,7 @@ fn replicated_query_can_accept_cycles() {
 
     // Canister B gets the transferred cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
     );
 }
@@ -3215,7 +3253,7 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
 
     // Canister A does not lose `transferred_cycles` since B trapped after accepting.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("query", &b_callback)
@@ -3224,7 +3262,7 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
 
     // Canister B does not get any cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
 }
@@ -3252,7 +3290,10 @@ fn replicated_query_can_burn_cycles() {
 
     // Canister A loses `cycles_to_burn` from its balance (in addition to execution cost)...
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles - test.canister_execution_cost(canister_id) - cycles_to_burn
     );
 
@@ -3260,6 +3301,7 @@ fn replicated_query_can_burn_cycles() {
     let burned_cycles = *test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .canister_metrics
         .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
@@ -3290,7 +3332,10 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
 
     // Canister A only loses cycles due to executing but not `cycles_to_burn` (since it trapped)...
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles - test.canister_execution_cost(canister_id)
     );
 
@@ -3298,6 +3343,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .canister_metrics
         .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
@@ -3357,6 +3403,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
+        .metadata
         .canister_metrics
         .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
@@ -3364,6 +3411,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
+        .metadata
         .canister_metrics
         .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
@@ -3375,7 +3423,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that canister A's balance is decremented for consumed cycles
     // plus transferred cycles to canister B.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - Cycles::from(transmission_consumption_before_response.get())
             - Cycles::from(instruction_consumption_before_response.get())
@@ -3403,13 +3451,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     // Check that canister A's balance is updated correctly.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles - execution_cost - transmission_cost - transferred_cycles
     );
 
     assert_eq!(
         test.canister_state(a_id)
             .system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .len(),
@@ -3419,6 +3468,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
+        .metadata
         .canister_metrics
         .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
@@ -3426,6 +3476,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
+        .metadata
         .canister_metrics
         .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
@@ -3449,7 +3500,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     // Check that canister B's balance is updated correctly.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
     );
 
@@ -3457,6 +3508,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(b_id)
             .system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .len(),
@@ -3467,6 +3519,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         *test
             .canister_state(b_id)
             .system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
@@ -4031,13 +4084,13 @@ fn cannot_accept_cycles_after_replying() {
     // Canister A loses `transferred_cycles / 2` since B accepted half of them before replying.
     // The remaining was refunded as part of the reply delivered to A.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles - (transferred_cycles / 2u64)
     );
 
     // Canister B gets half of transferred_cycles that it accepted before replying.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles + (transferred_cycles / 2u64)
     );
 }
@@ -4063,6 +4116,7 @@ fn helper_clear_chunk(test: &mut ExecutionTest, canister_id: CanisterId) {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .wasm_chunk_store
         .keys()
         .next()

@@ -87,8 +87,11 @@ fn dts_resume_works_in_install_code() {
             NextExecution::ContinueInstallCode
         );
         assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(canister_id)
+                .system_state
+                .metadata
+                .balance(),
+            original_system_state.metadata.balance()
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
@@ -103,8 +106,11 @@ fn dts_resume_works_in_install_code() {
         NextExecution::None
     );
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
+        original_system_state.metadata.balance()
             - (test.canister_execution_cost(canister_id) - original_execution_cost)
     );
     let ingress_status = test.ingress_status(&ingress_id);
@@ -137,8 +143,11 @@ fn dts_abort_works_in_install_code() {
             NextExecution::ContinueInstallCode
         );
         assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(canister_id)
+                .system_state
+                .metadata
+                .balance(),
+            original_system_state.metadata.balance()
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
@@ -161,8 +170,11 @@ fn dts_abort_works_in_install_code() {
             NextExecution::ContinueInstallCode
         );
         assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(canister_id)
+                .system_state
+                .metadata
+                .balance(),
+            original_system_state.metadata.balance()
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
@@ -178,8 +190,11 @@ fn dts_abort_works_in_install_code() {
         NextExecution::None,
     );
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
+        original_system_state.metadata.balance()
             - (test.canister_execution_cost(canister_id) - original_execution_cost)
     );
 
@@ -424,8 +439,11 @@ fn execute_install_code_message_dts_helper(
             NextExecution::ContinueInstallCode
         );
         assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(canister_id)
+                .system_state
+                .metadata
+                .balance(),
+            original_system_state.metadata.balance()
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(1_000_000),
                     test.subnet_size(),
@@ -643,7 +661,11 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         arg: vec![],
         sender_canister_version: None,
     };
-    let original_balance = test.canister_state(canister_id).system_state.balance();
+    let original_balance = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let message_id = test.dts_install_code(payload);
     let minimum_balance = test.install_code_reserved_execution_cycles();
 
@@ -1422,6 +1444,7 @@ fn install_chunked_recorded_in_history() {
     assert_eq!(
         state
             .system_state
+            .metadata
             .get_canister_history()
             .get_total_num_changes(),
         2
@@ -1429,6 +1452,7 @@ fn install_chunked_recorded_in_history() {
     assert_eq!(
         state
             .system_state
+            .metadata
             .get_canister_history()
             .get_changes(2)
             .collect::<Vec<_>>()[1],
@@ -1813,6 +1837,7 @@ fn install_chunked_succeeds_from_store_canister() {
     assert!(!test
         .canister_state(store_canister)
         .system_state
+        .metadata
         .controllers
         .contains(&store_canister.get()));
 
@@ -1885,13 +1910,17 @@ fn install_with_dts_correctly_updates_system_state() {
     check_ingress_status(ingress_status).unwrap();
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.certified_data,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .certified_data,
         vec![42]
     );
 
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .global_timer
         .to_nanos_since_unix_epoch()
         .is_some());
@@ -1899,11 +1928,13 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .canister_version;
 
     let history_entries_before = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .get_canister_history()
         .get_total_num_changes();
 
@@ -1935,13 +1966,17 @@ fn install_with_dts_correctly_updates_system_state() {
     // Check that the system state is properly updated.
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.certified_data,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .certified_data,
         vec![] as Vec<u8>
     );
 
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .global_timer
         .to_nanos_since_unix_epoch()
         .is_none());
@@ -1949,6 +1984,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .canister_version;
 
     assert_eq!(version_before + 1, version_after);
@@ -1956,6 +1992,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let history_entries_after = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .get_canister_history()
         .get_total_num_changes();
 
@@ -2008,13 +2045,17 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     check_ingress_status(ingress_status).unwrap();
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.certified_data,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .certified_data,
         vec![42]
     );
 
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .global_timer
         .to_nanos_since_unix_epoch()
         .is_some());
@@ -2022,11 +2063,13 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .canister_version;
 
     let history_entries_before = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .get_canister_history()
         .get_total_num_changes();
 
@@ -2060,13 +2103,17 @@ fn upgrade_with_dts_correctly_updates_system_state() {
 
     // Certified data is preserved on ugprades.
     assert_eq!(
-        test.canister_state(canister_id).system_state.certified_data,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .certified_data,
         vec![42]
     );
 
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .global_timer
         .to_nanos_since_unix_epoch()
         .is_none());
@@ -2074,6 +2121,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .canister_version;
 
     assert_eq!(version_before + 1, version_after);
@@ -2081,6 +2129,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let history_entries_after = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .get_canister_history()
         .get_total_num_changes();
 
@@ -2112,7 +2161,11 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let mut wrong_hash = hash.clone();
     wrong_hash[0] = wrong_hash[0].wrapping_add(1);
 
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     let method_name = "install_chunked_code";
     let arg = InstallChunkedCodeArgs::new(
@@ -2135,7 +2188,11 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     // Install the universal canister
     let install_err = test.subnet_message(method_name, arg).unwrap_err();
     assert_eq!(install_err.code(), ErrorCode::CanisterContractViolation);
-    let final_cycles = test.canister_state(canister_id).system_state.balance();
+    let final_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
     assert!(
@@ -2157,7 +2214,11 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     // Get the charges for a normal install
     let charge_for_regular_install = {
         let canister_id = test.create_canister(CYCLES);
-        let initial_cycles = test.canister_state(canister_id).system_state.balance();
+        let initial_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let method_name = "install_code";
         let arg = InstallCodeArgsV2::new(
             CanisterInstallModeV2::Install,
@@ -2167,7 +2228,11 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         )
         .encode();
         let _response = test.subnet_message(method_name, arg).unwrap();
-        let final_cycles = test.canister_state(canister_id).system_state.balance();
+        let final_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         initial_cycles - final_cycles
     };
 
@@ -2189,7 +2254,11 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     .unwrap()
     .hash;
 
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     let method_name = "install_chunked_code";
     let arg = InstallChunkedCodeArgs::new(
@@ -2220,7 +2289,11 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
 
     // Install the universal canister
     let _response = test.subnet_message(method_name, arg).unwrap();
-    let final_cycles = test.canister_state(canister_id).system_state.balance();
+    let final_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
     assert!(

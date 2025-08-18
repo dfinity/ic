@@ -195,7 +195,7 @@ fn correct_charging_target_canister_for_a_response() {
             freeze_threshold,
         ),
     };
-    let initial_cycles_balance = fixture.system_state.balance();
+    let initial_cycles_balance = fixture.system_state.metadata.balance();
 
     // Enqueue the request.
     assert!(fixture
@@ -208,7 +208,10 @@ fn correct_charging_target_canister_for_a_response() {
 
     // Target canister should not be charged for receiving the request or sending
     // the response
-    assert_eq!(initial_cycles_balance, fixture.system_state.balance());
+    assert_eq!(
+        initial_cycles_balance,
+        fixture.system_state.metadata.balance()
+    );
 }
 
 #[test]

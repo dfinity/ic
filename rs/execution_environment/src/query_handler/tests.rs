@@ -594,9 +594,17 @@ fn composite_query_fails_in_replicated_mode() {
 
     let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
 
-    let balance_before = test.canister_state(canister).system_state.balance();
+    let balance_before = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
     let err = test.ingress(canister, "query", vec![]).unwrap_err();
-    let balance_after = test.canister_state(canister).system_state.balance();
+    let balance_after = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
     assert_eq!(err.code(), ErrorCode::CompositeQueryCalledInReplicatedMode);
     assert_eq!(
         err.description(),

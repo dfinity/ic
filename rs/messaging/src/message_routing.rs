@@ -751,6 +751,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             self.metrics.canister_history_total_num_changes.observe(
                 canister
                     .system_state
+                    .metadata
                     .get_canister_history()
                     .get_total_num_changes() as f64,
             );

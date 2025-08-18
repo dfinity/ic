@@ -182,8 +182,8 @@ impl EntryEnv {
             let canister = state.get_active_canister(id)?;
             canisters_versions_balances_stats.push((
                 *id,
-                canister.system_state.canister_version,
-                canister.system_state.balance(),
+                canister.system_state.metadata.canister_version,
+                canister.system_state.metadata.balance(),
                 stats.clone(),
             ));
         }
@@ -261,10 +261,10 @@ impl EntryValue {
             };
             canisters_stats.push((id, stats));
 
-            if &canister.system_state.canister_version != version {
+            if &canister.system_state.metadata.canister_version != version {
                 all_canister_versions_are_valid = false;
             }
-            if &canister.system_state.balance() != balance {
+            if &canister.system_state.metadata.balance() != balance {
                 all_canister_balances_are_valid = false;
             }
         }
