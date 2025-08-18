@@ -233,7 +233,6 @@ jobs:
           upload-command: bazel run --check_up_to_date //:upload-artifacts
           credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
-
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     needs: [ config ]
@@ -582,7 +581,6 @@ jobs:
           run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
@@ -640,3 +638,32 @@ jobs:
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
+
+  check-pull-request-bazel-targets:
+    name: Check PULL_REQUEST_BAZEL_TARGETS
+    <<: *dind-small-setup
+    steps:
+      - <<: *checkout
+      - name: Filter files relevant for checking PULL_REQUEST_BAZEL_TARGETS
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        if : |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
+        with:
+          filters: |
+            src:
+              - "**/*.bzl"
+              - "**/*.bazel"
+              - "PULL_REQUEST_BAZEL_TARGETS"
+              - "ci/bazel-scripts/targets.py"
+      - name: Check PULL_REQUEST_BAZEL_TARGETS
+        if: |
+          steps.filter.outputs.src == 'true' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'workflow_call' ||
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          "$CI_PROJECT_DIR"/ci/bazel-scripts/targets.py check
