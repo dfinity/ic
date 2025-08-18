@@ -6242,7 +6242,12 @@ fn lsmt_shard_size_is_stable() {
 
 /// Mock version of CanisterManager::load_canister_snapshot that only does the bits relevant to the state manager
 fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mut ReplicatedState) {
-    let snapshot = state.canister_snapshots.get(snapshot_id).unwrap().clone();
+    let snapshot = state
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap()
+        .unwrap_left()
+        .clone();
     let mut canister = state.take_canister_state(&canister_id).unwrap();
 
     canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
@@ -6370,6 +6375,7 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
+            .unwrap_left()
             .execution_snapshot()
             .wasm_binary;
 
@@ -6402,6 +6408,7 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
+            .unwrap_left()
             .execution_snapshot()
             .wasm_binary;
 
@@ -6495,6 +6502,7 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
+            .unwrap_left()
             .execution_snapshot()
             .wasm_binary;
 

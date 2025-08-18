@@ -511,6 +511,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "educe": crate.spec(
                 version = "^0.4",
             ),
+            "either": crate.spec(
+                version = "^1.15.0",
+            ),
             "env-file-reader": crate.spec(
                 version = "^0.3",
             ),

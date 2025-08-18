@@ -55,6 +55,36 @@ pub enum ModuleLoadingStatus {
     FileNotLoaded,
 }
 
+/// Marker trait for `CanisterModuleImpl<.>` and `CanisterSnapshotImpl<.>`
+/// which have immutable and mutable versions.
+pub trait SnapshotMutability {
+    fn is_partial() -> bool {
+        false
+    }
+}
+
+/// Used as a marker for the immutable `CanisterSnapshotImpl<.>` and related types.
+impl SnapshotMutability for () {}
+
+/// Marker type for `CanisterModuleImpl` and `CanisterSnapshotImpl`
+/// which have default (immutable) versions and, if parametrized with
+/// this type, mutable versions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Mutable;
+
+impl SnapshotMutability for Mutable {
+    fn is_partial() -> bool {
+        true
+    }
+}
+
+/// Immutable `CanisterModule`.
+pub type CanisterModule = CanisterModuleImpl<()>;
+
+/// `CanisterModule`s which can still be manipulated via snapshot data
+/// upload are mutable.
+pub type MutableCanisterModule = CanisterModuleImpl<Mutable>;
+
 /// Canister module stored by the replica.
 /// Currently, we support two kinds of modules:
 ///   * Raw Wasm modules (magic number \0asm)
@@ -62,21 +92,24 @@ pub enum ModuleLoadingStatus {
 // We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
 // writing it to a file when creating checkpoints.
 #[derive(Clone, ValidateEq)]
-pub struct CanisterModule {
+pub struct CanisterModuleImpl<T: SnapshotMutability> {
     // The Wasm binary.
     #[validate_eq(Ignore)]
     module: ModuleStorage,
     // The Sha256 hash of the binary.
     module_hash: [u8; WASM_HASH_LENGTH],
+    #[validate_eq(Ignore)]
+    _t: std::marker::PhantomData<T>,
 }
 
-impl CanisterModule {
+impl<T: SnapshotMutability> CanisterModuleImpl<T> {
     pub fn new(bytes: Vec<u8>) -> Self {
         let module = ModuleStorage::Memory(Arc::new(bytes));
         let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
         Self {
             module,
             module_hash,
+            _t: std::marker::PhantomData,
         }
     }
 
@@ -89,26 +122,13 @@ impl CanisterModule {
         Ok(Self {
             module,
             module_hash: module_hash.0,
+            _t: std::marker::PhantomData,
         })
     }
 
     /// Returns if this module is backed by a file
     pub fn is_file(&self) -> bool {
         matches!(self.module, ModuleStorage::File(_))
-    }
-
-    /// Overwrite the module at `offset` with `buf`. This may invalidate the
-    /// module, and will change its hash. It's useful for uploading a module
-    /// chunk by chunk.
-    /// Returns an error if `offset` + `buf.len()` > `module.len()`.
-    pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        match self.module.write(buf, offset) {
-            Ok(()) => {
-                self.module_hash = ic_crypto_sha2::Sha256::hash(self.module.as_slice());
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -159,9 +179,41 @@ impl CanisterModule {
             ModuleStorage::File(file) => file.wasm_file_not_loaded_and_path_matches(expected_path),
         }
     }
+
+    pub fn into_mutable(self) -> CanisterModuleImpl<Mutable> {
+        CanisterModuleImpl {
+            module: self.module,
+            module_hash: self.module_hash,
+            _t: std::marker::PhantomData,
+        }
+    }
 }
 
-impl fmt::Debug for CanisterModule {
+impl CanisterModuleImpl<Mutable> {
+    /// Overwrite the module at `offset` with `buf`. This may invalidate the
+    /// module, and will change its hash. It's useful for uploading a module
+    /// chunk by chunk.
+    /// Returns an error if `offset` + `buf.len()` > `module.len()`.
+    pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
+        match self.module.write(buf, offset) {
+            Ok(()) => {
+                self.module_hash = ic_crypto_sha2::Sha256::hash(self.module.as_slice());
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn into_immutable(self) -> CanisterModuleImpl<()> {
+        CanisterModuleImpl {
+            module: self.module,
+            module_hash: self.module_hash,
+            _t: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: SnapshotMutability> fmt::Debug for CanisterModuleImpl<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "CanisterModule{{{}}}",
@@ -170,15 +222,15 @@ impl fmt::Debug for CanisterModule {
     }
 }
 
-impl PartialEq for CanisterModule {
+impl<T: SnapshotMutability> PartialEq for CanisterModuleImpl<T> {
     fn eq(&self, other: &Self) -> bool {
         self.module_hash() == other.module_hash()
     }
 }
 
-impl Eq for CanisterModule {}
+impl<T: SnapshotMutability> Eq for CanisterModuleImpl<T> {}
 
-impl std::hash::Hash for CanisterModule {
+impl<T: SnapshotMutability> std::hash::Hash for CanisterModuleImpl<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state)
     }
@@ -407,7 +459,7 @@ impl ModuleStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CanisterModule, MemoryMappableWasmFile, WasmHash, WASM_HASH_LENGTH};
+    use crate::{MemoryMappableWasmFile, MutableCanisterModule, WasmHash, WASM_HASH_LENGTH};
     use std::path::{Path, PathBuf};
     struct TestWasmFile(PathBuf);
     impl MemoryMappableWasmFile for TestWasmFile {
@@ -417,24 +469,11 @@ mod tests {
     }
 
     #[test]
-    fn wasmhash_display() {
-        let hash = WasmHash([0; WASM_HASH_LENGTH]);
-        let expected: String = "00".repeat(WASM_HASH_LENGTH);
-        assert_eq!(expected, format!("{}", hash));
-        let hash = WasmHash([11; WASM_HASH_LENGTH]);
-        let expected: String = "0b".repeat(WASM_HASH_LENGTH);
-        assert_eq!(expected, format!("{}", hash));
-        let hash = WasmHash([255; WASM_HASH_LENGTH]);
-        let expected: String = "ff".repeat(WASM_HASH_LENGTH);
-        assert_eq!(expected, format!("{}", hash));
-    }
-
-    #[test]
     fn test_chunk_write_to_module() {
         let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let original_hash = ic_crypto_sha2::Sha256::hash(original_module.as_slice());
         let chunk_size = 4;
-        let mut module = CanisterModule::new(original_module.clone());
+        let mut module = MutableCanisterModule::new(original_module.clone());
         assert_eq!(original_hash, module.module_hash());
 
         let mut offset = 0;
@@ -462,12 +501,25 @@ mod tests {
             .unwrap();
         let test_wasm_file = TestWasmFile(tmp.path().to_path_buf());
         let mut module =
-            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32]), None)
+            MutableCanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32]), None)
                 .unwrap();
         module.write(&[9], 5).unwrap();
         assert_eq!(
             &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],
             module.as_slice()
         );
+    }
+
+    #[test]
+    fn wasmhash_display() {
+        let hash = WasmHash([0; WASM_HASH_LENGTH]);
+        let expected: String = "00".repeat(WASM_HASH_LENGTH);
+        assert_eq!(expected, format!("{}", hash));
+        let hash = WasmHash([11; WASM_HASH_LENGTH]);
+        let expected: String = "0b".repeat(WASM_HASH_LENGTH);
+        assert_eq!(expected, format!("{}", hash));
+        let hash = WasmHash([255; WASM_HASH_LENGTH]);
+        let expected: String = "ff".repeat(WASM_HASH_LENGTH);
+        assert_eq!(expected, format!("{}", hash));
     }
 }

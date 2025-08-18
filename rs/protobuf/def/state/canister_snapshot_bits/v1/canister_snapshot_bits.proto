@@ -25,4 +25,5 @@ message CanisterSnapshotBits {
   CanisterTimer global_timer = 12;
   optional canister_state_bits.v1.OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 13;
   canister_state_bits.v1.SnapshotSource source = 14;
+  bool is_partial = 15;
 }

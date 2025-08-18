@@ -245,6 +245,7 @@ fn test_canister_snapshots_decode() {
         source: SnapshotSource::taken_from_canister(),
         global_timer: Some(CanisterTimer::Inactive),
         on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
+        is_partial: false,
     };
 
     let pb_bits =
