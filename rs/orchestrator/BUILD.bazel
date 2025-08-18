@@ -44,6 +44,7 @@ rust_library(
         "//rs/sys",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "@crate_index//:assert_matches",
         "@crate_index//:backoff",
         "@crate_index//:candid",
         "@crate_index//:clap",

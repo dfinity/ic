@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+assert_matches = { workspace = true }
 async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
