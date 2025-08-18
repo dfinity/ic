@@ -1265,8 +1265,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(91, summary_height, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(92, summary_height, &key_id);
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1283,10 +1283,8 @@ mod tests {
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 =
-                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
-            let inputs_2 =
-                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(93, payload_height_1, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(94, payload_height_1, &key_id);
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1520,8 +1518,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(91, summary_height, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(92, summary_height, &key_id);
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1540,10 +1538,8 @@ mod tests {
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 =
-                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
-            let inputs_2 =
-                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(93, payload_height_1, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(94, payload_height_1, &key_id);
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1991,7 +1987,7 @@ mod tests {
             let algorithm = AlgorithmId::from(key_id.inner());
             let test_inputs = match key_id.inner() {
                 MasterPublicKeyId::Ecdsa(_) => {
-                    TestSigInputs::from(&generate_tecdsa_protocol_inputs(
+                    TestPreSigRef::from(&generate_tecdsa_protocol_inputs(
                         &env,
                         &dealers,
                         &receivers,
@@ -2004,7 +2000,7 @@ mod tests {
                     ))
                 }
                 MasterPublicKeyId::Schnorr(_) => {
-                    TestSigInputs::from(&generate_tschnorr_protocol_inputs(
+                    TestPreSigRef::from(&generate_tschnorr_protocol_inputs(
                         &env,
                         &dealers,
                         &receivers,

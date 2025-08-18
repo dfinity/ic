@@ -3,8 +3,14 @@ set -ue
 shopt -s nocasematch
 ##
 ## Top-level script to run all execution and embedder benchmarks.
+##
 ## Usage:
-##     ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+##   To run all benchmarks and compare them to the committed baseline
+##   in a dev container on the `zh1-spm34` host:
+##
+##   ```sh
+##   HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+##   ```
 ##
 ## The best (minimum) results are located in the `*.min` files in the current directory.
 ## These should be manually copied to `rs/execution_environment/benches/baseline/`.
@@ -17,6 +23,12 @@ shopt -s nocasematch
 ## matches the benchmark name ("Embedders Heap", case-insensitive substring match),
 ## and the `FILTER` matches specific benchmark id ("query_read_fwd_102m_step_4k",
 ## case-sensitive regular expression).
+##
+## For example, run only the Embedders Heap benchmarks for `wasm32` query reads:
+##
+##   ```sh
+##   INCLUDE=heap FILTER=wasm32_query_read HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh
+##   ```
 ##
 
 printf "%-12s := %s\n" \

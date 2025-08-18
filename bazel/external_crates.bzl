@@ -305,7 +305,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                version = "^0.32.5",
+                version = "^0.32.99",
                 features = [
                     "default",
                     "rand",
@@ -669,6 +669,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-cdk": crate.spec(
                 version = "^0.18.5",
+            ),
+            "ic-cdk-executor": crate.spec(
+                version = "^1.0.2",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.12.2",
