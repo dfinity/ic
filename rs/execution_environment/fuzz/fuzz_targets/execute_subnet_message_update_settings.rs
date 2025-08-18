@@ -40,6 +40,7 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
             let memory_allocation = test
                 .canister_state(canister_id)
                 .system_state
+                .metadata
                 .memory_allocation
                 .bytes()
                 .get();
