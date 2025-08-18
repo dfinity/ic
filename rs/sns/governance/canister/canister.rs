@@ -25,6 +25,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_sns_governance::storage::with_upgrades_memory;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
@@ -69,19 +70,6 @@ use std::{
     ops::Deref,
     time::{Duration, SystemTime},
 };
-
-/// Constants to define memory segments.  Must not change.
-const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
-
-thread_local! {
-    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
-        MemoryManager::init(DefaultMemoryImpl::default())
-    );
-
-    // The memory where the governance reads and writes its state during an upgrade.
-    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
-        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
-}
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -287,11 +275,8 @@ fn canister_init_(init_payload: sns_gov_pb::Governance) {
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
-    UPGRADES_MEMORY.with(|um| {
-        let memory = um.borrow();
-
-        store_protobuf(memory.deref(), &governance().proto)
-            .expect("Failed to encode protobuf pre_upgrade");
+    with_upgrades_memory(|memory| {
+        store_protobuf(memory, &governance().proto).expect("Failed to encode protobuf pre_upgrade")
     });
 
     log!(INFO, "Completed pre upgrade");
@@ -316,16 +301,14 @@ fn canister_post_upgrade() {
     // Meaning there is no real possibility of these bytes being misinterpreted
     // TODO(NNS1-4037) Remove conditional after deploying the updated version to production
     let governance_proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-        UPGRADES_MEMORY
-            .with(|um| {
-                let result: Result<sns_gov_pb::Governance, _> =
-                    load_protobuf(um.borrow().deref());
-                result
-            })
-            .expect(
-                "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+        with_upgrades_memory(|memory| {
+            let result: Result<sns_gov_pb::Governance, _> = load_protobuf(memory);
+            result
+        })
+        .expect(
+            "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-            )
+        )
     } else {
         let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
         sns_gov_pb::Governance::decode(reader)
