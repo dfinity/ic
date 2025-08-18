@@ -42,8 +42,6 @@
 # and to check the correctness of this file. This is also run automatically by
 # the check-pull-request-bazel-targets job on CI.
 
-foo
-
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
 *.hs        //pre-commit:ormolu-lint
@@ -56,7 +54,6 @@ foo
             //rs/tests/nested:hostos_upgrade_smoke_test
             //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
             //rs/tests/nested:registration
-            //non-existing
 
 # Full rejoin test for state sync changes:
 *state_sync* //rs/tests/message_routing:rejoin_test
