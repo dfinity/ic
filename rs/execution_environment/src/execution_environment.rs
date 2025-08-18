@@ -1782,11 +1782,6 @@ impl ExecutionEnvironment {
             registry_settings.subnet_size,
             state.metadata.cost_schedule,
         );
-        info!(
-            self.log,
-            "debuggg fee: {}",
-            http_request_fee
-        );
         // Here we make sure that we do not let upper layers open new
         // http calls while the maximum number of calls is in-flight.
         // Later, in the http adapter we also have a bounded queue of

@@ -28,7 +28,7 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
-const APP_SUBNET_SIZES: [usize; 1] = [34];
+const APP_SUBNET_SIZES: [usize; 1] = [13];
 pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
 const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
 

@@ -109,6 +109,11 @@ impl CanisterHttpPayloadBuilderImpl {
     ) -> Self {
         let membership = Arc::new(Membership::new(cache.clone(), registry.clone(), subnet_id));
 
+        match rayon::ThreadPoolBuilder::new().num_threads(4).build_global() {
+            Ok(_) => println!("Successfully created a global thread pool with 4 threads."),
+            Err(e) => println!("Error building global thread pool: {}", e),
+        }
+
         Self {
             pool,
             cache,
@@ -168,7 +173,23 @@ impl CanisterHttpPayloadBuilderImpl {
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        // Get the threshold value that is needed for consensus
+
+        println!("BLOCKPROPOSAL at height={}", height);
+        let total_start = Instant::now();
+
+
+
+        // let busy_wait_duration = Duration::from_millis(70);
+        // let start = Instant::now();
+        // while start.elapsed() < busy_wait_duration {
+        //     // This hint tells the CPU that we are in a spin-loop,
+        //     // which can be more efficient than just an empty loop
+        //     // and prevents the compiler from optimizing it away.
+        //     std::hint::spin_loop();
+        // }
+    
+        // --- Block 1: Initial Setup & Registry Lookups ---
+        let block_1_start = Instant::now();
         let threshold = match self
             .membership
             .get_committee_threshold(height, Committee::CanisterHttp)
@@ -179,8 +200,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 return CanisterHttpPayload::default();
             }
         };
-
-        // Get the consensus registry version
+    
         let consensus_registry_version =
             match registry_version_at_height(self.cache.as_ref(), height) {
                 Some(registry_version) => registry_version,
@@ -192,7 +212,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     return CanisterHttpPayload::default();
                 }
             };
-
+    
         let faults_tolerated = match self.membership.get_canister_http_committee(height) {
             Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
             _ => {
@@ -200,27 +220,17 @@ impl CanisterHttpPayloadBuilderImpl {
                 return CanisterHttpPayload::default();
             }
         };
-
+        let block_1_setup_duration = block_1_start.elapsed();
+    
+        // --- Block 2: State Loading & Timeout Scan ---
+        let block_2_start = Instant::now();
         let mut accumulated_size = 0;
-        let mut responses_included = 0;
-
-        let mut candidates = vec![];
         let mut timeouts = vec![];
-        let mut divergence_responses = vec![];
-
-        // Metrics counters
-        let mut unique_includable_responses = 0;
-        let mut timeouts_included = 0;
-        let mut total_share_count = 0;
-        let mut active_shares = 0;
-        let mut unique_responses_count = 0;
-
+    
         let empty_contexts = BTreeMap::new();
-
         let state_result = self
             .state_reader
             .get_state_at(validation_context.certified_height);
-
         let canister_http_request_contexts =
             state_result.as_ref().map_or(&empty_contexts, |state| {
                 &state
@@ -229,44 +239,37 @@ impl CanisterHttpPayloadBuilderImpl {
                     .subnet_call_context_manager
                     .canister_http_request_contexts
             });
-
-        // Check the state for timeouts NOTE: We can not use the existing
-        // timed out artifacts for this task, since we don't have consensus
-        // on them. For example a malicious node might publish a single
-        // timed out metadata share and we would pick it up to generate a
-        // time out response. Instead, we scan the state metadata for timed
-        // out requests and generate time out responses based on that
-        // Iterate over all outstanding canister http requests
+    
         for (callback_id, request) in canister_http_request_contexts {
-            unique_includable_responses += 1;
             let candidate_size = callback_id.count_bytes();
             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
             if size >= max_payload_size {
-                // All timeouts have the same size, so we can stop iterating.
                 break;
             } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
                 && !delivered_ids.contains(callback_id)
             {
-                timeouts_included += 1;
                 timeouts.push(*callback_id);
                 accumulated_size += candidate_size;
             }
         }
-
-        // Since aggegating the signatures is expensive, we don't want to do the
-        // size checks after aggregation. Also we don't want to hold the lock on
-        // the pool while aggregating. Therefore, we pick the candidates for the
-        // payload first, then aggregate the signatures in a second step
+        let block_2_timeouts_duration = block_2_start.elapsed();
+    
+        let mut candidates = vec![];
+        let mut divergence_responses = vec![];
+        let mut responses_included = 0;
+    
+        // --- Block 3: Pool Access, Share Filtering, and Consensus Finding ---
+        let block_3_start = Instant::now();
+        let mut sub_3a_filtering_duration = Duration::ZERO;
+        let mut sub_3b_grouping_duration = Duration::ZERO;
+        let mut sub_3c_consensus_finding_duration = Duration::ZERO;
+        let mut block_4_candidate_sizing_duration = Duration::ZERO;
+    
         {
             let pool_access = self.pool.read().unwrap();
-
-            // Get share candidates to include in the block
+            let filtering_start = Instant::now();
             let share_candidates = pool_access
                 .get_validated_shares()
-                .inspect(|_| {
-                    total_share_count += 1;
-                })
-                // Filter out shares that are timed out or have the wrong registry versions
                 .filter(|&response| {
                     utils::check_share_against_context(
                         consensus_registry_version,
@@ -274,33 +277,24 @@ impl CanisterHttpPayloadBuilderImpl {
                         validation_context,
                     )
                 })
-                .inspect(|_| {
-                    active_shares += 1;
-                })
-                // Filter out shares for responses to requests that already have
-                // responses in the block chain up to the point we are creating a
-                // new payload.
                 .filter(|&response| !delivered_ids.contains(&response.content.id));
-
-            // Group the shares by their metadata
+            sub_3a_filtering_duration = filtering_start.elapsed();
+    
+            let grouping_start = Instant::now();
             let response_candidates_by_callback_id = group_shares_by_callback_id(share_candidates);
-
-            self.metrics.total_shares.set(total_share_count);
-            self.metrics.active_shares.set(active_shares);
-
-            let candidates_and_divergences = response_candidates_by_callback_id
+            sub_3b_grouping_duration = grouping_start.elapsed();
+    
+            let consensus_finding_start = Instant::now();
+            let candidates_and_divergences: Vec<_> = response_candidates_by_callback_id
                 .into_iter()
                 .filter_map(|(id, grouped_shares)| {
                     let consensus_candidate =
                         grouped_shares.iter().find_map(|(metadata, shares)| {
-                            unique_responses_count += 1;
                             match canister_http_request_contexts
                                 .get(&id)
                                 .map(|context| &context.replication)
                             {
                                 Some(Replication::NonReplicated(node_id)) => {
-                                    // For a non-replicated call, we require EXACTLY ONE share,
-                                    // and it MUST be from the designated node.
                                     shares
                                         .iter()
                                         .find(|share| share.signature.signer == *node_id)
@@ -317,7 +311,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                 }
                             }
                         });
-
+    
                     if let Some((metadata, shares)) = consensus_candidate {
                         pool_access
                             .get_response_content_by_hash(&metadata.content_hash)
@@ -328,30 +322,26 @@ impl CanisterHttpPayloadBuilderImpl {
                                     content,
                                 ))
                             })
+                    } else if grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated)
+                    {
+                        Some(CandidateOrDivergence::Divergence(
+                            CanisterHttpResponseDivergence {
+                                shares: grouped_shares
+                                    .into_iter()
+                                    .flat_map(|(_, shares)| shares.into_iter().cloned())
+                                    .collect(),
+                            },
+                        ))
                     } else {
-                        // No set of grouped shares large enough was found
-                        // so now we check whether we have divergence.
-                        if grouped_shares_meet_divergence_criteria(
-                            &grouped_shares,
-                            faults_tolerated,
-                        ) {
-                            Some(CandidateOrDivergence::Divergence(
-                                CanisterHttpResponseDivergence {
-                                    shares: grouped_shares
-                                        .into_iter()
-                                        .flat_map(|(_, shares)| shares.into_iter().cloned())
-                                        .collect(),
-                                },
-                            ))
-                        } else {
-                            // If not, we don't include this response candidate at all
-                            None
-                        }
+                        None
                     }
-                });
-
+                })
+                .collect();
+            sub_3c_consensus_finding_duration = consensus_finding_start.elapsed();
+    
+            // --- Block 4: Candidate Selection & Size Checks ---
+            let block_4_start = Instant::now();
             for candidate_or_divergence in candidates_and_divergences {
-                unique_includable_responses += 1;
                 match candidate_or_divergence {
                     CandidateOrDivergence::Candidate((metadata, shares, content)) => {
                         let candidate_size =
@@ -373,20 +363,17 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
                 }
-
                 if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
                     break;
                 }
-            }
+            }    
+            block_4_candidate_sizing_duration = block_4_start.elapsed();
         };
-
-        self.metrics.included_timeouts.set(timeouts_included);
-        self.metrics.unique_responses.set(unique_responses_count);
-        self.metrics
-            .unique_includable_responses
-            .set(unique_includable_responses);
-
-        // Now that we have the candidates, aggregate the signatures and construct the payload
+        
+        let block_3_pool_processing_duration = block_3_start.elapsed();
+    
+        // --- Block 5: Final Aggregation & Payload Construction ---
+        let block_5_start = Instant::now();
         let payload = CanisterHttpPayload {
             responses: candidates
                 .drain(..)
@@ -397,7 +384,25 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
         };
-
+        let block_5_aggregation_duration = block_5_start.elapsed();
+        let total_duration = total_start.elapsed();
+    
+        println!(
+            "CanisterHttpGetPayload: result=OK total_us={} num_responses={} num_timeouts={} num_divergence={} block_1_setup_us={} block_2_timeouts_us={} block_3_pool_processing_us={} (sub_3a_filtering_us={}, sub_3b_grouping_us={}, sub_3c_consensus_finding_us={}) block_4_candidate_sizing_us={} block_5_aggregation_us={}",
+            total_duration.as_micros(),
+            payload.responses.len(),
+            payload.timeouts.len(),
+            payload.divergence_responses.len(),
+            block_1_setup_duration.as_micros(),
+            block_2_timeouts_duration.as_micros(),
+            block_3_pool_processing_duration.as_micros(),
+            sub_3a_filtering_duration.as_micros(),
+            sub_3b_grouping_duration.as_micros(),
+            sub_3c_consensus_finding_duration.as_micros(),
+            block_4_candidate_sizing_duration.as_micros(), // Note: This is now timed outside the pool lock
+            block_5_aggregation_duration.as_micros(),
+        );
+    
         payload
     }
 
@@ -408,18 +413,31 @@ impl CanisterHttpPayloadBuilderImpl {
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), PayloadValidationError> {
+
+        println!("BLOCKVERIFIER start at height={}", height);
+
         let total_start = Instant::now();
+
+        // let busy_wait_duration = Duration::from_millis(70);
+        // let start = Instant::now();
+        // while start.elapsed() < busy_wait_duration {
+        //     // This hint tells the CPU that we are in a spin-loop,
+        //     // which can be more efficient than just an empty loop
+        //     // and prevents the compiler from optimizing it away.
+        //     std::hint::spin_loop();
+        // }
+
 
         // --- Block 1: Initial Checks ---
         let block_1_start = Instant::now();
-        if payload.is_empty() {
-            // Log this special case and exit.
-            println!(
-                "CanisterHttpPayloadValidation: result=OK reason=\"EmptyPayload\" total_us={}",
-                total_start.elapsed().as_micros()
-            );
-            return Ok(());
-        }
+        // if payload.is_empty() {
+        //     // Log this special case and exit.
+        //     println!(
+        //         "CanisterHttpPayloadValidation: result=OK reason=\"EmptyPayload\" total_us={}",
+        //         total_start.elapsed().as_micros()
+        //     );
+        //     return Ok(());
+        // }
         if !self.is_enabled(validation_context).map_err(|err| {
             ValidationError::ValidationFailed(
                 consensus::PayloadValidationFailure::RegistryUnavailable(err),
@@ -523,9 +541,11 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut loop7_signer_check_duration = Duration::ZERO;
         let mut loop7_crypto_verify_duration = Duration::ZERO; // Renamed for clarity
 
+        let mut proofs = vec![];
+
         let x: Result<(), PayloadValidationError> = payload
             .responses
-            .par_iter()
+            .iter()
             .map(|response| {
                 // --- Measure Sub-block A: Committee/Threshold Logic ---
                 let committee_logic_start = Instant::now();
@@ -586,18 +606,44 @@ impl CanisterHttpPayloadBuilderImpl {
 
                 let crypto_start = Instant::now();
 
-                self.crypto
-                    .verify_aggregate(&response.proof, consensus_registry_version)
-                    .map_err(|err| {
-                        CanisterHttpPayloadValidationError::InvalidArtifact(
-                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                        )
-                    })?;
+                proofs.push(&response.proof);
+
                 let loop7_crypto_verify_duration = crypto_start.elapsed();
                 Ok(())
             })
             .collect();
         x?;
+
+        let crypto_verify_start = Instant::now();
+        let mut batches_by_proof = vec![];
+
+        proofs.iter().for_each(|proof| {
+            batches_by_proof.push((&proof.content, &proof.signature));
+        });
+
+        let num_proofs = batches_by_proof.len();
+        let num_threads = rayon::current_num_threads();
+        // Ceiling division to ensure all items are processed
+        let chunk_size = (num_proofs + num_threads - 1) / num_threads;
+
+        // 2. CHUNK & 3. PROCESS (in parallel)
+        let result = batches_by_proof
+            .par_chunks(chunk_size)
+            .try_for_each(|chunk| {
+                // Each thread receives a `chunk`, which is a `&[(H, BasicSignatureBatch<H>)]`.
+                // This slice perfectly matches the signature of our verification function.
+                self.crypto.verify_multi_sig_batch(chunk, consensus_registry_version)
+            });
+
+        // 4. COMBINE RESULTS: Handle the final combined result.
+        result.map_err(|err| {
+            CanisterHttpPayloadValidationError::InvalidArtifact(
+                InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+            )
+        })?;
+
+        let loop7_crypto_verify_duration = crypto_verify_start.elapsed();
+
         let block_6_7_duration = block_6_7_start.elapsed();
 
         // --- Block 8: Divergence Proofs ---
@@ -676,6 +722,8 @@ impl CanisterHttpPayloadBuilderImpl {
             crypto_ind_verify_duration.as_micros()
         );
 
+        println!("BLOCKVERIFIER end at height={}", height);
+
         Ok(())
     }
 }
@@ -728,9 +776,9 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             .start_timer();
 
         // Empty payloads are always valid
-        if payload.is_empty() {
-            return Ok(());
-        }
+        // if payload.is_empty() {
+        //     return Ok(());
+        // }
 
         if payload.len() > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
             return Err(ValidationError::InvalidArtifact(

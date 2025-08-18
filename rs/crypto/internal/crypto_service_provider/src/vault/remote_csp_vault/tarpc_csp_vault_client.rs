@@ -847,7 +847,6 @@ impl VetKdCspVault for RemoteCspVault {
 impl PublicRandomSeedGenerator for RemoteCspVault {
     #[instrument(skip_all)]
     fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError> {
-        println!("debuggg remotecspvault");
         self.tokio_block_on(
             self.tarpc_csp_client
                 .new_public_seed(context_with_timeout(self.rpc_timeout)),

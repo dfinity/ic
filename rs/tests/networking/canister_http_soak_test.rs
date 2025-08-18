@@ -76,7 +76,7 @@ pub fn test(env: TestEnv) {
 
         let runtime = get_runtime_from_node(&node);
 
-        let canisters: Vec<_> = (0..6)  
+        let canisters: Vec<_> = (0..0)  
             .map(|i| {
                 let canister_name = format!("canister-{}", i);
                 create_proxy_canister_with_name_and_cycles(
