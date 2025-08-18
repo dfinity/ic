@@ -12,6 +12,10 @@ source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
+
+BOOTSTRAP_TAR_PATH="/mnt/config/ic-bootstrap.tar"
+CONFIG_ROOT_PATH="/boot/config"
+STATE_ROOT_PATH="/var/lib/ic"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
 
 function get_guestos_version() {
@@ -98,22 +102,22 @@ write_metric_attr "guestos_boot_action" \
     "GuestOS boot action" \
     "gauge"
 
-# /boot/config/CONFIGURED serves as a tag to indicate that the one-time bootstrap configuration has been completed.
-# If the `/boot/config/CONFIGURED` file is not present, the boot sequence will
+# ${CONFIG_ROOT_PATH}/CONFIGURED serves as a tag to indicate that the one-time bootstrap configuration has been completed.
+# If the `CONFIGURED` file is not present, the boot sequence will
 # search for a virtual USB stick (the bootstrap config image)
 # containing the injected configuration files, and create the file.
-if [ -f /boot/config/CONFIGURED ]; then
+if [ -f ${CONFIG_ROOT_PATH}/CONFIGURED ]; then
     echo "Bootstrap completed already"
 fi
 
-if [ ! -f /boot/config/CONFIGURED ]; then
+if [ ! -f ${CONFIG_ROOT_PATH}/CONFIGURED ]; then
     echo "Checking for bootstrap configuration"
 
-    if [ -e /mnt/config/ic-bootstrap.tar ]; then
+    if [ -e ${BOOTSTRAP_TAR_PATH} ]; then
         echo "Processing bootstrap data from /mnt/config"
-        process_bootstrap /mnt/config/ic-bootstrap.tar /boot/config /var/lib/ic
+        process_bootstrap ${BOOTSTRAP_TAR_PATH} ${CONFIG_ROOT_PATH} ${STATE_ROOT_PATH}
         echo "Successfully processed bootstrap data"
-        touch /boot/config/CONFIGURED
+        touch ${CONFIG_ROOT_PATH}/CONFIGURED
     else
         echo "No registration configuration provided to bootstrap IC node"
         exit 1
@@ -122,7 +126,7 @@ fi
 
 # Write metric on use of node_operator_private_key
 node_operator_private_key_exists=0
-if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
+if [ -f "${STATE_ROOT_PATH}/data/node_operator_private_key.pem" ]; then
     node_operator_private_key_exists=1
 fi
 
