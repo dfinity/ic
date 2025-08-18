@@ -48,7 +48,6 @@ rust_library(
 system_test_nns(
     name = "sr_app_same_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -107,7 +106,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -169,7 +167,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -189,7 +186,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -271,7 +267,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_same_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -296,7 +291,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",

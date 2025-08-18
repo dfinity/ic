@@ -519,6 +519,13 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     )
 
     original_tags = kwargs.pop("tags", [])
+
+    # Without the following, when a system_test_nns is tagged as a long_test it will run both on the nightly
+    # "Release Testing / CI Main / Bazel Test All" and "Release Testing / Release System Tests" which would be redundant.
+    # So we remove the default "system_test_large" tag from the head_nns variant such that it only runs on "Bazel Test All".
+    if "long_test" in original_tags and extra_head_nns_tags == ["system_test_large"]:
+        extra_head_nns_tags = []
+
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
