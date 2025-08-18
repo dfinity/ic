@@ -161,12 +161,12 @@ def targets(command: str, skip_long_tests: bool, base: str | None, head: str | N
 
 def check():
     """
-    Exit with 0 if PULL_REQUEST_BAZEL_TARGETS:
+    Exit successfully with 0 if PULL_REQUEST_BAZEL_TARGETS:
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
     * each pattern has at least one explicit target.
     * each target is valid and exists.
-    Otherwise print all errors to stderr and exit with 1.
+    Otherwise print all errors to stderr and exit erroneously with 1.
     """
     try:
         explicit_targets = load_explicit_targets()
