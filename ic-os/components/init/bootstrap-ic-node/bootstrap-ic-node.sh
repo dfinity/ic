@@ -16,23 +16,6 @@ SCRIPT="$(basename $0)[$$]"
 BOOTSTRAP_TAR_PATH="/mnt/config/ic-bootstrap.tar"
 CONFIG_ROOT_PATH="/boot/config"
 STATE_ROOT_PATH="/var/lib/ic"
-GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
-
-function get_guestos_version() {
-    if [ -r ${GUESTOS_VERSION_FILE} ]; then
-        GUESTOS_VERSION=$(cat ${GUESTOS_VERSION_FILE})
-        GUESTOS_VERSION_OK=1
-    else
-        GUESTOS_VERSION="unknown"
-        GUESTOS_VERSION_OK=0
-    fi
-    write_log "GuestOS version ${GUESTOS_VERSION}"
-    write_metric_attr "guestos_version" \
-        "{version=\"${GUESTOS_VERSION}\"}" \
-        "${GUESTOS_VERSION_OK}" \
-        "GuestOS version string" \
-        "gauge"
-}
 
 # Process the bootstrap package to populate SSH keys, /var/lib/ic/data and /var/lib/ic/crypto
 # note: keep this list in sync with configurations supported in `config::guestos_bootstrap_image`.
@@ -93,14 +76,6 @@ function process_bootstrap() {
     # to make sure the system can boot successfully after a hard shutdown.
     sync
 }
-
-get_guestos_version
-
-write_metric_attr "guestos_boot_action" \
-    "{successful_boot=\"true\"}" \
-    "0" \
-    "GuestOS boot action" \
-    "gauge"
 
 # ${CONFIG_ROOT_PATH}/CONFIGURED serves as a tag to indicate that the one-time bootstrap configuration has been completed.
 # If the `CONFIGURED` file is not present, the boot sequence will
