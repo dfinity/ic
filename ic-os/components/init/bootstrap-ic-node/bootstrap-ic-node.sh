@@ -98,14 +98,3 @@ if [ ! -f ${CONFIG_ROOT_PATH}/CONFIGURED ]; then
         exit 1
     fi
 fi
-
-# Write metric on use of node_operator_private_key
-node_operator_private_key_exists=0
-if [ -f "${STATE_ROOT_PATH}/data/node_operator_private_key.pem" ]; then
-    node_operator_private_key_exists=1
-fi
-
-write_metric "guestos_node_operator_private_key_exists" \
-    "${node_operator_private_key_exists}" \
-    "Existence of a Node Operator private key indicates the node deployment method" \
-    "gauge"
