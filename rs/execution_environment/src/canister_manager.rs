@@ -2092,7 +2092,7 @@ impl CanisterManager {
         if original_mutable {
             let _ = state
                 .canister_snapshots
-                .make_snapshot_immutable(snapshot_id); // we check the result below
+                .make_snapshot_immutable(snapshot_id); // cannot fail because we have a Right variant
         }
         let Either::Left(snapshot) = state.canister_snapshots.get(snapshot_id).unwrap() else {
             error!(
@@ -2102,9 +2102,8 @@ impl CanisterManager {
                 snapshot_id
             );
             return (
-                Err(CanisterManagerError::CanisterSnapshotTransformFailed {
-                    canister_id,
-                    snapshot_id,
+                Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                    message: format!("Failed to make snapshot {} of canister {} immutable during load_snapshot. This is a bug.", snapshot_id, canister_id)
                 }),
                 NumInstructions::new(0),
             );

@@ -466,10 +466,6 @@ pub(crate) enum CanisterManagerError {
     CanisterSnapshotInconsistent {
         message: String,
     },
-    CanisterSnapshotTransformFailed {
-        canister_id: CanisterId,
-        snapshot_id: SnapshotId,
-    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -728,10 +724,6 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterSnapshotMutable => ErrorHelp::UserError {
                 suggestion: "The requested operation is only valid for immutable snapshots.".to_string(),
-                doc_link: "".to_string(),
-            },
-            CanisterManagerError::CanisterSnapshotTransformFailed{ .. } => ErrorHelp::UserError {
-                suggestion: "This is a bug in the canister manager.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1043,12 +1035,6 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                 ErrorCode::CanisterSnapshotMutable,
                     "Only immutable canister snapshot (meta)data can be read.".to_string(),
-                )
-            }
-            CanisterSnapshotTransformFailed { canister_id, snapshot_id } => {
-                Self::new(
-                    ErrorCode::CanisterSnapshotTransformFailed,
-                    format!("Failed to convert a mutable snapshot to immutable during snapshot_load. canister_id: {} snapshot_id: {}. This is a bug in the canister manager.", canister_id, snapshot_id),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {

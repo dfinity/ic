@@ -245,7 +245,6 @@ impl CanisterSnapshots {
     ///
     /// External callers should call `ReplicatedState::delete_snapshots` instead.
     pub(crate) fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
-        // TODO: remove from partials
         let mut result = Vec::default();
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
@@ -366,7 +365,7 @@ impl CanisterSnapshots {
         // decisions whenever new fields are added.
         let CanisterSnapshots {
             snapshots: _,
-            partial_snapshots: _, // TODO
+            partial_snapshots: _,
             snapshot_ids: _,
             memory_usage: _,
         } = self;
@@ -481,34 +480,6 @@ pub struct CanisterSnapshotImpl<T: SnapshotMutability> {
 
 /// Impl specific to immutable snapshots.
 impl CanisterSnapshot {
-    // TODO
-    // pub fn new(
-    //     canister_id: CanisterId,
-    //     source: SnapshotSource,
-    //     taken_at_timestamp: Time,
-    //     canister_version: u64,
-    //     certified_data: Vec<u8>,
-    //     chunk_store: WasmChunkStore,
-    //     execution_snapshot: ExecutionStateSnapshot,
-    //     size: NumBytes,
-    // ) -> CanisterSnapshot {
-    //     Self {
-    //         canister_id,
-    //         source,
-    //         taken_at_timestamp,
-    //         canister_version,
-    //         certified_data,
-    //         chunk_store,
-    //         execution_snapshot,
-    //         size,
-    //     }
-    // }
-
-    /// Creates a snapshot from a canister.
-    ///
-    /// This method fails early, before any expensive computations are
-    /// performed. If that changes, the instructions used in this method
-    /// have to be accounted for in the caller.
     pub fn from_canister(
         canister: &CanisterState,
         taken_at_timestamp: Time,
