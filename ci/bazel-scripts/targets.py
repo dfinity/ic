@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--commit_range COMMIT_RANGE] {build,test}
+#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
-# If --commit_range is passed only bazel targets will be included that have modified inputs within the specified git COMMIT_RANGE.
+# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`.
+# When --head is not provided defaults to HEAD.
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
@@ -29,6 +30,10 @@ PULL_REQUEST_BAZEL_TARGETS = "PULL_REQUEST_BAZEL_TARGETS"
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
 # in case any file is modified matching any of the following globs:
 all_targets_globs = ["*.bazel", "*.bzl", ".bazelrc", ".bazelversion", "mainnet-*-revisions.json", ".github/*"]
+
+
+def log(msg: str):
+    print(msg, file=sys.stderr)
 
 
 def load_explicit_targets() -> dict[str, Set[str]]:
@@ -75,7 +80,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> str:
+def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
     * To return all targets in case files matching all_targets_globs are modified.
@@ -83,8 +88,12 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
     * To exclude long_tests if requested.
     """
     modified_files = subprocess.run(
-        ["git", "diff", "--name-only", commit_range], check=True, capture_output=True, text=True
+        ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
     ).stdout.splitlines()
+
+    log("Calculating targets to test for the following {n} modified files:".format(n=len(modified_files)))
+    for file in modified_files:
+        log(file)
 
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
@@ -123,31 +132,32 @@ def main():
     parser.add_argument("command", choices=["build", "test"], help="Bazel command to generate targets for")
     parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
     parser.add_argument(
-        "--commit_range",
-        help="Only include targets with modified inputs in the given git commit range. For example: 'master..HEAD'",
+        "--base",
+        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
     )
+    parser.add_argument("--head", help="See --base.")
     args = parser.parse_args()
 
-    # If no commit range is specified, form a query to return all targets
+    # If no base is specified, form a query to return all targets
     # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified).
     # Otherwise return a query for all targets that have modified inputs in the specified
     # git commit range taking several factors into account:
     query = (
         ("//..." + (" except attr(tags, long_test, //...)" if args.skip_long_tests else ""))
-        if args.commit_range is None
-        else diff_only_query(args.command, args.commit_range, args.skip_long_tests)
+        if args.base is None
+        else diff_only_query(args.command, args.base, "HEAD" if args.head is None else args.head, args.skip_long_tests)
     )
 
     # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
     query = f"({query}) except attr(tags, manual, //...)"
 
-    print(f"bazel query --keep_going '{query}'", file=sys.stderr)
+    log(f"bazel query --keep_going '{query}'")
     result = subprocess.run(["bazel", "query", "--keep_going", query], stderr=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        print(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr, file=sys.stderr)
+        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
         sys.exit(result.returncode)
 
 
