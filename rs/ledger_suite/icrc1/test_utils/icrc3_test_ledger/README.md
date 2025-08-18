@@ -47,7 +47,6 @@ bazel test //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledge
 
 ## Storage
 
-q
 The canister uses in-memory storage (heap) for simplicity. Data will not persist across canister upgrades. For a
 production use case, you would want to implement stable storage.
 
