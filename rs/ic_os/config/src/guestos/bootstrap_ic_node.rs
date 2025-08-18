@@ -62,8 +62,6 @@ pub fn process_bootstrap(
         println!("Setting up initial node_operator_private_key.pem");
         fs::copy(&node_op_key_src, &node_op_key_dst)?;
         fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
-    } else {
-        anyhow::bail!("node_operator_private_key.pem does not exist in the bootstrap tarball");
     }
 
     // set up initial ssh authorized keys
