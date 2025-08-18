@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test}
+#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
@@ -11,6 +11,8 @@
 #
 # ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
+#
+# When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
 #   ci/bazel-scripts/targets.py --skip_long_tests --base=master.. test
