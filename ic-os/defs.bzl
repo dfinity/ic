@@ -177,7 +177,6 @@ def icos_build(
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
-        extra_boot_args = "extra_boot" + test_suffix + "_args"
         launch_measurements = "launch-measurements" + test_suffix + ".json"
 
         ext4_image(
@@ -208,7 +207,6 @@ def icos_build(
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
                         (boot_args, "/boot_args:0644"),
-                        (extra_boot_args, "/extra_boot_args:0644"),
                         (image_deps["grub_config"], "/grub.cfg:0644"),
                     ]
                 )
@@ -224,9 +222,6 @@ def icos_build(
         # - Consistent boot argument handling across all OS types
         # - Predictable measurements for AMD SEV (especially important for signed root partitions)
         # - Static boot arguments stored on the boot partition
-
-        # For backwards compatibility in GuestOS and HostOS,
-        # we continue to support the old way of calculating the dynamic args (see :extra_boot_args).
 
         if image_deps.get("requires_root_signing", False):
             # Sign the root partition and substitute ROOT_HASH in boot args
@@ -256,25 +251,12 @@ def icos_build(
                       "< $(location :boot_args_template) > $@",
                 tags = ["manual"],
             )
-            native.genrule(
-                name = "generate-" + extra_boot_args,
-                outs = [extra_boot_args],
-                srcs = [partition_root_hash, ":extra_boot_args_template"],
-                cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
-                      "< $(location :extra_boot_args_template) > $@",
-                tags = ["manual"],
-            )
         else:
             # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
             native.alias(
                 name = boot_args,
                 actual = ":boot_args_template",
-                tags = ["manual"],
-            )
-            native.alias(
-                name = extra_boot_args,
-                actual = ":extra_boot_args_template",
                 tags = ["manual"],
             )
 
@@ -311,11 +293,6 @@ def icos_build(
     native.alias(
         name = "boot_args_template",
         actual = image_deps["boot_args_template"],
-    )
-
-    native.alias(
-        name = "extra_boot_args_template",
-        actual = image_deps["extra_boot_args_template"],
     )
 
     # -------------------- Assemble disk partitions ---------------
