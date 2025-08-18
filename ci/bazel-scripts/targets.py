@@ -180,9 +180,9 @@ def check():
             errors.append(f"Pattern '{pattern}' doesn't match any files tracked by git!")
         else:
             # Log successful matches which is useful for debugging
-            # or can be linked to in BuildBuddy to inform users of
+            # or can be linked to on github.com to inform users of
             # potentially too wide or otherwise incorrect patterns.
-            log(f"Pattern '{pattern}' matches {n} files:\n" + "\n".join(matches) + "\n")
+            log(f"Pattern '{pattern}' matches {n} files:\n" + "\n".join(matches) + "\n ")
 
         if len(explicit_targets_for_pattern) == 0:
             errors.append(f"Pattern '{pattern}' has no explicit targets!")
