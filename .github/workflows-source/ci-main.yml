@@ -662,7 +662,7 @@ jobs:
           steps.filter.outputs.src == 'true' ||
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'workflow_call' ||
+          github.event_name == 'workflow_call'
         shell: bash
         run: |
           set -eExuo pipefail
