@@ -523,10 +523,8 @@ impl Ledger {
             .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
-    pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        // If we include more principals here, we need to update the trap message
-        // in `icrc1_transfer` and similar functions.
-        !principal_id.is_anonymous()
+    pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
+        true
     }
 
     /// Check if it's allowed to notify this canister.
