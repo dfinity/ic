@@ -80,25 +80,14 @@ pub fn process_bootstrap(
     // Fix up permissions. Ideally this is specific to only what is copied. If
     // we do make this change, we need to make sure `data` itself has the
     // correct permissions.
-    let status = Command::new("chown")
+    let _ = Command::new("chown")
         .args(["ic-replica:nogroup", "-R"])
         .arg(state_root.join("data"))
-        .status()
-        .context("Failed to change ownership of data directory")?;
-
-    if !status.success() {
-        anyhow::bail!("chown failed with status: {}", status);
-    }
+        .status();
 
     // Synchronize the above cached writes to persistent storage
     // to make sure the system can boot successfully after a hard shutdown.
-    let status = Command::new("sync")
-        .status()
-        .context("Failed to sync filesystem")?;
-
-    if !status.success() {
-        anyhow::bail!("sync failed with status: {}", status);
-    }
+    let _ = Command::new("sync").status();
 
     Ok(())
 }
