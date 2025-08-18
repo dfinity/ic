@@ -13,11 +13,13 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
-    TakeCanisterSnapshotArgs, UploadChunkArgs,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_snapshots::{PartialCanisterSnapshot, ValidatedSnapshotMetadata};
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
@@ -6362,6 +6364,30 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
         let snapshot_id = SnapshotId::from((canister_id, 0));
         state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
 
+        const WASM_SIZE: usize = 42;
+        let new_partial_snapshot = PartialCanisterSnapshot::from_metadata(
+            &ValidatedSnapshotMetadata::validate(
+                UploadCanisterSnapshotMetadataArgs {
+                    canister_id: canister_id.into(),
+                    replace_snapshot: None,
+                    wasm_module_size: WASM_SIZE,
+                    exported_globals: vec![],
+                    wasm_memory_size: 0,
+                    stable_memory_size: 0,
+                    certified_data: vec![],
+                    global_timer: None,
+                    on_low_wasm_memory_hook_status: None,
+                },
+                WasmExecutionMode::Wasm32,
+            )
+            .unwrap(),
+            state.time(),
+            0,
+            state_manager.get_fd_factory(),
+        );
+        let partial_snapshot_id = SnapshotId::from((canister_id, 1));
+        state.create_snapshot_from_metadata(partial_snapshot_id, Arc::new(new_partial_snapshot));
+
         let canister_wasm_binary = &state
             .canister_state(&canister_id)
             .unwrap()
@@ -6379,9 +6405,18 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .execution_snapshot()
             .wasm_binary;
 
+        let partial_snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(partial_snapshot_id)
+            .unwrap()
+            .unwrap_right()
+            .execution_snapshot_impl()
+            .wasm_binary;
+
         // Before checkpointing, wasm binaries of both the canister and the snapshot are in memory.
         assert!(!canister_wasm_binary.is_file());
         assert!(!snapshot_wasm_binary.is_file());
+        assert!(!partial_snapshot_wasm_binary.is_file());
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -6392,6 +6427,7 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .unwrap();
         let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
         let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+        let partial_snapshot_layout = checkpoint_layout.snapshot(&partial_snapshot_id).unwrap();
 
         let (_height, state) = state_manager.take_tip();
 
@@ -6412,6 +6448,14 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .execution_snapshot()
             .wasm_binary;
 
+        let partial_snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(partial_snapshot_id)
+            .unwrap()
+            .unwrap_right()
+            .execution_snapshot_impl()
+            .wasm_binary;
+
         // After checkpointing, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@1
         // and file contents can be correctly read.
         // Note that `wasm_file_not_loaded_and_path_matches()` needs to be called before `as_slice()`
@@ -6423,6 +6467,10 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
         assert!(snapshot_wasm_binary
             .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
         assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+
+        assert!(partial_snapshot_wasm_binary
+            .wasm_file_not_loaded_and_path_matches(partial_snapshot_layout.wasm().raw_path()));
+        assert_eq!(partial_snapshot_wasm_binary.as_slice(), [0u8; WASM_SIZE]);
 
         assert_error_counters(metrics);
     });
@@ -6519,6 +6567,12 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
         assert_error_counters(metrics);
     });
 }
+
+// TODO: need this test:
+// - create partial snapshot
+// - checkpoint
+// - load_partial -> becomes full snapshpt
+//	  - assert: check that on disc we have canister state: what we uploaded, and snapshot still exists too.
 
 #[test]
 fn can_create_and_restore_snapshot() {
