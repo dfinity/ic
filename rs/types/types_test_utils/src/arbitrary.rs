@@ -4,14 +4,14 @@ use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-        NO_DEADLINE,
+        StreamBlocker, StreamMessage, NO_DEADLINE,
     },
     time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
     CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
 use proptest::prelude::*;
-use std::{convert::TryInto, time::Duration};
+use std::{convert::TryInto, ops::RangeInclusive, time::Duration};
 use strum::IntoEnumIterator;
 
 prop_compose! {
@@ -228,6 +228,27 @@ pub fn request_or_response() -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
         request().prop_flat_map(|req| Just(req.into())),
         response().prop_flat_map(|rep| Just(rep.into())),
+    ]
+}
+
+prop_compose! {
+    /// Produces an arbitrary [`StreamMessage`].
+    pub fn stream_blocker()(
+        subnet_id in subnet_id(),
+        index in any::<u64>(),
+    ) -> StreamBlocker {
+        StreamBlocker {
+            subnet_id,
+            index: index.into(),
+        }
+    }
+}
+
+pub fn stream_message_with_config(populate_deadline: bool) -> impl Strategy<Value = StreamMessage> {
+    prop_oneof![
+        request_with_config(populate_deadline).prop_flat_map(|req| Just(req.into())),
+        response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
+        stream_blocker().prop_flat_map(|blocker| Just(blocker.into())),
     ]
 }
 

@@ -161,7 +161,7 @@ fn stream_message_request_or_response_round_trip() {
                 let msg: StreamMessage = r.into();
                 assert_eq!(s, msg);
             }
-            StreamMessage::Blocker(b) => {
+            StreamMessage::StreamBlocker(b) => {
                 let msg = TryInto::<RequestOrResponse>::try_into(s).unwrap_err();
                 assert_eq!(b, msg);
             }

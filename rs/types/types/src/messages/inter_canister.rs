@@ -690,6 +690,24 @@ impl CountBytes for StreamMessage {
     }
 }
 
+impl From<Request> for StreamMessage {
+    fn from(req: Request) -> Self {
+        StreamMessage::Request(Arc::new(req))
+    }
+}
+
+impl From<Response> for StreamMessage {
+    fn from(resp: Response) -> Self {
+        StreamMessage::Response(Arc::new(resp))
+    }
+}
+
+impl From<StreamBlocker> for StreamMessage {
+    fn from(blocker: StreamBlocker) -> Self {
+        StreamMessage::StreamBlocker(Arc::new(blocker))
+    }
+}
+
 impl From<RequestOrResponse> for StreamMessage {
     fn from(msg: RequestOrResponse) -> Self {
         match msg {
