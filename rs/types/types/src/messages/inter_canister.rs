@@ -655,9 +655,10 @@ impl From<Response> for RequestOrResponse {
     }
 }
 
-/// A message that acts as a blocker for the message behind it in the `StreamIndexedQueue` of a
-/// `StreamSlice` until the `begin` in a different `StreamSlice` coming from `subnet_id` is verified
-/// to be >= `index`.
+/// A message in a stream that acts as a blocker until another stream from `subnet_id` has progressed
+/// past a certain `index`. This is used to prevent out of order delivery of message that can happen
+/// due to a race condition during subnet splitting when messages from the same canister can come from
+/// different subnets.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct StreamBlocker {
