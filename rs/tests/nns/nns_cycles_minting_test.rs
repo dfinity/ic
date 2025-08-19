@@ -50,7 +50,6 @@ use num_traits::ToPrimitive;
 use on_wire::IntoWire;
 use slog::info;
 
-/// Bogus change to trigger the /rs/tests/nns:nns_cycles_minting_test !!!
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
