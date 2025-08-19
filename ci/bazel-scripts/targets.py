@@ -126,8 +126,11 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     # Exclude the long_tests if requested:
     query = f"({query})" + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
 
-    # Include all long system-tests (under //rs/tests) of which a direct source file has been modified.
-    # We specify a depth of 2 since a system-test depends on the test binary which depends on the source file.
+    # Include all long system-tests (under //rs/tests) of which a "direct" source file has been modified.
+    # We specify a depth of 2 since a system-test depends on the test binary (1st degree) which depends
+    # on the source file (2nd degree).
+    # This will trigger long system-tests if some files other than its .rs file are modified but we think
+    # this is acceptable since it would be good to run the tests if those direct files are modified anyways.
     query = f"({query}) + attr(tags, long_test, rdeps(//rs/tests/..., set({mfiles}), 2))"
 
     # Next, add the explicit targets from the PULL_REQUEST_BAZEL_TARGETS file that match the modified files:
