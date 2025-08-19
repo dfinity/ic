@@ -59,8 +59,8 @@
 
 *nns_delegation* //rs/tests/networking:nns_delegation_test
 
-rs/backup/*.rs //rs/tests/consensus/backup:backup_manager_upgrade_test
-               //rs/tests/consensus/backup:backup_manager_downgrade_test
+rs/backup/*.rs //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
+               //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
 
 rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
                      //rs/tests/nested:nns_recovery_test
