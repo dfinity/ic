@@ -6932,6 +6932,7 @@ dependencies = [
  "candid",
  "ic-btc-interface",
  "ic-error-types 0.2.0",
+ "ic-interfaces-adapter-client",
  "ic-protobuf",
  "serde",
  "serde_bytes",

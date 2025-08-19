@@ -9,8 +9,8 @@ mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject, Network,
+    AdapterClient, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
+    BitcoinAdapterResponseWrapper, BitcoinReject, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
@@ -23,7 +23,7 @@ use ic_interfaces::{
     },
     validation::ValidationError,
 };
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
+use ic_interfaces_adapter_client::Options;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{log, warn, ReplicaLogger};
@@ -65,10 +65,6 @@ impl GetPayloadError {
         }
     }
 }
-
-type AdapterClient = Box<
-    dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
->;
 
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,

@@ -6,6 +6,7 @@
 
 use candid::CandidType;
 use ic_error_types::RejectCode;
+use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -103,6 +104,10 @@ impl TryFrom<v1::SendTransactionRequest> for SendTransactionRequest {
         })
     }
 }
+
+pub type AdapterClient = Box<
+    dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
+>;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BitcoinAdapterRequestWrapper {

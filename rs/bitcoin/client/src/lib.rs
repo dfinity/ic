@@ -6,8 +6,9 @@ use crate::metrics::{
 };
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
+    AdapterClient, BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
+    SendTransactionResponse,
 };
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
@@ -171,8 +172,7 @@ fn setup_adapter_client(
     metrics: Metrics,
     rt_handle: tokio::runtime::Handle,
     uds_path: Option<PathBuf>,
-) -> Box<dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>>
-{
+) -> AdapterClient {
     match uds_path {
         None => Box::new(BrokenConnectionBitcoinClient::new(metrics)),
         Some(uds_path) => {
@@ -204,30 +204,10 @@ fn setup_adapter_client(
 }
 
 pub struct BitcoinAdapterClients {
-    pub btc_testnet_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
-    pub btc_mainnet_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
-    pub doge_testnet_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
-    pub doge_mainnet_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
+    pub btc_testnet_client: AdapterClient,
+    pub btc_mainnet_client: AdapterClient,
+    pub doge_testnet_client: AdapterClient,
+    pub doge_mainnet_client: AdapterClient,
 }
 
 pub fn setup_bitcoin_adapter_clients(
