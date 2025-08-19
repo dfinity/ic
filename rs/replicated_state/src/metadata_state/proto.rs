@@ -12,7 +12,6 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
-use ic_types::messages::RequestOrResponseOrBlocker;
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -290,14 +289,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     subnet_stream: Some(stream.into()),
                 })
                 .collect(),
-            streams_with_blockers: item
-                .streams
-                .iter()
-                .map(|(subnet_id, stream)| pb_queues::StreamEntryWithBlockers {
-                    subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
-                    subnet_stream: Some(stream.into()),
-                })
-                .collect(),
             network_topology: Some((&item.network_topology).into()),
             subnet_call_context_manager: Some((&item.subnet_call_context_manager).into()),
             state_sync_version: item.state_sync_version as u32,
@@ -490,11 +481,7 @@ impl From<&Stream> for pb_queues::Stream {
             .collect();
         Self {
             messages_begin: item.messages.begin().get(),
-            messages: item
-                .messages
-                .iter()
-                .map(|(_, req_or_resp)| req_or_resp.into())
-                .collect(),
+            messages: item.messages.iter().map(|(_, msg)| msg.into()).collect(),
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
@@ -509,8 +496,8 @@ impl TryFrom<pb_queues::Stream> for Stream {
 
     fn try_from(item: pb_queues::Stream) -> Result<Self, Self::Error> {
         let mut messages = StreamIndexedQueue::with_begin(item.messages_begin.into());
-        for req_or_resp in item.messages {
-            messages.push(req_or_resp.try_into()?);
+        for msg in item.messages {
+            messages.push(msg.try_into()?);
         }
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::size_bytes(&messages);
@@ -556,32 +543,6 @@ impl TryFrom<pb_queues::Stream> for Stream {
                 .unwrap_or_default(),
             guaranteed_response_counts,
         })
-    }
-}
-
-impl From<&Stream> for pb_queues::StreamWithBlockers {
-    fn from(item: &Stream) -> Self {
-        let reject_signals = item
-            .reject_signals()
-            .iter()
-            .map(|signal| pb_queues::RejectSignal {
-                reason: pb_queues::RejectReason::from(signal.reason).into(),
-                index: signal.index.get(),
-            })
-            .collect();
-        Self {
-            messages_begin: item.messages.begin().get(),
-            messages: item
-                .messages
-                .iter()
-                .map(|(_, req_or_resp)| (&RequestOrResponseOrBlocker::from(req_or_resp)).into())
-                .collect(),
-            signals_end: item.signals_end.get(),
-            reject_signals,
-            reverse_stream_flags: Some(pb_queues::StreamFlags {
-                deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
-            }),
-        }
     }
 }
 

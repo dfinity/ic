@@ -142,11 +142,29 @@ fn request_or_response_proto_round_trip() {
 }
 
 #[test]
-fn request_or_response_or_blocker_proto_round_trip() {
-    for r in RequestOrResponseOrBlocker::exhaustive_set(&mut reproducible_rng()) {
-        let encoded = pb_queues::RequestOrResponseOrBlocker::from(&r);
-        let round_trip = RequestOrResponseOrBlocker::try_from(encoded).unwrap();
+fn stream_message_proto_round_trip() {
+    for r in StreamMessage::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::StreamMessage::from(&r);
+        let round_trip = StreamMessage::try_from(encoded).unwrap();
 
         assert_eq!(r, round_trip);
+    }
+}
+
+#[test]
+fn stream_message_request_or_response_round_trip() {
+    for s in StreamMessage::exhaustive_set(&mut reproducible_rng()) {
+        let t = s.clone();
+        match t {
+            StreamMessage::Request(_) | StreamMessage::Response(_) => {
+                let r: RequestOrResponse = t.try_into().unwrap();
+                let msg: StreamMessage = r.into();
+                assert_eq!(s, msg);
+            }
+            StreamMessage::Blocker(b) => {
+                let msg = TryInto::<RequestOrResponse>::try_into(s).unwrap_err();
+                assert_eq!(b, msg);
+            }
+        }
     }
 }

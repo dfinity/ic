@@ -27,6 +27,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
         is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+        StreamMessage,
     },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
@@ -795,7 +796,7 @@ impl SystemMetadata {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
-    messages: StreamIndexedQueue<RequestOrResponse>,
+    messages: StreamIndexedQueue<StreamMessage>,
 
     /// Index of the next expected reverse stream message.
     ///
@@ -841,7 +842,7 @@ impl Default for Stream {
 
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
-    pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
+    pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
@@ -856,7 +857,7 @@ impl Stream {
 
     /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
-        messages: StreamIndexedQueue<RequestOrResponse>,
+        messages: StreamIndexedQueue<StreamMessage>,
         signals_end: StreamIndex,
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
@@ -891,7 +892,7 @@ impl Stream {
     }
 
     /// Returns a reference to the message queue.
-    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
+    pub fn messages(&self) -> &StreamIndexedQueue<StreamMessage> {
         &self.messages
     }
 
@@ -921,7 +922,7 @@ impl Stream {
                     .or_insert(0) += 1;
             }
         }
-        self.messages.push(message);
+        self.messages.push(message.into());
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
@@ -967,6 +968,11 @@ impl Stream {
             // Deduct every discarded message from the stream's byte size.
             self.messages_size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+
+            // Exclude blockers at this point.
+            let Ok(msg) = TryInto::<RequestOrResponse>::try_into(msg) else {
+                continue;
+            };
 
             if let RequestOrResponse::Response(response) = &msg {
                 if !response.is_best_effort() {
@@ -1038,16 +1044,16 @@ impl Stream {
     }
 
     /// Calculates the estimated byte size of the given messages.
-    fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
+    fn size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
     fn calculate_guaranteed_response_counts(
-        messages: &StreamIndexedQueue<RequestOrResponse>,
+        messages: &StreamIndexedQueue<StreamMessage>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();
         for (_, msg) in messages.iter() {
-            if let RequestOrResponse::Response(response) = msg {
+            if let StreamMessage::Response(response) = msg {
                 // We only count guaranteed responses
                 if !response.is_best_effort() {
                     *result.entry(response.respondent).or_insert(0) += 1;

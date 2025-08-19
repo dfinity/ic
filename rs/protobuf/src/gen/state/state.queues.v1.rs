@@ -28,7 +28,7 @@ pub struct Stream {
     #[prost(uint64, tag = "1")]
     pub messages_begin: u64,
     #[prost(message, repeated, tag = "2")]
-    pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
+    pub messages: ::prost::alloc::vec::Vec<StreamMessage>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
     #[prost(message, repeated, tag = "8")]
@@ -42,26 +42,6 @@ pub struct StreamEntry {
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "2")]
     pub subnet_stream: ::core::option::Option<Stream>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StreamWithBlockers {
-    #[prost(uint64, tag = "1")]
-    pub messages_begin: u64,
-    #[prost(message, repeated, tag = "2")]
-    pub messages: ::prost::alloc::vec::Vec<RequestOrResponseOrBlocker>,
-    #[prost(uint64, tag = "3")]
-    pub signals_end: u64,
-    #[prost(message, repeated, tag = "4")]
-    pub reject_signals: ::prost::alloc::vec::Vec<RejectSignal>,
-    #[prost(message, optional, tag = "5")]
-    pub reverse_stream_flags: ::core::option::Option<StreamFlags>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StreamEntryWithBlockers {
-    #[prost(message, optional, tag = "1")]
-    pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
-    #[prost(message, optional, tag = "2")]
-    pub subnet_stream: ::core::option::Option<StreamWithBlockers>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestMetadata {
@@ -159,12 +139,12 @@ pub struct StreamBlocker {
     pub index: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RequestOrResponseOrBlocker {
-    #[prost(oneof = "request_or_response_or_blocker::R", tags = "1, 2, 3")]
-    pub r: ::core::option::Option<request_or_response_or_blocker::R>,
+pub struct StreamMessage {
+    #[prost(oneof = "stream_message::R", tags = "1, 2, 3")]
+    pub r: ::core::option::Option<stream_message::R>,
 }
-/// Nested message and enum types in `RequestOrResponseOrBlocker`.
-pub mod request_or_response_or_blocker {
+/// Nested message and enum types in `StreamMessage`.
+pub mod stream_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
         #[prost(message, tag = "1")]

@@ -665,43 +665,47 @@ pub struct StreamBlocker {
     pub index: StreamIndex,
 }
 
-/// `RequestOrResponse` extended by `StreamBlocker` which exists only in stream slices and streams.
+/// A message in a `Stream` or a `StreamSlice`; it can be either an inter canister message or a stream blocker.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub enum RequestOrResponseOrBlocker {
+pub enum StreamMessage {
     Request(Arc<Request>),
     Response(Arc<Response>),
     Blocker(Arc<StreamBlocker>),
 }
 
-impl From<&RequestOrResponse> for RequestOrResponseOrBlocker {
-    fn from(msg: &RequestOrResponse) -> RequestOrResponseOrBlocker {
+impl CountBytes for StreamMessage {
+    fn count_bytes(&self) -> usize {
+        size_of::<Self>()
+            + match self {
+                Self::Request(req) => {
+                    size_of::<Request>() + req.payload_size_bytes().get() as usize
+                }
+                Self::Response(resp) => {
+                    size_of::<Response>() + resp.payload_size_bytes().get() as usize
+                }
+                Self::Blocker(_) => size_of::<StreamBlocker>(),
+            }
+    }
+}
+
+impl From<RequestOrResponse> for StreamMessage {
+    fn from(msg: RequestOrResponse) -> Self {
         match msg {
-            RequestOrResponse::Request(request) => {
-                RequestOrResponseOrBlocker::Request(request.clone())
-            }
-            RequestOrResponse::Response(response) => {
-                RequestOrResponseOrBlocker::Response(response.clone())
-            }
+            RequestOrResponse::Request(req) => Self::Request(req),
+            RequestOrResponse::Response(resp) => Self::Response(resp),
         }
     }
 }
 
-/// Convenience `CountBytes` implementation that returns the same value as
-/// `RequestOrResponseOrBlocker::Blocker(self).count_bytes()`, so we don't need to wrap
-/// `self` into a `RequestOrResponseOrBlocker` only to calculate its estimated byte size.
-impl CountBytes for StreamBlocker {
-    fn count_bytes(&self) -> usize {
-        size_of::<RequestOrResponseOrBlocker>() + size_of::<StreamBlocker>()
-    }
-}
+impl TryFrom<StreamMessage> for RequestOrResponse {
+    type Error = Arc<StreamBlocker>;
 
-impl CountBytes for RequestOrResponseOrBlocker {
-    fn count_bytes(&self) -> usize {
-        match self {
-            RequestOrResponseOrBlocker::Request(req) => req.count_bytes(),
-            RequestOrResponseOrBlocker::Response(resp) => resp.count_bytes(),
-            RequestOrResponseOrBlocker::Blocker(blo) => blo.count_bytes(),
+    fn try_from(msg: StreamMessage) -> Result<Self, Self::Error> {
+        match msg {
+            StreamMessage::Request(req) => Ok(RequestOrResponse::Request(req)),
+            StreamMessage::Response(resp) => Ok(RequestOrResponse::Response(resp)),
+            StreamMessage::Blocker(blo) => Err(blo),
         }
     }
 }
@@ -890,43 +894,38 @@ impl TryFrom<pb_queues::StreamBlocker> for StreamBlocker {
     }
 }
 
-impl From<&RequestOrResponseOrBlocker> for pb_queues::RequestOrResponseOrBlocker {
-    fn from(rrb: &RequestOrResponseOrBlocker) -> Self {
+impl From<&StreamMessage> for pb_queues::StreamMessage {
+    fn from(rrb: &StreamMessage) -> Self {
         match rrb {
-            RequestOrResponseOrBlocker::Request(req) => pb_queues::RequestOrResponseOrBlocker {
-                r: Some(pb_queues::request_or_response_or_blocker::R::Request(
-                    req.as_ref().into(),
-                )),
+            StreamMessage::Request(req) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::Request(req.as_ref().into())),
             },
-            RequestOrResponseOrBlocker::Response(rep) => pb_queues::RequestOrResponseOrBlocker {
-                r: Some(pb_queues::request_or_response_or_blocker::R::Response(
-                    rep.as_ref().into(),
-                )),
+            StreamMessage::Response(rep) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::Response(rep.as_ref().into())),
             },
-            RequestOrResponseOrBlocker::Blocker(blo) => pb_queues::RequestOrResponseOrBlocker {
-                r: Some(pb_queues::request_or_response_or_blocker::R::Blocker(
-                    blo.as_ref().into(),
-                )),
+            StreamMessage::Blocker(blo) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::Blocker(blo.as_ref().into())),
             },
         }
     }
 }
 
-impl TryFrom<pb_queues::RequestOrResponseOrBlocker> for RequestOrResponseOrBlocker {
+impl TryFrom<pb_queues::StreamMessage> for StreamMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(rrb: pb_queues::RequestOrResponseOrBlocker) -> Result<Self, Self::Error> {
-        match rrb.r.ok_or(ProxyDecodeError::MissingField(
-            "RequestOrResponseOrBlocker::r",
-        ))? {
-            pb_queues::request_or_response_or_blocker::R::Request(r) => {
-                Ok(RequestOrResponseOrBlocker::Request(Arc::new(r.try_into()?)))
+    fn try_from(rrb: pb_queues::StreamMessage) -> Result<Self, Self::Error> {
+        match rrb
+            .r
+            .ok_or(ProxyDecodeError::MissingField("StreamMessage::r"))?
+        {
+            pb_queues::stream_message::R::Request(r) => {
+                Ok(StreamMessage::Request(Arc::new(r.try_into()?)))
             }
-            pb_queues::request_or_response_or_blocker::R::Response(r) => Ok(
-                RequestOrResponseOrBlocker::Response(Arc::new(r.try_into()?)),
-            ),
-            pb_queues::request_or_response_or_blocker::R::Blocker(r) => {
-                Ok(RequestOrResponseOrBlocker::Blocker(Arc::new(r.try_into()?)))
+            pb_queues::stream_message::R::Response(r) => {
+                Ok(StreamMessage::Response(Arc::new(r.try_into()?)))
+            }
+            pb_queues::stream_message::R::Blocker(r) => {
+                Ok(StreamMessage::Blocker(Arc::new(r.try_into()?)))
             }
         }
     }

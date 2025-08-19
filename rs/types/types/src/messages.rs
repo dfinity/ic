@@ -33,7 +33,7 @@ pub use ingress_messages::{
 };
 pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    RequestOrResponseOrBlocker, Response, StreamBlocker, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
+    Response, StreamBlocker, StreamMessage, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;

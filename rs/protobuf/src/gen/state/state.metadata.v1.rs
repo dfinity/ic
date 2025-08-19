@@ -492,9 +492,6 @@ pub struct SystemMetadata {
     pub batch_time_nanos: u64,
     #[prost(message, repeated, tag = "5")]
     pub streams: ::prost::alloc::vec::Vec<super::super::queues::v1::StreamEntry>,
-    #[prost(message, repeated, tag = "23")]
-    pub streams_with_blockers:
-        ::prost::alloc::vec::Vec<super::super::queues::v1::StreamEntryWithBlockers>,
     #[prost(message, optional, tag = "6")]
     pub network_topology: ::core::option::Option<NetworkTopology>,
     #[prost(message, optional, tag = "7")]
