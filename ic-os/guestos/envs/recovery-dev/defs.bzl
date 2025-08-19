@@ -19,7 +19,7 @@ def generate_dummy_recovery_archive(name):
     native.genrule(
         name = name,
         srcs = [
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh",
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash",
         ],
         outs = [
             "recovery.tar.zst",
@@ -27,7 +27,7 @@ def generate_dummy_recovery_archive(name):
             "cup.proto.b64",
             "ic_registry_local_store_1.b64",
             "ic_registry_local_store_2.b64",
-            "guestos-recovery-engine.sh",
+            "expected_recovery_hash",
         ],
         cmd = r"""
             set -euo pipefail
@@ -56,10 +56,10 @@ def generate_dummy_recovery_archive(name):
 
 
             RECOVERY_HASH="$$(sha256sum recovery.tar.zst | cut -d' ' -f1)"
-            sed < $< "s/readonly EXPECTED_RECOVERY_HASH=\"\"/readonly EXPECTED_RECOVERY_HASH=\"$$RECOVERY_HASH\"/" > guestos-recovery-engine.sh
             echo "$$RECOVERY_HASH" > recovery.tar.zst.sha256
+            echo "$$RECOVERY_HASH" > expected_recovery_hash
 
-            mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 guestos-recovery-engine.sh $(RULEDIR)
+            mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 expected_recovery_hash $(RULEDIR)
         """,
         target_compatible_with = [
             "@platforms//os:linux",
