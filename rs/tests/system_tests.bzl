@@ -211,7 +211,7 @@ def system_test(
         colocated_test_driver_vm_enable_ipv4 = False,
         colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_img = True,
-        uses_guestos_mainnet_img = False,
+        uses_guestos_nns_mainnet_img = False,
         uses_guestos_latest_release_mainnet_img = False,
         uses_guestos_recovery_dev_img = False,
         uses_guestos_malicious_img = False,
@@ -252,7 +252,7 @@ def system_test(
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
       uses_guestos_img: the test uses the branch GuestOS image
-      uses_guestos_mainnet_img: the test uses the NNS subnet mainnet GuestOS image
+      uses_guestos_nns_mainnet_img: the test uses the NNS subnet mainnet GuestOS image
       uses_guestos_latest_release_mainnet_img: the test uses the latest release mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
       uses_guestos_malicious_img: the test uses the malicious GuestOS image
@@ -306,7 +306,7 @@ def system_test(
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_nns_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
     if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
@@ -326,7 +326,7 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
-    if uses_guestos_mainnet_img:
+    if uses_guestos_nns_mainnet_img:
         # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
