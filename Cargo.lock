@@ -6781,7 +6781,6 @@ dependencies = [
  "ic-adapter-metrics-server",
  "ic-btc-adapter-client",
  "ic-btc-adapter-test-utils",
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-btc-service",
  "ic-btc-validation",
@@ -6884,7 +6883,6 @@ dependencies = [
 name = "ic-btc-consensus"
 version = "0.9.0"
 dependencies = [
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-config",
  "ic-error-types 0.2.0",
@@ -6930,7 +6928,6 @@ name = "ic-btc-replica-types"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-btc-interface",
  "ic-error-types 0.2.0",
  "ic-interfaces-adapter-client",
  "ic-protobuf",
@@ -12871,7 +12868,6 @@ dependencies = [
  "canister-test",
  "crossbeam-channel",
  "ic-base-types",
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-btc-service",
  "ic-canister-client-sender",
