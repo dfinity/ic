@@ -165,7 +165,7 @@ def check():
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
     * each pattern has at least one explicit target.
-    * each target is valid and exists.
+    * each target is valid and when queried results in at least one target after excluding all manual targets.
     Otherwise print all errors to stderr and exit erroneously with 1.
     """
     try:
@@ -176,6 +176,7 @@ def check():
     all_files = subprocess.run(["git", "ls-files"], check=True, capture_output=True, text=True).stdout.splitlines()
 
     errors = []
+    indentation = "    "
     for pattern, explicit_targets_for_pattern in explicit_targets.items():
         matches = fnmatch.filter(all_files, pattern)
         n = len(matches)
@@ -193,11 +194,22 @@ def check():
             errors.append(f"Pattern '{pattern}' has no explicit targets!")
 
         for target in explicit_targets_for_pattern:
-            result = subprocess.run(["bazel", "query", target], capture_output=True, text=True)
+            query = f"({target}) except attr(tags, manual, //...)"
+            result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
-                indentation = "    "
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
                 errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
+            else:
+                if len(result.stdout.splitlines()) == 0:
+                    errors.append(
+                        f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!"
+                        + (
+                            f"\n{indentation}It might be you're including the manual non-colocated variant of a system-test."
+                            + f"\n{indentation}Try '{target}_colocate' instead."
+                        )
+                        if target.startswith("//rs/tests")
+                        else ""
+                    )
 
     n = len(errors)
     if n > 0:
