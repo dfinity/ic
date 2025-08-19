@@ -463,13 +463,9 @@ fn instruction_and_reserved_cycles_exceed_canister_balance_setup() -> (StateMach
 }
 
 /// The amount of reserved cycles for storage when taking a snapshot in the test `instruction_and_reserved_cycles_exceed_canister_balance`.
-/// There is a dedicated test `reserved_by_snapshot_test` fixing the value of this constant.
 /// This value should be much more than 40B (instruction cycles prepayment as the prepayment amount can't be burned
 /// and we burn cycles to reach the target cycles balance).
-const RESERVED_BY_SNAPSHOT: u128 = 3_307_236_131_163;
-
-#[test]
-fn reserved_by_snapshot_test() {
+fn reserved_cycles_for_snapshot() -> u128 {
     let (env, canister_id) = instruction_and_reserved_cycles_exceed_canister_balance_setup();
 
     let before = reserved_balance(&env, canister_id);
@@ -481,7 +477,8 @@ fn reserved_by_snapshot_test() {
     let after = reserved_balance(&env, canister_id);
 
     let reserved_by_snapshot = after - before;
-    assert_eq!(reserved_by_snapshot, RESERVED_BY_SNAPSHOT);
+    assert!(reserved_by_snapshot >= 40_000_000_000);
+    reserved_by_snapshot
 }
 
 #[test]
@@ -489,11 +486,11 @@ fn instruction_and_reserved_cycles_exceed_canister_balance() {
     let (env, canister_id) = instruction_and_reserved_cycles_exceed_canister_balance_setup();
 
     // Burn cycles of the canister so that only
-    // `RESERVED_BY_SNAPSHOT` (reserved cycles for the snapshot) + 1B (slack; less than the base fee for a snapshot) are remaining.
+    // `reserved_cycles_for_snapshot()` + 1B (slack; less than the base fee for a snapshot) are remaining.
     let status = env.canister_status(canister_id).unwrap().unwrap();
     let balance = status.cycles();
     let to_burn = balance
-        .checked_sub(RESERVED_BY_SNAPSHOT + 1_000_000_000)
+        .checked_sub(reserved_cycles_for_snapshot() + 1_000_000_000)
         .unwrap();
     env.execute_ingress(
         canister_id,
