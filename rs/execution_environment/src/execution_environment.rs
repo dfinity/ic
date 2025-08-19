@@ -2847,9 +2847,8 @@ impl ExecutionEnvironment {
                 )),
             }
         };
-        let effective_canister_id =
-            extract_effective_canister_id(ingress, state.metadata.own_subnet_id)
-                .map_err(|err| err.into_user_error(ingress.method_name()))?;
+        let effective_canister_id = extract_effective_canister_id(ingress)
+            .map_err(|err| err.into_user_error(ingress.method_name()))?;
 
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
@@ -2890,7 +2889,7 @@ impl ExecutionEnvironment {
             }
         }
 
-        if ingress.is_addressed_to_subnet(self.own_subnet_id) {
+        if ingress.is_addressed_to_subnet() {
             return self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
