@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-wasm",
     "@crate_index//:libflate",
     "@crate_index//:prometheus-parse",
+    "@crate_index//:candid",
 ]
 
 MACRO_DEPENDENCIES = [

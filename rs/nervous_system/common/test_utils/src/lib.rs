@@ -2,6 +2,7 @@
 pub use crate::prometheus::{get_counter, get_gauge, get_samples};
 
 use async_trait::async_trait;
+use candid::Nat;
 use dfn_core::CanisterId;
 use futures::{
     channel::{
@@ -15,7 +16,6 @@ use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
-
 mod prometheus;
 pub mod wasm_helpers;
 
@@ -123,6 +123,18 @@ impl ICRC1Ledger for InterleavingTestLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(
@@ -266,6 +278,18 @@ impl ICRC1Ledger for SpyLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(

@@ -64,6 +64,19 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         self.canister_id
     }
 
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+    ) -> Result<Nat, NervousSystemError> {
+        <IcpLedgerCanister<Rt> as ICRC1Ledger>::icrc2_approve(
+            self, spender, amount, expires_at, fee,
+        )
+        .await
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,
@@ -206,6 +219,15 @@ pub trait ICRC1Ledger: Send + Sync {
 
     /// Returns the CanisterId of the Ledger being accessed.
     fn canister_id(&self) -> CanisterId;
+
+    /// Gives approval for `amount` of asset to `spender`.
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+    ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.
     async fn icrc3_get_blocks(

@@ -21,7 +21,7 @@ use ic_canister_log::log;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
+use ic_nervous_system_common::{ledger::compute_distribution_subaccount_bytes, ONE_HOUR_SECONDS};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -595,21 +595,17 @@ impl Governance {
         sns_amount_e8s: u64,
         icp_amount_e8s: u64,
     ) -> Result<(), GovernanceError> {
-        let treasury_sns_subaccount = self.sns_treasury_subaccount();
-        let treasury_icp_subaccount = self.icp_treasury_subaccount();
-
         let to = Account {
             owner: treasury_manager_canister_id.get().0,
             subaccount: None,
         };
 
         self.ledger
-            .transfer_funds(
-                sns_amount_e8s,
-                self.transaction_fee_e8s_or_panic(),
-                treasury_sns_subaccount,
+            .icrc2_approve(
                 to,
-                0,
+                sns_amount_e8s - self.transaction_fee_e8s_or_panic(),
+                Some(self.env.now() + ONE_HOUR_SECONDS),
+                self.transaction_fee_e8s_or_panic(),
             )
             .await
             .map(|_| ())
@@ -621,19 +617,18 @@ impl Governance {
             })?;
 
         self.nns_ledger
-            .transfer_funds(
-                icp_amount_e8s,
-                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
-                treasury_icp_subaccount,
+            .icrc2_approve(
                 to,
-                0,
+                icp_amount_e8s - icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
+                Some(self.env.now() + ONE_HOUR_SECONDS),
+                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
             )
             .await
             .map(|_| ())
             .map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error making ICP treasury transfer: {}", e),
+                    format!("Error making ICP Token treasury transfer: {}", e),
                 )
             })?;
 

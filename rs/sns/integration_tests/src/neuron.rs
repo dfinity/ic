@@ -1202,6 +1202,18 @@ async fn zero_total_reward_shares() {
             CanisterId::from_u64(1)
         }
 
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
+
         async fn icrc3_get_blocks(
             &self,
             _args: Vec<GetBlocksRequest>,
@@ -1386,6 +1398,18 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
 
         async fn icrc3_get_blocks(

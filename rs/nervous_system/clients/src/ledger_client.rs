@@ -11,6 +11,7 @@ use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::{Memo, TransferArg},
 };
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use num_traits::ToPrimitive;
 
@@ -92,6 +93,36 @@ impl ICRC1Ledger for LedgerCanister {
     fn canister_id(&self) -> CanisterId {
         let principal_id = PrincipalId::from(self.client.ledger_canister_id);
         CanisterId::unchecked_from_principal(principal_id)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+    ) -> Result<Nat, NervousSystemError> {
+        let args = ApproveArgs {
+            spender,
+            amount: Nat::from(amount),
+            expires_at,
+            fee: Some(Nat::from(fee)),
+            from_subaccount: None,
+            memo: None,
+            created_at_time: None,
+            expected_allowance: None,
+        };
+
+        let result: Result<Nat, (i32, String)> = self
+            .client
+            .runtime
+            .call(self.canister_id().into(), "icrc2_approve", (args,))
+            .await
+            .map(|result: (Nat,)| result.0);
+
+        result.map_err(|(code, msg)| {
+            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {:?}. Message: {}", code, msg))
+        })
     }
 
     async fn icrc3_get_blocks(
