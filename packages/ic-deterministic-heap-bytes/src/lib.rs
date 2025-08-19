@@ -1,6 +1,5 @@
 pub use ic_deterministic_heap_bytes_derive::DeterministicHeapBytes;
 use paste::paste;
-use std::collections::BTreeMap;
 
 /// A trait to deterministically report heap memory usage.
 ///
@@ -30,6 +29,9 @@ pub trait DeterministicHeapBytes {
     }
 }
 
+////////////////////////////////////////////////////////////////////////
+// Scalar types.
+
 impl DeterministicHeapBytes for u8 {}
 impl DeterministicHeapBytes for u16 {}
 impl DeterministicHeapBytes for u32 {}
@@ -46,6 +48,13 @@ impl DeterministicHeapBytes for f32 {}
 impl DeterministicHeapBytes for f64 {}
 impl DeterministicHeapBytes for bool {}
 impl DeterministicHeapBytes for char {}
+
+////////////////////////////////////////////////////////////////////////
+// Standard library types.
+
+impl DeterministicHeapBytes for std::sync::atomic::AtomicU64 {}
+impl DeterministicHeapBytes for std::time::Duration {}
+impl DeterministicHeapBytes for std::fs::File {}
 
 impl DeterministicHeapBytes for String {
     fn deterministic_heap_bytes(&self) -> usize {
@@ -79,7 +88,7 @@ impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Vec<T> {
 }
 
 impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapBytes
-    for BTreeMap<K, V>
+    for std::collections::BTreeMap<K, V>
 {
     /// Calculates the precise heap size by summing the heap usage of all elements.
     ///
@@ -97,6 +106,39 @@ impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapByte
         self_heap_bytes + elements_heap_bytes
     }
 }
+
+impl<T: DeterministicHeapBytes> DeterministicHeapBytes for std::sync::Arc<T> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.as_ref().deterministic_heap_bytes()
+    }
+}
+
+impl<T: DeterministicHeapBytes> DeterministicHeapBytes for std::sync::Mutex<T> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.lock().unwrap().deterministic_heap_bytes()
+    }
+}
+
+impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Option<T> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        match self {
+            Some(s) => s.deterministic_heap_bytes(),
+            None => 0,
+        }
+    }
+}
+
+impl<T: DeterministicHeapBytes, E: DeterministicHeapBytes> DeterministicHeapBytes for Result<T, E> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        match self {
+            Ok(ok) => ok.deterministic_heap_bytes(),
+            Err(err) => err.deterministic_heap_bytes(),
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+// Tuples.
 
 macro_rules! impl_heap_bytes_for_tuple {
     ( $( $idx:tt ),* ) => {
@@ -120,25 +162,17 @@ impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5);
 impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5, 6);
 impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5, 6, 7);
 
-impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Option<T> {
-    fn deterministic_heap_bytes(&self) -> usize {
-        match self {
-            Some(s) => s.deterministic_heap_bytes(),
-            None => 0,
-        }
-    }
-}
-
-impl<T: DeterministicHeapBytes, E: DeterministicHeapBytes> DeterministicHeapBytes for Result<T, E> {
-    fn deterministic_heap_bytes(&self) -> usize {
-        match self {
-            Ok(ok) => ok.deterministic_heap_bytes(),
-            Err(err) => err.deterministic_heap_bytes(),
-        }
-    }
-}
+////////////////////////////////////////////////////////////////////////
+// External types.
 
 impl DeterministicHeapBytes for candid::Principal {}
+impl DeterministicHeapBytes for candid::types::principal::PrincipalError {}
+impl DeterministicHeapBytes for tempfile::TempDir {
+    fn deterministic_heap_bytes(&self) -> usize {
+        // TempDir allocates a string for the path.
+        self.path().as_os_str().len()
+    }
+}
 
 #[cfg(test)]
 mod tests;

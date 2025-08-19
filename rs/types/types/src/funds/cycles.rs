@@ -1,4 +1,5 @@
 use candid::{CandidType, Nat};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
@@ -19,6 +20,7 @@ use thousands::Separable;
     Copy,
     Clone,
     Eq,
+    DeterministicHeapBytes,
     PartialEq,
     Ord,
     PartialOrd,

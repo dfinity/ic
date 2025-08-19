@@ -21,6 +21,7 @@ rust_library(
     crate_name = "ic_base_types",
     proc_macro_deps = [
         # Keep sorted.
+        "//packages/ic-deterministic-heap-bytes-derive",
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({
@@ -30,6 +31,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-deterministic-heap-bytes",
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "//rs/protobuf",

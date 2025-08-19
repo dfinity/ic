@@ -1,13 +1,14 @@
 use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, Cycles, MemoryDiskBytes, NumInstructions};
+use ic_types::{methods::WasmMethod, CanisterId, Cycles, DiskBytes, NumInstructions};
 use ic_wasm_types::{
     doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
 };
 use serde::{Deserialize, Serialize};
 
 /// Various traps that a canister can create.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TrapCode {
     StackOverflow,
     HeapOutOfBounds,
@@ -46,7 +47,7 @@ impl std::fmt::Display for TrapCode {
 ///
 /// Should be used as the wrapped error by various components that need to
 /// handle such cases.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CanisterOutOfCyclesError {
     pub canister_id: CanisterId,
     pub available: Cycles,
@@ -71,7 +72,7 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
 
 /// Backtrace coming from canister code. Suitable for displaying to users for
 /// assistance in debugging canisters.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CanisterBacktrace(pub Vec<(u32, Option<String>)>);
 
 impl std::fmt::Display for CanisterBacktrace {
@@ -88,7 +89,7 @@ impl std::fmt::Display for CanisterBacktrace {
 }
 
 /// Errors returned by the Hypervisor.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum HypervisorError {
     /// The message sent to the canister refers a function not found in the
     /// table. The payload contains the index of the table and the index of the
@@ -404,15 +405,7 @@ impl std::fmt::Display for HypervisorError {
     }
 }
 
-impl MemoryDiskBytes for HypervisorError {
-    fn memory_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
-}
+impl DiskBytes for HypervisorError {}
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {
