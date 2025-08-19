@@ -255,7 +255,6 @@ impl NodeRewardsCanister {
                     )
                 })?;
             NodeRewardsCanister::schedule_metrics_sync(canister).await;
-            let rewards_distribution_day: DayUtc = request.to_timestamp_nanoseconds.into();
             let result =
                 canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
             let rewards_xdr_permyriad = result
@@ -283,7 +282,8 @@ impl NodeRewardsCanister {
                 for (provider_id, provider_rewards) in result.provider_results {
                     let key = NodeProviderRewardsKey {
                         principal_id: Some(provider_id),
-                        rewards_distribution_day: Some(rewards_distribution_day.into()),
+                        end_day: Some(result.end_day.into()),
+                        start_day: Some(result.start_day.into()),
                     };
                     historical_rewards.insert(key, provider_rewards.into());
                 }

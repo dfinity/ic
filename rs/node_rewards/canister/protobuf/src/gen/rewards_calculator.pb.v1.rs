@@ -130,7 +130,9 @@ pub struct NodeProviderRewardsKey {
     #[prost(message, optional, tag = "1")]
     pub principal_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     #[prost(message, optional, tag = "2")]
-    pub rewards_distribution_day: ::core::option::Option<DayUtc>,
+    pub end_day: ::core::option::Option<DayUtc>,
+    #[prost(message, optional, tag = "3")]
+    pub start_day: ::core::option::Option<DayUtc>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsFailureRateValue {

@@ -75,7 +75,8 @@ message NodeProviderRewards {
 
 message NodeProviderRewardsKey {
   ic_base_types.pb.v1.PrincipalId principal_id = 1;
-  DayUtc rewards_distribution_day = 2;
+  DayUtc end_day = 2;
+  DayUtc start_day = 3;
 }
 
 message SubnetsFailureRateValue {

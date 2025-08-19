@@ -118,13 +118,13 @@ pub struct NodeMetricsDaily {
     pub relative_fr: Percent,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum NodeStatus {
     Assigned { node_metrics: NodeMetricsDaily },
     Unassigned { extrapolated_fr: Percent },
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DailyResults {
     pub day: DayUtc,
     pub node_status: NodeStatus,
@@ -134,7 +134,7 @@ pub struct DailyResults {
     pub adjusted_rewards: XDRPermyriad,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NodeResults {
     pub node_id: NodeId,
     pub node_reward_type: NodeRewardType,
@@ -143,7 +143,7 @@ pub struct NodeResults {
     pub daily_results: Vec<DailyResults>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct BaseRewards {
     pub node_reward_type: NodeRewardType,
     pub region: Region,
@@ -151,7 +151,7 @@ pub struct BaseRewards {
     pub daily: XDRPermyriad,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DailyBaseRewardsType3 {
     pub day: DayUtc,
     pub region: Region,
@@ -161,7 +161,7 @@ pub struct DailyBaseRewardsType3 {
     pub value: XDRPermyriad,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: u64,
     pub base_rewards: Vec<BaseRewards>,
@@ -170,6 +170,8 @@ pub struct NodeProviderRewards {
 }
 
 pub struct RewardsCalculatorResults {
+    pub start_day: DayUtc,
+    pub end_day: DayUtc,
     pub subnets_fr: BTreeMap<(DayUtc, SubnetId), Percent>,
     pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
