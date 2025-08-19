@@ -12868,6 +12868,7 @@ dependencies = [
  "canister-test",
  "crossbeam-channel",
  "ic-base-types",
+ "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-btc-service",
  "ic-canister-client-sender",
