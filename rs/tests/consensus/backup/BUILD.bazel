@@ -60,9 +60,8 @@ rust_binary(
 system_test_nns(
     name = "backup_manager_upgrade_test",
     env = BACKUP_ENV | MAINNET_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_driver_target = ":backup_manager_test_bin",
@@ -78,9 +77,8 @@ system_test_nns(
 system_test_nns(
     name = "backup_manager_downgrade_test",
     env = BACKUP_ENV | MAINNET_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_driver_target = ":backup_manager_test_bin",

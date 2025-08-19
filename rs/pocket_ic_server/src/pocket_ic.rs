@@ -300,7 +300,7 @@ impl BitcoinAdapterParts {
         runtime: Arc<Runtime>,
     ) -> Self {
         let bitcoin_adapter_config = BitcoinAdapterConfig {
-            network: Network::Regtest,
+            network: Network::Regtest.into(),
             nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,
@@ -522,6 +522,7 @@ struct PocketIcSubnets {
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
+    initial_time: SystemTime,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
@@ -600,6 +601,7 @@ impl PocketIcSubnets {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
+        initial_time: SystemTime,
         synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -625,6 +627,7 @@ impl PocketIcSubnets {
             log_level,
             bitcoind_addr,
             icp_features,
+            initial_time,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
         }
@@ -683,7 +686,7 @@ impl PocketIcSubnets {
             subnet_state_dir,
             subnet_kind,
             instruction_config,
-            time,
+            expected_state_time,
         } = subnet_config_info;
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
@@ -766,7 +769,7 @@ impl PocketIcSubnets {
         // if one was provided).
         let subnet_id = sm.get_subnet_id();
 
-        if let Some(expected_time) = time {
+        if let Some(expected_time) = expected_state_time {
             let actual_time: SystemTime = sm.get_state_time().into();
             if actual_time != expected_time {
                 return Err(format!(
@@ -850,7 +853,7 @@ impl PocketIcSubnets {
 
         // All subnets must have the same time and time can only advance =>
         // set the time to the maximum time in the latest state across all subnets.
-        let mut time: SystemTime = default_timestamp(&self.icp_features);
+        let mut time: SystemTime = self.initial_time;
         for subnet in self.subnets.get_all() {
             time = max(time, subnet.state_machine.get_state_time().into());
         }
@@ -1841,10 +1844,23 @@ impl PocketIc {
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         allow_incomplete_state: Option<bool>,
+        initial_time: Option<Time>,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
         }
+        if let Some(time) = initial_time {
+            let systime: SystemTime = time.into();
+            let minimum_systime = default_timestamp(&icp_features);
+            if systime < minimum_systime {
+                return Err(format!("The initial timestamp (unix timestamp in nanoseconds) must be no earlier than {} (provided {}).",
+                    systemtime_to_unix_epoch_nanos(minimum_systime),
+                    systemtime_to_unix_epoch_nanos(systime)));
+            }
+        }
+        let initial_time: SystemTime = initial_time
+            .map(|time| time.into())
+            .unwrap_or_else(|| default_timestamp(&icp_features));
 
         let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
             let registry_file_path = state_dir.join("registry.proto");
@@ -1887,7 +1903,7 @@ impl PocketIc {
                     if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
-                    let time = if let Some(true) = allow_incomplete_state {
+                    let expected_state_time = if let Some(true) = allow_incomplete_state {
                         None
                     } else {
                         Some(topology.time)
@@ -1899,7 +1915,7 @@ impl PocketIc {
                         subnet_state_dir: None,
                         subnet_kind: config.subnet_kind,
                         instruction_config: config.instruction_config,
-                        time,
+                        expected_state_time,
                     }
                 })
                 .collect()
@@ -2048,7 +2064,7 @@ impl PocketIc {
                     subnet_state_dir,
                     subnet_kind,
                     instruction_config,
-                    time: None,
+                    expected_state_time: None,
                 });
             }
 
@@ -2070,6 +2086,7 @@ impl PocketIc {
             log_level,
             bitcoind_addr,
             icp_features,
+            initial_time,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
@@ -2298,7 +2315,7 @@ struct SubnetConfigInfo {
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
     pub instruction_config: SubnetInstructionConfig,
-    pub time: Option<SystemTime>,
+    pub expected_state_time: Option<SystemTime>,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -3913,7 +3930,7 @@ fn route(
                         subnet_state_dir: None,
                         subnet_kind,
                         instruction_config,
-                        time: None,
+                        expected_state_time: None,
                     })?;
                     pic.subnets
                         .persist_topology(pic.default_effective_canister_id);
@@ -4021,6 +4038,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -4032,6 +4050,7 @@ mod tests {
                 },
                 None,
                 false,
+                None,
                 None,
                 None,
                 None,
