@@ -620,7 +620,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -676,7 +676,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -740,7 +740,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -802,7 +802,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -891,7 +891,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -967,7 +967,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -1025,7 +1025,7 @@ mod tests {
             2,
             MetricsRegistry::default(),
             SubnetType::Application,
-            NNSDelegationReader::new(rx),
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
