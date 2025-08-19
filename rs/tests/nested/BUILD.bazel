@@ -166,7 +166,7 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_latest_release_mainnet_img = True,
-    uses_hostos_mainnet_update = True,
+    uses_hostos_latest_release_mainnet_update = True,
     uses_setupos_latest_release_mainnet_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,

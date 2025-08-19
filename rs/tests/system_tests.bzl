@@ -223,7 +223,7 @@ def system_test(
         uses_setupos_latest_release_mainnet_img = False,
         uses_hostos_update = False,
         uses_hostos_test_update = False,
-        uses_hostos_mainnet_update = False,
+        uses_hostos_latest_release_mainnet_update = False,
         env = {},
         env_inherit = [],
         additional_colocate_tags = [],
@@ -264,7 +264,7 @@ def system_test(
       uses_setupos_latest_release_mainnet_img: the test uses the mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
       uses_hostos_test_update: the test uses the branch HostOS update-test image
-      uses_hostos_mainnet_update: the test uses the mainnet HostOS update image
+      uses_hostos_latest_release_mainnet_update: the test uses the mainnet HostOS update image
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -315,7 +315,7 @@ def system_test(
     if int(uses_setupos_img) + int(uses_setupos_latest_release_mainnet_img) >= 2:
         fail("More than one initial SetupOS (disk) image was provided!")
 
-    if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_mainnet_update) >= 2:
+    if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_latest_release_mainnet_update) >= 2:
         fail("More than one target HostOS (upgrade) image was specified!")
 
     icos_images = dict()
@@ -417,7 +417,7 @@ def system_test(
         info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
-    if uses_hostos_mainnet_update:
+    if uses_hostos_latest_release_mainnet_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(
             git_commit_id = MAINNET_LATEST_HOSTOS_REVISION,
