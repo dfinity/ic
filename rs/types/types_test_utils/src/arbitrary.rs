@@ -11,7 +11,7 @@ use ic_types::{
     CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
 use proptest::prelude::*;
-use std::{convert::TryInto, ops::RangeInclusive, time::Duration};
+use std::{convert::TryInto, time::Duration};
 use strum::IntoEnumIterator;
 
 prop_compose! {

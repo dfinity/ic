@@ -1477,17 +1477,20 @@ fn stream_discard_messages_before_returns_expected_messages() {
     let expected_rejected_messages = vec![
         (
             RejectReason::QueueFull,
-            stream.messages().get(32.into()).unwrap().clone(),
+            TryInto::<RequestOrResponse>::try_into(
+                stream.messages().get(32.into()).unwrap().clone(),
+            )
+            .unwrap(),
         ),
         (
             RejectReason::Unknown,
-            stream.messages().get(35.into()).unwrap().clone(),
+            TryInto::<RequestOrResponse>::try_into(
+                stream.messages().get(35.into()).unwrap().clone(),
+            )
+            .unwrap(),
         ),
     ];
 
-    // Note that the `generate_stream` testing fixture only generates requests
-    // while in the normal case reject signals are not expected to be generated for requests.
-    // It does not matter here for the purpose of testing `discard_messages_before`.
     let rejected_messages =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
