@@ -28,12 +28,12 @@ fn test_no_canister_http_without_auto_progress() {
 
     // No canister http outcalls should be made
     // (because we did not enable auto progress when creating the PocketIC instance
-    // and the system canisters should not be configured to make no canister http outcalls
+    // and the system canisters should be configured to make no canister http outcalls
     // in this case).
-    // We execute a few more rounds and advance time in case they were only made on timers.
+    // We advance time and execute a few more rounds in case they were only made on timers.
     for _ in 0..10 {
-        pic.tick();
         pic.advance_time(Duration::from_secs(1));
+        pic.tick();
     }
     assert!(pic.get_canister_http().is_empty());
 }
