@@ -323,8 +323,8 @@ impl TargetCanister {
     }
 
     pub fn forum_discussion(&self) -> &str {
-        const NNS_UPDATES_AGGREGATION_THREAD: &str =
-            "\nForum discussion: https://forum.dfinity.org/t/nns-updates-aggregation-thread/23551\n";
+        const NNS_UPDATES_AGGREGATION_THREAD_URL: &str =
+            "https://forum.dfinity.org/t/nns-updates-aggregation-thread/23551";
 
         match self {
             TargetCanister::BtcChecker
@@ -346,7 +346,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive3
             | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
-            | TargetCanister::IcpLedger => NNS_UPDATES_AGGREGATION_THREAD,
+            | TargetCanister::IcpLedger => NNS_UPDATES_AGGREGATION_THREAD_URL,
         }
     }
 }
