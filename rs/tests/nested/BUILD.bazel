@@ -180,7 +180,7 @@ system_test_nns(
     flaky = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_mainnet_update = True,
+    uses_guestos_nns_mainnet_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,

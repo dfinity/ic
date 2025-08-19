@@ -217,7 +217,7 @@ def system_test(
         uses_guestos_malicious_img = False,
         uses_guestos_update = False,
         uses_guestos_test_update = False,
-        uses_guestos_mainnet_update = False,
+        uses_guestos_nns_mainnet_update = False,
         uses_guestos_malicious_update = False,
         uses_setupos_img = False,
         uses_setupos_latest_release_mainnet_img = False,
@@ -258,7 +258,7 @@ def system_test(
       uses_guestos_malicious_img: the test uses the malicious GuestOS image
       uses_guestos_update: the test uses the branch GuestOS update image
       uses_guestos_test_update: the test uses the branch GuestOS update-test image
-      uses_guestos_mainnet_update: the test uses the mainnet GuestOS update image
+      uses_guestos_nns_mainnet_update: the test uses the mainnet GuestOS update image
       uses_guestos_malicious_update: the test uses the malicious GuestOS update image
       uses_setupos_img: the test uses the branch SetupOS image
       uses_setupos_latest_release_mainnet_img: the test uses the mainnet SetupOS image
@@ -309,7 +309,7 @@ def system_test(
     if int(uses_guestos_img) + int(uses_guestos_nns_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
-    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
+    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_nns_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
         fail("More than one target GuestOS (upgrade) image was specified!")
 
     if int(uses_setupos_img) + int(uses_setupos_latest_release_mainnet_img) >= 2:
@@ -327,7 +327,6 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_guestos_nns_mainnet_img:
-        # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(
@@ -374,8 +373,7 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img-test.tar.zst"
         _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos + "launch-measurements-test.json"
 
-    if uses_guestos_mainnet_update:
-        # NOTE: Uses the "NNS" subnet to determine mainnet version
+    if uses_guestos_nns_mainnet_update:
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(
             git_commit_id = MAINNET_NNS_SUBNET_REVISION,
