@@ -109,7 +109,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
@@ -178,7 +178,7 @@ jobs:
               targets_args+=("--skip_long_tests")
             fi
             if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--commit_range=$BASE_SHA..$HEAD_SHA")
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
             "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
             # if bazel targets is empty we don't need to run any tests
@@ -333,7 +333,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -377,7 +377,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -399,7 +399,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -431,7 +431,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -479,7 +479,7 @@ jobs:
             targets_args=()
             commit_range_arg=""
             if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--commit_range=$BASE_SHA..$HEAD_SHA")
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
             ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
 
@@ -560,7 +560,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -579,7 +579,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -616,7 +616,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -648,3 +648,17 @@ jobs:
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
+  check-pull-request-bazel-targets:
+    name: Check PULL_REQUEST_BAZEL_TARGETS
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+      options: >-
+        -e NODE_NAME
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check PULL_REQUEST_BAZEL_TARGETS
+        run: ./ci/bazel-scripts/targets.py check

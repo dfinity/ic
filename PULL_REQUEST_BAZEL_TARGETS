@@ -37,6 +37,10 @@
 #
 # Tip: to test which files matches <PATTERN> you can use the following:
 # git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
+#
+# Run `ci/bazel-scripts/targets.py check` to see the matches for every pattern
+# and to check the correctness of this file. This is also run automatically by
+# the check-pull-request-bazel-targets job on CI.
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
@@ -59,19 +63,10 @@
 
 *nns_delegation* //rs/tests/networking:nns_delegation_test
 
-rs/backup/*.rs //rs/tests/consensus/backup:backup_manager_upgrade_test
-               //rs/tests/consensus/backup:backup_manager_downgrade_test
+rs/backup/*.rs //rs/tests/consensus/backup/...
 
-rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery:sr_app_same_nodes_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_same_nodes_enable_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_same_nodes_with_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_failover_nodes_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_failover_nodes_enable_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_failover_nodes_with_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_local_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_enable_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_app_large_with_chain_keys_test
-                     //rs/tests/consensus/subnet_recovery:sr_nns_same_nodes_test
-                     //rs/tests/consensus/subnet_recovery:sr_nns_failover_nodes_test
+rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
+                     //rs/tests/consensus:subnet_splitting_test_colocate
+                     //rs/tests/nested:nns_recovery_test
+
+rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate

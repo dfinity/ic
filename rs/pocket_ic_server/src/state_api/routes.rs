@@ -37,10 +37,10 @@ use ic_http_endpoints_public::cors_layer;
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
-    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, TickConfigs, Topology,
+    HttpGatewayDetails, InitialTime, InstanceConfig, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
+    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs, Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -1202,20 +1202,35 @@ pub async fn create_instance(
         None
     };
 
+    let initial_time = match instance_config.initial_time {
+        Some(InitialTime::Timestamp(raw_time)) => Some(
+            ic_types::Time::from_nanos_since_unix_epoch(raw_time.nanos_since_epoch),
+        ),
+        Some(InitialTime::AutoProgress(_)) | None => None,
+    };
+    let auto_progress = match instance_config.initial_time {
+        Some(InitialTime::AutoProgress(config)) => Some(config),
+        Some(InitialTime::Timestamp(_)) | None => None,
+    };
+
     match api_state
-        .add_instance(move |seed| {
-            PocketIc::try_new(
-                runtime,
-                seed,
-                subnet_configs,
-                instance_config.state_dir,
-                instance_config.nonmainnet_features,
-                log_level,
-                instance_config.bitcoind_addr,
-                instance_config.icp_features,
-                instance_config.allow_incomplete_state,
-            )
-        })
+        .add_instance(
+            move |seed| {
+                PocketIc::try_new(
+                    runtime,
+                    seed,
+                    subnet_configs,
+                    instance_config.state_dir,
+                    instance_config.nonmainnet_features,
+                    log_level,
+                    instance_config.bitcoind_addr,
+                    instance_config.icp_features,
+                    instance_config.allow_incomplete_state,
+                    initial_time,
+                )
+            },
+            auto_progress,
+        )
         .await
     {
         Ok((instance_id, topology)) => (

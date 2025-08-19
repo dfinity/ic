@@ -58,14 +58,10 @@ The `boot_args.template` file in the GuestOS context directory defines the kerne
 * `BOOT_ARGS_A`: Kernel command line parameters for booting from partition set A
 * `BOOT_ARGS_B`: Kernel command line parameters for booting from partition set B
 
-We also save `extra_boot_args` separately for backwards compatibility.
-
 === During the boot process
 
 1. The GRUB bootloader checks for the existence of a `boot_args` file on the boot partition.
 2. If found, it sources this file to get the appropriate boot arguments based on the active partition set (A or B).
-3. If not found, it falls back to a hardcoded set of parameters and any parameters defined in `extra_boot_args`.
-
 
 == Mount +/boot+ filesystems
 
