@@ -100,6 +100,24 @@ fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
     }
 }
 
+/// Warns if SetupOS and initial NNS GuestOS image versions don't match.
+/// Only warns if both functions return ReplicaVersion successfully.
+fn warn_if_mismatched_versions(logger: &slog::Logger) {
+    match (get_setupos_img_version(), get_guestos_img_version()) {
+        (Ok(setupos_version), Ok(guestos_version)) => {
+            if setupos_version != guestos_version {
+                slog::warn!(
+                    logger,
+                    "WARNING: Version mismatch detected: Deployed SetupOS version '{setupos_version}' does not match initial NNS GuestOS version '{guestos_version}'.\nAfter registration, the deployed node will upgrade to the NNS GuestOS version '{guestos_version}'."
+                );
+            }
+        }
+        _ => {
+            // If either function returns an error, don't warn
+        }
+    }
+}
+
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS (x num_hosts)
 pub fn config(env: TestEnv, num_hosts: usize) {
@@ -111,6 +129,8 @@ pub fn config(env: TestEnv, num_hosts: usize) {
     for vm_name in &host_vm_names {
         setup_vector_targets_for_vm(&env, vm_name);
     }
+
+    warn_if_mismatched_versions(&env.logger());
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
