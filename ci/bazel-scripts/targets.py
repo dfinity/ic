@@ -201,7 +201,9 @@ def check():
                 errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
             else:
                 if len(result.stdout.splitlines()) == 0:
-                    errors.append(f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!")
+                    errors.append(
+                        f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!"
+                    )
 
     n = len(errors)
     if n > 0:
