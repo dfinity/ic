@@ -243,7 +243,9 @@ system_test_nns(
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/certification",
         "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
