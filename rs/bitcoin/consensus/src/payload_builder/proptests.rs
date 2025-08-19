@@ -48,7 +48,6 @@ fn proptest_round(
         .times(1)
         .returning(move |_, _| Ok(bitcoin_payload.clone()));
 
-    // TODO: What to put in here?
     let state_manager =
         mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
             GetSuccessorsRequestInitial {

@@ -1,10 +1,11 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
-    self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
+    self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
+    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
+    ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
     OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
@@ -2629,7 +2630,7 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
 fn send_messages_to_bitcoin_canister_until_capacity(
     test: &mut ExecutionTest,
     bitcoin_canister: CanisterId,
-    network: BitcoinNetwork,
+    network: NetworkInRequest,
 ) {
     let uc = test.universal_canister().unwrap();
 
@@ -2640,7 +2641,7 @@ fn send_messages_to_bitcoin_canister_until_capacity(
             ic00::IC_00.get()
         };
         let args = Encode!(&BitcoinGetUtxosArgs {
-            network: network.into(),
+            network,
             address: String::from(""),
             filter: None,
         })
@@ -2692,7 +2693,7 @@ fn canister_output_queue_does_not_overflow_when_calling_bitcoin_mainnet_canister
     send_messages_to_bitcoin_canister_until_capacity(
         &mut test,
         bitcoin_mainnet_canister,
-        BitcoinNetwork::Mainnet,
+        NetworkInRequest::Mainnet,
     );
 }
 
@@ -2711,7 +2712,7 @@ fn canister_output_queue_does_not_overflow_when_calling_bitcoin_testnet_canister
     send_messages_to_bitcoin_canister_until_capacity(
         &mut test,
         bitcoin_testnet_canister,
-        BitcoinNetwork::Testnet,
+        NetworkInRequest::Testnet,
     );
 }
 
