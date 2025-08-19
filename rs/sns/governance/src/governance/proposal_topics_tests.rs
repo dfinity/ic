@@ -7,7 +7,7 @@ use crate::pb::v1::Topic::TreasuryAssetManagement;
 use crate::pb::v1::{
     self as pb, nervous_system_function, ExecuteExtensionOperation, ExtensionInit,
 };
-use crate::storage::with_registered_extensions_map_mut;
+use crate::storage::cache_registered_extension;
 use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_canisters::cmc::FakeCmc;
@@ -212,12 +212,9 @@ fn test_all_topics() {
         name: "foo".to_string(),
         version: ExtensionVersion(1),
         topic: TreasuryAssetManagement,
-        extension_types: vec![TreasuryManager],
-        validate_init_arg: unimplemented_validator,
+        extension_type: TreasuryManager,
     };
-    with_registered_extensions_map_mut(|registered_extensions| {
-        registered_extensions.insert(extension_canister_id, extension_spec);
-    });
+    cache_registered_extension(extension_canister_id, extension_spec);
     test_cases.push((
         pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
             extension_canister_id: Some(extension_canister_id.get()),

@@ -29,7 +29,8 @@ use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
 
-use crate::storage::{with_registered_extensions_map, with_registered_extensions_map_mut};
+use crate::pb::v1;
+use crate::storage::{cache_registered_extension, get_registered_extension_from_cache};
 use futures::future::BoxFuture;
 use ic_ledger_core::Tokens;
 use std::cell::RefCell;
@@ -298,7 +299,7 @@ pub fn get_extension_operation_spec_from_cache(
         return Err("operation_name is required.".to_string());
     };
 
-    get_spec_for_registered_extension(extension_canister_id)
+    get_registered_extension_from_cache(extension_canister_id)
         .and_then(|spec| spec.get_operation(operation_name))
         .ok_or(format!(
             "No operation found called '{}' for extension with \
@@ -353,63 +354,38 @@ pub struct ExtensionSpec {
     pub name: String,
     pub version: ExtensionVersion,
     pub topic: Topic,
-    /// The extension types this extension implements (can be multiple)
-    pub extension_types: Vec<ExtensionType>,
-    // Custom per-extension operations can be added here in the future
-    // TODO: Add a way to specify initialization arguments schema for the extension.
-    pub validate_init_arg:
-        fn(&Governance, ExtensionInit) -> BoxFuture<Result<ValidatedExtensionInit, String>>,
+    pub extension_type: ExtensionType,
 }
 
 impl ExtensionSpec {
-    /// Validates that there are no operation name conflicts
-    pub fn validate(&self) -> Result<(), String> {
-        // This restriction may be relaxed later, but at present each extension type can only
-        // have one responsibility.
-        if self.extension_types.len() > 1 {
-            return Err("ExtensionSpec can only have one extension type at a time".to_string());
-        }
-
-        // NOTE - if we support custom operations, we will need validation to prevent
-        // name collisions.
-
-        Ok(())
-    }
-
     pub async fn validate_init_arg(
         &self,
         gov: &Governance,
         init: ExtensionInit,
     ) -> Result<ValidatedExtensionInit, String> {
-        (self.validate_init_arg)(gov, init).await
+        match &self.extension_type {
+            ExtensionType::TreasuryManager => validate_treasury_manager_init(gov, init).await, // Future extension types would be handled here
+        }
     }
 
     /// Get all operations for this extension
-    /// Returns error if there are conflicts
-    pub fn all_operations(&self) -> Result<BTreeMap<String, ExtensionOperationSpec>, String> {
-        self.validate()?;
-
+    pub fn all_operations(&self) -> BTreeMap<String, ExtensionOperationSpec> {
         let mut operations = BTreeMap::new();
 
-        // Add standard operations from each extension type
-        for ext_type in &self.extension_types {
-            for op in ext_type.standard_operations() {
-                operations.insert(op.name().to_string(), op);
-            }
+        // Add standard operations from the extension type
+        for op in self.extension_type.standard_operations() {
+            operations.insert(op.name(), op);
         }
 
-        Ok(operations)
+        operations
     }
 
     /// Get a specific operation by name
     /// Standard operations take precedence to ensure deterministic behavior
     pub fn get_operation(&self, name: &str) -> Option<ExtensionOperationSpec> {
-        // validate() ensures no name conflicts, so we can safely look up operations this way
-        for ext_type in &self.extension_types {
-            for op in ext_type.standard_operations() {
-                if op.name() == name {
-                    return Some(op);
-                }
+        for op in self.extension_type.standard_operations() {
+            if op.name() == name {
+                return Some(op);
             }
         }
 
@@ -417,21 +393,23 @@ impl ExtensionSpec {
     }
 
     pub fn supports_extension_type(&self, extension_type: ExtensionType) -> bool {
-        self.extension_types.contains(&extension_type)
+        self.extension_type == extension_type
     }
 }
 
 impl Display for ExtensionSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let operations_str = match self.all_operations() {
-            Ok(ops) => ops.keys().cloned().collect::<Vec<_>>().join(", "),
-            Err(e) => format!("<invalid: {}>", e),
-        };
+        let operations_str = self
+            .all_operations()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
 
         write!(
             f,
-            "SNS Extension {{ name: {}, topic: {}, types: {:?}, operations: {} }}",
-            self.name, self.topic, self.extension_types, operations_str
+            "SNS Extension {{ name: {}, topic: {}, type: {:?}, operations: {} }}",
+            self.name, self.topic, self.extension_type, operations_str
         )
     }
 }
@@ -748,8 +726,7 @@ pub fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec,
             name: "Test Extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
-            extension_types: vec![ExtensionType::TreasuryManager],
-            validate_init_arg: validate_treasury_manager_init,
+            extension_type: ExtensionType::TreasuryManager,
         })
     } else if cfg!(all(test, not(feature = "test"))) {
         // In regular test mode (without feature), use the test allowed extensions
@@ -774,8 +751,6 @@ fn validate_extension_wasm_with_allowed(
     })?;
 
     if let Some(spec) = allowed_extensions.get(&hash_array) {
-        // Validate the spec to ensure no conflicting method names.
-        spec.validate()?;
         return Ok(spec.clone());
     }
 
@@ -1035,20 +1010,10 @@ async fn get_extension_spec_and_update_cache(
     });
 
     if result.is_ok() {
-        with_registered_extensions_map_mut(|registered_extensions| {
-            registered_extensions.insert(extension_canister_id, result.as_ref().cloned().unwrap())
-        });
+        cache_registered_extension(extension_canister_id, result.as_ref().cloned().unwrap());
     }
 
     result
-}
-
-pub fn get_spec_for_registered_extension(
-    extension_canister_id: CanisterId,
-) -> Option<ExtensionSpec> {
-    with_registered_extensions_map(|registered_extensions| {
-        registered_extensions.get(&extension_canister_id)
-    })
 }
 
 /// Validates that this is a supported extension operation and runs any validation for that
@@ -1322,7 +1287,7 @@ impl RenderablePayload for ValidatedDepositOperationArg {
         format!(
             r#"### Treasury Deposit
 
-**SNS Tokens:** {} e8s  
+**SNS Tokens:** {} e8s
 **ICP Tokens:** {} e8s
 
 {raw_payload}"#,
@@ -1411,9 +1376,63 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
             name: "My Test Extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
-            extension_types: vec![ExtensionType::TreasuryManager],
-            validate_init_arg: validate_treasury_manager_init,
+            extension_type: ExtensionType::TreasuryManager,
         }
+    }
+}
+
+// ============================================================================
+// Extension-related conversions
+// ============================================================================
+
+impl From<ExtensionType> for v1::ExtensionType {
+    fn from(item: ExtensionType) -> Self {
+        match item {
+            ExtensionType::TreasuryManager => v1::ExtensionType::TreasuryManager,
+        }
+    }
+}
+
+impl TryFrom<v1::ExtensionType> for ExtensionType {
+    type Error = String;
+
+    fn try_from(item: v1::ExtensionType) -> Result<Self, Self::Error> {
+        match item {
+            v1::ExtensionType::Unspecified => Err("Unspecified ExtensionType".to_string()),
+            v1::ExtensionType::TreasuryManager => Ok(ExtensionType::TreasuryManager),
+        }
+    }
+}
+
+impl From<ExtensionSpec> for v1::ExtensionSpec {
+    fn from(item: ExtensionSpec) -> Self {
+        Self {
+            name: Some(item.name),
+            version: Some(item.version.0),
+            topic: Some(v1::Topic::from(item.topic) as i32),
+            extension_type: Some(v1::ExtensionType::from(item.extension_type) as i32),
+        }
+    }
+}
+
+impl TryFrom<v1::ExtensionSpec> for ExtensionSpec {
+    type Error = String;
+
+    fn try_from(item: v1::ExtensionSpec) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: item.name.ok_or("Missing name")?,
+            version: ExtensionVersion(item.version.ok_or("Missing version")?),
+            topic: item
+                .topic
+                .and_then(|t| crate::pb::v1::Topic::try_from(t).ok())
+                .and_then(|t| Topic::try_from(t).ok())
+                .ok_or("No valid topic")?,
+            extension_type: v1::ExtensionType::try_from(
+                item.extension_type.ok_or("Missing extension_type")?,
+            )
+            .map_err(|_| "Invalid extension_type")?
+            .try_into()?,
+        })
     }
 }
 
@@ -2158,34 +2177,17 @@ mod tests {
     }
 
     #[test]
-    fn test_extension_spec_validate_multiple_extension_types() {
-        // Test that ExtensionSpec can only have one extension type at a time
+    fn test_extension_spec_creation() {
+        // Test that extension spec can be created successfully
         let spec = ExtensionSpec {
             name: "test_extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::Governance,
-            extension_types: vec![
-                ExtensionType::TreasuryManager,
-                ExtensionType::TreasuryManager,
-            ],
-            validate_init_arg: validate_treasury_manager_init,
+            extension_type: ExtensionType::TreasuryManager,
         };
 
-        let result = spec.validate();
-        assert_eq!(
-            result.unwrap_err(),
-            "ExtensionSpec can only have one extension type at a time"
-        );
-
-        // Test that single extension type validates successfully
-        let spec = ExtensionSpec {
-            name: "test_extension".to_string(),
-            version: ExtensionVersion(1),
-            topic: Topic::Governance,
-            extension_types: vec![ExtensionType::TreasuryManager],
-            validate_init_arg: validate_treasury_manager_init,
-        };
-
-        assert!(spec.validate().is_ok());
+        // Basic functionality test - ensure we can get operations
+        let operations = spec.all_operations();
+        assert!(!operations.is_empty());
     }
 }
