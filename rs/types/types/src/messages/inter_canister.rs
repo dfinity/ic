@@ -671,7 +671,7 @@ pub struct StreamBlocker {
 pub enum StreamMessage {
     Request(Arc<Request>),
     Response(Arc<Response>),
-    Blocker(Arc<StreamBlocker>),
+    StreamBlocker(Arc<StreamBlocker>),
 }
 
 impl CountBytes for StreamMessage {
@@ -684,7 +684,7 @@ impl CountBytes for StreamMessage {
                 Self::Response(resp) => {
                     size_of::<Response>() + resp.payload_size_bytes().get() as usize
                 }
-                Self::Blocker(_) => size_of::<StreamBlocker>(),
+                Self::StreamBlocker(_) => size_of::<StreamBlocker>(),
             }
     }
 }
@@ -705,7 +705,7 @@ impl TryFrom<StreamMessage> for RequestOrResponse {
         match msg {
             StreamMessage::Request(req) => Ok(RequestOrResponse::Request(req)),
             StreamMessage::Response(resp) => Ok(RequestOrResponse::Response(resp)),
-            StreamMessage::Blocker(blo) => Err(blo),
+            StreamMessage::StreamBlocker(blocker) => Err(blocker),
         }
     }
 }
@@ -903,8 +903,10 @@ impl From<&StreamMessage> for pb_queues::StreamMessage {
             StreamMessage::Response(rep) => pb_queues::StreamMessage {
                 r: Some(pb_queues::stream_message::R::Response(rep.as_ref().into())),
             },
-            StreamMessage::Blocker(blo) => pb_queues::StreamMessage {
-                r: Some(pb_queues::stream_message::R::Blocker(blo.as_ref().into())),
+            StreamMessage::StreamBlocker(blocker) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::StreamBlocker(
+                    blocker.as_ref().into(),
+                )),
             },
         }
     }
@@ -924,8 +926,8 @@ impl TryFrom<pb_queues::StreamMessage> for StreamMessage {
             pb_queues::stream_message::R::Response(r) => {
                 Ok(StreamMessage::Response(Arc::new(r.try_into()?)))
             }
-            pb_queues::stream_message::R::Blocker(r) => {
-                Ok(StreamMessage::Blocker(Arc::new(r.try_into()?)))
+            pb_queues::stream_message::R::StreamBlocker(r) => {
+                Ok(StreamMessage::StreamBlocker(Arc::new(r.try_into()?)))
             }
         }
     }

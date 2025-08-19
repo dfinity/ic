@@ -152,7 +152,7 @@ pub mod stream_message {
         #[prost(message, tag = "2")]
         Response(super::Response),
         #[prost(message, tag = "3")]
-        Blocker(super::StreamBlocker),
+        StreamBlocker(super::StreamBlocker),
     }
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]

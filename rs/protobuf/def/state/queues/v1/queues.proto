@@ -116,7 +116,7 @@ message StreamMessage {
   oneof r {
     Request request = 1;
     Response response = 2;
-    StreamBlocker blocker = 3;
+    StreamBlocker stream_blocker = 3;
   }
 }
 
