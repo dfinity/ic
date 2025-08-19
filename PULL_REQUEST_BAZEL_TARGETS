@@ -60,7 +60,7 @@
 
 *nns_delegation* //rs/tests/networking:nns_delegation_test
 
-*rs/backup*rs //rs/tests/consensus/backup:backup_manager_upgrade_test
+rs/backup/*.rs //rs/tests/consensus/backup:backup_manager_upgrade_test
               //rs/tests/consensus/backup:backup_manager_downgrade_test
 
 *rs/recovery/src/*rs //rs/tests/consensus/subnet_recovery:sr_app_same_nodes_test
