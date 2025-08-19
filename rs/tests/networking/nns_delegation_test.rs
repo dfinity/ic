@@ -304,7 +304,7 @@ fn validate_delegation(
     subnet_id: SubnetId,
     canister_ranges_format: Option<CanisterRangesFormat>,
 ) {
-    let nns_public_key = env.prep_dir(&"").unwrap().root_public_key().unwrap();
+    let nns_public_key = env.prep_dir("").unwrap().root_public_key().unwrap();
     validate_subnet_delegation_certificate(
         &delegation.certificate,
         &subnet_id,
