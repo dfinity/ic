@@ -6,7 +6,7 @@
 // Set up a testnet containing:
 //   one System subnet with the hosts specified in the PERF_HOSTS environment variable,
 //   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 5 TiB disk.
+// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 10 TiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
@@ -133,7 +133,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
         # NOTE: Taken from SetupOS
 
-        # Clear any old partition signatures
+        # Clear any old partition and fs signatures
         sudo vgscan --mknodes
         loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
         if [ "${loop_device}" != "" ]; then
@@ -260,7 +260,7 @@ pub fn setup(env: TestEnv, config: Config) {
 
     let topology_snapshot = env.topology_snapshot();
 
-    // NOTE: The storage available (10TiB) is less than production (32TiB), but as much as the host is able to provide.
+    // NOTE: The storage available (10TiB) is less than production (32TB), but as much as the host is able to provide.
     let mut switch_to_ssd_handles = Vec::new();
     for subnet in topology_snapshot.subnets() {
         if subnet.subnet_type() != SubnetType::Application {
