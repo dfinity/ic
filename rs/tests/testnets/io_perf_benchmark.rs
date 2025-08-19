@@ -132,6 +132,8 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
         xmlstarlet ed --inplace -a "//domain/devices/disk[target[@dev='vda']]/source" -t attr -n dev -v "/dev/hostlvm/guestos" "$CONFIG"
 
         # NOTE: Taken from SetupOS
+
+        # Clear any old partition signatures
         sudo vgscan --mknodes
         loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
         if [ "${loop_device}" != "" ]; then
@@ -139,13 +141,21 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
             sudo losetup -d "${loop_device}"
         fi
         sudo wipefs --all --force /dev/mapper/hostlvm-guestos
+
+        # Copy the (small) image to SSD
         sudo dd if=$IMAGE of=/dev/mapper/hostlvm-guestos bs=10M conv=sparse status=progress
         sudo sync
+
+        # NOTE: This is not needed if we can avoid starting the VM.
+        # Reset to initial state
         loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
         if [ "${loop_device}" != "" ]; then
+            # Clear var
             sudo wipefs --all --force "${loop_device}"p6
+            # Delete encrypted data
             sudo sfdisk --force --no-reread --delete "${loop_device}" 10
 
+            # Reset config partition
             CONF_DIR=$(mktemp -d)
             sudo mount "${loop_device}p3" "${CONF_DIR}"
             sudo rm "${CONF_DIR}/CONFIGURED" "${CONF_DIR}/store.keyfile"
@@ -207,6 +217,7 @@ pub fn setup(env: TestEnv, config: Config) {
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
+        // NOTE: This is less than production (490 GiB), but as much as the host is able to provide.
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
         ..Default::default()
     };
@@ -248,6 +259,8 @@ pub fn setup(env: TestEnv, config: Config) {
         .expect("Failed to setup IC under test");
 
     let topology_snapshot = env.topology_snapshot();
+
+    // NOTE: The storage available (10TiB) is less than production (32TiB), but as much as the host is able to provide.
     let mut switch_to_ssd_handles = Vec::new();
     for subnet in topology_snapshot.subnets() {
         if subnet.subnet_type() != SubnetType::Application {
