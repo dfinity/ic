@@ -118,11 +118,8 @@ impl NodeRewardsCanister {
         &self,
         request: GetNodeProvidersRewardsRequest,
     ) -> Result<RewardsCalculatorResults, String> {
-        let reward_period = RewardPeriod::new(
-            request.from_timestamp_nanoseconds,
-            request.to_timestamp_nanoseconds,
-        )
-        .map_err(|e| e.to_string())?;
+        let reward_period =
+            RewardPeriod::new(request.from, request.to).map_err(|e| e.to_string())?;
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier

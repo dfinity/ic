@@ -119,6 +119,14 @@ impl RegistryQuerier {
             let node_reward_type =
                 NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
 
+            let node_reward_type = if node_reward_type == NodeRewardType::Type1 {
+                NodeRewardType::Type1dot1
+            } else if node_reward_type == NodeRewardType::Type0 {
+                NodeRewardType::Type1dot1
+            } else {
+                node_reward_type
+            };
+
             rewardable_nodes_per_provider
                 .entry(node_provider_id)
                 .or_default()
@@ -193,16 +201,9 @@ impl RegistryQuerier {
                             // A deletion
                             if let Some(start_of_interval) = last_present_ts.take() {
                                 // The node was present and is now gone. Finalize the interval.
-                                let mut days_between = DayUtc::from(start_of_interval)
-                                    .days_until(&DayUtc::from(ts))
-                                    .unwrap_or_default();
-
-                                // If a node is deleted it will be rewarded until the day before deletion.
-                                if !days_between.is_empty() {
-                                    days_between.truncate(days_between.len() - 1);
-                                }
-
-                                days.extend(days_between);
+                                let days_between =
+                                    DayUtc::from(start_of_interval).days_until(&DayUtc::from(ts));
+                                days.extend(days_between.unwrap_or_default());
                             }
                         }
                     }

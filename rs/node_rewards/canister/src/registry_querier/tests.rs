@@ -253,6 +253,7 @@ fn test_nodes_in_registry_returns_expected_days() {
         ts("2025-07-05").into(),
         ts("2025-07-06").into(),
         ts("2025-07-07").into(),
+        ts("2025-07-08").into(),
     ];
     assert_eq!(node_1_days, &expected_node_1_days);
 
@@ -278,6 +279,7 @@ fn test_nodes_in_registry_returns_expected_days() {
     let expected_node_3_days: Vec<DayUtc> = vec![
         ts("2025-07-11").into(),
         ts("2025-07-12").into(),
+        ts("2025-07-13").into(),
         // node_3 was deleted on 2025-07-13, so it should not be present on 2025-07-14
         ts("2025-07-15").into(),
         ts("2025-07-16").into(),
@@ -314,7 +316,7 @@ fn test_rewardable_nodes_deleted_nodes() {
         "Node 1 should not be rewardable after it was deleted"
     );
 
-    // Node 2 should be rewardable in this period.
+    // Node 2 and 3 should be rewardable in this period.
     let node_2_rewardable_days = node_rewardable_days(&np_1_rewardables, 2);
 
     assert_eq!(node_2_rewardable_days.first(), Some(&from.into()));
@@ -322,12 +324,8 @@ fn test_rewardable_nodes_deleted_nodes() {
 
     let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
 
-    // Node 3 should be rewardable until 2025-07-12 because on 2025-07-13 got deleted.
     assert_eq!(node_3_rewardable_days.first(), Some(&from.into()));
-    assert_eq!(
-        node_3_rewardable_days.last(),
-        Some(&ts("2025-07-12").into())
-    );
+    assert_eq!(node_3_rewardable_days.last(), Some(&to.into()));
 }
 
 #[test]
@@ -360,7 +358,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     assert_eq!(node_1_rewardable_days.first(), Some(&from.into()));
     assert_eq!(
         node_1_rewardable_days.last(),
-        Some(&ts("2025-07-07").into())
+        Some(&ts("2025-07-08").into())
     );
 
     // Node 2 is active throughout the whole range.
@@ -421,6 +419,7 @@ fn test_node_re_registered_after_deletion() {
 
     let expected_days: Vec<DayUtc> = vec![
         ts("2025-07-07").into(),
+        ts("2025-07-08").into(),
         // On 2025-07-08, node_1 was deleted, so it should not be rewardable until the 2025-07-11.
         ts("2025-07-11").into(),
         ts("2025-07-12").into(),

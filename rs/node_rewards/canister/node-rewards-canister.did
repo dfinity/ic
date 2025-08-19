@@ -15,8 +15,8 @@ type NodeProvidersMonthlyXdrRewards = record {
 type UnixTsNanos = nat64;
 
 type GetNodeProvidersRewardsRequest = record {
-  from_timestamp_nanoseconds: UnixTsNanos;
-  to_timestamp_nanoseconds: UnixTsNanos;
+  from: UnixTsNanos;
+  to: UnixTsNanos;
 };
 
 type NodeProvidersRewards = record {

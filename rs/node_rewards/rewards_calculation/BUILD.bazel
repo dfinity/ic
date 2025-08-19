@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [
