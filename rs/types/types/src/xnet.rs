@@ -388,7 +388,8 @@ pub struct CertifiedStreamSlice {
 }
 
 pub mod testing {
-    use super::{RequestOrResponse, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
+    use super::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
+    use crate::messages::RequestOrResponse;
 
     /// Provides test-only methods for `StreamHeader`.
     pub trait StreamHeaderTesting {
