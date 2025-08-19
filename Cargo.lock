@@ -10996,6 +10996,7 @@ name = "ic-nervous-system-common-test-utils"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "candid",
  "dfn_core",
  "futures",
  "ic-nervous-system-canisters",

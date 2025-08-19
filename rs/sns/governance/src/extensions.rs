@@ -444,7 +444,7 @@ impl ValidatedRegisterExtension {
                     })?;
 
                 governance
-                    .deposit_treasury_manager(
+                    .approve_treasury_manager(
                         extension_canister_id,
                         treasury_allocation_sns_e8s,
                         treasury_allocation_icp_e8s,
@@ -590,6 +590,57 @@ impl Governance {
     }
 
     pub async fn deposit_treasury_manager(
+        &self,
+        treasury_manager_canister_id: CanisterId,
+        sns_amount_e8s: u64,
+        icp_amount_e8s: u64,
+    ) -> Result<(), GovernanceError> {
+        let treasury_sns_subaccount = self.sns_treasury_subaccount();
+        let treasury_icp_subaccount = self.icp_treasury_subaccount();
+
+        let to = Account {
+            owner: treasury_manager_canister_id.get().0,
+            subaccount: None,
+        };
+
+        self.ledger
+            .transfer_funds(
+                sns_amount_e8s,
+                self.transaction_fee_e8s_or_panic(),
+                treasury_sns_subaccount,
+                to,
+                0,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error making SNS Token treasury transfer: {}", e),
+                )
+            })?;
+
+        self.nns_ledger
+            .transfer_funds(
+                icp_amount_e8s,
+                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
+                treasury_icp_subaccount,
+                to,
+                0,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error making ICP treasury transfer: {}", e),
+                )
+            })?;
+
+        Ok(())
+    }
+
+    async fn approve_treasury_manager(
         &self,
         treasury_manager_canister_id: CanisterId,
         sns_amount_e8s: u64,
