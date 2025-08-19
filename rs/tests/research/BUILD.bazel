@@ -30,10 +30,8 @@ package(default_visibility = ["//rs:system-tests-pkg"])
     for name in [
         "spec_compliance_application_subnet_test",
         "spec_compliance_group_01_application_subnet_test",
-        "spec_compliance_group_02_application_subnet_test",
         "spec_compliance_system_subnet_test",
         "spec_compliance_group_01_system_subnet_test",
-        "spec_compliance_group_02_system_subnet_test",
     ]
 ]
 

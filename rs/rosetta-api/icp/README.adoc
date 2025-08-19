@@ -1,55 +1,15 @@
+= Rosetta API for ICP
+
 This is a standalone server which implements the https://www.rosetta-api.org/[Rosetta API]
 
-When complete this will allow cryptocurrency exchanges with this binary to read and write ICPT transactions using a standard interface.
+It allows cryptocurrency exchanges to read and write ICP transactions using a standard interface.
 
 The Rosetta API uses slightly different terminology to us:
 * Accounts are canisters on our system
 * Shards are subnets
 * Mempools are the ingress queue
 
-== Building and running Docker image
-
-You can build the Docker image with a GitHub `ic` repo checkout:
-
-[source,bash]
-....
-cd rs/rosetta-api
-docker build . \
-    --file docker/ic-rosetta-api.Dockerfile \
-    --tag dfinity/rosetta-api
-....
-
-Once the image is built, start Rosetta API server with
-
-[source,bash]
-....
-docker run \
-    --interactive \
-    --tty \
-    --user $(id -u) \
-    --publish 8080:8080 \
-    --rm \
-    dfinity/rosetta-api
-....
-
-== Connecting to local `dfx` replica with `ic-rosetta-api`
-
-You need https://github.com/nghttp2/nghttp2[`nghttp2`]. If you have nix,
-it's available as `nixpkgs.nghttp2`.
-
-After installing it, assuming `dfx` replica is listening at `8080` port,
-run this command in another terminal session:
-
-[source,sh]
-----
-$ nghttpx --backend "127.0.0.1,8080" --frontend "127.0.0.1,2053;no-tls"
-----
-
-This will reforward the connections to `2053` port, supporting
-plain-text http2. You can then pass `--ic-url http://127.0.0.1:2053` to
-`ic-rosetta-api`.
-
-== Building and running Docker image for developers
+== Building and running the Rosetta image
 
 Enter the dev container
 
@@ -63,25 +23,18 @@ Use Bazel to build the image locally:
 $ bazel build //rs/rosetta-api/icp:rosetta_image.tar
 ```
 
-Query Bazel for the produced image
+Then load the image in docker
 
 ```
-$ bazel cquery //rs/rosetta-api/icp:rosetta_image.tar --output=files
-<path to image>
-```
-
-The load the image in docker
-
-```
-$ docker load -i <path to image>
+$ docker load -i $(bazel cquery //rs/rosetta-api/icp:rosetta_image.tar --output=files)
 ...
-Loaded image(s): <image>
+Loaded image: localhost/rosetta:image
 ```
 
 Finally run the image
 
 ```
-$ docker run <image>
+$ docker run localhost/rosetta:image
 ```
 
 Remember to mount `/home/rosetta/log` and `/data` to persist logs and data after shutting down the docker container.

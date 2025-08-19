@@ -1,6 +1,7 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
 use crate::{activate_flags, DiskEncryption, Partition};
 use anyhow::{Context, Result};
+use ic_sys::fs::{write_atomically_using_tmp_file, Clobber};
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -44,18 +45,14 @@ impl GeneratedKeyDiskEncryption<'_> {
                 .key_path
                 .parent()
                 .context("Could not find parent directory for key file")?;
-            let mut temp = tempfile::Builder::new()
+            let temp = tempfile::Builder::new()
                 .permissions(Permissions::from_mode(0o600))
                 .tempfile_in(parent_dir)
                 .context("Could not create temporary file for boot partition key")?;
             let rand_key = rand::random::<[u8; GENERATED_KEY_SIZE_BYTES]>();
-            temp.write_all(&rand_key)
-                .context("Could not write generated key")?;
-
-            match temp
-                .persist_noclobber(self.key_path)
-                .context("Could not persist boot partition key")
-            {
+            match write_atomically_using_tmp_file(self.key_path, temp.path(), Clobber::No, |buf| {
+                buf.write_all(&rand_key)
+            }) {
                 Ok(_) => {
                     println!(
                         "Generated disk encryption key and saved it to {}",
@@ -65,7 +62,7 @@ impl GeneratedKeyDiskEncryption<'_> {
                 }
                 Err(err) => {
                     if !self.key_path.exists() {
-                        return Err(err);
+                        return Err(err.into());
                     }
                     // If the file was created in the meantime by a concurrent process, fall through
                     // to reading it.

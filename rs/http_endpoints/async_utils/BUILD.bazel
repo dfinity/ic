@@ -10,7 +10,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/monitoring/logger",
-        "@crate_index//:anyhow",
         "@crate_index//:async-stream",
         "@crate_index//:byte-unit",
         "@crate_index//:bytes",
