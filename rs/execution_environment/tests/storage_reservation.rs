@@ -15,6 +15,7 @@ use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_
 use ic_types::{CanisterId, Cycles, NumBytes};
 use more_asserts::{assert_gt, assert_lt};
 
+const B: u128 = 1_000_000_000;
 const T: u128 = 1_000_000_000_000;
 
 const KIB: u64 = 1024;
@@ -475,9 +476,11 @@ fn reserved_cycles_for_snapshot() -> u128 {
     })
     .unwrap();
     let after = reserved_balance(&env, canister_id);
-
     let reserved_by_snapshot = after - before;
-    assert!(reserved_by_snapshot >= 40_000_000_000);
+
+    let margin = 10;
+    assert!(reserved_by_snapshot > 40 * B * margin);
+
     reserved_by_snapshot
 }
 
