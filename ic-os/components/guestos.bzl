@@ -160,6 +160,7 @@ component_files = {
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-data.service"): "/etc/systemd/system/setup-shared-data.service",
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-swap.sh"): "/opt/ic/bin/setup-shared-swap.sh",
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-swap.service"): "/etc/systemd/system/setup-shared-swap.service",
+    Label("upgrade/shared-resources/setup-shared-resources/tmp.mount.d/override.conf"): "/etc/systemd/system/tmp.mount.d/override.conf",
     Label("upgrade/systemd-generators/guestos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
