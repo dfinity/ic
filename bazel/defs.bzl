@@ -409,7 +409,8 @@ write_info_file_var = rule(
 def file_size_check(
         name,
         file,
-        max_file_size):
+        max_file_size,
+        tags = []):
     """
     A check to make sure the given file is below the specified size.
 
@@ -417,6 +418,7 @@ def file_size_check(
       name: Name of the test.
       file: File to check (label).
       max_file_size: Max accepted size in bytes.
+      tags: See Bazel documentation
     """
 
     native.sh_test(
@@ -427,4 +429,5 @@ def file_size_check(
             "FILE": "$(rootpath %s)" % file,
             "MAX_SIZE": str(max_file_size),
         },
+        tags = tags,
     )

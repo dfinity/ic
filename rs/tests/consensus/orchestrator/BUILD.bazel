@@ -6,7 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "node_assign_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -32,7 +31,6 @@ system_test_nns(
 system_test_nns(
     name = "node_reassignment_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -92,7 +90,6 @@ system_test(
 
 system_test_nns(
     name = "ssh_access_to_nodes_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -132,7 +129,6 @@ system_test_nns(
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
