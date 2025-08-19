@@ -605,7 +605,8 @@ jobs:
         if: |
           steps.filter.outputs.cargo == 'true' ||
           github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'workflow_call'
         shell: bash
         run: |
           set -eExuo pipefail
@@ -634,7 +635,8 @@ jobs:
         if: |
           steps.filter.outputs.cargo == 'true' ||
           github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'workflow_call'
         shell: bash
         run: |
           set -eExuo pipefail
