@@ -5,6 +5,7 @@ use crate::{
     InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
@@ -763,18 +764,18 @@ fn query_cache_frees_memory_after_invalidated_entries() {
         .build();
     let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
 
-    let memory_bytes = query_cache(&test).memory_bytes();
+    let heap_bytes = query_cache(&test).deterministic_heap_bytes();
     // Initially the cache should be empty, i.e. less than 1MB.
-    assert!(memory_bytes < BIG_RESPONSE_SIZE);
+    assert!(heap_bytes < BIG_RESPONSE_SIZE);
 
     // The 1MB result will be cached internally.
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
     assert_eq!(BIG_RESPONSE_SIZE, res.memory_bytes());
-    let memory_bytes = query_cache(&test).memory_bytes();
+    let heap_bytes = query_cache(&test).deterministic_heap_bytes();
     // After the first reply, the cache should have more than 1MB of data.
-    assert!(memory_bytes > BIG_RESPONSE_SIZE);
+    assert!(heap_bytes > BIG_RESPONSE_SIZE);
 
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
     test.canister_state_mut(id).system_state.remove_cycles(
@@ -787,10 +788,10 @@ fn query_cache_frees_memory_after_invalidated_entries() {
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
     assert_eq!(SMALL_RESPONSE_SIZE, res.memory_bytes());
-    let memory_bytes = query_cache(&test).memory_bytes();
+    let heap_bytes = query_cache(&test).deterministic_heap_bytes();
     // The second 42 reply should invalidate and replace the first 1MB reply in the cache.
-    assert!(memory_bytes > SMALL_RESPONSE_SIZE);
-    assert!(memory_bytes < BIG_RESPONSE_SIZE);
+    assert!(heap_bytes > SMALL_RESPONSE_SIZE);
+    assert!(heap_bytes < BIG_RESPONSE_SIZE);
 }
 
 #[test]
@@ -801,8 +802,8 @@ fn query_cache_respects_cache_capacity() {
     let id = test.universal_canister().unwrap();
 
     // Initially the cache should be empty, i.e. less than REPLY_SIZE.
-    let memory_bytes = query_cache(&test).memory_bytes();
-    assert!(memory_bytes < REPLY_SIZE);
+    let heap_bytes = query_cache(&test).deterministic_heap_bytes();
+    assert!(heap_bytes < REPLY_SIZE);
 
     // All replies should hit the same cache entry.
     for _ in 0..ITERATIONS {
@@ -810,9 +811,9 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[1; REPLY_SIZE / 2]).build());
         // Now there should be only one reply in the cache.
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert!(memory_bytes > REPLY_SIZE);
-        assert!(memory_bytes < QUERY_CACHE_CAPACITY);
+        let heap_bytes = query_cache(&test).deterministic_heap_bytes();
+        assert!(heap_bytes > REPLY_SIZE);
+        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
     }
 
     // Now the replies should hit another entry.
@@ -820,9 +821,9 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[2; REPLY_SIZE / 2]).build());
         // Now there should be two replies in the cache.
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert!(memory_bytes > REPLY_SIZE * 2);
-        assert!(memory_bytes < QUERY_CACHE_CAPACITY);
+        let heap_bytes = query_cache(&test).deterministic_heap_bytes();
+        assert!(heap_bytes > REPLY_SIZE * 2);
+        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
     }
 
     // Now the replies should evict the first entry.
@@ -830,9 +831,9 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[3; REPLY_SIZE / 2]).build());
         // There should be still just two replies in the cache.
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert!(memory_bytes > REPLY_SIZE * 2);
-        assert!(memory_bytes < QUERY_CACHE_CAPACITY);
+        let heap_bytes = query_cache(&test).deterministic_heap_bytes();
+        assert!(heap_bytes > REPLY_SIZE * 2);
+        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
     }
 }
 
@@ -842,13 +843,13 @@ fn query_cache_works_with_zero_cache_capacity() {
     let id = test.universal_canister().unwrap();
 
     // Even with zero capacity the cache data structure uses some bytes for the pointers etc.
-    let initial_memory_bytes = query_cache(&test).memory_bytes();
+    let initial_heap_bytes = query_cache(&test).deterministic_heap_bytes();
 
     // Replies should not change the initial (zero) capacity.
     for _ in 0..ITERATIONS {
         let _res = test.non_replicated_query(id, "query", wasm().reply_data(&[1]).build());
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert_eq!(initial_memory_bytes, memory_bytes);
+        let heap_bytes = query_cache(&test).deterministic_heap_bytes();
+        assert_eq!(initial_heap_bytes, heap_bytes);
     }
 }
 
@@ -1562,4 +1563,70 @@ fn query_cache_future_proof_test() {
             ////////////////////////////////////////////////////////////////////
         }
     }
+}
+
+#[test]
+fn total_bytes_future_proof_guard() {
+    const HEAP_BYTES: usize = 5;
+
+    // Key with no heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: String::new(),
+        method_payload: vec![],
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(key.deterministic_total_bytes(), size_of_val(&key));
+
+    // Key with some heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: " ".repeat(HEAP_BYTES),
+        method_payload: vec![42; HEAP_BYTES],
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(
+        key.deterministic_total_bytes(),
+        size_of_val(&key) + HEAP_BYTES * 2
+    );
+
+    // Value with no heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![],
+    };
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(value.deterministic_total_bytes(), size_of_val(&value));
+
+    // Value with some heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![
+            (
+                CanisterId::from_u64(1),
+                0,
+                0_u64.into(),
+                QueryStats::default(),
+            );
+            HEAP_BYTES
+        ],
+    };
+    let env_vec_size = size_of_val(&*env.canisters_versions_balances_stats);
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![42; HEAP_BYTES])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(
+        value.deterministic_total_bytes(),
+        size_of_val(&value) + env_vec_size + HEAP_BYTES
+    );
 }

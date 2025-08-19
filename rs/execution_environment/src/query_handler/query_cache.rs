@@ -1,4 +1,5 @@
 use ic_base_types::{CanisterId, NumBytes};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
@@ -9,7 +10,7 @@ use ic_types::{
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{collections::BTreeMap, mem::size_of_val, sync::Mutex, time::Duration};
+use std::{collections::BTreeMap, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -125,7 +126,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, DeterministicHeapBytes, PartialEq, Hash)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -137,9 +138,10 @@ pub(crate) struct EntryKey {
     pub method_payload: Vec<u8>,
 }
 
+// The MemoryDiskBytes trait is still required by the LruCache.
 impl MemoryDiskBytes for EntryKey {
     fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.method_name.len() + self.method_payload.len()
+        self.deterministic_heap_bytes()
     }
 
     fn disk_bytes(&self) -> usize {
@@ -163,7 +165,7 @@ impl From<&Query> for EntryKey {
 ///
 /// The cache entry is valid as long as the metadata is unchanged,
 /// or it can be proven that the query does not depend on the change.
-#[derive(PartialEq)]
+#[derive(DeterministicHeapBytes, PartialEq)]
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
@@ -196,6 +198,7 @@ impl EntryEnv {
 
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache entry value.
+#[derive(DeterministicHeapBytes)]
 pub(crate) struct EntryValue {
     /// Query Cache entry environment metadata captured before the query execution.
     env: EntryEnv,
@@ -209,9 +212,10 @@ pub(crate) struct EntryValue {
     ignore_canister_balances: bool,
 }
 
+// The MemoryDiskBytes trait is still required by the LruCache.
 impl MemoryDiskBytes for EntryValue {
     fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.result.memory_bytes()
+        self.deterministic_heap_bytes()
     }
 
     fn disk_bytes(&self) -> usize {
@@ -367,26 +371,22 @@ impl EntryValue {
 
 ////////////////////////////////////////////////////////////////////////
 /// Replica Side Query Cache.
+#[derive(DeterministicHeapBytes)]
 pub(crate) struct QueryCache {
     // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
     // to update the LRU.
+    // For now, avoid using the derive macro on LruCache.
+    #[deterministic_heap_bytes(with =
+        |c: &Mutex<LruCache<EntryKey, EntryValue>>| c.lock().unwrap().memory_bytes())]
     cache: Mutex<LruCache<EntryKey, EntryValue>>,
     /// The upper limit on how long the cache entry stays valid in the query cache.
     max_expiry_time: Duration,
     /// The upper limit on how long the data certificate stays valid in the query cache.
     data_certificate_expiry_time: Duration,
-    /// Query cache metrics (public for tests)
+    /// Query cache metrics (public for tests).
+    // Assume the metrics do not use any heap allocations.
+    #[deterministic_heap_bytes(with = |_| 0)]
     pub(crate) metrics: QueryCacheMetrics,
-}
-
-impl MemoryDiskBytes for QueryCache {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.cache.lock().unwrap().memory_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
 }
 
 impl QueryCache {

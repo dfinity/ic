@@ -4,6 +4,7 @@ use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use candid::types::principal::{Principal, PrincipalError};
 use candid::types::{Type, TypeId, TypeInner};
 use ic_crypto_sha2::Sha224;
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -24,7 +25,16 @@ use strum_macros::EnumIter;
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as
 /// a fixed-size array and a length.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize, Serialize, comparable::Comparable,
+    Copy,
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    comparable::Comparable,
 )]
 #[describe_type(String)]
 #[describe_body(self.to_string())]

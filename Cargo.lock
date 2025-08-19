@@ -6511,6 +6511,7 @@ dependencies = [
  "hex",
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
+ "ic-deterministic-heap-bytes",
  "ic-protobuf",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
@@ -9243,6 +9244,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbeeb3d91aa179d6496d7293becdacedfc413c825cac79fd54ea1906f003ee55"
 dependencies = [
+ "ic-deterministic-heap-bytes",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9283,6 +9285,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-cycles-account-manager",
+ "ic-deterministic-heap-bytes",
  "ic-embedders",
  "ic-error-types 0.2.0",
  "ic-interfaces",
@@ -14704,6 +14707,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
+ "ic-deterministic-heap-bytes",
  "ic-error-types 0.2.0",
  "ic-exhaustive-derive",
  "ic-limits",
@@ -18831,6 +18835,7 @@ name = "phantom_newtype"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-deterministic-heap-bytes",
  "num-traits",
  "serde",
  "serde_json",

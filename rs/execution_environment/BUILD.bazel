@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-deterministic-heap-bytes",
     "//packages/ic-error-types",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
@@ -60,7 +61,10 @@ DEPENDENCIES = [
     "@crate_index//:wasmparser",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-deterministic-heap-bytes-derive",
+]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
