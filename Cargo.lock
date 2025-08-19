@@ -12923,7 +12923,6 @@ dependencies = [
  "criterion-time",
  "cvt",
  "ic-base-types",
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-certification-version",
  "ic-config",
