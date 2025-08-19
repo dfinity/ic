@@ -258,13 +258,13 @@ def system_test(
       uses_guestos_malicious_img: the test uses the malicious GuestOS image
       uses_guestos_update: the test uses the branch GuestOS update image
       uses_guestos_test_update: the test uses the branch GuestOS update-test image
-      uses_guestos_nns_mainnet_update: the test uses the mainnet GuestOS update image
+      uses_guestos_nns_mainnet_update: the test uses the NNS subnet mainnet GuestOS update image
       uses_guestos_malicious_update: the test uses the malicious GuestOS update image
       uses_setupos_img: the test uses the branch SetupOS image
-      uses_setupos_latest_release_mainnet_img: the test uses the mainnet SetupOS image
+      uses_setupos_latest_release_mainnet_img: the test uses the latest release mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
       uses_hostos_test_update: the test uses the branch HostOS update-test image
-      uses_hostos_latest_release_mainnet_update: the test uses the mainnet HostOS update image
+      uses_hostos_latest_release_mainnet_update: the test uses the latest release mainnet HostOS update image
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
