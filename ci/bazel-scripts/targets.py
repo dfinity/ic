@@ -107,14 +107,14 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
     # simply return all bazel targets. Otherwise return all targets that depend on the modified files.
-    modified_files_union = " ".join(modified_files)
+    mfiles = " ".join(modified_files)
     query = (
         "//..."
         if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in all_targets_globs)
         # Note that modified_files may contain files not depended upon by any bazel target.
         # `bazel query --keep_going` will ignore those but will return the special exit code 3
         # in case this happens which we check for below.
-        else f"rdeps(//..., set({modified_files_union}))"
+        else f"rdeps(//..., set({mfiles}))"
     )
 
     # The targets returned by this script will be passed to `bazel test` by the caller (in case there are any).
@@ -128,7 +128,7 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
 
     # Include all long system-tests (under //rs/tests) of which a direct source file has been modified.
     # We specify a depth of 2 since a system-test depends on the test binary which depends on the source file.
-    query = f"({query}) + attr(tags, long_test, rdeps(//rs/tests/..., set({modified_files_union}), 2))"
+    query = f"({query}) + attr(tags, long_test, rdeps(//rs/tests/..., set({mfiles}), 2))"
 
     # Next, add the explicit targets from the PULL_REQUEST_BAZEL_TARGETS file that match the modified files:
     explicit_targets: Set[str] = set()
