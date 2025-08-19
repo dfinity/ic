@@ -659,6 +659,7 @@ impl From<Response> for RequestOrResponse {
 /// `StreamSlice` until the `begin` in a different `StreamSlice` coming from `subnet_id` is verified
 /// to be >= `index`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct StreamBlocker {
     pub subnet_id: SubnetId,
     pub index: StreamIndex,
@@ -666,6 +667,7 @@ pub struct StreamBlocker {
 
 /// `RequestOrResponse` extended by `StreamBlocker` which exists only in stream slices and streams.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponseOrBlocker {
     Request(Arc<Request>),
     Response(Arc<Response>),

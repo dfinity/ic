@@ -140,3 +140,13 @@ fn request_or_response_proto_round_trip() {
         assert_eq!(r, round_trip);
     }
 }
+
+#[test]
+fn request_or_response_or_blocker_proto_round_trip() {
+    for r in RequestOrResponseOrBlocker::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::RequestOrResponseOrBlocker::from(&r);
+        let round_trip = RequestOrResponseOrBlocker::try_from(encoded).unwrap();
+
+        assert_eq!(r, round_trip);
+    }
+}
