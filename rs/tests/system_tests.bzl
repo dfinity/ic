@@ -220,7 +220,7 @@ def system_test(
         uses_guestos_mainnet_update = False,
         uses_guestos_malicious_update = False,
         uses_setupos_img = False,
-        uses_setupos_mainnet_img = False,
+        uses_setupos_latest_release_mainnet_img = False,
         uses_hostos_update = False,
         uses_hostos_test_update = False,
         uses_hostos_mainnet_update = False,
@@ -261,7 +261,7 @@ def system_test(
       uses_guestos_mainnet_update: the test uses the mainnet GuestOS update image
       uses_guestos_malicious_update: the test uses the malicious GuestOS update image
       uses_setupos_img: the test uses the branch SetupOS image
-      uses_setupos_mainnet_img: the test uses the mainnet SetupOS image
+      uses_setupos_latest_release_mainnet_img: the test uses the mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
       uses_hostos_test_update: the test uses the branch HostOS update-test image
       uses_hostos_mainnet_update: the test uses the mainnet HostOS update image
@@ -312,7 +312,7 @@ def system_test(
     if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
         fail("More than one target GuestOS (upgrade) image was specified!")
 
-    if int(uses_setupos_img) + int(uses_setupos_mainnet_img) >= 2:
+    if int(uses_setupos_img) + int(uses_setupos_latest_release_mainnet_img) >= 2:
         fail("More than one initial SetupOS (disk) image was provided!")
 
     if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_mainnet_update) >= 2:
@@ -401,7 +401,7 @@ def system_test(
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
-    if uses_setupos_mainnet_img:
+    if uses_setupos_latest_release_mainnet_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-test-img.tar.zst"
