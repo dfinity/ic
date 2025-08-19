@@ -43,6 +43,26 @@ pub struct StreamEntry {
     #[prost(message, optional, tag = "2")]
     pub subnet_stream: ::core::option::Option<Stream>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamWithBlockers {
+    #[prost(uint64, tag = "1")]
+    pub messages_begin: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub messages: ::prost::alloc::vec::Vec<RequestOrResponseOrBlocker>,
+    #[prost(uint64, tag = "3")]
+    pub signals_end: u64,
+    #[prost(message, repeated, tag = "4")]
+    pub reject_signals: ::prost::alloc::vec::Vec<RejectSignal>,
+    #[prost(message, optional, tag = "5")]
+    pub reverse_stream_flags: ::core::option::Option<StreamFlags>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamEntryWithBlockers {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(message, optional, tag = "2")]
+    pub subnet_stream: ::core::option::Option<StreamWithBlockers>,
+}
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestMetadata {
     #[prost(uint64, tag = "1")]
@@ -129,6 +149,30 @@ pub mod request_or_response {
         Request(super::Request),
         #[prost(message, tag = "2")]
         Response(super::Response),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamBlocker {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(uint64, tag = "2")]
+    pub index: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RequestOrResponseOrBlocker {
+    #[prost(oneof = "request_or_response_or_blocker::R", tags = "1, 2, 3")]
+    pub r: ::core::option::Option<request_or_response_or_blocker::R>,
+}
+/// Nested message and enum types in `RequestOrResponseOrBlocker`.
+pub mod request_or_response_or_blocker {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum R {
+        #[prost(message, tag = "1")]
+        Request(super::Request),
+        #[prost(message, tag = "2")]
+        Response(super::Response),
+        #[prost(message, tag = "3")]
+        Blocker(super::StreamBlocker),
     }
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]

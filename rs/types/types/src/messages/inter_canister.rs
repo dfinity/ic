@@ -1,8 +1,10 @@
 use crate::{
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
+    xnet::StreamIndex,
     CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
+use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_option, SubnetId};
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -653,6 +655,55 @@ impl From<Response> for RequestOrResponse {
     }
 }
 
+/// A message that acts as a blocker for the message behind it in the `StreamIndexedQueue` of a
+/// `StreamSlice` until the `begin` in a different `StreamSlice` coming from `subnet_id` is verified
+/// to be >= `index`.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct StreamBlocker {
+    pub subnet_id: SubnetId,
+    pub index: StreamIndex,
+}
+
+/// `RequestOrResponse` extended by `StreamBlocker` which exists only in stream slices and streams.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub enum RequestOrResponseOrBlocker {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    Blocker(Arc<StreamBlocker>),
+}
+
+impl From<&RequestOrResponse> for RequestOrResponseOrBlocker {
+    fn from(msg: &RequestOrResponse) -> RequestOrResponseOrBlocker {
+        match msg {
+            RequestOrResponse::Request(request) => {
+                RequestOrResponseOrBlocker::Request(request.clone())
+            }
+            RequestOrResponse::Response(response) => {
+                RequestOrResponseOrBlocker::Response(response.clone())
+            }
+        }
+    }
+}
+
+/// Convenience `CountBytes` implementation that returns the same value as
+/// `RequestOrResponseOrBlocker::Blocker(self).count_bytes()`, so we don't need to wrap
+/// `self` into a `RequestOrResponseOrBlocker` only to calculate its estimated byte size.
+impl CountBytes for StreamBlocker {
+    fn count_bytes(&self) -> usize {
+        size_of::<RequestOrResponseOrBlocker>() + size_of::<StreamBlocker>()
+    }
+}
+
+impl CountBytes for RequestOrResponseOrBlocker {
+    fn count_bytes(&self) -> usize {
+        match self {
+            RequestOrResponseOrBlocker::Request(req) => req.count_bytes(),
+            RequestOrResponseOrBlocker::Response(resp) => resp.count_bytes(),
+            RequestOrResponseOrBlocker::Blocker(blo) => blo.count_bytes(),
+        }
+    }
+}
+
 impl From<&RequestMetadata> for pb_queues::RequestMetadata {
     fn from(metadata: &RequestMetadata) -> Self {
         Self {
@@ -812,6 +863,68 @@ impl TryFrom<pb_queues::RequestOrResponse> for RequestOrResponse {
             }
             pb_queues::request_or_response::R::Response(r) => {
                 Ok(RequestOrResponse::Response(Arc::new(r.try_into()?)))
+            }
+        }
+    }
+}
+
+impl From<&StreamBlocker> for pb_queues::StreamBlocker {
+    fn from(b: &StreamBlocker) -> Self {
+        Self {
+            subnet_id: Some(subnet_id_into_protobuf(b.subnet_id)),
+            index: b.index.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::StreamBlocker> for StreamBlocker {
+    type Error = ProxyDecodeError;
+
+    fn try_from(b: pb_queues::StreamBlocker) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subnet_id: subnet_id_try_from_option(b.subnet_id)?,
+            index: b.index.into(),
+        })
+    }
+}
+
+impl From<&RequestOrResponseOrBlocker> for pb_queues::RequestOrResponseOrBlocker {
+    fn from(rrb: &RequestOrResponseOrBlocker) -> Self {
+        match rrb {
+            RequestOrResponseOrBlocker::Request(req) => pb_queues::RequestOrResponseOrBlocker {
+                r: Some(pb_queues::request_or_response_or_blocker::R::Request(
+                    req.as_ref().into(),
+                )),
+            },
+            RequestOrResponseOrBlocker::Response(rep) => pb_queues::RequestOrResponseOrBlocker {
+                r: Some(pb_queues::request_or_response_or_blocker::R::Response(
+                    rep.as_ref().into(),
+                )),
+            },
+            RequestOrResponseOrBlocker::Blocker(blo) => pb_queues::RequestOrResponseOrBlocker {
+                r: Some(pb_queues::request_or_response_or_blocker::R::Blocker(
+                    blo.as_ref().into(),
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb_queues::RequestOrResponseOrBlocker> for RequestOrResponseOrBlocker {
+    type Error = ProxyDecodeError;
+
+    fn try_from(rrb: pb_queues::RequestOrResponseOrBlocker) -> Result<Self, Self::Error> {
+        match rrb.r.ok_or(ProxyDecodeError::MissingField(
+            "RequestOrResponseOrBlocker::r",
+        ))? {
+            pb_queues::request_or_response_or_blocker::R::Request(r) => {
+                Ok(RequestOrResponseOrBlocker::Request(Arc::new(r.try_into()?)))
+            }
+            pb_queues::request_or_response_or_blocker::R::Response(r) => Ok(
+                RequestOrResponseOrBlocker::Response(Arc::new(r.try_into()?)),
+            ),
+            pb_queues::request_or_response_or_blocker::R::Blocker(r) => {
+                Ok(RequestOrResponseOrBlocker::Blocker(Arc::new(r.try_into()?)))
             }
         }
     }

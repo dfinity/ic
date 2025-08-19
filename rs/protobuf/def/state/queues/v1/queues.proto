@@ -53,6 +53,19 @@ message StreamEntry {
   Stream subnet_stream = 2;
 }
 
+message StreamWithBlockers {
+  uint64 messages_begin = 1;
+  repeated RequestOrResponseOrBlocker messages = 2;
+  uint64 signals_end = 3;
+  repeated RejectSignal reject_signals = 4;
+  StreamFlags reverse_stream_flags = 5;
+}
+
+message StreamEntryWithBlockers {
+  types.v1.SubnetId subnet_id = 1;
+  StreamWithBlockers subnet_stream = 2;
+}
+
 message RequestMetadata {
   uint64 call_tree_depth = 1;
   uint64 call_tree_start_time_nanos = 2;
@@ -104,6 +117,19 @@ message RequestOrResponse {
   oneof r {
     Request request = 1;
     Response response = 2;
+  }
+}
+
+message StreamBlocker {
+  types.v1.SubnetId subnet_id = 1;
+  uint64 index = 2;
+}
+
+message RequestOrResponseOrBlocker {
+  oneof r {
+    Request request = 1;
+    Response response = 2;
+    StreamBlocker blocker = 3;
   }
 }
 
