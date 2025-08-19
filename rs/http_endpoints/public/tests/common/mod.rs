@@ -461,6 +461,7 @@ impl HttpEndpointBuilder {
 
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
+        let log = no_op_logger();
 
         // Run test on "nns" to avoid fetching root delegation
         let subnet_id = subnet_test_id(1);
@@ -471,10 +472,11 @@ impl HttpEndpointBuilder {
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
         let builder = self.delegation_from_nns.map(|delegation| {
-            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
         });
         let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
-        let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
+        let nns_delegation_reader =
+            NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
@@ -484,8 +486,6 @@ impl HttpEndpointBuilder {
         let crypto = Arc::new(CryptoReturningOk::default());
 
         let (ingress_tx, ingress_rx) = channel(self.ingress_channel_capacity);
-
-        let log = no_op_logger();
 
         start_server(
             self.rt_handle,

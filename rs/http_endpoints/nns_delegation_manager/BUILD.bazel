@@ -78,6 +78,7 @@ rust_ic_bench(
         ":nns_delegation_manager",
         "//rs/crypto/tree_hash",
         "//rs/http_endpoints/nns_delegation_manager/test_utils",
+        "//rs/monitoring/logger",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:criterion",

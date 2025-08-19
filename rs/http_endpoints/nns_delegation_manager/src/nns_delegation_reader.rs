@@ -2,6 +2,7 @@ use ic_crypto_tree_hash::{
     lookup_lower_bound, sparse_labeled_tree_from_paths, FilterBuilder, LabeledTree,
     LookupLowerBoundStatus, Path,
 };
+use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation},
     CanisterId, SubnetId,
@@ -32,11 +33,15 @@ pub enum CanisterRangesFilter {
 // TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
     pub(crate) receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+    logger: ReplicaLogger,
 }
 
 impl NNSDelegationReader {
-    pub fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
-        Self { receiver }
+    pub fn new(
+        receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        Self { receiver, logger }
     }
 
     /// Returns the most recent NNS delegation known to the replica.
@@ -49,7 +54,7 @@ impl NNSDelegationReader {
         self.receiver
             .borrow()
             .as_ref()
-            .map(|builder| builder.build_or_original(canister_ranges_filter))
+            .map(|builder| builder.build_or_original(canister_ranges_filter, &self.logger))
     }
 
     pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
@@ -65,7 +70,11 @@ pub struct NNSDelegationBuilder {
 }
 
 impl NNSDelegationBuilder {
-    pub fn try_new(raw_certificate: Blob, subnet_id: SubnetId) -> Result<Self, String> {
+    pub fn try_new(
+        raw_certificate: Blob,
+        subnet_id: SubnetId,
+        logger: &ReplicaLogger,
+    ) -> Result<Self, String> {
         let full_certificate: Certificate = serde_cbor::from_slice(&raw_certificate)
             .map_err(|err| format!("Failed to parse delegation certificate: {err}"))?;
 
@@ -77,6 +86,7 @@ impl NNSDelegationBuilder {
             full_labeled_tree,
             raw_certificate,
             subnet_id,
+            logger,
         ))
     }
 
@@ -85,6 +95,7 @@ impl NNSDelegationBuilder {
         full_labeled_tree: LabeledTree<Vec<u8>>,
         raw_certificate: Blob,
         subnet_id: SubnetId,
+        logger: &ReplicaLogger,
     ) -> Self {
         let builder = NNSDelegationBuilderInner::new(
             full_certificate,
@@ -93,9 +104,9 @@ impl NNSDelegationBuilder {
             subnet_id,
         );
         let precomputed_delegation_without_canister_ranges =
-            builder.build_or_original(CanisterRangesFilter::None);
+            builder.build_or_original(CanisterRangesFilter::None, logger);
         let precomputed_delegation_with_flat_canister_ranges =
-            builder.build_or_original(CanisterRangesFilter::Flat);
+            builder.build_or_original(CanisterRangesFilter::Flat, logger);
 
         Self {
             builder,
@@ -111,6 +122,7 @@ impl NNSDelegationBuilder {
     pub(crate) fn build_or_original(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
+        logger: &ReplicaLogger,
     ) -> CertificateDelegation {
         match canister_ranges_filter {
             CanisterRangesFilter::Flat => self
@@ -119,9 +131,9 @@ impl NNSDelegationBuilder {
             CanisterRangesFilter::None => {
                 self.precomputed_delegation_without_canister_ranges.clone()
             }
-            CanisterRangesFilter::Tree(_canister_id) => {
-                self.builder.build_or_original(canister_ranges_filter)
-            }
+            CanisterRangesFilter::Tree(_canister_id) => self
+                .builder
+                .build_or_original(canister_ranges_filter, logger),
         }
     }
 
@@ -177,11 +189,20 @@ impl NNSDelegationBuilderInner {
         }
     }
 
-    fn build_or_original(&self, filter: CanisterRangesFilter) -> CertificateDelegation {
+    fn build_or_original(
+        &self,
+        filter: CanisterRangesFilter,
+        logger: &ReplicaLogger,
+    ) -> CertificateDelegation {
         match self.try_build(filter) {
             Ok(delegation) => delegation,
             Err(err) => {
-                // FIXME(kpop): log something
+                warn!(
+                    every_n_seconds => 30,
+                    logger,
+                    "Failed to build an NNS delegation with filter {filter:?}: {err}. \
+                    Returning the original delegation."
+                );
                 if cfg!(debug_assertions) {
                     panic!("Failed to build an NNS delegation with filter {filter:?}: {err}");
                 }
@@ -289,6 +310,7 @@ mod tests {
 
     use ic_certification::verify_delegation_certificate;
     use ic_crypto_tree_hash::lookup_path;
+    use ic_logger::no_op_logger;
     use ic_nns_delegation_manager_test_utils::create_fake_certificate_delegation;
     use ic_test_utilities_types::ids::SUBNET_0;
 
@@ -305,11 +327,15 @@ mod tests {
         subnet_id: SubnetId,
     ) -> NNSDelegationReader {
         let builder = delegation.map(|delegation| {
-            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &no_op_logger())
+                .unwrap()
         });
         let (_sender, receiver) = watch::channel(builder);
 
-        NNSDelegationReader { receiver }
+        NNSDelegationReader {
+            receiver,
+            logger: no_op_logger(),
+        }
     }
 
     #[test]

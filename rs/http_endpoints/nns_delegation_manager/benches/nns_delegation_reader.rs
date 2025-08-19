@@ -2,6 +2,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_crypto_tree_hash::LabeledTree;
+use ic_logger::no_op_logger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_delegation_manager_test_utils::create_fake_certificate_delegation;
 use ic_test_utilities_types::ids::SUBNET_0;
@@ -54,10 +55,11 @@ fn get_delegation_bench(
             LabeledTree::try_from(certificate.tree.clone()).unwrap(),
             Blob(vec![]),
             SUBNET_0,
+            &no_op_logger(),
         );
         let (_sender, receiver) = watch::channel(Some(builder));
 
-        let reader = NNSDelegationReader::new(receiver);
+        let reader = NNSDelegationReader::new(receiver, no_op_logger());
 
         println!(
             "The delegation size in bytes with {} canister ranges: {}",
@@ -87,7 +89,7 @@ fn get_delegation_on_nns(criterion: &mut Criterion) {
 
     // On NNS there is no delegation
     let (_, rx) = watch::channel(None);
-    let reader = NNSDelegationReader::new(rx);
+    let reader = NNSDelegationReader::new(rx, no_op_logger());
 
     group.bench_function("tree", |bencher| {
         bencher.iter(|| {
