@@ -347,7 +347,7 @@ def system_test(
             variant = "guest-os",
             update = True,
             test = False,
-            dev = False,  # TODO(NODE-1684): Use dev image once support for dev hashes
+            dev = True,
         ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APPLICATION_SUBNET_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
