@@ -41,6 +41,7 @@ impl NNSDelegationReader {
 
     /// Returns the most recent NNS delegation known to the replica.
     /// Consecutive calls might return different delegations.
+    /// Note: on the NNS subnet this always returns `None`.
     pub fn get_delegation(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
