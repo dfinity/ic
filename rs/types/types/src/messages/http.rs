@@ -12,6 +12,7 @@ use crate::{
 };
 use ic_base_types::{hash_of_map, CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -712,7 +713,7 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Hash)]
 pub enum CertificateDelegationFormat {
     /// Delegation with the canister ranges in the `/subnet/{subnet_id}/canister_ranges` path.
     Flat,

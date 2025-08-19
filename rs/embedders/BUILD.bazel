@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-deterministic-heap-bytes",
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
@@ -50,7 +51,10 @@ DEPENDENCIES = [
     "@crate_index//:wasmtime-environ",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-deterministic-heap-bytes-derive",
+]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.

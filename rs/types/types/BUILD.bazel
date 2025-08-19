@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_types",
     proc_macro_deps = [
         # Keep sorted.
+        "//packages/ic-deterministic-heap-bytes-derive",
         "//rs/utils/validate_eq_derive",
         "@crate_index//:strum_macros",
     ],
@@ -19,6 +20,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-deterministic-heap-bytes",
         "//packages/ic-error-types",
         "//rs/bitcoin/replica_types",
         "//rs/crypto/internal/crypto_lib/types",
