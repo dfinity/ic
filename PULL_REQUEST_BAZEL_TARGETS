@@ -75,3 +75,4 @@ rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery:sr_app_same_nodes_test
                      //rs/tests/consensus/subnet_recovery:sr_app_large_with_chain_keys_test
                      //rs/tests/consensus/subnet_recovery:sr_nns_same_nodes_test
                      //rs/tests/consensus/subnet_recovery:sr_nns_failover_nodes_test
+                     //rs/tests/nested:nns_recovery_test
