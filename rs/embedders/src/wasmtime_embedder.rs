@@ -61,7 +61,6 @@ mod tests;
 
 const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
 pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
-pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
 pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 
@@ -358,23 +357,14 @@ impl WasmtimeEmbedder {
         heap_memory: &execution_state::Memory,
         stable_memory: &execution_state::Memory,
     ) -> Vec<WasmMemoryInfo> {
-        let dirty_page_tracking = match (
-            modification_tracking,
-            self.config.feature_flags.write_barrier,
-        ) {
-            (ModificationTracking::Ignore, _) | (_, FlagStatus::Enabled) => {
-                DirtyPageTracking::Ignore
-            }
-            (ModificationTracking::Track, FlagStatus::Disabled) => DirtyPageTracking::Track,
+        let dirty_page_tracking = match modification_tracking {
+            ModificationTracking::Ignore => DirtyPageTracking::Ignore,
+            ModificationTracking::Track => DirtyPageTracking::Track,
         };
 
         let mut result = vec![WasmMemoryInfo {
             name: WASM_HEAP_MEMORY_NAME,
-            bytemap_name: if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
-                Some(WASM_HEAP_BYTEMAP_MEMORY_NAME)
-            } else {
-                None
-            },
+            bytemap_name: None,
             memory: heap_memory.clone(),
             memory_type: CanisterMemoryType::Heap,
             dirty_page_tracking,
@@ -394,6 +384,7 @@ impl WasmtimeEmbedder {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     pub fn new_instance(
         &self,
         canister_id: CanisterId,
@@ -569,7 +560,6 @@ impl WasmtimeEmbedder {
             log: self.log.clone(),
             instance_stats: InstanceStats::default(),
             store,
-            write_barrier: self.config.feature_flags.write_barrier,
             canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead,
@@ -825,7 +815,6 @@ pub struct WasmtimeInstance {
     log: ReplicaLogger,
     instance_stats: InstanceStats,
     store: wasmtime::Store<StoreData>,
-    write_barrier: FlagStatus,
     #[allow(unused)]
     canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
@@ -865,7 +854,7 @@ impl WasmtimeInstance {
     }
 
     fn page_accesses(&mut self) -> HypervisorResult<PageAccessResults> {
-        let stable_dirty_pages = self.dirty_pages_from_bytemap(CanisterMemoryType::Stable)?;
+        let stable_dirty_pages = self.stable_dirty_pages_from_bytemap()?;
 
         // Get stable accessed pages from the global counter.
         let stable_accessed_pages = (self.stable_memory_page_access_limit.get() as i64
@@ -889,26 +878,21 @@ impl WasmtimeInstance {
             })
         } else {
             let wasm_dirty_pages = match self.modification_tracking {
-                ModificationTracking::Track => match self.write_barrier {
-                    FlagStatus::Enabled => {
-                        self.dirty_pages_from_bytemap(CanisterMemoryType::Heap)?
-                    }
-                    FlagStatus::Disabled => {
-                        let tracker = self
-                            .memory_trackers
-                            .get(&CanisterMemoryType::Heap)
-                            .unwrap()
-                            .lock()
-                            .unwrap();
-                        let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
-                        let dirty_pages = tracker.take_dirty_pages();
-                        dirty_pages
-                            .into_iter()
-                            .chain(speculatively_dirty_pages)
-                            .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
-                            .collect::<Vec<PageIndex>>()
-                    }
-                },
+                ModificationTracking::Track => {
+                    let tracker = self
+                        .memory_trackers
+                        .get(&CanisterMemoryType::Heap)
+                        .unwrap()
+                        .lock()
+                        .unwrap();
+                    let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
+                    let dirty_pages = tracker.take_dirty_pages();
+                    dirty_pages
+                        .into_iter()
+                        .chain(speculatively_dirty_pages)
+                        .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
+                        .collect::<Vec<PageIndex>>()
+                }
                 ModificationTracking::Ignore => {
                     vec![]
                 }
@@ -1121,22 +1105,18 @@ impl WasmtimeInstance {
         }
     }
 
-    fn dirty_pages_from_bytemap(
-        &mut self,
-        memory_type: CanisterMemoryType,
-    ) -> HypervisorResult<Vec<PageIndex>> {
-        let (memory_name, bytemap_name) = match memory_type {
-            CanisterMemoryType::Heap => (WASM_HEAP_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME),
-            CanisterMemoryType::Stable => (STABLE_MEMORY_NAME, STABLE_BYTEMAP_MEMORY_NAME),
-        };
+    fn stable_dirty_pages_from_bytemap(&mut self) -> HypervisorResult<Vec<PageIndex>> {
         let mut result = vec![];
-        if let Ok(heap_memory) = self.get_memory(memory_name) {
-            let bytemap = self.get_memory(bytemap_name)?.data(&self.store);
-            let tracker = self.memory_trackers.get(&memory_type).ok_or_else(|| {
-                HypervisorError::ToolchainContractViolation {
-                    error: format!("No {} memory tracker", memory_type),
-                }
-            })?;
+        if let Ok(heap_memory) = self.get_memory(STABLE_MEMORY_NAME) {
+            let bytemap = self
+                .get_memory(STABLE_BYTEMAP_MEMORY_NAME)?
+                .data(&self.store);
+            let tracker = self
+                .memory_trackers
+                .get(&CanisterMemoryType::Stable)
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                    error: "No memory tracker for stable memory".to_string(),
+                })?;
             let tracker = tracker.lock().unwrap();
             let page_map = tracker.page_map();
             let accessed_pages = tracker.accessed_pages().borrow();

@@ -164,8 +164,11 @@ upload_artifacts(
             "//publish/canisters:bundle",
             "//ic-os/guestos/envs/dev:bundle-disk",  # used by icos_deploy testnet script
             "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",
+            "//ic-os/hostos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/setupos/envs/prod:bundle",
+            "//ic-os/setupos/envs/dev:bundle",  # used by nested tests
         ],
     }),
     visibility = ["//visibility:public"],

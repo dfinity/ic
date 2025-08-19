@@ -256,14 +256,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             };
 
                             if transform_result_size as u64 > max_response_size_bytes {
-                                info!(
-                                    log,
-                                    "Canister http transform result size {} on canister {} \
-                                    exceeds the `max_response_size` of {}.",
-                                    transform_result_size,
-                                    request_sender,
-                                    max_response_size_bytes
-                                );
                                 let err_msg = format!(
                                     "Transformed http response exceeds limit: {}",
                                     max_response_size_bytes
@@ -473,10 +465,7 @@ mod tests {
                     if let Some(client) = client {
                         Ok(hyper_util::rt::TokioIo::new(client))
                     } else {
-                        Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "Client already taken",
-                        ))
+                        Err(std::io::Error::other("Client already taken"))
                     }
                 }
             }))

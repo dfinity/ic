@@ -22,6 +22,7 @@
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
 /WORKSPACE.bazel                   @dfinity/idx
+/PULL_REQUEST_BAZEL_TARGETS        @dfinity/idx
 
 # [Rust Lang]
 rust-toolchain.toml       @dfinity/consensus

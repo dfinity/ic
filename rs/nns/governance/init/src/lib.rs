@@ -227,6 +227,13 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
+    /// Initializes the governance canister with the given genesis timestamp.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_genesis_timestamp_seconds(&mut self, genesis_timestamp_seconds: u64) -> &mut Self {
+        self.proto.genesis_timestamp_seconds = genesis_timestamp_seconds;
+        self
+    }
+
     /// Adds all the neurons from the specified CSV file.
     ///
     /// This obviously can only work when compiled to x86 so the wasm

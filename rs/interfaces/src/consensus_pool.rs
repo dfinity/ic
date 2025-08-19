@@ -84,9 +84,9 @@ pub trait ChangeSetOperation: Sized {
     /// Conditional composition when self is empty. Similar to Option::or_else.
     fn or_else<F: FnOnce() -> Self>(self, f: F) -> Self;
     /// Append a change action only when it is not a duplicate of what already
-    /// exists in the Mutations. Return the rejected action as error when it
+    /// exists in the Mutations. Return the rejected action when it
     /// is considered as duplicate.
-    fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction>;
+    fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction>;
 }
 
 impl ChangeSetOperation for Mutations {
@@ -98,12 +98,12 @@ impl ChangeSetOperation for Mutations {
         }
     }
 
-    fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction> {
+    fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction> {
         if !self.iter().any(|x| x.content_eq(&action)) {
             self.push(action);
-            Ok(())
+            None
         } else {
-            Err(action)
+            Some(action)
         }
     }
 }

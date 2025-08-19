@@ -46,6 +46,7 @@ system_test(
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
     tags = [
         "k8s",
+        "long_test",
     ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [

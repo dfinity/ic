@@ -18,7 +18,7 @@ use ic_registry_keys::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::btreemap;
-use rewards_calculation::rewards_calculator_results::DayUTC;
+use rewards_calculation::rewards_calculator_results::DayUtc;
 use rewards_calculation::types::{RewardPeriod, RewardableNode};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -156,7 +156,7 @@ fn client_for_tests() -> RegistryQuerier {
     }
 }
 
-fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Vec<DayUTC> {
+fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Vec<DayUtc> {
     let node_id = NodeId::from(PrincipalId::new_node_test_id(node_id));
 
     rewardable_nodes
@@ -247,18 +247,17 @@ fn test_nodes_in_registry_returns_expected_days() {
     let node_3_id = NodeId::from(PrincipalId::new_node_test_id(3));
 
     let (_, _, node_1_days) = &nodes_map[&node_1_id];
-    let expected_node_1_days: Vec<DayUTC> = vec![
+    let expected_node_1_days: Vec<DayUtc> = vec![
         ts("2025-07-03").into(),
         ts("2025-07-04").into(),
         ts("2025-07-05").into(),
         ts("2025-07-06").into(),
         ts("2025-07-07").into(),
-        ts("2025-07-08").into(),
     ];
     assert_eq!(node_1_days, &expected_node_1_days);
 
     let (_, _, node_2_days) = &nodes_map[&node_2_id];
-    let expected_node_2_days: Vec<DayUTC> = vec![
+    let expected_node_2_days: Vec<DayUtc> = vec![
         ts("2025-07-04").into(),
         ts("2025-07-05").into(),
         ts("2025-07-06").into(),
@@ -276,10 +275,9 @@ fn test_nodes_in_registry_returns_expected_days() {
     assert_eq!(node_2_days, &expected_node_2_days);
 
     let (_, _, node_3_days) = &nodes_map[&node_3_id];
-    let expected_node_3_days: Vec<DayUTC> = vec![
+    let expected_node_3_days: Vec<DayUtc> = vec![
         ts("2025-07-11").into(),
         ts("2025-07-12").into(),
-        ts("2025-07-13").into(),
         // node_3 was deleted on 2025-07-13, so it should not be present on 2025-07-14
         ts("2025-07-15").into(),
         ts("2025-07-16").into(),
@@ -297,8 +295,9 @@ fn test_rewardable_nodes_deleted_nodes() {
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
-        &REGISTRY_STORE,
-        reward_period,
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        reward_period.from,
+        reward_period.to,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -315,7 +314,7 @@ fn test_rewardable_nodes_deleted_nodes() {
         "Node 1 should not be rewardable after it was deleted"
     );
 
-    // Node 2 and 3 should be rewardable in this period.
+    // Node 2 should be rewardable in this period.
     let node_2_rewardable_days = node_rewardable_days(&np_1_rewardables, 2);
 
     assert_eq!(node_2_rewardable_days.first(), Some(&from.into()));
@@ -323,8 +322,12 @@ fn test_rewardable_nodes_deleted_nodes() {
 
     let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
 
+    // Node 3 should be rewardable until 2025-07-12 because on 2025-07-13 got deleted.
     assert_eq!(node_3_rewardable_days.first(), Some(&from.into()));
-    assert_eq!(node_3_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(
+        node_3_rewardable_days.last(),
+        Some(&ts("2025-07-12").into())
+    );
 }
 
 #[test]
@@ -340,8 +343,9 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
-        &REGISTRY_STORE,
-        reward_period,
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        reward_period.from,
+        reward_period.to,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -356,7 +360,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     assert_eq!(node_1_rewardable_days.first(), Some(&from.into()));
     assert_eq!(
         node_1_rewardable_days.last(),
-        Some(&ts("2025-07-08").into())
+        Some(&ts("2025-07-07").into())
     );
 
     // Node 2 is active throughout the whole range.
@@ -402,8 +406,9 @@ fn test_node_re_registered_after_deletion() {
     let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
-        &REGISTRY_STORE,
-        reward_period,
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        reward_period.from,
+        reward_period.to,
     )
     .expect("Failed to fetch rewardables");
 
@@ -414,9 +419,8 @@ fn test_node_re_registered_after_deletion() {
 
     let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, node_1_id);
 
-    let expected_days: Vec<DayUTC> = vec![
+    let expected_days: Vec<DayUtc> = vec![
         ts("2025-07-07").into(),
-        ts("2025-07-08").into(),
         // On 2025-07-08, node_1 was deleted, so it should not be rewardable until the 2025-07-11.
         ts("2025-07-11").into(),
         ts("2025-07-12").into(),
@@ -431,9 +435,13 @@ fn test_node_operator_data_returns_expected_data() {
 
     let version = 39667;
     let no_2_id = PrincipalId::new_user_test_id(30);
-    let data = RegistryQuerier::node_operator_data(&REGISTRY_STORE, no_2_id, version.into())
-        .unwrap()
-        .unwrap();
+    let data = RegistryQuerier::node_operator_data(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        no_2_id,
+        version.into(),
+    )
+    .unwrap()
+    .unwrap();
 
     assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
     assert_eq!(data.dc_id, "y");
@@ -441,9 +449,13 @@ fn test_node_operator_data_returns_expected_data() {
 
     let version = 39675;
     let no_1_id = PrincipalId::new_user_test_id(10);
-    let data = RegistryQuerier::node_operator_data(&REGISTRY_STORE, no_1_id, version.into())
-        .unwrap()
-        .unwrap();
+    let data = RegistryQuerier::node_operator_data(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        no_1_id,
+        version.into(),
+    )
+    .unwrap()
+    .unwrap();
 
     assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
     assert_eq!(data.dc_id, "x");
@@ -451,7 +463,7 @@ fn test_node_operator_data_returns_expected_data() {
 
     let not_yet_added_no_version = 39652;
     let data = RegistryQuerier::node_operator_data(
-        &REGISTRY_STORE,
+        &*REGISTRY_STORE.with(|store| store.clone()),
         no_1_id,
         not_yet_added_no_version.into(),
     )

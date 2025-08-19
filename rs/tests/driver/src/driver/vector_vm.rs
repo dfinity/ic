@@ -291,7 +291,7 @@ fn emit_kibana_url_event(log: &slog::Logger, network_name: &str, start_time: &Da
     let fmt = |dt: &DateTime<Utc>| dt.format("'%Y-%m-%dT%H:%M:%S%.3fZ'").to_string();
 
     let event = LogEvent::new(
-        "kibana_url_created_new_event".to_string(),
+        "kibana_url_created_event".to_string(),
         KibanaUrl {
             message: "Pulled replica logs will appear in Kibana".to_string(),
             url: format!("https://kibana.testnet.dfinity.network/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:{},to:now))&_a=(columns:!(MESSAGE,ic_subnet,ic_node),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,field:ic,index:testnet-vector-push,key:ic,negate:!f,params:(query:{network_name}),type:phrase),query:(match_phrase:(ic:{network_name})))),hideChart:!f,index:testnet-vector-push,interval:auto,query:(language:kuery,query:''),sort:!(!(timestamp,desc)))", fmt(start_time))

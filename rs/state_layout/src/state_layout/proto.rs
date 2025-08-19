@@ -16,7 +16,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .map(|controller| controller.into())
                 .collect(),
             last_full_execution_round: item.last_full_execution_round.get(),
-            call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
             compute_allocation: item.compute_allocation.as_percent(),
             accumulated_priority: item.accumulated_priority.get(),
             priority_credit: item.priority_credit.get(),
@@ -84,10 +83,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .execution_state_bits
             .map(|b| b.try_into())
             .transpose()?;
-        let call_context_manager = value
-            .call_context_manager
-            .map(|c| c.try_into())
-            .transpose()?;
 
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
@@ -134,7 +129,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
-            call_context_manager,
             compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "ComputeAllocation",
@@ -304,7 +298,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             on_low_wasm_memory_hook_status: item
                 .on_low_wasm_memory_hook_status
                 .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
-            source: pb_canister_snapshot_bits::SnapshotSource::from(item.source).into(),
+            source: pb_canister_state_bits::SnapshotSource::from(item.source).into(),
         }
     }
 }
@@ -339,7 +333,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             .and_then(Result::ok);
 
         let source =
-            pb_canister_snapshot_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
+            pb_canister_state_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
         let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),

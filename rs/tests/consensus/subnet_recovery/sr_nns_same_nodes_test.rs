@@ -45,9 +45,9 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::Height;
 use slog::info;
-use std::{cmp, convert::TryFrom};
+use std::cmp;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -119,14 +119,11 @@ pub fn test(env: TestEnv) {
     let backup_mean = AuthMean::PrivateKey(ssh_priv_key);
     wait_until_authentication_is_granted(&upload_node.get_ip_addr(), "backup", &backup_mean);
 
-    let ic_version =
-        get_assigned_replica_version(&upload_node).expect("Failed to get assigned replica version");
-    let ic_version = ReplicaVersion::try_from(ic_version).unwrap();
+    let ic_version = get_guestos_img_version().unwrap();
     info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
 
     // identifies the version of the replica after the recovery
-    let working_version =
-        ReplicaVersion::try_from(get_guestos_update_img_version().unwrap()).unwrap();
+    let working_version = get_guestos_update_img_version().unwrap();
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
     let app_can_id = store_message(

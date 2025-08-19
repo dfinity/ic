@@ -8,8 +8,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    batch::ChainKeyData,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
@@ -1015,6 +1014,7 @@ pub trait SystemApi {
         &mut self,
         current_size: u64,
         additional_pages: u64,
+        max_size: u64,
         stable_memory_api: StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome>;
 

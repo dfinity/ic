@@ -279,7 +279,6 @@ case "${ACTION}" in
             "gauge"
 
         write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
-        sync
         # Ignore termination signals from the following reboot, so that
         # the script exits without error.
         trap -- '' SIGTERM

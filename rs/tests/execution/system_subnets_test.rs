@@ -48,131 +48,46 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
     let app_agent = app_node.build_default_agent();
     let sys_no_nns_agent = sys_no_nns_node.build_default_agent();
     block_on(async move {
-        // Check that canisters on verified app subnets cannot create canisters on other
-        // subnets.
-        let uni_can = UniversalCanister::new_with_cycles_with_retries(
-            &ver_app_agent,
-            ver_app_node.effective_canister_id(),
-            900_000_000_000_000_u64,
-            &logger,
-        )
-        .await;
-        let other_subnet = app_node.subnet_id().unwrap();
-        let res = uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::from(100_000_000_000_000u64),
+        // Check that canisters on non-NNS subnets cannot create canisters on other
+        // subnets (including itself) by specifying their subnet ID as the callee.
+        for (source_agent, source_node) in [
+            (&ver_app_agent, &ver_app_node),
+            (&app_agent, &app_node),
+            (&sys_no_nns_agent, &sys_no_nns_node),
+        ] {
+            let uni_can = UniversalCanister::new_with_cycles_with_retries(
+                source_agent,
+                source_node.effective_canister_id(),
+                900_000_000_000_000_u64,
+                &logger,
             )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            });
-        assert_reject(res, RejectCode::CanisterReject);
-
-        let other_subnet = sys_node.subnet_id().unwrap();
-        let res = uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::from(100_000_000_000_000u64),
-            )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            });
-        assert_reject(res, RejectCode::CanisterReject);
-
-        // Check that canisters on app subnets cannot create canisters on other subnets.
-        let uni_can = UniversalCanister::new_with_cycles_with_retries(
-            &app_agent,
-            app_node.effective_canister_id(),
-            900_000_000_000_000_u64,
-            &logger,
-        )
-        .await;
-        let other_subnet = ver_app_node.subnet_id().unwrap();
-        let res = uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::zero(),
-            )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            });
-        assert_reject(res, RejectCode::CanisterReject);
-
-        let other_subnet = sys_node.subnet_id().unwrap();
-        let res = uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::zero(),
-            )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            });
-        assert_reject(res, RejectCode::CanisterReject);
-
-        // Check that canisters on system subnets excluding NNS cannot create canisters
-        // on other subnets.
-        let uni_can = UniversalCanister::new_with_cycles_with_retries(
-            &sys_no_nns_agent,
-            sys_no_nns_node.effective_canister_id(),
-            900_000_000_000_000_u64,
-            &logger,
-        )
-        .await;
-        let other_subnet = ver_app_node.subnet_id().unwrap();
-        let res = uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::from(50_000_000_000_000u64),
-            )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            });
-        assert_reject(res, RejectCode::CanisterReject);
-
-        let other_subnet = app_node.subnet_id().unwrap();
-        let res = uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::from(50_000_000_000_000u64),
-            )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            });
-        assert_reject(res, RejectCode::CanisterReject);
+            .await;
+            for other_subnet in [
+                ver_app_node.subnet_id().unwrap(),
+                app_node.subnet_id().unwrap(),
+                sys_node.subnet_id().unwrap(),
+                sys_no_nns_node.subnet_id().unwrap(),
+            ] {
+                let res = uni_can
+                    .forward_with_cycles_to(
+                        &other_subnet.get().into(),
+                        "create_canister",
+                        Encode!().unwrap(),
+                        Cycles::from(100_000_000_000_000u64),
+                    )
+                    .await
+                    .map(|res| {
+                        Decode!(res.as_slice(), CreateCanisterResult)
+                            .unwrap()
+                            .canister_id
+                    });
+                assert_reject(res, RejectCode::CanisterReject);
+            }
+        }
     });
 }
 
-/// Tests whether creating a canister on another subnet is possible from an NNS
+/// Tests whether creating a canister on another subnet (including itself) is possible from an NNS
 /// canister.
 pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(env: TestEnv) {
     let logger = env.logger();
@@ -187,20 +102,24 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(env: T
             &logger,
         )
         .await;
-        let other_subnet = non_nns_node.subnet_id().unwrap();
-        uni_can
-            .forward_with_cycles_to(
-                &other_subnet.get().into(),
-                "create_canister",
-                Encode!().unwrap(),
-                Cycles::from(100_000_000_000_000u64),
-            )
-            .await
-            .map(|res| {
-                Decode!(res.as_slice(), CreateCanisterResult)
-                    .unwrap()
-                    .canister_id
-            })
-            .unwrap();
+        for other_subnet in [
+            nns_node.subnet_id().unwrap(),
+            non_nns_node.subnet_id().unwrap(),
+        ] {
+            uni_can
+                .forward_with_cycles_to(
+                    &other_subnet.get().into(),
+                    "create_canister",
+                    Encode!().unwrap(),
+                    Cycles::from(100_000_000_000_000u64),
+                )
+                .await
+                .map(|res| {
+                    Decode!(res.as_slice(), CreateCanisterResult)
+                        .unwrap()
+                        .canister_id
+                })
+                .unwrap();
+        }
     });
 }

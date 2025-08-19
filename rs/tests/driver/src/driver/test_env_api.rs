@@ -139,7 +139,7 @@ use super::{
 };
 use crate::{
     driver::{
-        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
+        constants::{self, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -190,7 +190,6 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{debug, info, warn, Logger};
 use ssh2::Session;
@@ -211,6 +210,8 @@ use std::{
 use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
+pub use super::ic_images::*;
+
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -221,7 +222,6 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
-const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
@@ -230,27 +230,6 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
         bail!("option '{}': invalid sha256 value: {:?}", opt_name, sha256);
     }
     Ok(())
-}
-
-/// Checks whether the input string as the form [hostname:port{,hostname:port}]
-pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
-    const HOST_START: &str = r"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*";
-    const HOST_STOP: &str = r"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])";
-    const PORT: &str = r#":[[:digit:]]{2,5}$"#;
-    let s = match s {
-        Some(s) => s,
-        None => return Ok(vec![]),
-    };
-    let rgx = format!("{}{}{}", HOST_START, HOST_STOP, PORT);
-    let rgx = Regex::new(&rgx).unwrap();
-    let mut res = vec![];
-    for target in s.trim().split(',') {
-        if !rgx.is_match(target) {
-            bail!("Invalid filebeat host: '{}'", s);
-        }
-        res.push(target.to_string());
-    }
-    Ok(res)
 }
 
 /// An immutable snapshot of the Internet Computer topology valid at a
@@ -1138,145 +1117,61 @@ impl HasRegistryLocalStore for TestEnv {
     }
 }
 
-pub trait HasIcDependencies {
+pub trait HasFarmUrl {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
 }
 
-impl<T: HasTestEnv> HasIcDependencies for T {
+impl<T: HasTestEnv> HasFarmUrl for T {
     fn get_farm_url(&self) -> Result<Url> {
         let dep_rel_path = "farm_base_url";
         let url = read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| FarmBaseUrl::read_attribute(&self.test_env()).to_string());
         Ok(Url::parse(&url)?)
     }
-
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
-        Ok(initial_replica_version.version)
-    }
 }
 
-pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
-    let dep_rel_path = "elasticsearch_hosts";
-    let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
-    parse_elasticsearch_hosts(Some(hosts))
+pub fn get_current_branch_version() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(read_dependency_from_env_to_string(
+        "ENV_DEPS__IC_VERSION_FILE",
+    )?)?;
+
+    Ok(replica_version)
 }
 
-pub fn get_current_branch_version() -> Result<String> {
-    read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet nns version from environment"),
+    )?;
+
+    Ok(replica_version)
 }
 
-pub fn get_mainnet_nns_revision() -> String {
-    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet nns version from environment")
-}
+pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet application subnet version from environment"),
+    )?;
 
-pub fn get_mainnet_application_subnet_revision() -> String {
-    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet application subnet version from environment")
-}
-
-// The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
-
-/// Pull the version of the initial GuestOS image from the environment.
-pub fn get_guestos_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_VERSION")?)
-}
-
-/// Pull the URL of the initial GuestOS image from the environment.
-pub fn get_guestos_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-/// Pull the hash of the initial GuestOS image from the environment.
-pub fn get_guestos_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
-}
-
-/// Pull the URL of the initial GuestOS update image from the environment.
-///
-/// With the initial image, there is also a corresponding initial update image.
-/// The version is shared, so only the URL and hash are provided.
-pub fn get_guestos_initial_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-/// Pull the hash of the initial GuestOS update image from the environment.
-///
-/// With the initial image, there is also a corresponding initial update image.
-/// The version is shared, so only the URL and hash are provided.
-pub fn get_guestos_initial_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH")?)
-}
-
-/// Pull the version of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION")?)
-}
-
-/// Pull the URL of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-/// Pull the hash of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
-}
-
-/// Pull the version of the initial SetupOS image from the environment.
-pub fn get_setupos_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_VERSION")?)
-}
-
-/// Pull the URL of the initial SetupOS image from the environment.
-pub fn get_setupos_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-/// Pull the hash of the initial SetupOS image from the environment.
-pub fn get_setupos_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?)
-}
-
-/// Pull the version of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_version() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION")?)
-}
-
-/// Pull the URL of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-/// Pull the hash of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_HASH")?)
+    Ok(replica_version)
 }
 
 pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
-pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+pub fn get_build_setupos_config_image_tool() -> PathBuf {
+    get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG")
 }
 
-pub fn get_boundary_node_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+pub fn get_create_setupos_config_tool() -> PathBuf {
+    get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG")
 }
 
 pub trait HasGroupSetup {
@@ -1325,7 +1220,6 @@ impl HasGroupSetup for TestEnv {
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -1394,7 +1288,7 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
-pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+fn get_dependency_path_from_env(v: &str) -> PathBuf {
     let runfiles =
         std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
 
@@ -1417,7 +1311,7 @@ pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     }
 }
 
-pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
+pub(crate) fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
     read_dependency_to_string(path_from_env)
@@ -2471,17 +2365,6 @@ impl TestEnvAttribute for FarmBaseUrl {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct InitialReplicaVersion {
-    pub version: ReplicaVersion,
-}
-
-impl TestEnvAttribute for InitialReplicaVersion {
-    fn attribute_name() -> String {
-        "initial_replica_version".to_string()
-    }
-}
-
 pub fn emit_group_event(log: &slog::Logger, group: &str) {
     #[derive(Deserialize, Serialize)]
     pub struct GroupName {
@@ -2493,22 +2376,6 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         GroupName {
             message: "Created new InfraProvider group".to_string(),
             group: group.to_string(),
-        },
-    );
-    event.emit_log(log);
-}
-
-pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Deserialize, Serialize)]
-    pub struct KibanaUrl {
-        message: String,
-        url: String,
-    }
-    let event = log_events::LogEvent::new(
-        KIBANA_URL_CREATED_EVENT_NAME.to_string(),
-        KibanaUrl {
-            message: "Replica logs will appear in Kibana".to_string(),
-            url: kibana_url.to_string(),
         },
     );
     event.emit_log(log);

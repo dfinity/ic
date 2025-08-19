@@ -8,6 +8,7 @@ use ic_embedders::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -24,6 +25,8 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
 };
+
+const GB: u64 = 1024 * 1024 * 1024;
 
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
@@ -1361,4 +1364,116 @@ fn test_wasm64_costs_similar_to_wasm32_for_arithmetic_instructions() {
 
     // Check that the cost in Wasm64 mode is similar to Wasm32 mode.
     assert_eq!(total_cost, total_cost_wasm32);
+}
+
+/// Checks that heap and injected stable memories always have a maximum limit
+/// which does not exceed the limit set in the configuration
+fn assert_memories_have_max_limit(wat: &str) {
+    use itertools::Itertools;
+
+    for ((heap_limit, heap64_limit), stable_limit) in [2 * GB, 4 * GB]
+        .into_iter()
+        .cartesian_product([4 * GB, 8 * GB, 20 * GB])
+        .cartesian_product([30 * GB, 100 * GB, 500 * GB])
+    {
+        let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
+
+        let (_, instrumentation_details) = validate_and_instrument_for_testing(
+            &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+            &wasm,
+        )
+        .unwrap();
+        let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
+        assert!(
+            module.memories.len() >= 2,
+            "Module should have at least a heap and stable memory"
+        );
+
+        let heap_memory = module.memories[0];
+        if heap_memory.memory64 {
+            assert!(
+                heap_memory.maximum.unwrap() < heap64_limit,
+                "memory limit {} exceeds expected {}",
+                heap_memory.maximum.unwrap(),
+                heap64_limit
+            );
+        } else {
+            assert!(
+                heap_memory.maximum.unwrap() < heap_limit,
+                "memory limit {} exceeds expected {}",
+                heap_memory.maximum.unwrap(),
+                heap_limit
+            );
+        }
+
+        let stable_memory = module.memories[1];
+        assert!(
+            stable_memory.maximum.unwrap() < stable_limit,
+            "memory limit {} exceeds expected {}",
+            stable_memory.maximum.unwrap(),
+            stable_limit
+        );
+    }
+}
+
+#[test]
+fn test_heap_memory_limit() {
+    assert_memories_have_max_limit(
+        r#"
+        (module
+            (memory 0)
+        )"#,
+    );
+}
+
+#[test]
+fn test_heap_existing_memory_limit() {
+    assert_memories_have_max_limit(
+        r#"
+        (module
+            (memory 1 1000)
+        )"#,
+    );
+}
+
+#[test]
+fn test_heap_existing_memory_limit_too_large() {
+    assert_memories_have_max_limit(&format!(
+        r#"
+        (module
+            (memory 1 {})
+        )"#,
+        4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
+    ));
+}
+
+#[test]
+fn test_64bit_heap_memory_limit() {
+    assert_memories_have_max_limit(
+        r#"
+        (module
+            (memory i64 0)
+        )"#,
+    );
+}
+
+#[test]
+fn test_64bit_heap_existing_memory_limit() {
+    assert_memories_have_max_limit(
+        r#"
+        (module
+            (memory i64 1 1000)
+        )"#,
+    );
+}
+
+#[test]
+fn test_64bit_heap_existing_memory_limit_too_large() {
+    assert_memories_have_max_limit(&format!(
+        r#"
+        (module
+            (memory i64 1 {})
+        )"#,
+        10 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
+    ))
 }

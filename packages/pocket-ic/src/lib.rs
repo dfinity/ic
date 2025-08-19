@@ -55,9 +55,9 @@
 ///
 use crate::{
     common::rest::{
-        BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
-        IcpFeatures, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
+        HttpsConfig, IcpFeatures, InitialTime, InstanceId, MockCanisterHttpResponse,
+        RawEffectivePrincipal, RawMessageId, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -162,6 +162,7 @@ pub struct PocketIcBuilder {
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
+    initial_time: Option<InitialTime>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -178,6 +179,7 @@ impl PocketIcBuilder {
             log_level: None,
             bitcoind_addr: None,
             icp_features: IcpFeatures::default(),
+            initial_time: None,
         }
     }
 
@@ -199,6 +201,7 @@ impl PocketIcBuilder {
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
+            self.initial_time,
         )
     }
 
@@ -214,6 +217,7 @@ impl PocketIcBuilder {
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
+            self.initial_time,
         )
         .await
     }
@@ -414,6 +418,34 @@ impl PocketIcBuilder {
         self.icp_features = IcpFeatures::all_icp_features();
         self
     }
+
+    /// Enables selected ICP features supported by PocketIC and implemented by system canisters
+    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
+    pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
+        self.icp_features = icp_features;
+        self
+    }
+
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    pub fn with_initial_timestamp(mut self, initial_timestamp_nanos: u64) -> Self {
+        self.initial_time = Some(InitialTime::Timestamp(RawTime {
+            nanos_since_epoch: initial_timestamp_nanos,
+        }));
+        self
+    }
+
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    pub fn with_auto_progress(mut self, artificial_delay_ms: Option<u64>) -> Self {
+        let config = AutoProgressConfig {
+            artificial_delay_ms,
+        };
+        self.initial_time = Some(InitialTime::AutoProgress(config));
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -527,6 +559,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -550,6 +583,7 @@ impl PocketIc {
                 log_level,
                 bitcoind_addr,
                 icp_features,
+                initial_time,
             )
             .await
         });
@@ -1107,6 +1141,23 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .upgrade_canister(canister_id, wasm_module, arg, sender)
+                .await
+        })
+    }
+
+    /// Upgrade a Motoko EOP canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn upgrade_eop_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .upgrade_eop_canister(canister_id, wasm_module, arg, sender)
                 .await
         })
     }

@@ -17,7 +17,7 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::{
     batch::BatchBuilder, ids::subnet_test_id, messages::SignedIngressBuilder,
 };
-use ic_types::batch::{BatchMessages, ChainKeyData};
+use ic_types::batch::{BatchMessages, CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::messages::SignedIngress;
 use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
 use maplit::btreemap;
@@ -114,6 +114,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             subnet_type: SubnetType::Application,
             subnet_features: SubnetFeatures::default(),
             chain_keys_held: BTreeSet::new(),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         },
     );
 
