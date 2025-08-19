@@ -9,7 +9,7 @@
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
-# However, if a direct source file of a long system-test (//rs/tests/...) has been modified it will be included.
+# However, long system-tests of which a direct source file has been modified will be included.
 #
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
