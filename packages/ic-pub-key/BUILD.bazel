@@ -32,13 +32,13 @@ rust_doc_test(
 rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
+    crate_features = [
+        "ed25519",
+        "secp256k1",
+    ],
     deps = [
         ":ic-pub-key",
         "@crate_index//:hex",
         "@crate_index//:hex-literal",
-    ],
-    crate_features = [
-        "ed25519",
-        "secp256k1",
     ],
 )
