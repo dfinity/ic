@@ -13,7 +13,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
         env = {
             "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         },
-        tags = ["experimental_system_test_colocation"],
+        tags = ["colocate"],
         runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
             "//hs/spec_compliance:ic-ref-test",

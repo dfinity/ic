@@ -65,7 +65,7 @@ system_test(
     name = "dual_workload_test",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -219,7 +219,7 @@ system_test_nns(
     name = "subnet_splitting_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
@@ -359,7 +359,7 @@ system_test_nns(
         "//conditions:default": [],
     }),
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "manual",
     ],
     test_timeout = "eternal",
