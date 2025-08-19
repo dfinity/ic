@@ -9,6 +9,9 @@ use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
+};
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -101,6 +104,17 @@ async fn get_node_providers_monthly_xdr_rewards(
 ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
     panic_if_caller_not_governance();
     NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
+}
+
+#[update]
+async fn get_node_providers_rewards(
+    request: GetNodeProvidersRewardsRequest,
+) -> GetNodeProvidersRewardsResponse {
+    panic_if_caller_not_governance();
+    NodeRewardsCanister::get_node_providers_rewards::<RegistryStoreStableMemoryBorrower>(
+        &CANISTER, request,
+    )
+    .await
 }
 
 #[cfg(test)]
