@@ -427,7 +427,7 @@ impl ValidatedRegisterExtension {
         let context = governance.treasury_manager_deposit_context().await?;
 
         let ValidatedRegisterExtension {
-            spec: _,
+            spec,
             init,
             extension_canister_id,
             wasm,
@@ -472,6 +472,8 @@ impl ValidatedRegisterExtension {
                 CanisterInstallMode::Install,
             )
             .await?;
+
+        cache_registered_extension(extension_canister_id, spec);
 
         Ok(())
     }
