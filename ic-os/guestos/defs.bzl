@@ -109,9 +109,9 @@ def image_deps(mode, malicious = False):
         expected_recovery_hash_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:expected_recovery_hash"
 
         deps["component_files"].update({
+            expected_recovery_hash_path: "/opt/ic/share/expected_recovery_hash",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
-            expected_recovery_hash_path: "/opt/ic/share/expected_recovery_hash",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
