@@ -5,7 +5,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "rosetta_test",
-    tags = ["experimental_system_test_colocation"],
+    tags = ["colocate"],
     test_timeout = "long",
     runtime_deps = [
         "//rs/rosetta-api/icp:ic-rosetta-api",
