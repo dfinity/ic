@@ -23,8 +23,19 @@ fn test_canister_wasm() -> Vec<u8> {
 }
 
 #[test]
-fn with_all_icp_features() {
-    let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+fn test_no_canister_http_without_auto_progress() {
+    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    // No canister http outcalls should be made
+    // (because we did not enable auto progress when creating the PocketIC instance
+    // and the system canisters should not be configured to make no canister http outcalls
+    // in this case).
+    // We execute a few more rounds and advance time in case they were only made on timers.
+    for _ in 0..10 {
+        pic.tick();
+        pic.advance_time(Duration::from_secs(1));
+    }
+    assert!(pic.get_canister_http().is_empty());
 }
 
 fn resolving_client(pic: &PocketIc, host: String) -> Client {
@@ -61,20 +72,6 @@ fn test_ii() {
     let resp = client.get(endpoint).send().unwrap();
     let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(body.contains("<title>Internet Identity</title>"));
-}
-
-#[test]
-fn test_ii_makes_no_canister_http() {
-    let pic = PocketIcBuilder::new().with_all_icp_features().build();
-
-    // No canister http outcalls should be made
-    // (because we did not enable auto progress when creating the PocketIC instance).
-    // We execute a few more rounds and advance time in case they were only made on timers.
-    for _ in 0..10 {
-        pic.tick();
-        pic.advance_time(Duration::from_secs(1));
-    }
-    assert!(pic.get_canister_http().is_empty());
 }
 
 #[test]
