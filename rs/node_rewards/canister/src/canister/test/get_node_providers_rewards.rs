@@ -595,3 +595,125 @@ fn test_get_node_providers_rewards() {
     };
     assert_eq!(result_endpoint.rewards, Some(expected));
 }
+
+pub async fn read_items(path: &str) -> Result<Vec<RegistryDelta>, Box<dyn std::error::Error>> {
+    let data = fs::read(path).await?;
+    let mut items = Vec::new();
+    let mut buf = &data[..];
+
+    while !buf.is_empty() {
+        let item = RegistryDelta::decode_length_delimited(&mut buf)?;
+        items.push(item);
+    }
+
+    Ok(items)
+}
+
+#[derive(Default, CandidType, candid::Deserialize)]
+struct SubnetMetricsExport {
+    metrics_by_subnet: BTreeMap<PrincipalId, Vec<NodeMetricsHistoryRecord>>,
+}
+
+#[test]
+fn test_real() {
+    let fake_registry = Arc::new(FakeRegistry::new());
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("canister")
+        .join("test")
+        .join("test_data")
+        .join("registry");
+
+    let mut file = File::open(&path).unwrap();
+    let mut file_bytes = Vec::new();
+    file.read_to_end(&mut file_bytes).unwrap();
+    let mut buf = &file_bytes[..];
+    let mut registry = IndexMap::new();
+    while !buf.is_empty() {
+        let delta = RegistryDelta::decode_length_delimited(&mut buf).unwrap();
+
+        for values in delta.values {
+            let string_key = std::str::from_utf8(&delta.key[..]).unwrap().to_string();
+            let value = if values.deletion_marker {
+                None
+            } else {
+                Some(values.value)
+            };
+
+            match registry.get(&(
+                string_key.clone(),
+                values.version,
+                values.timestamp_nanoseconds,
+            )) {
+                None => {}
+                Some(existing) => {
+                    let existing: &Option<Vec<u8>> = existing;
+                    let record =
+                        NodeOperatorRecord::decode(existing.clone().unwrap().as_slice()).unwrap();
+                    println!("Duplicate {} {:?}", string_key.clone(), record)
+                }
+            }
+            registry.insert(
+                (string_key, values.version, values.timestamp_nanoseconds),
+                value,
+            );
+        }
+    }
+
+    for ((string_key, version, timestamp_nanoseconds), value) in registry {
+        fake_registry.set_value_at_version_with_timestamp(
+            string_key,
+            version,
+            timestamp_nanoseconds,
+            value,
+        );
+    }
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("canister")
+        .join("test")
+        .join("test_data")
+        .join("subnets_metrics_export.candid");
+    let mut file = File::open(&path).unwrap();
+    let mut file_bytes = Vec::new();
+    file.read_to_end(&mut file_bytes).unwrap();
+
+    let mut buf = &file_bytes[..];
+    let exported_metrics = Decode!(buf, SubnetMetricsExport).unwrap();
+    let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().returning(move |args| {
+        match exported_metrics
+            .metrics_by_subnet
+            .get(&PrincipalId::from(args.subnet_id))
+        {
+            None => CallResult::Err((RejectionCode::Unknown, "Error".to_string())),
+            Some(subnet_metrics) => CallResult::Ok(subnet_metrics.clone()),
+        }
+    });
+    let metrics_manager = Rc::new(MetricsManager::new_test(mock));
+    let canister = NodeRewardsCanister::new(
+        Arc::new(StableCanisterRegistryClient::<TestState>::new(
+            fake_registry,
+        )),
+        metrics_manager,
+    );
+    CANISTER_TEST.with_borrow_mut(|c| *c = canister);
+    let request = GetNodeProvidersRewardsRequest {
+        from: DayUtc::from("2025-06-14").get(),
+        to: DayUtc::from("2025-07-13").get(),
+    };
+
+    println!("finished syncing");
+    let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
+        &CANISTER_TEST,
+        request.clone(),
+    )
+    .now_or_never()
+    .unwrap();
+    let rewards_calculator_results: RewardsCalculatorResults = CANISTER_TEST
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .unwrap();
+
+    write_rewards_to_csv(&rewards_calculator_results, "rewards_results")
+        .expect("Failed to write rewards to CSV");
+}
