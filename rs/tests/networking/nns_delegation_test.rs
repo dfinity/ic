@@ -10,9 +10,9 @@ Runbook::
 Success::
 . NNS subnet doesn't attach any delegations to the responses.
 . Application subnets refresh delegations once in a while.
-. Responses from `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
-. Responses from `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
-. Responses from `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
+. Responses to `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
+. Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
+. Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
  */
 use std::{
     borrow::Cow,
@@ -180,7 +180,7 @@ async fn get_nns_delegation_timestamp(
     Some(leb128::read::unsigned(&mut std::io::Cursor::new(&timestamp)).unwrap())
 }
 
-/// Responses from `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
+/// Responses to `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv) {
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
 
@@ -201,7 +201,7 @@ fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv) {
     );
 }
 
-/// Responses from `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
+/// Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn canister_read_state_v2_returns_correct_delegation(env: TestEnv) {
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
 
@@ -232,7 +232,7 @@ struct SyncCallResponse {
     certificate: Blob,
 }
 
-/// Responses from `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
+/// Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
 fn call_v3_returns_correct_delegation(env: TestEnv) {
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
 
