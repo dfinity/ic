@@ -970,7 +970,7 @@ impl Stream {
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
             // Exclude blockers at this point.
-            let Ok(msg) = TryInto::<RequestOrResponse>::try_into(msg) else {
+            let Ok(msg) = msg.try_into() else {
                 continue;
             };
 

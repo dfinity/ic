@@ -22,7 +22,7 @@ use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
 use ic_types::messages::{
-    CallbackId, Payload, StreamMessage, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, Payload, StreamBlocker, StreamMessage, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
@@ -2361,8 +2361,8 @@ fn legacy_check_stream_handler_generated_reject_response_canister_migrating() {
 }
 
 /// Tests that inducting stream slices results in signals appended to `StreamHeaders`;
-/// and messages included into canister `InputQueues` or reject `Responses` on output streams
-/// as appropriate.
+/// and messages inducted into canister `InputQueues` or reject `Responses` on output streams
+/// as appropriate; `StreamBlocker` are discarded but the `signals_end` is incremented.
 #[test]
 fn induct_stream_slices_partial_success() {
     with_test_setup(
@@ -2393,9 +2393,11 @@ fn induct_stream_slices_partial_success() {
                 // ...a request from a missing canister @48 (not anywhere according to the routing
                 // table); this is expected to be accepted but dropped...
                 Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
-                // ...and a response to a missing canister @49 (on this subnet according to the
-                // routing table); this expected to be accepted but dropped.
+                // ...a response to a missing canister @49 (on this subnet according to the
+                // routing table); this expected to be accepted but dropped...
                 Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                // ...and a stream blocker @50; this is expected to get dropped silently.
+                StreamBlocker(CANISTER_MIGRATION_SUBNET, 123),
             ],
             // ...and two accept signals.
             signals_end: 33,
@@ -2420,8 +2422,9 @@ fn induct_stream_slices_partial_success() {
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 31).clone(),
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
                 ],
-                // ...6 accept signals for the messages in the stream slice...
-                signals_end: 50,
+                // ...6 accept signals for the messages in the stream slice
+                // and 1 for the stream blocker...
+                signals_end: 51,
                 reject_signals: vec![
                     // ...and a reject signal for the request @46 due to a missing canister.
                     RejectSignal::new(RejectReason::CanisterNotFound, 46.into()),
@@ -4143,6 +4146,15 @@ fn with_test_setup_and_config(
                         RejectResponse(respondent, originator, _) => {
                             (respondent, originator, NO_DEADLINE)
                         }
+                        StreamBlocker(subnet_id, index) => {
+                            return StreamMessage::StreamBlocker(
+                                StreamBlocker {
+                                    subnet_id,
+                                    index: index.into(),
+                                }
+                                .into(),
+                            );
+                        }
                     };
                     // Attach a unique (bit mask-like) number of cycles to each message (assuming
                     // that there are fewer than 127 messages).
@@ -4531,6 +4543,8 @@ enum MessageBuilder {
     BestEffortResponse(CanisterId, CanisterId, CoarseTime),
     // `(respondent, originator, reason)`
     RejectResponse(CanisterId, CanisterId, RejectReason),
+    // `(subnet_id, index)`
+    StreamBlocker(SubnetId, u64),
 }
 
 impl MessageBuilder {
@@ -4576,6 +4590,13 @@ impl MessageBuilder {
                     .build(),
             )
             .into(),
+            Self::StreamBlocker(subnet_id, index) => StreamMessage::StreamBlocker(
+                StreamBlocker {
+                    subnet_id,
+                    index: index.into(),
+                }
+                .into(),
+            ),
         }
     }
 }
