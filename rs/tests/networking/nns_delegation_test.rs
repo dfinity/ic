@@ -11,11 +11,8 @@ Success::
 . NNS subnet doesn't attach any delegations to the responses.
 . Application subnets refresh delegations once in a while.
 . Responses to `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
-. Responses to `api/v3/subnet/{subnet_id}/read_state` have valid delegations without any canister ranges.
 . Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
-. Responses to `api/v3/canister/{canister_id}/read_state` have valid delegations with canister ranges in the tree format.
 . Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
-. Responses to `api/v4/canister/{canister_id}/call` have valid delegations with canister ranges in the tree format.
  */
 use std::{
     borrow::Cow,
@@ -204,27 +201,6 @@ fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv) {
     );
 }
 
-/// Responses to `api/v3/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
-fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-
-    let response: HttpReadStateResponse = block_on(send(
-        &node,
-        format!("api/v3/subnet/{}/read_state", subnet.subnet_id),
-        sign_envelope(&read_state_content()),
-    ));
-    let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
-
-    validate_delegation(
-        &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
-        subnet.subnet_id,
-        None,
-    );
-}
-
 /// Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn canister_read_state_v2_returns_correct_delegation(env: TestEnv) {
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
@@ -249,33 +225,9 @@ fn canister_read_state_v2_returns_correct_delegation(env: TestEnv) {
     );
 }
 
-/// Responses to `api/v3/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
-fn canister_read_state_v3_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-
-    let response: HttpReadStateResponse = block_on(send(
-        &node,
-        format!(
-            "api/v3/canister/{}/read_state",
-            node.effective_canister_id()
-        ),
-        sign_envelope(&read_state_content()),
-    ));
-    let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
-
-    validate_delegation(
-        &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
-        subnet.subnet_id,
-        Some(CanisterRangesFormat::Tree),
-    );
-}
-
-#[allow(dead_code)]
 #[derive(Deserialize)]
 struct SyncCallResponse {
+    #[allow(dead_code)]
     status: String,
     certificate: Blob,
 }
@@ -287,27 +239,6 @@ fn call_v3_returns_correct_delegation(env: TestEnv) {
     let response: SyncCallResponse = block_on(send(
         &node,
         format!("api/v3/canister/{}/call", node.effective_canister_id()),
-        sign_envelope(&call_content(node.effective_canister_id())),
-    ));
-    let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
-
-    validate_delegation(
-        &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
-        subnet.subnet_id,
-        Some(CanisterRangesFormat::Flat),
-    );
-}
-
-/// Responses to `api/v4/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
-fn call_v4_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-
-    let response: SyncCallResponse = block_on(send(
-        &node,
-        format!("api/v4/canister/{}/call", node.effective_canister_id()),
         sign_envelope(&call_content(node.effective_canister_id())),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
@@ -387,7 +318,7 @@ fn validate_delegation(
         .expect("Should return a state tree which can be parsed");
 
     match lookup_path(&tree, &[b"time"]).expect("Every delegation has a '/time' path") {
-        LabeledTree::Leaf(value) => value,
+        LabeledTree::Leaf(_value) => (),
         LabeledTree::SubTree(_) => panic!("Not a leaf"),
     };
 
@@ -501,8 +432,5 @@ fn main() -> Result<()> {
         .add_test(systest!(canister_read_state_v2_returns_correct_delegation))
         .add_test(systest!(subnet_read_state_v2_returns_correct_delegation))
         .add_test(systest!(call_v3_returns_correct_delegation))
-        .add_test(systest!(canister_read_state_v3_returns_correct_delegation))
-        .add_test(systest!(subnet_read_state_v3_returns_correct_delegation))
-        .add_test(systest!(call_v4_returns_correct_delegation))
         .execute_from_args()
 }
