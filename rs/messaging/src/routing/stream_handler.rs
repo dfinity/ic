@@ -727,20 +727,23 @@ impl StreamHandlerImpl {
                     stream.signals_end(),
                     stream_index
                 );
-                let Ok(msg) = msg.try_into() else {
-                    // Got a blocker, record its observation then drop it.
-                    self.metrics.incoming_stream_blockers.inc();
-                    stream.push_accept_signal();
-                    continue;
-                };
-
-                lost_cycles += self.induct_message(
-                    msg,
-                    remote_subnet_id,
-                    &mut state,
-                    stream,
-                    available_guaranteed_response_memory,
-                );
+                match msg.try_into() {
+                    Ok(msg) => {
+                        // Got a `RequestOrResponse`, induct it.
+                        lost_cycles += self.induct_message(
+                            msg,
+                            remote_subnet_id,
+                            &mut state,
+                            stream,
+                            available_guaranteed_response_memory,
+                        );
+                    }
+                    Err(_blocker) => {
+                        // Got a `StreamBlocker`, record its observation then drop it.
+                        self.metrics.incoming_stream_blockers.inc();
+                        stream.push_accept_signal();
+                    }
+                }
             }
         }
 

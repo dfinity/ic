@@ -457,6 +457,7 @@ impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for Reques
                 response: Some((response.as_ref(), certification_version).into()),
             },
             StreamBlocker(_) => {
+                // TODO: [MR-706] Add support for `StreamBlocker` in the canonical state.
                 todo!();
             }
         }
