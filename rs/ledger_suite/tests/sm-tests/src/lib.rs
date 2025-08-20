@@ -4859,7 +4859,7 @@ fn test_icrc21_approve_message(
     .unwrap_err();
     match message {
         Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
-            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\", \"transfer\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
         }
         _ => panic!("Unexpected error: {:?}", message),
     }

@@ -25,6 +25,29 @@ pub enum Icrc21Function {
     Approve,
     #[strum(serialize = "icrc2_transfer_from")]
     TransferFrom,
+    #[strum(serialize = "transfer")]
+    LegacyTransfer,
+}
+
+pub enum AccountOrId {
+    Account(Account),
+    AccountIdAddress(Option<String>),
+}
+
+impl AccountOrId {
+    pub fn to_string(&self) -> String {
+        match self {
+            AccountOrId::Account(account) => account.to_string(),
+            AccountOrId::AccountIdAddress(str) => str.clone().unwrap_or_default(),
+        }
+    }
+
+    pub fn is_anonymous(&self) -> bool {
+        match self {
+            AccountOrId::Account(account) => account.owner == Principal::anonymous(),
+            AccountOrId::AccountIdAddress(addr) => addr.is_none(),
+        }
+    }
 }
 
 pub struct ConsentMessageBuilder {
@@ -32,8 +55,8 @@ pub struct ConsentMessageBuilder {
     display_type: Option<DisplayMessageType>,
     approver: Option<Account>,
     spender: Option<Account>,
-    from: Option<Account>,
-    receiver: Option<Account>,
+    from: Option<AccountOrId>,
+    receiver: Option<AccountOrId>,
     amount: Option<Nat>,
     token_symbol: Option<String>,
     token_name: Option<String>,
@@ -82,12 +105,12 @@ impl ConsentMessageBuilder {
         self
     }
 
-    pub fn with_from_account(mut self, from: Account) -> Self {
+    pub fn with_from_account(mut self, from: AccountOrId) -> Self {
         self.from = Some(from);
         self
     }
 
-    pub fn with_receiver_account(mut self, receiver: Account) -> Self {
+    pub fn with_receiver_account(mut self, receiver: AccountOrId) -> Self {
         self.receiver = Some(receiver);
         self
     }
@@ -147,7 +170,7 @@ impl ConsentMessageBuilder {
             }
         };
         match self.function {
-            Icrc21Function::Transfer => {
+            Icrc21Function::Transfer | Icrc21Function::LegacyTransfer => {
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -167,11 +190,11 @@ impl ConsentMessageBuilder {
                 })?;
 
                 message.add_intent(Icrc21Function::Transfer, Some(token_name));
-                if from_account.owner != Principal::anonymous() {
-                    message.add_account("From", &from_account);
+                if !from_account.is_anonymous() {
+                    message.add_account("From", from_account.to_string());
                 }
                 message.add_amount(self.amount, self.decimals, &token_symbol)?;
-                message.add_account("To", &receiver_account);
+                message.add_account("To", receiver_account.to_string());
                 message.add_fee(
                     Icrc21Function::Transfer,
                     self.ledger_fee,
@@ -195,9 +218,9 @@ impl ConsentMessageBuilder {
 
                 message.add_intent(Icrc21Function::Approve, None);
                 if approver_account.owner != Principal::anonymous() {
-                    message.add_account("From", &approver_account);
+                    message.add_account("From", approver_account.to_string());
                 }
-                message.add_account("Approve to spender", &spender_account);
+                message.add_account("Approve to spender", spender_account.to_string());
                 message.add_allowance(self.amount, self.decimals, &token_symbol)?;
                 if let Some(expected_allowance) = self.expected_allowance {
                     message.add_existing_allowance(
@@ -214,7 +237,7 @@ impl ConsentMessageBuilder {
                     &token_symbol,
                 )?;
                 if approver_account.owner != Principal::anonymous() {
-                    message.add_account("Fees paid by", &approver_account);
+                    message.add_account("Fees paid by", approver_account.to_string());
                 }
             }
             Icrc21Function::TransferFrom => {
@@ -240,12 +263,12 @@ impl ConsentMessageBuilder {
                     description: "Token Name must be specified.".to_owned(),
                 })?;
                 message.add_intent(Icrc21Function::TransferFrom, Some(token_name));
-                message.add_account("From", &from_account);
+                message.add_account("From", from_account.to_string());
                 message.add_amount(self.amount, self.decimals, &token_symbol)?;
                 if spender_account.owner != Principal::anonymous() {
-                    message.add_account("Spender", &spender_account);
+                    message.add_account("Spender", spender_account.to_string());
                 }
-                message.add_account("To", &receiver_account);
+                message.add_account("To", receiver_account.to_string());
                 message.add_fee(
                     Icrc21Function::TransferFrom,
                     self.ledger_fee,
@@ -263,14 +286,19 @@ impl ConsentMessageBuilder {
     }
 }
 
-pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+pub struct GenericTransferArgs {
+    pub from: AccountOrId,
+    pub receiver: AccountOrId,
+    pub amount: Nat,
+}
+
+fn prepare_message_builder(
     consent_msg_request: ConsentMessageRequest,
-    caller_principal: Principal,
     ledger_fee: Nat,
     token_symbol: String,
     token_name: String,
     decimals: u8,
-) -> Result<ConsentInfo, Icrc21Error> {
+) -> Result<(ConsentMessageBuilder, ConsentMessageMetadata), Icrc21Error> {
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
             description: format!(
@@ -306,7 +334,57 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     if let Some(display_type) = consent_msg_request.user_preferences.device_spec {
         display_message_builder = display_message_builder.with_display_type(display_type);
     }
+    Ok((display_message_builder, metadata))
+}
 
+pub fn build_icrc21_consent_info_for_generic_transfer(
+    consent_msg_request: ConsentMessageRequest,
+    transfer_args: GenericTransferArgs,
+    ledger_fee: Nat,
+    token_symbol: String,
+    token_name: String,
+    decimals: u8,
+) -> Result<ConsentInfo, Icrc21Error> {
+    let (mut display_message_builder, metadata) = prepare_message_builder(
+        consent_msg_request,
+        ledger_fee,
+        token_symbol,
+        token_name,
+        decimals,
+    )?;
+    let consent_message = match display_message_builder.function {
+        Icrc21Function::LegacyTransfer => {
+            display_message_builder = display_message_builder
+                .with_amount(transfer_args.amount)
+                .with_receiver_account(transfer_args.receiver)
+                .with_from_account(transfer_args.from);
+            display_message_builder.build()
+        }
+        _ => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: "Only legacy transfer is supported".to_string(),
+        })),
+    }?;
+    Ok(ConsentInfo {
+        metadata,
+        consent_message,
+    })
+}
+
+pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+    consent_msg_request: ConsentMessageRequest,
+    caller_principal: Principal,
+    ledger_fee: Nat,
+    token_symbol: String,
+    token_name: String,
+    decimals: u8,
+) -> Result<ConsentInfo, Icrc21Error> {
+    let (mut display_message_builder, metadata) = prepare_message_builder(
+        consent_msg_request.clone(),
+        ledger_fee,
+        token_symbol,
+        token_name,
+        decimals,
+    )?;
     let consent_message = match display_message_builder.function {
         Icrc21Function::Transfer => {
             let TransferArg {
@@ -327,8 +405,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_receiver_account(to)
-                .with_from_account(sender);
+                .with_receiver_account(AccountOrId::Account(to))
+                .with_from_account(AccountOrId::Account(sender));
 
             if let Some(memo) = memo {
                 display_message_builder = display_message_builder.with_memo(memo.0);
@@ -355,8 +433,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_receiver_account(to)
-                .with_from_account(from)
+                .with_receiver_account(AccountOrId::Account(to))
+                .with_from_account(AccountOrId::Account(from))
                 .with_spender_account(spender);
 
             if let Some(memo) = memo {
@@ -404,6 +482,9 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
+        Icrc21Function::LegacyTransfer => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: "Legacy transfer is not supported".to_string(),
+        })),
     }?;
 
     Ok(ConsentInfo {
