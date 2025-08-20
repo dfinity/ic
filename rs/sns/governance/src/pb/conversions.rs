@@ -4414,6 +4414,15 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                 },
             is_critical,
         } = value;
+
+        // Collect extension operations for this topic from the global specs
+        let extension_operations: Vec<pb_api::topics::ExtensionOperationSpec> = 
+            crate::extensions::EXTENSION_OPERATION_SPECS
+                .values()
+                .filter(|spec| pb_api::topics::Topic::try_from(spec.topic).unwrap() == topic)
+                .map(|spec| pb_api::topics::ExtensionOperationSpec::from(spec.clone()))
+                .collect();
+
         pb_api::topics::TopicInfo {
             topic: Some(topic),
             name: Some(name),
@@ -4430,7 +4439,91 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                     .map(pb_api::NervousSystemFunction::from)
                     .collect(),
             ),
+            extension_operations: Some(extension_operations),
             is_critical: Some(is_critical),
+        }
+    }
+}
+
+// Conversions for ExtensionOperationType
+impl From<crate::extensions::OperationType> for pb_api::topics::ExtensionOperationType {
+    fn from(value: crate::extensions::OperationType) -> Self {
+        match value {
+            crate::extensions::OperationType::TreasuryManagerDeposit => {
+                pb_api::topics::ExtensionOperationType::TreasuryManagerDeposit
+            }
+            crate::extensions::OperationType::TreasuryManagerWithdraw => {
+                pb_api::topics::ExtensionOperationType::TreasuryManagerWithdraw
+            }
+            crate::extensions::OperationType::Custom(name) => {
+                pb_api::topics::ExtensionOperationType::Custom(name)
+            }
+        }
+    }
+}
+
+impl From<pb_api::topics::ExtensionOperationType> for crate::extensions::OperationType {
+    fn from(value: pb_api::topics::ExtensionOperationType) -> Self {
+        match value {
+            pb_api::topics::ExtensionOperationType::TreasuryManagerDeposit => {
+                crate::extensions::OperationType::TreasuryManagerDeposit
+            }
+            pb_api::topics::ExtensionOperationType::TreasuryManagerWithdraw => {
+                crate::extensions::OperationType::TreasuryManagerWithdraw
+            }
+            pb_api::topics::ExtensionOperationType::Custom(name) => {
+                crate::extensions::OperationType::Custom(name)
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionType
+impl From<crate::extensions::ExtensionType> for pb_api::topics::ExtensionType {
+    fn from(value: crate::extensions::ExtensionType) -> Self {
+        match value {
+            crate::extensions::ExtensionType::TreasuryManager => {
+                pb_api::topics::ExtensionType::TreasuryManager
+            }
+        }
+    }
+}
+
+impl From<pb_api::topics::ExtensionType> for crate::extensions::ExtensionType {
+    fn from(value: pb_api::topics::ExtensionType) -> Self {
+        match value {
+            pb_api::topics::ExtensionType::TreasuryManager => {
+                crate::extensions::ExtensionType::TreasuryManager
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionOperationSpec
+impl From<crate::extensions::ExtensionOperationSpec> for pb_api::topics::ExtensionOperationSpec {
+    fn from(value: crate::extensions::ExtensionOperationSpec) -> Self {
+        pb_api::topics::ExtensionOperationSpec {
+            operation_type: Some(pb_api::topics::ExtensionOperationType::from(value.operation_type)),
+            description: Some(value.description),
+            extension_type: Some(pb_api::topics::ExtensionType::from(value.extension_type)),
+            topic: Some(pb_api::topics::Topic::try_from(value.topic).unwrap()),
+        }
+    }
+}
+
+impl From<pb_api::topics::ExtensionOperationSpec> for crate::extensions::ExtensionOperationSpec {
+    fn from(value: pb_api::topics::ExtensionOperationSpec) -> Self {
+        crate::extensions::ExtensionOperationSpec {
+            operation_type: crate::extensions::OperationType::from(
+                value.operation_type.expect("operation_type is required")
+            ),
+            description: value.description.expect("description is required"),
+            extension_type: crate::extensions::ExtensionType::from(
+                value.extension_type.expect("extension_type is required")
+            ),
+            topic: pb::Topic::from(
+                value.topic.expect("topic is required")
+            ),
         }
     }
 }
