@@ -375,7 +375,7 @@ pub mod fake {
             }
 
             let version = version.get();
-            let max_version = version.checked_add(10).unwrap();
+            let max_version = version.checked_add(10000).unwrap();
 
             let changes = self
                 .store

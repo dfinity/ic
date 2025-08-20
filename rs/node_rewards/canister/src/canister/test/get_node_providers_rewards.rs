@@ -4,7 +4,7 @@ use crate::canister::test::test_utils::{
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::{ManagementCanisterClient, MetricsManager};
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
-use candid::{CandidType, Decode};
+use candid::{CandidType, Decode, Encode};
 use flate2::read::GzDecoder;
 use futures_util::FutureExt;
 use ic_cdk::api::call::{CallResult, RejectionCode};
@@ -35,7 +35,7 @@ use rewards_calculation::rewards_calculator_results::{
 };
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -426,11 +426,33 @@ pub async fn read_items(path: &str) -> Result<Vec<RegistryDelta>, Box<dyn std::e
     Ok(items)
 }
 
-#[derive(Default, CandidType, candid::Deserialize)]
+#[derive(Default, CandidType, candid::Deserialize, Debug)]
 struct SubnetMetricsExport {
     metrics_by_subnet: BTreeMap<PrincipalId, Vec<NodeMetricsHistoryRecord>>,
 }
 
+#[test]
+fn test_convert_json_to_candid() {
+    // Path to your JSON
+    let json_path = "/Users/pietro.di.marco/RustroverProjects/dre2/rs/cli/out.json";
+    let candid_path = "/Users/pietro.di.marco/RustroverProjects/ic/rs/node_rewards/canister/src/canister/test/test_data/subnets_metrics_export.candid";
+
+    // Open JSON
+    let file = File::open(json_path).unwrap();
+    let reader = BufReader::new(file);
+
+    // Deserialize JSON -> struct
+    let exported_metrics: SubnetMetricsExport = serde_json::from_reader(reader).unwrap();
+
+    // Encode struct as Candid
+    let bytes = Encode!(&exported_metrics).unwrap();
+
+    // Write Candid-encoded blob to file
+    let mut out = File::create(candid_path).unwrap();
+    out.write_all(&bytes).unwrap();
+
+    println!("✅ Wrote candid file to {}", candid_path);
+}
 #[test]
 fn test_real() {
     let fake_registry = Arc::new(FakeRegistry::new());
@@ -467,13 +489,6 @@ fn test_real() {
                     let existing: &Option<Vec<u8>> = existing;
                     let record =
                         NodeOperatorRecord::decode(existing.clone().unwrap().as_slice()).unwrap();
-                    println!(
-                        "Duplicate {} timestamp: {} registry version: {} {:?}",
-                        string_key.clone(),
-                        DayUtc::from(values.timestamp_nanoseconds).to_string(),
-                        values.version,
-                        record
-                    )
                 }
             }
             registry.insert(
@@ -491,18 +506,11 @@ fn test_real() {
             value,
         );
     }
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("canister")
-        .join("test")
-        .join("test_data")
-        .join("subnets_metrics_export.candid");
-    let mut file = File::open(&path).unwrap();
-    let mut file_bytes = Vec::new();
-    file.read_to_end(&mut file_bytes).unwrap();
+    // Open the file
+    let bytes = std::fs::read("/Users/pietro.di.marco/RustroverProjects/ic/rs/node_rewards/canister/src/canister/test/test_data/subnets_metrics_export.candid").unwrap();
+    let exported_metrics: SubnetMetricsExport = Decode!(&bytes, SubnetMetricsExport).unwrap();
 
-    let mut buf = &file_bytes[..];
-    let exported_metrics = Decode!(buf, SubnetMetricsExport).unwrap();
+    // Deserialize into the struct
     let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
     mock.expect_node_metrics_history().returning(move |args| {
         match exported_metrics
