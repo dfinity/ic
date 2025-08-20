@@ -652,7 +652,7 @@ fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, Stor
         .into_iter()
         .map(|(k, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "Metadata field {} is reserved and cannot be set",
                     k
                 ));
@@ -953,7 +953,7 @@ impl Ledger {
         }
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "failed to convert transfer fee {} to tokens: {}",
                     transfer_fee, e
                 ))
@@ -961,7 +961,7 @@ impl Ledger {
         }
         if let Some(max_memo_length) = args.max_memo_length {
             if self.max_memo_length > max_memo_length {
-                ic_cdk::trap(&format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
+                ic_cdk::trap(format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
             }
             self.max_memo_length = max_memo_length;
         }

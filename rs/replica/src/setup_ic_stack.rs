@@ -306,7 +306,6 @@ pub fn construct_ic_stack(
         execution_services.https_outcalls_service,
         max_canister_http_requests_in_flight,
         log.clone(),
-        subnet_type,
         nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
@@ -322,6 +321,7 @@ pub fn construct_ic_stack(
         config.malicious_behavior.malicious_flags.clone(),
         node_id,
         subnet_id,
+        subnet_type,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,
