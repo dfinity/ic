@@ -38,6 +38,8 @@ struct StreamHandlerMetrics {
     pub inducted_xnet_messages: IntCounterVec,
     /// Successfully inducted XNet message payload sizes.
     pub inducted_xnet_payload_sizes: Histogram,
+    /// Counts observations of XNet stream blockers.
+    pub observed_xnet_stream_blockers: IntCounter,
     /// Garbage collected XNet messages.
     pub gced_xnet_messages: IntCounter,
     /// Garbage collected XNet reject signals.
@@ -69,6 +71,7 @@ struct StreamHandlerMetrics {
 
 const METRIC_INDUCTED_XNET_MESSAGES: &str = "mr_inducted_xnet_message_count";
 const METRIC_INDUCTED_XNET_PAYLOAD_SIZES: &str = "mr_inducted_xnet_payload_size_bytes";
+const METRIC_OBSERVED_XNET_STREAM_BLOCKERS: &str = "mr_observed_xnet_stream_blockers";
 const METRIC_GCED_XNET_MESSAGES: &str = "mr_gced_xnet_message_count";
 const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count";
 const METRIC_STREAM_FLAGS_CHANGES: &str = "mr_stream_flags_changes_count";
@@ -110,6 +113,10 @@ impl StreamHandlerMetrics {
                 MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as f64,
                 decimal_buckets(1, 6),
             ),
+        );
+        let observed_xnet_stream_blockers = metrics_registry.int_counter(
+            METRIC_OBSERVED_XNET_STREAM_BLOCKERS,
+            "Observed XNet stream blockers",
         );
         let gced_xnet_messages = metrics_registry.int_counter(
             METRIC_GCED_XNET_MESSAGES,
@@ -165,6 +172,7 @@ impl StreamHandlerMetrics {
         Self {
             inducted_xnet_messages,
             inducted_xnet_payload_sizes,
+            observed_xnet_stream_blockers,
             gced_xnet_messages,
             gced_xnet_reject_signals,
             stream_flags_changes,
@@ -696,7 +704,8 @@ impl StreamHandlerImpl {
                     stream_index
                 );
                 let Ok(msg) = msg.try_into() else {
-                    // Got a blocker, silently drop it.
+                    // Got a blocker, record observations then drop.
+                    self.metrics.observed_xnet_stream_blockers.inc();
                     stream.push_accept_signal();
                     continue;
                 };

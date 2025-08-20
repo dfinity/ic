@@ -2486,6 +2486,12 @@ fn induct_stream_slices_partial_success() {
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
             ]);
             assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
+            assert_eq!(
+                1,
+                metrics
+                    .fetch_int_counter(METRIC_OBSERVED_XNET_STREAM_BLOCKERS)
+                    .unwrap()
+            );
             // Three critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 induct_response_failed: 1,
@@ -4525,7 +4531,7 @@ fn clone_messages_in_slice(
 }
 
 /// Pushes the messages yielded by `iter` into the `state`.
-fn push_inputs<'a>(state: &mut ReplicatedState, iter: impl IntoIterator<Item = RequestOrResponse>) {
+fn push_inputs(state: &mut ReplicatedState, iter: impl IntoIterator<Item = RequestOrResponse>) {
     for msg in iter {
         state.push_input(msg, &mut (i64::MAX / 2)).unwrap();
     }
