@@ -11,6 +11,7 @@ use crate::icrc21::requests::ConsentMessageMetadata;
 use candid::Decode;
 use candid::{Nat, Principal};
 use serde_bytes::ByteBuf;
+use std::fmt::{self, Display};
 use strum::{self, IntoEnumIterator};
 use strum_macros::{Display, EnumIter, EnumString};
 
@@ -35,17 +36,19 @@ pub enum AccountOrId {
 }
 
 impl AccountOrId {
-    pub fn to_string(&self) -> String {
-        match self {
-            AccountOrId::Account(account) => account.to_string(),
-            AccountOrId::AccountIdAddress(str) => str.clone().unwrap_or_default(),
-        }
-    }
-
     pub fn is_anonymous(&self) -> bool {
         match self {
             AccountOrId::Account(account) => account.owner == Principal::anonymous(),
             AccountOrId::AccountIdAddress(addr) => addr.is_none(),
+        }
+    }
+}
+
+impl Display for AccountOrId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AccountOrId::Account(account) => write!(f, "{}", account.to_string()),
+            AccountOrId::AccountIdAddress(str) => write!(f, "{}", str.clone().unwrap_or_default()),
         }
     }
 }
