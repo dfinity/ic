@@ -13125,7 +13125,6 @@ dependencies = [
  "hex-literal",
  "hmac",
  "k256 0.13.4",
- "lazy_static",
  "num-bigint 0.4.6",
  "pem 1.1.1",
  "rand 0.8.5",
