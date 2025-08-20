@@ -57,13 +57,6 @@ pub fn list_registered_extensions_from_cache() -> Vec<(CanisterId, ExtensionSpec
     })
 }
 
-// TODO - how should we handle this?  The extension spec has to come from somewhere.
-// Eventually it will not come from our local machine.  It needs to be serializable.  And so do
-// the validation functions.
-// But currently, we are creating specs for operations and extensions that use types and
-// function pointers.  How is that going to be something that we can transfer into SNS Governance?
-// If we cache them with a reference to a hash, we can work well until such time as that hash
-// goes away.  Using the data tree of references seems like a less than ideal solution.
 impl Storable for ExtensionSpec {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(crate::pb::v1::ExtensionSpec::from(self.clone()).encode_to_vec())
