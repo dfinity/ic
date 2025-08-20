@@ -2352,7 +2352,7 @@ impl CanisterManager {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-            exported_globals: snapshot.exported_globals().clone(),
+            globals: snapshot.exported_globals().clone(),
             wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
                 * WASM_PAGE_SIZE_IN_BYTES as u64,
             stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64

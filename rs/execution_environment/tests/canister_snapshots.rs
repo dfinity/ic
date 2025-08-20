@@ -38,11 +38,11 @@ fn assert_snapshot_eq(
     metadata_1.canister_version = metadata_2.canister_version;
     // Also ignore the last two globals that are appended by the IC.
     metadata_1
-        .exported_globals
-        .truncate(metadata_1.exported_globals.len().checked_sub(2).unwrap());
+        .globals
+        .truncate(metadata_1.globals.len().checked_sub(2).unwrap());
     metadata_2
-        .exported_globals
-        .truncate(metadata_2.exported_globals.len().checked_sub(2).unwrap());
+        .globals
+        .truncate(metadata_2.globals.len().checked_sub(2).unwrap());
     assert_eq!(metadata_1, metadata_2);
 
     // Download and compare snapshot (binary) data.
@@ -86,7 +86,7 @@ fn download_upload_snapshot(
         target_canister_id,
         None, /* replace_snapshot */
         module_download.len() as u64,
-        metadata.exported_globals.clone(),
+        metadata.globals.clone(),
         heap_download.len() as u64,
         stable_memory_download.len() as u64,
         metadata.certified_data.clone(),
@@ -424,7 +424,7 @@ fn upload_snapshot_with_checkpoint() {
         canister_id,
         None,
         module_dl.len() as u64,
-        md.exported_globals.clone(),
+        md.globals.clone(),
         heap_dl.len() as u64,
         stable_memory_dl.len() as u64,
         md.certified_data.clone(),
@@ -516,7 +516,7 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
         canister_id,
         None,
         module_dl.len() as u64,
-        md.exported_globals.clone(),
+        md.globals.clone(),
         heap_dl.len() as u64,
         stable_memory_dl.len() as u64,
         md.certified_data.clone(),
@@ -557,7 +557,7 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
         &env,
         || {
             let mut args = original_args.clone();
-            args.exported_globals = vec![Global::I32(1), Global::I64(1999996623), Global::I32(2)];
+            args.globals = vec![Global::I32(1), Global::I64(1999996623), Global::I32(2)];
             args
         },
         "Wasm exported globals of canister module and snapshot metadata do not match",
