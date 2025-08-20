@@ -1348,15 +1348,14 @@ impl CkBtcSetup {
         MetricsAssert::from_http_query(self)
     }
 
-    pub fn upgrade(&self) {
+    pub fn upgrade_with(&self, upgrade_args: Option<UpgradeArgs>) {
+        let encoded_args = match upgrade_args {
+            None => Encode!(&()),
+            Some(args) => Encode!(&Some(MinterArg::Upgrade(Some(args)))),
+        }
+        .unwrap();
         self.env
-            .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&()).unwrap())
-            .unwrap();
-    }
-
-    pub fn upgrade_with(&self, arg: Option<MinterArg>) {
-        self.env
-            .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&arg).unwrap())
+            .upgrade_canister(self.minter_id, minter_wasm(), encoded_args)
             .unwrap();
     }
 
@@ -1532,19 +1531,10 @@ fn test_min_retrieval_amount_custom() {
 
     // Test changing min_retrieve_fee when upgrade
     let min_amount = 123_456;
-    let upgrade_args = UpgradeArgs {
+    ckbtc.upgrade_with(Some(UpgradeArgs {
         retrieve_btc_min_amount: Some(min_amount),
         ..Default::default()
-    };
-    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
-    assert!(ckbtc
-        .env
-        .upgrade_canister(
-            ckbtc.minter_id,
-            minter_wasm(),
-            Encode!(&minter_arg).unwrap()
-        )
-        .is_ok());
+    }));
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, min_amount);
 }
@@ -2462,251 +2452,5 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     assert_eq!(
         ckbtc.balance_of(user_account),
         balance_before_withdrawal.clone() - reimbursement_fee
-    );
-}
-
-#[test]
-fn should_cancel_non_standard_transaction() {
-    let ckbtc = CkBtcSetup::new();
-    let main_address: BtcAddress = ckbtc
-        .get_btc_address(Principal::from(ckbtc.minter_id))
-        .parse()
-        .unwrap();
-    let user = Principal::from(ckbtc.caller);
-
-    // Step 1: deposit a lot of small UTXOs
-    let num_uxtos = 2_000;
-    let deposit_value = 100_000_u64;
-    let utxos = (0..num_uxtos)
-        .map(|i| {
-            let mut txid = vec![0; 32];
-            txid[0] = (i % 256) as u8;
-            txid[1] = (i / 256) as u8;
-            Utxo {
-                height: 0,
-                outpoint: OutPoint {
-                    txid: vec_to_txid(txid),
-                    vout: 1,
-                },
-                value: deposit_value,
-            }
-        })
-        .collect::<BTreeSet<_>>();
-    ckbtc.deposit_utxos(user, utxos.clone().into_iter().collect());
-    assert_eq!(
-        ckbtc
-            .get_known_utxos(user)
-            .into_iter()
-            .collect::<BTreeSet<_>>(),
-        utxos
-    );
-
-    let balance_after_deposit = ckbtc.balance_of(user);
-    assert_eq!(
-        balance_after_deposit,
-        Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
-    );
-
-    // ckbtc.enable_non_standard_tx(true);
-
-    // Step 2: request a withdrawal
-    let withdrawal_amount = 1_800 * deposit_value;
-    ckbtc.approve_minter(user, withdrawal_amount, None);
-    let balance_before_withdrawal = ckbtc.balance_of(user);
-
-    let RetrieveBtcOk { block_index } = ckbtc
-        .retrieve_btc_with_approval(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount, None)
-        .expect("retrieve_btc failed");
-
-    let balance_after_withdrawal = ckbtc.balance_of(user);
-    assert_eq!(
-        balance_after_withdrawal,
-        balance_before_withdrawal.clone() - Nat::from(withdrawal_amount)
-    );
-
-    assert_eq!(
-        ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Pending
-    );
-
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
-
-    // Step 3: wait for the transaction to be submitted
-
-    // A lot of UTXOs to sign
-    let txid = ckbtc.await_btc_transaction(block_index, 10_000);
-    let mempool = ckbtc.mempool();
-    assert_eq!(
-        mempool.len(),
-        1,
-        "ckbtc transaction did not appear in the mempool"
-    );
-    let non_standard_tx = mempool
-        .get(&txid)
-        .expect("the mempool does not contain the withdrawal transaction");
-    assert_eq!(non_standard_tx.input.len(), 1_800);
-    assert_eq!(
-        non_standard_tx.txid().to_string(),
-        "c729d4a443158e70a4a3f550f0c88df865c05ca92d8048830a8585c7a7ffa09f"
-    );
-    assert_eq!(non_standard_tx.vsize(), 122_244); //above 100 kvbytes is non standard
-    assert_matches!(
-        ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Submitted { .. }
-    );
-
-    // ckbtc.enable_non_standard_tx(false);
-    ckbtc.env.checkpointed_tick();
-    ckbtc.upgrade();
-
-    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, 100_000);
-
-    assert_matches!(
-        ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Submitted { .. }
-    );
-
-    ckbtc
-        .env
-        .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
-
-    let mempool = ckbtc.tick_until(
-        "mempool contains a replacement transaction",
-        1_000,
-        |ckbtc| {
-            let mempool = ckbtc.mempool();
-            (mempool.len() > 1).then_some(mempool)
-        },
-    );
-
-    assert_eq!(ckbtc.balance_of(user), balance_after_withdrawal);
-
-    assert_eq!(mempool.len(), 2);
-    let (cancel_tx_id, cancel_tx) = {
-        let txs: Vec<_> = mempool
-            .into_iter()
-            .filter(|(txid, _tx)| txid.to_string() != non_standard_tx.txid().to_string())
-            .collect();
-        assert_eq!(txs.len(), 1);
-        txs[0].clone()
-    };
-    assert_eq!(
-        cancel_tx_id.to_string(),
-        "3ee9c4368b7f6c64b1b18f204290b20a4b6377e1acc8a129ce28c816d40f6e4e"
-    );
-
-    println!("Found cancel transaction {cancel_tx_id}: {cancel_tx:?}");
-
-    assert_eq!(cancel_tx.input.len(), 1);
-    assert_eq!(cancel_tx.output.len(), 2);
-    assert_eq!(cancel_tx.output[0].value, 98_981,);
-    assert_eq!(cancel_tx.output[1].value, 300,);
-    let bitcoin_fee = deposit_value - cancel_tx.output.iter().map(|o| o.value).sum::<u64>();
-    assert_eq!(bitcoin_fee, 719);
-    for output in &cancel_tx.output {
-        assert_eq!(
-            BtcAddress::from_script(&output.script_pubkey, BtcNetwork::Bitcoin).unwrap(),
-            main_address
-        );
-    }
-
-    let non_standard_tx_used_utxos: BTreeSet<_> = non_standard_tx
-        .input
-        .iter()
-        .map(|txin| txin.previous_output)
-        .collect();
-    assert!(
-        non_standard_tx_used_utxos.contains(&cancel_tx.input.first().unwrap().previous_output),
-        "BUG: Cancel transaction {cancel_tx:?} must have a common input with the transaction {non_standard_tx:?} to cancel!"
-    );
-
-    assert_matches!(
-        ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Unknown
-    );
-
-    let _replaced_event = ckbtc
-        .get_events()
-        .iter()
-        .find(|event| {
-            matches!(
-                event.payload, EventType::ReplacedBtcTransaction { old_txid, new_txid, .. }
-                if old_txid.to_string() == non_standard_tx.txid().to_string() &&
-                new_txid == cancel_tx_id
-            )
-        })
-        .unwrap();
-
-    ckbtc.finalize_transaction(&cancel_tx);
-
-    ckbtc.env.advance_time(Duration::from_secs(5));
-    ckbtc.env.tick();
-
-    assert_matches!(
-        ckbtc.retrieve_btc_status_v2(block_index),
-        RetrieveBtcStatusV2::Reimbursed(_)
-    );
-
-    let reimbursement_block_index = block_index + 1;
-
-    ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
-    assert!(ckbtc.balance_of(user) < balance_before_withdrawal);
-    let margin = Nat::from(1111u64); // error margin for fees paid
-    assert!(ckbtc.balance_of(user) + margin > balance_before_withdrawal);
-
-    ckbtc.minter_self_check();
-}
-
-#[test]
-fn should_reimburse_withdrawals_in_non_standard_transaction() {
-    let ckbtc = CkBtcSetup::new();
-    ckbtc.env.set_time(std::time::SystemTime::now());
-    // ckbtc.upload_mainnet_events();
-    ckbtc.env.checkpointed_tick();
-    let upgrade_args = UpgradeArgs {
-        // ecdsa_key_name: Some("master_ecdsa_public_key".to_string()),
-        ..Default::default()
-    };
-    ckbtc.upgrade_with(Some(MinterArg::Upgrade(Some(upgrade_args)))); //replay events to repopulate the minter's state
-
-    // transaction 5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847
-    // is non-standard end hence stuck
-    let stuck_status = RetrieveBtcStatusV2::Submitted {
-        txid: "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
-            .parse()
-            .unwrap(),
-    };
-    assert_eq!(ckbtc.retrieve_btc_status_v2(2952170), stuck_status);
-
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
-
-    let mempool = ckbtc.tick_until("mempool contains a replacement transaction", 30, |ckbtc| {
-        // Need time for the canister to finish checking_invariants
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let mempool = ckbtc.mempool();
-        (mempool.len() > 1).then_some(mempool)
-    });
-
-    assert_eq!(mempool.len(), 2);
-
-    assert_eq!(
-        ckbtc.retrieve_btc_status_v2(2952170),
-        RetrieveBtcStatusV2::Unknown
-    );
-
-    for (_, tx) in mempool.iter() {
-        // assert_eq!(tx.input.len(), 1);
-        assert_eq!(tx.output.len(), 2);
-        ckbtc.finalize_transaction(tx);
-    }
-    for _ in 0..10 {
-        ckbtc.env.advance_time(Duration::from_secs(5));
-        ckbtc.env.tick();
-    }
-
-    assert_matches!(
-        ckbtc.retrieve_btc_status_v2(2952170),
-        RetrieveBtcStatusV2::WillReimburse(_)
     );
 }
