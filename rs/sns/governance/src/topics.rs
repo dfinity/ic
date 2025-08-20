@@ -1,7 +1,10 @@
 use crate::extensions;
-use crate::extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec};
+use crate::extensions::{
+    get_extension_operation_spec_from_cache, ExtensionOperationSpec, ExtensionSpec,
+};
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
+use crate::storage::list_registered_extensions_from_cache;
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_base_types::CanisterId;
@@ -196,6 +199,26 @@ impl Governance {
             })
             .into_group_map();
 
+        let registered_extensions = list_registered_extensions_from_cache();
+        let all_registered_operations: BTreeMap<Topic, Vec<RegisteredExtensionOperationSpec>> =
+            registered_extensions
+                .into_iter()
+                .flat_map(|(canister_id, extension_spec)| {
+                    let operations = extension_spec.all_operations();
+                    operations.into_iter().map(move |(_name, operation)| {
+                        let topic = Topic::try_from(operation.topic).expect("Topic is unknown");
+                        let registered_spec = RegisteredExtensionOperationSpec {
+                            canister_id,
+                            spec: operation,
+                        };
+
+                        (topic, registered_spec)
+                    })
+                })
+                .into_group_map()
+                .into_iter()
+                .collect();
+
         let topics = topic_descriptions()
             .map(|topic| TopicInfo {
                 topic: topic.topic,
@@ -214,7 +237,10 @@ impl Governance {
                         .unwrap_or_default()
                         .clone(),
                 },
-                extension_operations: vec![],
+                extension_operations: all_registered_operations
+                    .get(&topic.topic)
+                    .cloned()
+                    .unwrap_or_default(),
                 is_critical: topic.is_critical,
             })
             .to_vec();

@@ -1,6 +1,6 @@
 use crate::extensions::ExtensionSpec;
 use candid::Principal;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{BTreeMap, DefaultMemoryImpl, Storable};
@@ -42,6 +42,19 @@ pub fn clear_registered_extension_cache(canister_id: CanisterId) {
 
 pub fn get_registered_extension_from_cache(canister_id: CanisterId) -> Option<ExtensionSpec> {
     REGISTERED_EXTENSIONS.with_borrow(|map| map.get(&canister_id.get().0))
+}
+
+pub fn list_registered_extensions_from_cache() -> Vec<(CanisterId, ExtensionSpec)> {
+    REGISTERED_EXTENSIONS.with_borrow(|map| {
+        map.iter()
+            .map(|(principal, spec)| {
+                (
+                    CanisterId::unchecked_from_principal(PrincipalId::from(principal)),
+                    spec,
+                )
+            })
+            .collect()
+    })
 }
 
 // TODO - how should we handle this?  The extension spec has to come from somewhere.

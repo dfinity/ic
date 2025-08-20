@@ -14,6 +14,7 @@ use crate::extensions::ExtensionSpec;
 use crate::extensions::ExtensionType;
 use crate::extensions::ExtensionVersion;
 use crate::storage::cache_registered_extension;
+use crate::topics::RegisteredExtensionOperationSpec;
 use crate::{
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
@@ -4716,19 +4717,24 @@ fn test_list_topics() {
         Box::new(FakeCmc::new()),
     );
 
-    // Call the API under test
-    let ListTopicsResponse {
-        topics: topic_infos,
-        uncategorized_functions,
-    } = governance.list_topics();
-
     let registered_spec = ExtensionSpec {
         name: "KongSwap".to_string(),
         version: ExtensionVersion(1),
         topic: Topic::TreasuryAssetManagement.into(),
         extension_type: ExtensionType::TreasuryManager,
     };
-    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec);
+
+    let deposit_operation_spec = registered_spec.get_operation("deposit").unwrap();
+    let withdraw_operation_spec = registered_spec.get_operation("withdraw").unwrap();
+
+    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec.clone());
+    cache_registered_extension(CanisterId::from_u64(100_002), registered_spec);
+
+    // Call the API under test
+    let ListTopicsResponse {
+        topics: topic_infos,
+        uncategorized_functions,
+    } = governance.list_topics();
 
     // Assert the results are as expected
     assert_eq!(uncategorized_functions, vec![function_3]);
@@ -4937,7 +4943,12 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
-            extension_operations: vec![],
+            extension_operations: vec![
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  deposit_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  withdraw_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  deposit_operation_spec },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  withdraw_operation_spec },
+            ],
             is_critical: true,
         },
         TopicInfo {
