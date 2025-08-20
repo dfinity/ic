@@ -12,5 +12,6 @@ candid = { workspace =true }
 ic-cdk = { workspace =true }
 ic-cdk-timers = { workspace =true }
 ic-stable-structures = { workspace =true }
+serde_cbor = { workspace = true }
 serde = { workspace =true }
 serde_bytes = { workspace =true }

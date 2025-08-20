@@ -3,6 +3,14 @@
 //!
 
 use candid::Principal;
+use ic_stable_structures::{storable::Bound, Storable};
+use serde::{Deserialize, Serialize};
+use serde_cbor::{from_slice, to_vec};
+use std::borrow::Cow;
+
+mod canister_state;
+mod external_interfaces;
+mod migration_canister;
 
 enum ValidatonError {
     MigrationsDisabled,
@@ -19,6 +27,7 @@ enum ValidatonError {
     TargetHasSnapshots,
 }
 
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 struct Request {
     source: Principal,
     source_subnet: Principal,
@@ -29,6 +38,7 @@ struct Request {
     sender: Principal,
 }
 
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 enum RequestState {
     /// Request was validated successfully.
     /// * Called registry `get_subnet_for_canister` to determine:
@@ -41,8 +51,6 @@ enum RequestState {
     Accepted { request: Request },
 
     /// Called mgmt `update_settings` to make us the only controller.
-    ///
-    /// Record the original controllers of source.
     ///
     /// Certain checks are not informative before this state because the original controller
     /// could still interfere until this state.
@@ -59,7 +67,7 @@ enum RequestState {
     /// Record the canister version and history length of source and the current time.
     StoppedAndReady {
         request: Request,
-        stopped_since: Time,
+        stopped_since: u64,
         canister_version: u64,
         canister_history_total_num: u64,
     },
@@ -67,7 +75,7 @@ enum RequestState {
     /// Called mgmt `rename_canister`. Subsequent mgmt calls have to use the explicit subnet ID, not `aaaaa-aa`.
     RenamedTarget {
         request: Request,
-        stopped_since: Time,
+        stopped_since: u64,
     },
 
     /// Called registry `migrate_canisters`.
@@ -75,7 +83,7 @@ enum RequestState {
     /// Record the new registry version.
     UpdatedRoutingTable {
         request: Request,
-        stopped_since: Time,
+        stopped_since: u64,
         registry_version: u64,
     },
 
@@ -83,13 +91,13 @@ enum RequestState {
     /// Called `subnet_info` on both subnets to determine their `registry_version`.
     RoutingTableChangeAccepted {
         request: Request,
-        stopped_since: Time,
+        stopped_since: u64,
     },
 
     /// Called mgmt `delete_canister`.
     SourceDeleted {
         request: Request,
-        stopped_since: Time,
+        stopped_since: u64,
     },
 
     /// Five minutes have passed since `stopped_since` such that any messages to the
@@ -103,4 +111,28 @@ enum RequestState {
     /// We stay in this state until the controllers have been restored and then
     /// transition to a `Failed` state in the `HISTORY`.
     Failed { request: Request, reason: String },
+}
+
+impl Storable for Request {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(to_vec(&self).expect("Request serialization failed"))
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Request deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for RequestState {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(to_vec(&self).expect("RequestState serialization failed"))
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("RequestState deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }

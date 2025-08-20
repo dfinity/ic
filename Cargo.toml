@@ -217,6 +217,7 @@ members = [
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
+    "rs/migration_canister",
     "rs/monitoring/adapter_metrics/client",
     "rs/monitoring/adapter_metrics/server",
     "rs/monitoring/adapter_metrics/service",
