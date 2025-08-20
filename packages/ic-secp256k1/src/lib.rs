@@ -5,8 +5,6 @@
 
 //! A crate with handling of ECDSA and Schnorr keys over the secp256k1 curve
 
-use std::sync::LazyLock;
-
 use hex_literal::hex;
 use k256::{
     elliptic_curve::{
@@ -16,6 +14,7 @@ use k256::{
     AffinePoint, Scalar, Secp256k1,
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
 pub use candid::Principal as CanisterId;

@@ -13143,7 +13143,6 @@ dependencies = [
  "hex",
  "hex-literal",
  "hmac",
- "lazy_static",
  "num-bigint 0.4.6",
  "p256",
  "pem 1.1.1",
