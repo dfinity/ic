@@ -4871,7 +4871,7 @@ fn test_list_topics() {
         TopicInfo {
             topic: Topic::Governance,
             name: "Governance".to_string(),
-            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NervousSystemFunctions {
                 native_functions: vec![
                     NervousSystemFunction {
