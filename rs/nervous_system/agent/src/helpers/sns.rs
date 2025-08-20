@@ -17,7 +17,7 @@ use ic_sns_swap::{
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SnsProposalError {
     #[error("Error submitting proposal: {0}")]
     ProposalSubmissionError(ProposalSubmissionError),

@@ -791,7 +791,7 @@ async fn list_extensions(
 async fn canister_module_hash(
     env: &dyn Environment,
     canister_id: CanisterId,
-) -> Result<Vec<u8>, GovernanceError> {
+) -> Result<Option<Vec<u8>>, GovernanceError> {
     let canister_info_arg =
         Encode!(&CanisterInfoRequest::new(canister_id, Some(1),)).map_err(|err| {
             GovernanceError::new_with_message(
@@ -818,7 +818,7 @@ async fn canister_module_hash(
             })
         })?;
 
-    Ok(response.module_hash().unwrap_or_default())
+    Ok(response.module_hash())
 }
 
 /// Returns the ICRC-1 subaccounts for the SNS treasury and ICP treasury.
@@ -937,7 +937,7 @@ pub async fn validate_register_extension(
         // Use the store canister to install the extension itself.
         let extension_canister_id = store_canister_id;
 
-        let spec = validate_extension_wasm(&wasm_module_hash)
+        let spec: ExtensionSpec = validate_extension_wasm(&wasm_module_hash)
             .map_err(|err| format!("Invalid extension wasm: {}", err))?;
 
         let wasm = Wasm::Chunked {
@@ -965,6 +965,19 @@ pub async fn validate_register_extension(
         )
     })?;
 
+    // Ensure that the extension canister does not have any code installed yet.
+    if let Some(module_hash) = canister_module_hash(&*governance.env, extension_canister_id).await?
+    {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Extension canister {} already has code installed (module hash {}).",
+                extension_canister_id,
+                hex::encode(module_hash),
+            ),
+        ));
+    };
+
     Ok(ValidatedRegisterExtension {
         wasm,
         extension_canister_id,
@@ -990,7 +1003,15 @@ async fn get_extension_spec_and_update_cache(
         ));
     }
 
-    let wasm_module_hash = canister_module_hash(env, extension_canister_id).await?;
+    let Some(wasm_module_hash) = canister_module_hash(env, extension_canister_id).await? else {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Extension canister {} does not have a Wasm module installed.",
+                extension_canister_id
+            ),
+        ));
+    };
 
     let result = validate_extension_wasm(&wasm_module_hash).map_err(|err| {
         GovernanceError::new_with_message(

@@ -26,7 +26,7 @@ pub struct SubmittedProposal {
     pub proposal_id: ProposalId,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ProposalSubmissionError {
     #[error("SNS Governance returned an error: {0:?}")]
     GovernanceError(GovernanceError),
