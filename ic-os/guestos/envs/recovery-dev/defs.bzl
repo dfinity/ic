@@ -18,9 +18,6 @@ def generate_dummy_recovery_archive(name):
     """
     native.genrule(
         name = name,
-        srcs = [
-            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash",
-        ],
         outs = [
             "recovery.tar.zst",
             "recovery.tar.zst.sha256",
