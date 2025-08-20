@@ -23,7 +23,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
+        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, StreamMessage,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
     },
     time::{CoarseTime, UNIX_EPOCH},
@@ -1013,7 +1013,7 @@ fn requests_into_queue_round_robin(
     requests: Vec<Request>,
     byte_limit: Option<u64>,
     time: Time,
-) -> StreamIndexedQueue<RequestOrResponse> {
+) -> StreamIndexedQueue<StreamMessage> {
     let mut queue = StreamIndexedQueue::with_begin(start);
 
     let mut request_map: BTreeMap<CanisterId, BTreeMap<CanisterId, VecDeque<Request>>> =
@@ -1046,7 +1046,7 @@ fn requests_into_queue_round_robin(
                         break;
                     }
                 }
-                let req: RequestOrResponse = request.into();
+                let req: StreamMessage = request.into();
                 bytes_routed += req.count_bytes() as u64;
                 queue.push(req);
                 requests.push_back((dst, req_queue));

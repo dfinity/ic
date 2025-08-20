@@ -18,7 +18,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CryptoHash, CryptoHashOf,
     },
-    messages::{Request, RequestOrResponse, Response},
+    messages::{Request, Response, StreamMessage},
     state_manager::{StateManagerError, StateManagerResult},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
@@ -308,35 +308,30 @@ impl StateReader for FakeStateManager {
 }
 
 /// Local helper to enable serialization and deserialization of
-/// [`RequestOrResponse`] for testing.
+/// [`StreamMessage`] for testing.
 #[derive(Deserialize, Serialize)]
-enum SerializableRequestOrResponse {
+enum SerializableStreamMessage {
     Request(Request),
     Response(Response),
 }
 
-impl From<&RequestOrResponse> for SerializableRequestOrResponse {
-    fn from(msg: &RequestOrResponse) -> Self {
+impl From<&StreamMessage> for SerializableStreamMessage {
+    fn from(msg: &StreamMessage) -> Self {
         match msg {
-            RequestOrResponse::Request(req) => {
-                SerializableRequestOrResponse::Request((**req).clone())
-            }
-            RequestOrResponse::Response(rep) => {
-                SerializableRequestOrResponse::Response((**rep).clone())
+            StreamMessage::Request(req) => SerializableStreamMessage::Request((**req).clone()),
+            StreamMessage::Response(rep) => SerializableStreamMessage::Response((**rep).clone()),
+            StreamMessage::StreamBlocker(_) => {
+                todo!();
             }
         }
     }
 }
 
-impl From<SerializableRequestOrResponse> for RequestOrResponse {
-    fn from(msg: SerializableRequestOrResponse) -> RequestOrResponse {
+impl From<SerializableStreamMessage> for StreamMessage {
+    fn from(msg: SerializableStreamMessage) -> StreamMessage {
         match msg {
-            SerializableRequestOrResponse::Request(req) => {
-                RequestOrResponse::Request(Arc::new(req))
-            }
-            SerializableRequestOrResponse::Response(rep) => {
-                RequestOrResponse::Response(Arc::new(rep))
-            }
+            SerializableStreamMessage::Request(req) => StreamMessage::Request(Arc::new(req)),
+            SerializableStreamMessage::Response(rep) => StreamMessage::Response(Arc::new(rep)),
         }
     }
 }
@@ -471,11 +466,11 @@ impl From<SerializableStreamFlags> for StreamFlags {
 #[derive(Deserialize, Serialize)]
 struct SerializableStreamIndexedQueue {
     begin: StreamIndex,
-    queue: VecDeque<SerializableRequestOrResponse>,
+    queue: VecDeque<SerializableStreamMessage>,
 }
 
-impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQueue {
-    fn from(q: &StreamIndexedQueue<RequestOrResponse>) -> Self {
+impl From<&StreamIndexedQueue<StreamMessage>> for SerializableStreamIndexedQueue {
+    fn from(q: &StreamIndexedQueue<StreamMessage>) -> Self {
         SerializableStreamIndexedQueue {
             begin: q.begin(),
             queue: q.iter().map(|(_, msg)| msg.into()).collect(),
@@ -483,8 +478,8 @@ impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQ
     }
 }
 
-impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrResponse> {
-    fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<RequestOrResponse> {
+impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<StreamMessage> {
+    fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<StreamMessage> {
         let mut queue = StreamIndexedQueue::with_begin(q.begin);
         q.queue
             .into_iter()

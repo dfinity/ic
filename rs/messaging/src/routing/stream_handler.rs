@@ -20,7 +20,7 @@ use ic_replicated_state::replicated_state::{
 };
 use ic_replicated_state::{ReplicatedState, StateError};
 use ic_types::messages::{
-    Payload, RejectContext, Request, RequestOrResponse, Response,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StreamMessage,
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
@@ -383,7 +383,7 @@ impl StreamHandlerImpl {
             debug_assert!(loopback_stream
                 .messages()
                 .iter()
-                .all(|(_, msg)| matches!(msg, RequestOrResponse::Response(_))));
+                .all(|(_, msg)| matches!(msg, StreamMessage::Response(_))));
         }
 
         state
@@ -695,6 +695,12 @@ impl StreamHandlerImpl {
                     stream.signals_end(),
                     stream_index
                 );
+                let Ok(msg) = msg.try_into() else {
+                    // Got a blocker, silently drop it.
+                    stream.push_accept_signal();
+                    continue;
+                };
+
                 lost_cycles += self.induct_message(
                     msg,
                     remote_subnet_id,
@@ -1204,7 +1210,7 @@ fn assert_valid_signals_for_messages(
 /// Ensures that the given slice messages (if non-empty) begin where the reverse
 /// stream's signals end.
 fn assert_valid_slice_messages_for_stream(
-    slice_messages: Option<&StreamIndexedQueue<RequestOrResponse>>,
+    slice_messages: Option<&StreamIndexedQueue<StreamMessage>>,
     stream_signals_end: StreamIndex,
     subnet: SubnetId,
 ) {

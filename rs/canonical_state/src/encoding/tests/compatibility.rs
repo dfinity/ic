@@ -23,7 +23,7 @@ use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     crypto::CryptoHash,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        CallbackId, Payload, RejectContext, Request, RequestMetadata, Response, StreamMessage,
         NO_DEADLINE,
     },
     nominal_cycles::NominalCycles,
@@ -374,7 +374,7 @@ fn canonical_encoding_subnet_metrics() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Request(
+/// StreamMessage::Request(
 ///     Request {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
@@ -428,7 +428,7 @@ fn canonical_encoding_subnet_metrics() {
 #[test]
 fn canonical_encoding_request() {
     for certification_version in all_supported_versions() {
-        let request: RequestOrResponse = Request {
+        let request: StreamMessage = Request {
             receiver: canister_test_id(1),
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
@@ -450,7 +450,7 @@ fn canonical_encoding_request() {
 /// Canonical CBOR encoding (with certification versions 18 and up) of:
 ///
 /// ```no_run
-/// RequestOrResponse::Request(
+/// StreamMessage::Request(
 ///     Request {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
@@ -508,7 +508,7 @@ fn canonical_encoding_request_v18_plus() {
     for certification_version in
         all_supported_versions().filter(|v| v >= &CertificationVersion::V18)
     {
-        let request: RequestOrResponse = Request {
+        let request: StreamMessage = Request {
             receiver: canister_test_id(1),
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
@@ -530,7 +530,7 @@ fn canonical_encoding_request_v18_plus() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Request(
+/// StreamMessage::Request(
 ///     Request {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
@@ -583,7 +583,7 @@ fn canonical_encoding_request_v18_plus() {
 #[test]
 fn canonical_encoding_request_with_u128_cycles() {
     for certification_version in all_supported_versions() {
-        let request: RequestOrResponse = Request {
+        let request: StreamMessage = Request {
             receiver: canister_test_id(1),
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
@@ -605,7 +605,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 /// Canonical CBOR encoding (with certification versions 18 and up) of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
@@ -651,7 +651,7 @@ fn canonical_encoding_response_v18_plus() {
     for certification_version in
         all_supported_versions().filter(|v| v >= &CertificationVersion::V18)
     {
-        let response: RequestOrResponse = Response {
+        let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
@@ -671,7 +671,7 @@ fn canonical_encoding_response_v18_plus() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
@@ -713,7 +713,7 @@ fn canonical_encoding_response_v18_plus() {
 #[test]
 fn canonical_encoding_response() {
     for certification_version in all_supported_versions() {
-        let response: RequestOrResponse = Response {
+        let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
@@ -734,7 +734,7 @@ fn canonical_encoding_response() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
@@ -778,7 +778,7 @@ fn canonical_encoding_response() {
 #[test]
 fn canonical_encoding_response_with_u128_cycles() {
     for certification_version in all_supported_versions() {
-        let response: RequestOrResponse = Response {
+        let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
@@ -798,7 +798,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(6),
 ///         respondent: canister_test_id(5),
@@ -847,7 +847,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 #[test]
 fn canonical_encoding_reject_response() {
     for certification_version in all_supported_versions() {
-        let reject_response: RequestOrResponse = Response {
+        let reject_response: StreamMessage = Response {
             originator: canister_test_id(6),
             respondent: canister_test_id(5),
             originator_reply_callback: CallbackId::from(4),
@@ -983,7 +983,7 @@ fn invalid_message_extra_field() {
         ))
         .unwrap();
 
-        let _: RequestOrResponse = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
+        let _: StreamMessage = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
     }
 }
 
@@ -1002,7 +1002,7 @@ fn invalid_message_empty() {
         )
         .unwrap();
 
-        let _: RequestOrResponse = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
+        let _: StreamMessage = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
     }
 }
 
@@ -1462,7 +1462,7 @@ fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
     )
 }
 
-fn request_message(certification_version: CertificationVersion) -> RequestOrResponse {
+fn request_message(certification_version: CertificationVersion) -> StreamMessage {
     request(certification_version).into()
 }
 

@@ -35,14 +35,14 @@ pub struct RequestOrResponseV17 {
     pub response: Option<ResponseV17>,
 }
 
-impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponseV17 {
+impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for RequestOrResponseV17 {
     fn from(
         (message, certification_version): (
-            &ic_types::messages::RequestOrResponse,
+            &ic_types::messages::StreamMessage,
             CertificationVersion,
         ),
     ) -> Self {
-        use ic_types::messages::RequestOrResponse::*;
+        use ic_types::messages::StreamMessage::*;
         match message {
             Request(request) => Self {
                 request: Some((request.as_ref(), certification_version).into()),
@@ -52,11 +52,14 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
                 request: None,
                 response: Some((response.as_ref(), certification_version).into()),
             },
+            StreamBlocker(_) => {
+                todo!();
+            }
         }
     }
 }
 
-impl TryFrom<RequestOrResponseV17> for ic_types::messages::RequestOrResponse {
+impl TryFrom<RequestOrResponseV17> for ic_types::messages::StreamMessage {
     type Error = ProxyDecodeError;
 
     fn try_from(message: RequestOrResponseV17) -> Result<Self, Self::Error> {

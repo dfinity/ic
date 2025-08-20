@@ -439,14 +439,14 @@ fn try_from_deltas_v19(
         .collect())
 }
 
-impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponse {
+impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for RequestOrResponse {
     fn from(
         (message, certification_version): (
-            &ic_types::messages::RequestOrResponse,
+            &ic_types::messages::StreamMessage,
             CertificationVersion,
         ),
     ) -> Self {
-        use ic_types::messages::RequestOrResponse::*;
+        use ic_types::messages::StreamMessage::*;
         match message {
             Request(request) => Self {
                 request: Some((request.as_ref(), certification_version).into()),
@@ -456,11 +456,14 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
                 request: None,
                 response: Some((response.as_ref(), certification_version).into()),
             },
+            StreamBlocker(_) => {
+                todo!();
+            }
         }
     }
 }
 
-impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
+impl TryFrom<RequestOrResponse> for ic_types::messages::StreamMessage {
     type Error = ProxyDecodeError;
 
     fn try_from(message: RequestOrResponse) -> Result<Self, Self::Error> {
