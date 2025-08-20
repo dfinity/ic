@@ -50,6 +50,11 @@ impl AccountOrId {
     }
 }
 
+pub enum GenericMemo {
+    Icrc1Memo(ByteBuf),
+    IntMemo(u64),
+}
+
 pub struct ConsentMessageBuilder {
     function: Icrc21Function,
     display_type: Option<DisplayMessageType>,
@@ -61,7 +66,7 @@ pub struct ConsentMessageBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     ledger_fee: Option<Nat>,
-    memo: Option<ByteBuf>,
+    memo: Option<GenericMemo>,
     expected_allowance: Option<Nat>,
     expires_at: Option<u64>,
     utc_offset_minutes: Option<i16>,
@@ -135,7 +140,7 @@ impl ConsentMessageBuilder {
         self
     }
 
-    pub fn with_memo(mut self, memo: ByteBuf) -> Self {
+    pub fn with_memo(mut self, memo: GenericMemo) -> Self {
         self.memo = Some(memo);
         self
     }
@@ -290,6 +295,7 @@ pub struct GenericTransferArgs {
     pub from: AccountOrId,
     pub receiver: AccountOrId,
     pub amount: Nat,
+    pub memo: Option<GenericMemo>,
 }
 
 fn prepare_message_builder(
@@ -358,6 +364,9 @@ pub fn build_icrc21_consent_info_for_generic_transfer(
                 .with_amount(transfer_args.amount)
                 .with_receiver_account(transfer_args.receiver)
                 .with_from_account(transfer_args.from);
+            if let Some(memo) = transfer_args.memo {
+                display_message_builder = display_message_builder.with_memo(memo);
+            }
             display_message_builder.build()
         }
         _ => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
@@ -409,7 +418,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 .with_from_account(AccountOrId::Account(sender));
 
             if let Some(memo) = memo {
-                display_message_builder = display_message_builder.with_memo(memo.0);
+                display_message_builder =
+                    display_message_builder.with_memo(GenericMemo::Icrc1Memo(memo.0));
             }
             display_message_builder.build()
         }
@@ -438,7 +448,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 .with_spender_account(spender);
 
             if let Some(memo) = memo {
-                display_message_builder = display_message_builder.with_memo(memo.0);
+                display_message_builder =
+                    display_message_builder.with_memo(GenericMemo::Icrc1Memo(memo.0));
             }
             display_message_builder.build()
         }
@@ -471,7 +482,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 .with_spender_account(spender);
 
             if let Some(memo) = memo {
-                display_message_builder = display_message_builder.with_memo(memo.0);
+                display_message_builder =
+                    display_message_builder.with_memo(GenericMemo::Icrc1Memo(memo.0));
             }
             if let Some(expires_at) = expires_at {
                 display_message_builder = display_message_builder.with_expires_at(expires_at);

@@ -1,10 +1,12 @@
-use crate::icrc21::{errors::Icrc21Error, lib::Icrc21Function};
+use crate::icrc21::{
+    errors::Icrc21Error,
+    lib::{GenericMemo, Icrc21Function},
+};
 
 use super::requests::ConsentMessageMetadata;
 use candid::{CandidType, Deserialize, Nat};
 use num_traits::{Pow, ToPrimitive};
 use serde::Serialize;
-use serde_bytes::ByteBuf;
 
 #[derive(CandidType, Deserialize, Eq, PartialEq, Debug, Serialize, Clone)]
 pub enum Value {
@@ -285,20 +287,32 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_memo(&mut self, memo: ByteBuf) {
-        // Check if the memo is a valid UTF-8 string and display it as such if it is.
-        let memo_str = match std::str::from_utf8(memo.as_slice()) {
-            Ok(valid_str) => valid_str.to_string(),
-            Err(_) => hex::encode(memo.as_slice()),
-        };
-        match self {
-            ConsentMessage::GenericDisplayMessage(message) => {
-                message.push_str(&format!("\n\n**Memo:**\n`{}`", memo_str));
+    pub fn add_memo(&mut self, memo: GenericMemo) {
+        match memo {
+            GenericMemo::Icrc1Memo(memo) => {
+                // Check if the memo is a valid UTF-8 string and display it as such if it is.
+                let memo_str = match std::str::from_utf8(memo.as_slice()) {
+                    Ok(valid_str) => valid_str.to_string(),
+                    Err(_) => hex::encode(memo.as_slice()),
+                };
+                match self {
+                    ConsentMessage::GenericDisplayMessage(message) => {
+                        message.push_str(&format!("\n\n**Memo:**\n`{}`", memo_str));
+                    }
+                    ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                        .fields
+                        .push(("Memo".to_string(), Value::Text { content: memo_str })),
+                }
             }
-            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
-                .fields
-                .push(("Memo".to_string(), Value::Text { content: memo_str })),
-        }
+            GenericMemo::IntMemo(memo) => match self {
+                ConsentMessage::GenericDisplayMessage(message) => {
+                    message.push_str(&format!("\n\n**Memo:**\n`{}`", memo));
+                }
+                ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                    .fields
+                    .push(("Memo".to_string(), Value::Memo { value: memo })),
+            },
+        };
     }
 }
 
