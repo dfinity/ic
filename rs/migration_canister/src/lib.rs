@@ -2,7 +2,7 @@
 //!
 //!
 
-use candid::Principal;
+use candid::{CandidType, Principal};
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
@@ -12,15 +12,16 @@ mod canister_state;
 mod external_interfaces;
 mod migration_canister;
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
 enum ValidatonError {
     MigrationsDisabled,
-    MigrationInProgress { canisters: Vec<Principal> },
     RateLimited,
+    MigrationInProgress { canisters: Vec<Principal> },
     CanisterNotFound { canisters: Vec<Principal> },
     SameSubnet,
     SenderNotController,
     NotController,
-    TargetNotEnoughCycles,
+    TargetInsufficientCycles,
     SourceNotStopped,
     SourceNotReady,
     TargetNotStopped,
