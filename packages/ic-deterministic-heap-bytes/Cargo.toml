@@ -3,14 +3,13 @@ authors.workspace = true
 description.workspace = true
 documentation.workspace = true
 edition.workspace = true
-name = "ic-heap-bytes"
+name = "ic-deterministic-heap-bytes"
 version.workspace = true
 
 [lib]
-name = "ic_heap_bytes"
 path = "src/lib.rs"
 
 [dependencies]
-ic-heap-bytes-derive = { path = "../heap_bytes_derive" }
-ic-types = { path = "../../types/types" }
+candid = { workspace = true }
+ic-deterministic-heap-bytes-derive = { path = "../ic-deterministic-heap-bytes-derive" }
 paste = { workspace = true }

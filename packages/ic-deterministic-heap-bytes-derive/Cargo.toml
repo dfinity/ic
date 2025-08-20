@@ -3,11 +3,10 @@ authors.workspace = true
 description.workspace = true
 documentation.workspace = true
 edition.workspace = true
-name = "ic-heap-bytes-derive"
+name = "ic-deterministic-heap-bytes-derive"
 version.workspace = true
 
 [lib]
-name = "ic_heap_bytes_derive"
 path = "src/lib.rs"
 proc-macro = true
 

@@ -1,38 +1,41 @@
 use std::collections::BTreeMap;
 
-use super::HeapBytes;
+use super::DeterministicHeapBytes;
 
 #[test]
 fn empty_total_bytes() {
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {}
-    assert_eq!(S::default().total_bytes(), 0);
-    #[derive(HeapBytes, Default)]
+    assert_eq!(S::default().deterministic_total_bytes(), 0);
+    #[derive(DeterministicHeapBytes, Default)]
     enum E {
         #[default]
         One,
     }
-    assert_eq!(E::default().total_bytes(), 0);
-    assert_eq!(String::new().total_bytes(), size_of::<String>());
-    assert_eq!([()].total_bytes(), 0);
-    assert_eq!(vec![()].total_bytes(), size_of::<Vec<()>>());
+    assert_eq!(E::default().deterministic_total_bytes(), 0);
     assert_eq!(
-        BTreeMap::<(), ()>::new().total_bytes(),
+        String::new().deterministic_total_bytes(),
+        size_of::<String>()
+    );
+    assert_eq!([()].deterministic_total_bytes(), 0);
+    assert_eq!(vec![()].deterministic_total_bytes(), size_of::<Vec<()>>());
+    assert_eq!(
+        BTreeMap::<(), ()>::new().deterministic_total_bytes(),
         size_of::<BTreeMap<(), ()>>()
     );
-    assert_eq!(().total_bytes(), 0);
-    assert_eq!(None::<()>.total_bytes(), 1);
-    assert_eq!(Ok::<(), ()>(()).total_bytes(), 1);
-    assert_eq!(Err::<(), ()>(()).total_bytes(), 1);
+    assert_eq!(().deterministic_total_bytes(), 0);
+    assert_eq!(None::<()>.deterministic_total_bytes(), 1);
+    assert_eq!(Ok::<(), ()>(()).deterministic_total_bytes(), 1);
+    assert_eq!(Err::<(), ()>(()).deterministic_total_bytes(), 1);
 }
 
 macro_rules! assert_struct_basic_field_total_bytes_eq {
     ($field_type:ty, $expected_size:expr) => {{
-        #[derive(HeapBytes, Default)]
+        #[derive(DeterministicHeapBytes, Default)]
         struct S {
             v: $field_type,
         }
-        assert_eq!(S::default().total_bytes(), $expected_size);
+        assert_eq!(S::default().deterministic_total_bytes(), $expected_size);
     }};
 }
 
@@ -58,22 +61,22 @@ fn struct_basic_field_total_bytes() {
 
 #[test]
 fn struct_basic_fields_total_bytes() {
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {
         v1: u8,
         v2: u128,
     }
-    assert_eq!(S::default().total_bytes(), size_of::<S>());
+    assert_eq!(S::default().deterministic_total_bytes(), size_of::<S>());
 }
 
 macro_rules! assert_enum_basic_field_total_bytes_eq {
     ($field_type:ty, $expected_size:expr) => {{
-        #[derive(HeapBytes)]
+        #[derive(DeterministicHeapBytes)]
         enum E {
             One($field_type),
         }
         assert_eq!(
-            E::One(<$field_type>::default()).total_bytes(),
+            E::One(<$field_type>::default()).deterministic_total_bytes(),
             $expected_size
         );
     }};
@@ -101,93 +104,186 @@ fn enum_basic_field_total_bytes() {
 
 #[test]
 fn enum_basic_fields_total_bytes() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     enum E {
         One(u8, u128),
     }
     assert_eq!(
-        E::One(<u8>::default(), <u128>::default()).total_bytes(),
+        E::One(<u8>::default(), <u128>::default()).deterministic_total_bytes(),
         size_of::<E>()
     );
 }
 
 #[test]
 fn enum_repr_total_bytes() {
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[repr(u8)]
     enum U8 {
         #[default]
         One,
     }
-    assert_eq!(U8::default().total_bytes(), size_of::<u8>());
+    assert_eq!(U8::default().deterministic_total_bytes(), size_of::<u8>());
 
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[repr(u64)]
     enum U64 {
         #[default]
         One,
     }
-    assert_eq!(U64::default().total_bytes(), size_of::<u64>());
+    assert_eq!(U64::default().deterministic_total_bytes(), size_of::<u64>());
 }
 
 #[test]
 fn string_total_bytes() {
     let b = size_of::<String>();
-    assert_eq!("".to_string().total_bytes(), b);
-    assert_eq!("123".to_string().total_bytes(), b + 3);
+    assert_eq!("".to_string().deterministic_total_bytes(), b);
+    assert_eq!("123".to_string().deterministic_total_bytes(), b + 3);
 }
 
 #[test]
 fn array_basic_total_bytes() {
-    assert_eq!([42_u8; 42].total_bytes(), size_of::<u8>() * 42);
-    assert_eq!([42_u16; 42].total_bytes(), size_of::<u16>() * 42);
-    assert_eq!([42_u32; 42].total_bytes(), size_of::<u32>() * 42);
-    assert_eq!([42_u64; 42].total_bytes(), size_of::<u64>() * 42);
-    assert_eq!([42_u128; 42].total_bytes(), size_of::<u128>() * 42);
-    assert_eq!([42_usize; 42].total_bytes(), size_of::<usize>() * 42);
-    assert_eq!([42_i8; 42].total_bytes(), size_of::<i8>() * 42);
-    assert_eq!([42_i16; 42].total_bytes(), size_of::<i16>() * 42);
-    assert_eq!([42_i32; 42].total_bytes(), size_of::<i32>() * 42);
-    assert_eq!([42_i64; 42].total_bytes(), size_of::<i64>() * 42);
-    assert_eq!([42_i128; 42].total_bytes(), size_of::<i128>() * 42);
-    assert_eq!([42_isize; 42].total_bytes(), size_of::<isize>() * 42);
-    assert_eq!([42_f32; 42].total_bytes(), size_of::<f32>() * 42);
-    assert_eq!([42_f64; 42].total_bytes(), size_of::<f64>() * 42);
-    assert_eq!([true; 42].total_bytes(), size_of::<bool>() * 42);
-    assert_eq!(['c'; 42].total_bytes(), size_of::<char>() * 42);
+    assert_eq!(
+        [42_u8; 42].deterministic_total_bytes(),
+        size_of::<u8>() * 42
+    );
+    assert_eq!(
+        [42_u16; 42].deterministic_total_bytes(),
+        size_of::<u16>() * 42
+    );
+    assert_eq!(
+        [42_u32; 42].deterministic_total_bytes(),
+        size_of::<u32>() * 42
+    );
+    assert_eq!(
+        [42_u64; 42].deterministic_total_bytes(),
+        size_of::<u64>() * 42
+    );
+    assert_eq!(
+        [42_u128; 42].deterministic_total_bytes(),
+        size_of::<u128>() * 42
+    );
+    assert_eq!(
+        [42_usize; 42].deterministic_total_bytes(),
+        size_of::<usize>() * 42
+    );
+    assert_eq!(
+        [42_i8; 42].deterministic_total_bytes(),
+        size_of::<i8>() * 42
+    );
+    assert_eq!(
+        [42_i16; 42].deterministic_total_bytes(),
+        size_of::<i16>() * 42
+    );
+    assert_eq!(
+        [42_i32; 42].deterministic_total_bytes(),
+        size_of::<i32>() * 42
+    );
+    assert_eq!(
+        [42_i64; 42].deterministic_total_bytes(),
+        size_of::<i64>() * 42
+    );
+    assert_eq!(
+        [42_i128; 42].deterministic_total_bytes(),
+        size_of::<i128>() * 42
+    );
+    assert_eq!(
+        [42_isize; 42].deterministic_total_bytes(),
+        size_of::<isize>() * 42
+    );
+    assert_eq!(
+        [42_f32; 42].deterministic_total_bytes(),
+        size_of::<f32>() * 42
+    );
+    assert_eq!(
+        [42_f64; 42].deterministic_total_bytes(),
+        size_of::<f64>() * 42
+    );
+    assert_eq!(
+        [true; 42].deterministic_total_bytes(),
+        size_of::<bool>() * 42
+    );
+    assert_eq!(
+        ['c'; 42].deterministic_total_bytes(),
+        size_of::<char>() * 42
+    );
 }
 
 #[test]
 fn vec_basic_total_bytes() {
     let b = size_of::<Vec<()>>();
-    assert_eq!(vec![42_u8; 42].total_bytes(), b + size_of::<u8>() * 42);
-    assert_eq!(vec![42_u16; 42].total_bytes(), b + size_of::<u16>() * 42);
-    assert_eq!(vec![42_u32; 42].total_bytes(), b + size_of::<u32>() * 42);
-    assert_eq!(vec![42_u64; 42].total_bytes(), b + size_of::<u64>() * 42);
-    assert_eq!(vec![42_u128; 42].total_bytes(), b + size_of::<u128>() * 42);
     assert_eq!(
-        vec![42_usize; 42].total_bytes(),
+        vec![42_u8; 42].deterministic_total_bytes(),
+        b + size_of::<u8>() * 42
+    );
+    assert_eq!(
+        vec![42_u16; 42].deterministic_total_bytes(),
+        b + size_of::<u16>() * 42
+    );
+    assert_eq!(
+        vec![42_u32; 42].deterministic_total_bytes(),
+        b + size_of::<u32>() * 42
+    );
+    assert_eq!(
+        vec![42_u64; 42].deterministic_total_bytes(),
+        b + size_of::<u64>() * 42
+    );
+    assert_eq!(
+        vec![42_u128; 42].deterministic_total_bytes(),
+        b + size_of::<u128>() * 42
+    );
+    assert_eq!(
+        vec![42_usize; 42].deterministic_total_bytes(),
         b + size_of::<usize>() * 42
     );
-    assert_eq!(vec![42_i8; 42].total_bytes(), b + size_of::<i8>() * 42);
-    assert_eq!(vec![42_i16; 42].total_bytes(), b + size_of::<i16>() * 42);
-    assert_eq!(vec![42_i32; 42].total_bytes(), b + size_of::<i32>() * 42);
-    assert_eq!(vec![42_i64; 42].total_bytes(), b + size_of::<i64>() * 42);
-    assert_eq!(vec![42_i128; 42].total_bytes(), b + size_of::<i128>() * 42);
     assert_eq!(
-        vec![42_isize; 42].total_bytes(),
+        vec![42_i8; 42].deterministic_total_bytes(),
+        b + size_of::<i8>() * 42
+    );
+    assert_eq!(
+        vec![42_i16; 42].deterministic_total_bytes(),
+        b + size_of::<i16>() * 42
+    );
+    assert_eq!(
+        vec![42_i32; 42].deterministic_total_bytes(),
+        b + size_of::<i32>() * 42
+    );
+    assert_eq!(
+        vec![42_i64; 42].deterministic_total_bytes(),
+        b + size_of::<i64>() * 42
+    );
+    assert_eq!(
+        vec![42_i128; 42].deterministic_total_bytes(),
+        b + size_of::<i128>() * 42
+    );
+    assert_eq!(
+        vec![42_isize; 42].deterministic_total_bytes(),
         b + size_of::<isize>() * 42
     );
-    assert_eq!(vec![42_f32; 42].total_bytes(), b + size_of::<f32>() * 42);
-    assert_eq!(vec![42_f64; 42].total_bytes(), b + size_of::<f64>() * 42);
-    assert_eq!(vec![true; 42].total_bytes(), b + size_of::<bool>() * 42);
-    assert_eq!(vec!['c'; 42].total_bytes(), b + size_of::<char>() * 42);
+    assert_eq!(
+        vec![42_f32; 42].deterministic_total_bytes(),
+        b + size_of::<f32>() * 42
+    );
+    assert_eq!(
+        vec![42_f64; 42].deterministic_total_bytes(),
+        b + size_of::<f64>() * 42
+    );
+    assert_eq!(
+        vec![true; 42].deterministic_total_bytes(),
+        b + size_of::<bool>() * 42
+    );
+    assert_eq!(
+        vec!['c'; 42].deterministic_total_bytes(),
+        b + size_of::<char>() * 42
+    );
 }
 
 macro_rules! assert_btree_map_basic_total_bytes_eq {
     ($field_type:ty, $expected_size:expr) => {{
         let t = <$field_type>::default();
-        assert_eq!(BTreeMap::from([(t, t)]).total_bytes(), $expected_size);
+        assert_eq!(
+            BTreeMap::from([(t, t)]).deterministic_total_bytes(),
+            $expected_size
+        );
     }};
 }
 
@@ -212,77 +308,158 @@ fn btree_map_basic_total_bytes() {
 
 #[test]
 fn tuple_basic_total_bytes() {
-    assert_eq!((42_u8,).total_bytes(), size_of::<u8>());
-    assert_eq!((42_u8, 42_u8,).total_bytes(), size_of::<u8>() * 2);
-    assert_eq!((42_u8, 42_u8, 42_u8,).total_bytes(), size_of::<u8>() * 3);
+    assert_eq!((42_u8,).deterministic_total_bytes(), size_of::<u8>());
     assert_eq!(
-        (42_u8, 42_u8, 42_u8, 42_u8,).total_bytes(),
+        (42_u8, 42_u8,).deterministic_total_bytes(),
+        size_of::<u8>() * 2
+    );
+    assert_eq!(
+        (42_u8, 42_u8, 42_u8,).deterministic_total_bytes(),
+        size_of::<u8>() * 3
+    );
+    assert_eq!(
+        (42_u8, 42_u8, 42_u8, 42_u8,).deterministic_total_bytes(),
         size_of::<u8>() * 4
     );
     assert_eq!(
-        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).total_bytes(),
+        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).deterministic_total_bytes(),
         size_of::<u8>() * 5
     );
     assert_eq!(
-        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).total_bytes(),
+        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).deterministic_total_bytes(),
         size_of::<u8>() * 6
     );
     assert_eq!(
-        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).total_bytes(),
+        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).deterministic_total_bytes(),
         size_of::<u8>() * 7
     );
     assert_eq!(
-        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).total_bytes(),
+        (42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8, 42_u8,).deterministic_total_bytes(),
         size_of::<(u8, u8, u8, u8, u8, u8, u8, u8,)>()
     );
 }
 
 #[test]
 fn option_basic_total_bytes() {
-    assert_eq!(Some(42_u8).total_bytes(), size_of::<u8>() * 2);
-    assert_eq!(None::<u8>.total_bytes(), size_of::<u8>() * 2);
-    assert_eq!(Some(42_u16).total_bytes(), size_of::<u16>() * 2);
-    assert_eq!(None::<u16>.total_bytes(), size_of::<u16>() * 2);
-    assert_eq!(Some(42_u32).total_bytes(), size_of::<u32>() * 2);
-    assert_eq!(None::<u32>.total_bytes(), size_of::<u32>() * 2);
-    assert_eq!(Some(42_u64).total_bytes(), size_of::<u64>() * 2);
-    assert_eq!(None::<u64>.total_bytes(), size_of::<u64>() * 2);
-    assert_eq!(Some(42_u128).total_bytes(), size_of::<u128>() * 2);
-    assert_eq!(None::<u128>.total_bytes(), size_of::<u128>() * 2);
-    assert_eq!(Some(42_usize).total_bytes(), size_of::<usize>() * 2);
-    assert_eq!(None::<usize>.total_bytes(), size_of::<usize>() * 2);
-    assert_eq!(Some(true).total_bytes(), size_of::<bool>());
-    assert_eq!(None::<bool>.total_bytes(), size_of::<bool>());
-    assert_eq!(Some('c').total_bytes(), size_of::<char>());
-    assert_eq!(None::<char>.total_bytes(), size_of::<char>());
+    assert_eq!(Some(42_u8).deterministic_total_bytes(), size_of::<u8>() * 2);
+    assert_eq!(None::<u8>.deterministic_total_bytes(), size_of::<u8>() * 2);
+    assert_eq!(
+        Some(42_u16).deterministic_total_bytes(),
+        size_of::<u16>() * 2
+    );
+    assert_eq!(
+        None::<u16>.deterministic_total_bytes(),
+        size_of::<u16>() * 2
+    );
+    assert_eq!(
+        Some(42_u32).deterministic_total_bytes(),
+        size_of::<u32>() * 2
+    );
+    assert_eq!(
+        None::<u32>.deterministic_total_bytes(),
+        size_of::<u32>() * 2
+    );
+    assert_eq!(
+        Some(42_u64).deterministic_total_bytes(),
+        size_of::<u64>() * 2
+    );
+    assert_eq!(
+        None::<u64>.deterministic_total_bytes(),
+        size_of::<u64>() * 2
+    );
+    assert_eq!(
+        Some(42_u128).deterministic_total_bytes(),
+        size_of::<u128>() * 2
+    );
+    assert_eq!(
+        None::<u128>.deterministic_total_bytes(),
+        size_of::<u128>() * 2
+    );
+    assert_eq!(
+        Some(42_usize).deterministic_total_bytes(),
+        size_of::<usize>() * 2
+    );
+    assert_eq!(
+        None::<usize>.deterministic_total_bytes(),
+        size_of::<usize>() * 2
+    );
+    assert_eq!(Some(true).deterministic_total_bytes(), size_of::<bool>());
+    assert_eq!(None::<bool>.deterministic_total_bytes(), size_of::<bool>());
+    assert_eq!(Some('c').deterministic_total_bytes(), size_of::<char>());
+    assert_eq!(None::<char>.deterministic_total_bytes(), size_of::<char>());
 }
 
 #[test]
 fn result_basic_total_bytes() {
-    assert_eq!(Ok::<u8, u8>(42).total_bytes(), size_of::<u8>() * 2);
-    assert_eq!(Err::<u8, u8>(42).total_bytes(), size_of::<u8>() * 2);
-    assert_eq!(Ok::<u16, u16>(42).total_bytes(), size_of::<u16>() * 2);
-    assert_eq!(Err::<u16, u16>(42).total_bytes(), size_of::<u16>() * 2);
-    assert_eq!(Ok::<u32, u32>(42).total_bytes(), size_of::<u32>() * 2);
-    assert_eq!(Err::<u32, u32>(42).total_bytes(), size_of::<u32>() * 2);
-    assert_eq!(Ok::<u64, u64>(42).total_bytes(), size_of::<u64>() * 2);
-    assert_eq!(Err::<u64, u64>(42).total_bytes(), size_of::<u64>() * 2);
-    assert_eq!(Ok::<u128, u128>(42).total_bytes(), size_of::<u128>() * 2);
-    assert_eq!(Err::<u128, u128>(42).total_bytes(), size_of::<u128>() * 2);
-    assert_eq!(Ok::<usize, usize>(42).total_bytes(), size_of::<usize>() * 2);
     assert_eq!(
-        Err::<usize, usize>(42).total_bytes(),
+        Ok::<u8, u8>(42).deterministic_total_bytes(),
+        size_of::<u8>() * 2
+    );
+    assert_eq!(
+        Err::<u8, u8>(42).deterministic_total_bytes(),
+        size_of::<u8>() * 2
+    );
+    assert_eq!(
+        Ok::<u16, u16>(42).deterministic_total_bytes(),
+        size_of::<u16>() * 2
+    );
+    assert_eq!(
+        Err::<u16, u16>(42).deterministic_total_bytes(),
+        size_of::<u16>() * 2
+    );
+    assert_eq!(
+        Ok::<u32, u32>(42).deterministic_total_bytes(),
+        size_of::<u32>() * 2
+    );
+    assert_eq!(
+        Err::<u32, u32>(42).deterministic_total_bytes(),
+        size_of::<u32>() * 2
+    );
+    assert_eq!(
+        Ok::<u64, u64>(42).deterministic_total_bytes(),
+        size_of::<u64>() * 2
+    );
+    assert_eq!(
+        Err::<u64, u64>(42).deterministic_total_bytes(),
+        size_of::<u64>() * 2
+    );
+    assert_eq!(
+        Ok::<u128, u128>(42).deterministic_total_bytes(),
+        size_of::<u128>() * 2
+    );
+    assert_eq!(
+        Err::<u128, u128>(42).deterministic_total_bytes(),
+        size_of::<u128>() * 2
+    );
+    assert_eq!(
+        Ok::<usize, usize>(42).deterministic_total_bytes(),
         size_of::<usize>() * 2
     );
-    assert_eq!(Ok::<bool, bool>(true).total_bytes(), size_of::<bool>() * 2);
-    assert_eq!(Err::<bool, bool>(true).total_bytes(), size_of::<bool>() * 2);
-    assert_eq!(Ok::<char, char>('c').total_bytes(), size_of::<char>() * 2);
-    assert_eq!(Err::<char, char>('c').total_bytes(), size_of::<char>() * 2);
+    assert_eq!(
+        Err::<usize, usize>(42).deterministic_total_bytes(),
+        size_of::<usize>() * 2
+    );
+    assert_eq!(
+        Ok::<bool, bool>(true).deterministic_total_bytes(),
+        size_of::<bool>() * 2
+    );
+    assert_eq!(
+        Err::<bool, bool>(true).deterministic_total_bytes(),
+        size_of::<bool>() * 2
+    );
+    assert_eq!(
+        Ok::<char, char>('c').deterministic_total_bytes(),
+        size_of::<char>() * 2
+    );
+    assert_eq!(
+        Err::<char, char>('c').deterministic_total_bytes(),
+        size_of::<char>() * 2
+    );
 }
 
 #[test]
 fn mixed_struct() {
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {
         b: usize,
         s: String,
@@ -293,7 +470,7 @@ fn mixed_struct() {
         m: BTreeMap<String, String>,
     }
     assert_eq!(
-        S::default().total_bytes(),
+        S::default().deterministic_total_bytes(),
         size_of::<usize>()
             + size_of::<String>()
             + size_of::<Option<String>>()
@@ -307,7 +484,7 @@ fn mixed_struct() {
 #[test]
 fn mixed_enum() {
     #[allow(dead_code)]
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[repr(usize)]
     enum E {
         #[default]
@@ -321,7 +498,7 @@ fn mixed_enum() {
         BTreeMap(BTreeMap<usize, usize>),
     }
     assert_eq!(
-        E::default().total_bytes(),
+        E::default().deterministic_total_bytes(),
         size_of::<usize>()
             + size_of::<String>()
                 .max(size_of::<Option<usize>>())
@@ -345,7 +522,7 @@ fn mixed_tuple() {
         BTreeMap::from([(String::new(), String::new())]),
     );
     assert_eq!(
-        tuple.total_bytes(),
+        tuple.deterministic_total_bytes(),
         size_of::<usize>()
             + size_of::<String>()
             + size_of::<Option<String>>()
@@ -359,7 +536,10 @@ fn mixed_tuple() {
     );
 
     let tuple = ("1".to_string(), "123".to_string(), "12345".to_string());
-    assert_eq!(tuple.total_bytes(), size_of::<String>() * 3 + 1 + 3 + 5);
+    assert_eq!(
+        tuple.deterministic_total_bytes(),
+        size_of::<String>() * 3 + 1 + 3 + 5
+    );
 }
 
 #[test]
@@ -369,7 +549,7 @@ fn mixed_array() {
         ("12345".to_string(), "1234567".to_string()),
     ];
     assert_eq!(
-        arr.total_bytes(),
+        arr.deterministic_total_bytes(),
         size_of::<[(String, String); 2]>() + 1 + 3 + 5 + 7
     );
 }
@@ -381,7 +561,7 @@ fn mixed_vec() {
         ("12345".to_string(), "1234567".to_string()),
     ];
     assert_eq!(
-        vec.total_bytes(),
+        vec.deterministic_total_bytes(),
         size_of::<Vec<(String, String)>>() + size_of::<String>() * 4 + 1 + 3 + 5 + 7
     );
 }
@@ -393,19 +573,19 @@ fn mixed_btree_map() {
         ("12345".to_string(), "1234567".to_string()),
     ]);
     assert_eq!(
-        btree_map.total_bytes(),
+        btree_map.deterministic_total_bytes(),
         size_of::<BTreeMap<String, String>>() + size_of::<String>() * 4 + 1 + 3 + 5 + 7
     );
 }
 
 #[test]
 fn nested_vec_enum_struct_string() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     struct S {
         v: Vec<String>,
         m: BTreeMap<String, String>,
     }
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     enum E {
         One,
         Two(Option<(S, S)>),
@@ -435,7 +615,7 @@ fn nested_vec_enum_struct_string() {
         ]),
     ];
     assert_eq!(
-        v.total_bytes(),
+        v.deterministic_total_bytes(),
         size_of::<Vec<E>>()
             + size_of::<E>()
             + size_of::<E>()
@@ -464,16 +644,16 @@ fn nested_vec_enum_struct_string() {
 
 #[test]
 fn with_vec_enum_struct_string() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     struct S {
         v: Vec<String>,
         m: BTreeMap<String, String>,
     }
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     enum E {
         One,
         Two(Option<(S, S)>),
-        #[heap_bytes(with = |v: &Vec<_>| v.len() + 17)]
+        #[deterministic_heap_bytes(with = |v: &Vec<_>| v.len() + 17)]
         Three(Vec<Result<S, S>>),
     }
     let v = vec![
@@ -501,7 +681,7 @@ fn with_vec_enum_struct_string() {
     ];
     // Same as above, but the third option has a custom size calculation.
     assert_eq!(
-        v.total_bytes(),
+        v.deterministic_total_bytes(),
         size_of::<Vec<E>>()
             + size_of::<E>()
             + size_of::<E>()
@@ -536,14 +716,17 @@ fn with_external_types() {
         Two(u32),
     }
 
-    #[derive(HeapBytes, Default)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {
-        #[heap_bytes(with = |v: &Vec<_>| v.len() + 7)]
+        #[deterministic_heap_bytes(with = |v: &Vec<_>| v.len() + 7)]
         v: Vec<ExternalStruct>,
-        #[heap_bytes(with = |_| 11)]
+        #[deterministic_heap_bytes(with = |_| 11)]
         e: ExternalEnum,
     }
-    assert_eq!(S::default().total_bytes(), size_of::<S>() + 7 + 11);
+    assert_eq!(
+        S::default().deterministic_total_bytes(),
+        size_of::<S>() + 7 + 11
+    );
     assert_eq!(
         S {
             v: vec![
@@ -553,14 +736,14 @@ fn with_external_types() {
             ],
             e: ExternalEnum::Two(u32::MAX),
         }
-        .total_bytes(),
+        .deterministic_total_bytes(),
         size_of::<S>() + 3 + 7 + 11
     );
 }
 
 #[test]
 fn custom_heap_bytes() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     struct PreciseCount {
         s: String,
         v: Vec<String>,
@@ -571,18 +754,18 @@ fn custom_heap_bytes() {
             s: "1".to_string(),
             v: vec!["123".to_string(), "12345".to_string()]
         }
-        .total_bytes(),
+        .deterministic_total_bytes(),
         size_of::<PreciseCount>() + size_of::<String>() * 2 + 1 + 3 + 5
     );
 }
 
 #[test]
 fn struct_heap_bytes_with() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     struct FieldWith {
-        #[heap_bytes(with = |s: &String| s.len() + 5)]
+        #[deterministic_heap_bytes(with = |s: &String| s.len() + 5)]
         string: String,
-        #[heap_bytes(with = |_v| self.vec.len() + 7)]
+        #[deterministic_heap_bytes(with = |_v| self.vec.len() + 7)]
         vec: Vec<String>,
     }
 
@@ -591,13 +774,13 @@ fn struct_heap_bytes_with() {
             string: "1".to_string(),
             vec: vec!["123".to_string(), "12345".to_string()]
         }
-        .total_bytes(),
+        .deterministic_total_bytes(),
         size_of::<FieldWith>() + 1 + 5 + 2 + 7
     );
 
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     struct SuperWith {
-        #[heap_bytes(with = |s: &String| s.len() + 11)]
+        #[deterministic_heap_bytes(with = |s: &String| s.len() + 11)]
         string: String,
         vec: Vec<FieldWith>,
     }
@@ -610,44 +793,44 @@ fn struct_heap_bytes_with() {
                 vec: vec!["123".to_string(), "12345".to_string()]
             }]
         }
-        .total_bytes(),
+        .deterministic_total_bytes(),
         size_of::<SuperWith>() + 1 + 11 + size_of::<FieldWith>() + 1 + 5 + 2 + 7
     );
 }
 
 #[test]
 fn enum_heap_bytes_with() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     enum VariantWith {
-        #[heap_bytes(with = |s: &String| s.len() + 13)]
+        #[deterministic_heap_bytes(with = |s: &String| s.len() + 13)]
         One(String),
-        #[heap_bytes(with = |v: &Vec<_>| v.len() + 17)]
+        #[deterministic_heap_bytes(with = |v: &Vec<_>| v.len() + 17)]
         Two(Vec<String>),
     }
 
     assert_eq!(
-        VariantWith::One("1".to_string()).total_bytes(),
+        VariantWith::One("1".to_string()).deterministic_total_bytes(),
         size_of::<VariantWith>() + 1 + 13
     );
     assert_eq!(
-        VariantWith::Two(vec!["123".to_string(), "12345".to_string()]).total_bytes(),
+        VariantWith::Two(vec!["123".to_string(), "12345".to_string()]).deterministic_total_bytes(),
         size_of::<VariantWith>() + 2 + 17
     );
 
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     enum FieldWith {
         One(
-            #[heap_bytes(with = |s: &String| s.len() + 19)] String,
+            #[deterministic_heap_bytes(with = |s: &String| s.len() + 19)] String,
             String,
         ),
         Two(
             String,
-            #[heap_bytes(with = |v: &Vec<_>| v.len() + 23)] Vec<String>,
+            #[deterministic_heap_bytes(with = |v: &Vec<_>| v.len() + 23)] Vec<String>,
         ),
     }
 
     assert_eq!(
-        FieldWith::One("1".to_string(), "123".to_string()).total_bytes(),
+        FieldWith::One("1".to_string(), "123".to_string()).deterministic_total_bytes(),
         size_of::<FieldWith>() + 1 + 3 + 19
     );
     assert_eq!(
@@ -655,22 +838,22 @@ fn enum_heap_bytes_with() {
             "1".to_string(),
             vec!["123".to_string(), "12345".to_string()]
         )
-        .total_bytes(),
+        .deterministic_total_bytes(),
         size_of::<FieldWith>() + 1 + 2 + 23
     );
 
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     enum SuperdWith {
-        #[heap_bytes(with = |s1: &String, s2: &String| s1.len() + s2.len() + 27)]
+        #[deterministic_heap_bytes(with = |s1: &String, s2: &String| s1.len() + s2.len() + 27)]
         One(String, String),
         Two(
-            #[heap_bytes(with = |s: &String| s.len() + 29)] String,
+            #[deterministic_heap_bytes(with = |s: &String| s.len() + 29)] String,
             Vec<FieldWith>,
         ),
     }
 
     assert_eq!(
-        SuperdWith::One("1".to_string(), "123".to_string()).total_bytes(),
+        SuperdWith::One("1".to_string(), "123".to_string()).deterministic_total_bytes(),
         size_of::<SuperdWith>() + 1 + 3 + 27
     );
     assert_eq!(
@@ -681,14 +864,14 @@ fn enum_heap_bytes_with() {
                 vec!["123".to_string(), "12345".to_string()]
             )]
         )
-        .total_bytes(),
+        .deterministic_total_bytes(),
         size_of::<SuperdWith>() + 5 + 29 + size_of::<FieldWith>() + 1 + 2 + 23
     );
 }
 
 #[test]
 fn example_struct() {
-    #[derive(HeapBytes)]
+    #[derive(DeterministicHeapBytes)]
     struct MyStruct {
         s: String,
         v: Vec<String>,
@@ -698,28 +881,34 @@ fn example_struct() {
         s: "1".to_string(),
         v: vec!["123".to_string(), "12345".to_string()],
     };
-    assert_eq!(s.heap_bytes(), size_of::<String>() * 2 + 1 + 3 + 5);
     assert_eq!(
-        s.total_bytes(),
+        s.deterministic_heap_bytes(),
+        size_of::<String>() * 2 + 1 + 3 + 5
+    );
+    assert_eq!(
+        s.deterministic_total_bytes(),
         size_of::<MyStruct>() + size_of::<String>() * 2 + 1 + 3 + 5
     );
 
-    #[derive(HeapBytes)]
-    struct CustomHeapBytes {
+    #[derive(DeterministicHeapBytes)]
+    struct CustomDeterministicHeapBytes {
         s: String,
         /// The vector's heap size is approximated using a constant-time closure.
-        #[heap_bytes(with = |v: &Vec<String>| v.len() * size_of::<String>() + 17)]
+        #[deterministic_heap_bytes(with = |v: &Vec<String>| v.len() * size_of::<String>() + 17)]
         v: Vec<String>,
     }
 
-    let s = CustomHeapBytes {
+    let s = CustomDeterministicHeapBytes {
         s: "1".to_string(),
         v: vec!["123".to_string(), "12345".to_string()],
     };
-    assert_eq!(s.heap_bytes(), 1 + 2 * size_of::<Vec<String>>() + 17);
     assert_eq!(
-        s.total_bytes(),
-        size_of::<CustomHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
+        s.deterministic_heap_bytes(),
+        1 + 2 * size_of::<Vec<String>>() + 17
+    );
+    assert_eq!(
+        s.deterministic_total_bytes(),
+        size_of::<CustomDeterministicHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
     );
 }
 
@@ -729,21 +918,24 @@ fn example_struct_with_function() {
         size_of_val(v) + 17
     }
 
-    #[derive(HeapBytes)]
-    struct CustomHeapBytes {
+    #[derive(DeterministicHeapBytes)]
+    struct CustomDeterministicHeapBytes {
         s: String,
         /// The vector's heap size is approximated using a constant-time function.
-        #[heap_bytes(with = vec_approx)]
+        #[deterministic_heap_bytes(with = vec_approx)]
         v: Vec<String>,
     }
 
-    let s = CustomHeapBytes {
+    let s = CustomDeterministicHeapBytes {
         s: "1".to_string(),
         v: vec!["123".to_string(), "12345".to_string()],
     };
-    assert_eq!(s.heap_bytes(), 1 + 2 * size_of::<Vec<String>>() + 17);
     assert_eq!(
-        s.total_bytes(),
-        size_of::<CustomHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
+        s.deterministic_heap_bytes(),
+        1 + 2 * size_of::<Vec<String>>() + 17
+    );
+    assert_eq!(
+        s.deterministic_total_bytes(),
+        size_of::<CustomDeterministicHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
     );
 }

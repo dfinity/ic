@@ -3,13 +3,13 @@ use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Expr, Ident};
 
 #[derive(FromDeriveInput)]
-struct HeapBytesReceiver {
+struct DeterministicHeapBytesReceiver {
     ident: Ident,
     data: Data<VariantReceiver, FieldReceiver>,
 }
 
 #[derive(Debug, FromVariant)]
-#[darling(attributes(heap_bytes))]
+#[darling(attributes(deterministic_heap_bytes))]
 struct VariantReceiver {
     ident: Ident,
     fields: darling::ast::Fields<FieldReceiver>,
@@ -18,17 +18,17 @@ struct VariantReceiver {
 }
 
 #[derive(Debug, FromField)]
-#[darling(attributes(heap_bytes))]
+#[darling(attributes(deterministic_heap_bytes))]
 struct FieldReceiver {
     ident: Option<Ident>,
     #[darling(default)]
     with: Option<Expr>,
 }
 
-#[proc_macro_derive(HeapBytes, attributes(heap_bytes))]
+#[proc_macro_derive(DeterministicHeapBytes, attributes(deterministic_heap_bytes))]
 pub fn derive_heap_bytes(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let receiver = match HeapBytesReceiver::from_derive_input(&input) {
+    let receiver = match DeterministicHeapBytesReceiver::from_derive_input(&input) {
         Ok(r) => r,
         Err(e) => return e.write_errors().into(),
     };
@@ -42,8 +42,8 @@ pub fn derive_heap_bytes(input: proc_macro::TokenStream) -> proc_macro::TokenStr
     };
 
     quote! {
-        impl #impl_generics HeapBytes for #struct_name #ty_generics #where_clause {
-            fn heap_bytes(&self) -> usize {
+        impl #impl_generics DeterministicHeapBytes for #struct_name #ty_generics #where_clause {
+            fn deterministic_heap_bytes(&self) -> usize {
                 #heap_bytes_body
             }
         }
@@ -53,6 +53,7 @@ pub fn derive_heap_bytes(input: proc_macro::TokenStream) -> proc_macro::TokenStr
 
 fn struct_heap_bytes(fields: &darling::ast::Fields<FieldReceiver>) -> proc_macro2::TokenStream {
     let fields = fields.fields.iter().enumerate().map(|(index, field)| {
+        let index = syn::Index::from(index);
         let accessor = if let Some(ident) = &field.ident {
             quote! { self.#ident }
         } else {
@@ -61,7 +62,7 @@ fn struct_heap_bytes(fields: &darling::ast::Fields<FieldReceiver>) -> proc_macro
         if let Some(closure) = &field.with {
             quote! { (#closure)(&#accessor) }
         } else {
-            quote! { #accessor.heap_bytes() }
+            quote! { #accessor.deterministic_heap_bytes() }
         }
     });
 
@@ -92,7 +93,7 @@ fn enum_heap_bytes(variants: &[VariantReceiver]) -> proc_macro2::TokenStream {
                 } else if let Some(_closure) = &variant.with {
                     quote! { &#accessor }
                 } else {
-                    quote! { #accessor.heap_bytes() }
+                    quote! { #accessor.deterministic_heap_bytes() }
                 };
 
                 (field_pat, expr)
