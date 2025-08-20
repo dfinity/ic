@@ -189,7 +189,8 @@ impl ConsensusCacheImpl {
         let finalized_block = get_highest_finalized_block(pool, &catch_up_package);
         let mut summary_block = catch_up_package.content.block.as_ref().clone();
         update_summary_block(pool, &mut summary_block, &finalized_block);
-        let finalized_chain = ConsensusBlockChainImpl::new(pool, &summary_block, &finalized_block);
+        let finalized_chain =
+            ConsensusBlockChainImpl::new(pool, summary_block.height, &finalized_block);
 
         Self {
             cache: RwLock::new(CachedData {
@@ -345,29 +346,25 @@ pub(crate) fn update_summary_block(
 
 #[derive(Clone)]
 pub(crate) struct ConsensusBlockChainImpl {
-    /// Blocks in the chain between [summary_block, tip], ends inclusive. So this can never be empty.
+    /// Blocks in the chain between [start_height, tip], ends inclusive. So this can never be empty.
     blocks: BTreeMap<Height, Block>,
 }
 
 impl ConsensusBlockChainImpl {
     pub(crate) fn new(
         consensus_pool: &dyn ConsensusPool,
-        summary_block: &Block,
+        start_height: Height,
         tip: &Block,
     ) -> Self {
         let mut blocks = BTreeMap::new();
-        match summary_block.height().cmp(&tip.height()) {
-            Ordering::Less | Ordering::Equal => Self::add_blocks(
-                consensus_pool,
-                summary_block.height(),
-                summary_block,
-                tip,
-                &mut blocks,
-            ),
+        match start_height.cmp(&tip.height()) {
+            Ordering::Less | Ordering::Equal => {
+                Self::add_blocks(consensus_pool, start_height, tip, &mut blocks)
+            }
             Ordering::Greater => {
                 panic!(
-                    "ConsensusBlockChainImpl::new(): summary height {} > tip height {}",
-                    summary_block.height(),
+                    "ConsensusBlockChainImpl::new(): start height {} > tip height {}",
+                    start_height,
                     tip.height()
                 );
             }
@@ -413,13 +410,7 @@ impl ConsensusBlockChainImpl {
             cur_summary_height,
             summary_block.height(),
         );
-        Self::add_blocks(
-            consensus_pool,
-            start_height,
-            summary_block,
-            tip,
-            &mut self.blocks,
-        )
+        Self::add_blocks(consensus_pool, start_height, tip, &mut self.blocks)
     }
 
     /// Adds the blocks in the range [start_height, tip.height()] to the
@@ -427,16 +418,9 @@ impl ConsensusBlockChainImpl {
     fn add_blocks(
         consensus_pool: &dyn ConsensusPool,
         start_height: Height,
-        summary_block: &Block,
         tip: &Block,
         blocks: &mut BTreeMap<Height, Block>,
     ) {
-        // ChainIterator may miss the summary block if it only exists
-        // as part of the CUP in the pool. We make sure it is included here.
-        let summary_height = summary_block.height();
-        if summary_height >= start_height && summary_height <= tip.height() {
-            blocks.insert(summary_height, summary_block.clone());
-        }
         ChainIterator::new(consensus_pool, tip.clone(), None)
             .take_while(|block| block.height() >= start_height)
             .for_each(|block| {

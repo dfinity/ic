@@ -396,7 +396,7 @@ fn validate_data_payload(
                 parent_block.height()
             )
         });
-    let parent_chain = block_chain_cache(pool_reader, &summary_block, parent_block)
+    let parent_chain = block_chain_cache(pool_reader, summary_block.height(), parent_block)
         .map_err(InvalidIDkgPayloadReason::from)?;
     let block_reader = IDkgBlockReaderImpl::new(parent_chain);
     let curr_height = parent_block.height().increment();
