@@ -9,6 +9,10 @@
         "version": "84a268e93a909a6827d76ad794411b161c839a12",
         "update_img_hash_dev": "be9f13cd4aa20cc7d728ca6872833322dc2cf22ed3d442619e6284677907f81e"
       }
+    },
+    "latest_release": {
+      "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
+      "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b"
     }
   },
   "hostos": {
