@@ -13,9 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keys used for threshold EdDSA on the Internet Computer.
 - Add `PublicKey::derive_mainnet_key` to derive public key offline, in the same way it is done by the respective management canister call (`schnorr_public_key`).
 
-convenient access to the master public
-  keys used for threshold EdDSA on the Internet Computer.
-
 ## [0.2.0] - 2025-02-14
 
 ### Added
