@@ -359,7 +359,8 @@ macro_rules! assert_btree_map_basic_total_bytes_eq {
 
 #[test]
 fn btree_map_basic_total_bytes() {
-    let b = size_of::<BTreeMap<(), ()>>();
+    // Also account for edges, i.e. pointers to the child nodes.
+    let b = size_of::<BTreeMap<(), ()>>() + size_of::<usize>();
     assert_btree_map_basic_total_bytes_eq!(u8, b + size_of::<u8>() * 2);
     assert_btree_map_basic_total_bytes_eq!(u16, b + size_of::<u16>() * 2);
     assert_btree_map_basic_total_bytes_eq!(u32, b + size_of::<u32>() * 2);
@@ -603,6 +604,7 @@ fn mixed_tuple() {
             + size_of::<String>() * 3
             + size_of::<BTreeMap<String, String>>()
             + size_of::<String>() * 2
+            + size_of::<usize>()
     );
 
     let tuple = ("1".to_string(), "123".to_string(), "12345".to_string());
@@ -642,9 +644,16 @@ fn mixed_btree_map() {
         ("1".to_string(), "123".to_string()),
         ("12345".to_string(), "1234567".to_string()),
     ]);
+    // Also account for edges, i.e. pointers to the child nodes.
     assert_eq!(
         btree_map.deterministic_total_bytes(),
-        size_of::<BTreeMap<String, String>>() + size_of::<String>() * 4 + 1 + 3 + 5 + 7
+        size_of::<BTreeMap<String, String>>()
+            + size_of::<String>() * 4
+            + size_of::<usize>() * 2
+            + 1
+            + 3
+            + 5
+            + 7
     );
 }
 
@@ -701,6 +710,7 @@ fn nested_vec_enum_struct_string() {
             + size_of::<E>()
             + size_of::<Result<S, S>>() * 2
             + size_of::<String>() * 8
+            + size_of::<usize>() * 4
             + 23
             + 29
             + 31
@@ -756,6 +766,7 @@ fn with_vec_enum_struct_string() {
             + size_of::<E>()
             + size_of::<E>()
             + size_of::<String>() * 8
+            + size_of::<usize>() * 2
             + 1
             + 3
             + 5

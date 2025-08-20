@@ -85,7 +85,11 @@ impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapByte
     ///
     /// WARNING: This performs a full scan of the map and is `O(n)`.
     fn deterministic_heap_bytes(&self) -> usize {
-        let self_heap_bytes = self.len() * (size_of::<K>() + size_of::<V>());
+        // In addition to the key and value sizes, we also account for edges,
+        // i.e. pointers to child nodes. Depending on the map's operational history,
+        // the number of edges can be proportional to the number of elements.
+        // See: https://github.com/rust-lang/rust/blob/master/library/alloc/src/collections/btree/node.rs
+        let self_heap_bytes = self.len() * (size_of::<K>() + size_of::<V>() + size_of::<usize>());
         let elements_heap_bytes: usize = self
             .iter()
             .map(|(k, v)| k.deterministic_heap_bytes() + v.deterministic_heap_bytes())
