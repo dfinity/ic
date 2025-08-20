@@ -2347,12 +2347,19 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+        // A snapshot also contains the instruction counter as the last global
+        // (because it is *appended* during WASM instrumentation).
+        // We pop that last global (which is merely an implementation detail)
+        // from the list of globals returned to the user.
+        let mut globals = snapshot.exported_globals().clone();
+        let maybe_instruction_counter = globals.pop();
+        debug_assert!(maybe_instruction_counter.is_some());
 
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-            globals: snapshot.exported_globals().clone(),
+            globals,
             wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
                 * WASM_PAGE_SIZE_IN_BYTES as u64,
             stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
