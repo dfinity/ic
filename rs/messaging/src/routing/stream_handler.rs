@@ -20,7 +20,7 @@ use ic_replicated_state::replicated_state::{
 };
 use ic_replicated_state::{ReplicatedState, StateError};
 use ic_types::messages::{
-    Payload, RejectContext, Request, RequestOrResponse, Response, StreamMessage,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StreamBlocker, StreamMessage,
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
@@ -734,7 +734,7 @@ impl StreamHandlerImpl {
                     stream_index
                 );
                 match msg.try_into() {
-                    Ok(msg) => {
+                    Ok::<RequestOrResponse, _>(msg) => {
                         // Got a `RequestOrResponse`, induct it.
                         lost_cycles += self.induct_message(
                             msg,
@@ -744,7 +744,7 @@ impl StreamHandlerImpl {
                             available_guaranteed_response_memory,
                         );
                     }
-                    Err(_blocker) => {
+                    Err::<_, Arc<StreamBlocker>>(_blocker) => {
                         // Got a `StreamBlocker`, record its observation then drop it.
                         self.metrics.incoming_stream_blockers.inc();
                         stream.push_accept_signal();
