@@ -434,7 +434,7 @@ def system_test(
         info_file_vars = info_file_vars,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
-               (["manual"] if "experimental_system_test_colocation" in tags else []),
+               (["manual"] if "colocate" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
@@ -473,7 +473,7 @@ def system_test(
         icos_images = icos_images,
         info_file_vars = info_file_vars,
         tags = tags + ["requires-network", "system_test"] +
-               (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
+               (["colocated"] if "colocate" in tags else ["manual"]) +
                additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,

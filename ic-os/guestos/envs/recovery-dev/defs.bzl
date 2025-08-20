@@ -67,4 +67,5 @@ def generate_dummy_recovery_archive(name):
         visibility = [
             "//rs:system-tests-pkg",
         ],
+        tags = ["manual"],
     )

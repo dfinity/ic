@@ -6,6 +6,7 @@ use ic_types::Height;
 use slog::{info, warn, Logger};
 use std::path::PathBuf;
 
+pub mod impersonate_upstreams;
 pub mod node;
 pub mod performance;
 pub mod rw_message;

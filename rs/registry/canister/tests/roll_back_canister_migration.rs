@@ -18,7 +18,7 @@ use registry_canister::{
 };
 
 mod common;
-use common::test_helpers::{check_error_message, get_routing_table};
+use common::test_helpers::{check_error_message, check_subnet_for_canisters};
 
 #[test]
 fn test_roll_back_canister_migration() {
@@ -59,7 +59,17 @@ fn test_roll_back_canister_migration() {
             )
             .await;
 
-            let routing_table_original = get_routing_table(&registry).await;
+            check_subnet_for_canisters(
+                &registry,
+                vec![
+                    (CanisterId::from(10), subnet_id_2),
+                    (CanisterId::from(11), subnet_id_2),
+                    (CanisterId::from(12), subnet_id_2),
+                    (CanisterId::from(13), subnet_id_2),
+                    (CanisterId::from(14), subnet_id_2),
+                ],
+            )
+            .await;
 
             let governance_fake = set_up_universal_canister(&runtime).await;
             assert_eq!(
@@ -110,24 +120,16 @@ fn test_roll_back_canister_migration() {
             .await
             .unwrap();
 
-            let routing_table = get_routing_table(&registry).await;
-
-            assert_eq!(
-                routing_table.route(CanisterId::from(10).into()),
-                Some(subnet_id_1)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(11).into()),
-                Some(subnet_id_1)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(13).into()),
-                Some(subnet_id_2)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(14).into()),
-                Some(subnet_id_2)
-            );
+            check_subnet_for_canisters(
+                &registry,
+                vec![
+                    (CanisterId::from(10), subnet_id_1),
+                    (CanisterId::from(11), subnet_id_1),
+                    (CanisterId::from(13), subnet_id_2),
+                    (CanisterId::from(14), subnet_id_2),
+                ],
+            )
+            .await;
 
             // Try to roll back the canister migration.
             // Invalid request: although there is an entry of canister migrations for the given range,
@@ -150,7 +152,16 @@ fn test_roll_back_canister_migration() {
                 .await,
                 "not all canisters to be migrated are hosted by the provided source subnet",
             );
-            assert_eq!(get_routing_table(&registry).await, routing_table);
+            check_subnet_for_canisters(
+                &registry,
+                vec![
+                    (CanisterId::from(10), subnet_id_1),
+                    (CanisterId::from(11), subnet_id_1),
+                    (CanisterId::from(13), subnet_id_2),
+                    (CanisterId::from(14), subnet_id_2),
+                ],
+            )
+            .await;
 
             let payload = RerouteCanisterRangesPayload {
                 reassigned_canister_ranges: vec![CanisterIdRange {
@@ -170,14 +181,17 @@ fn test_roll_back_canister_migration() {
             .await
             .unwrap();
 
-            let routing_table = get_routing_table(&registry).await;
-            for id in 10..=14 {
-                assert_eq!(
-                    routing_table.route(CanisterId::from(id).into()),
-                    Some(subnet_id_2)
-                );
-            }
-            assert_eq!(routing_table, routing_table_original);
+            check_subnet_for_canisters(
+                &registry,
+                vec![
+                    (CanisterId::from(10), subnet_id_2),
+                    (CanisterId::from(11), subnet_id_2),
+                    (CanisterId::from(12), subnet_id_2),
+                    (CanisterId::from(13), subnet_id_2),
+                    (CanisterId::from(14), subnet_id_2),
+                ],
+            )
+            .await;
 
             Ok(())
         }

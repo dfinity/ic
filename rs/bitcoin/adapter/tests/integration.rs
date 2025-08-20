@@ -3,10 +3,9 @@ use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Cli
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    SendTransactionRequest,
+    Network, SendTransactionRequest,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;

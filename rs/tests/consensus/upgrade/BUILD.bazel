@@ -32,7 +32,7 @@ system_test_nns(
     },
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",
     ],
     test_timeout = "eternal",
@@ -79,6 +79,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
