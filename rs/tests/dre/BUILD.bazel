@@ -11,7 +11,6 @@ system_test(
     tags = [
         "manual",
     ],
-    uses_branch_version = True,
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_NNS_CANISTER_RUNTIME_DEPS +

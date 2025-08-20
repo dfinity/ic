@@ -210,7 +210,6 @@ def system_test(
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
         colocated_test_driver_vm_forward_ssh_agent = False,
-        uses_branch_version = False,
         uses_guestos_img = True,
         uses_guestos_mainnet_img = False,
         uses_guestos_recovery_dev_img = False,
@@ -251,7 +250,6 @@ def system_test(
       colocated_test_driver_vm_forward_ssh_agent: forward the SSH agent to the colocated test-driver VM.
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
-      uses_branch_version: the test uses the current branch version.txt
       uses_guestos_img: the test uses the branch GuestOS image
       uses_guestos_mainnet_img: the test uses the mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
@@ -301,8 +299,7 @@ def system_test(
     icos_images = dict()
     info_file_vars = dict()
 
-    if uses_branch_version:
-        info_file_vars["ENV_DEPS__IC_VERSION"] = ["STABLE_VERSION"]
+    info_file_vars["ENV_DEPS__IC_VERSION"] = ["STABLE_VERSION"]
 
     _guestos = "//ic-os/guestos/envs/dev:"
     _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"

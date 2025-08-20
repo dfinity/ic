@@ -363,7 +363,6 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    uses_branch_version = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
