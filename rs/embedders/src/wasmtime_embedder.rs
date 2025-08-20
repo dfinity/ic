@@ -756,11 +756,11 @@ fn sigsegv_memory_tracker<S>(
         };
         let sigsegv_memory_tracker_clone = Arc::clone(&sigsegv_memory_tracker);
 
-        println!(
-            "Current memory size for {} in pages: {}",
-            mem_type,
-            size / PAGE_SIZE
-        );
+        // println!(
+        //     "Current memory size for {} in pages: {}",
+        //     mem_type,
+        //     size / PAGE_SIZE
+        // );
 
         let uffd = UffdBuilder::new()
             .close_on_exec(true)
@@ -768,24 +768,24 @@ fn sigsegv_memory_tracker<S>(
             .user_mode_only(true)
             .create()
             .expect("Failed to create userfaultfd");
-        println!(
-            "Created userfaultfd: {:?} for mem_type {}, size {}",
-            uffd,
-            mem_type,
-            max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
-        );
+        // println!(
+        //     "Created userfaultfd: {:?} for mem_type {}, size {}",
+        //     uffd,
+        //     mem_type,
+        //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
+        // );
         uffd.register_with_mode(
             base,
             max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES,
             RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
         )
         .expect("Failed to register region");
-        println!(
-            "Registering uffd at: {:?} for mem_type {}, size {}",
-            base,
-            mem_type,
-            max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
-        );
+        // println!(
+        //     "Registering uffd at: {:?} for mem_type {}, size {}",
+        //     base,
+        //     mem_type,
+        //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
+        // );
 
         let base = base as usize;
         let handle = stoppable_thread::spawn(move |stopped| {
@@ -831,7 +831,7 @@ fn sigsegv_memory_tracker<S>(
 
                     match (kind, rw) {
                         (FaultKind::Missing, ReadWrite::Read) => {
-                            println!("[handler] Handling missing page fault for read access");
+                            // println!("[handler] Handling missing page fault for read access");
 
                             let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
@@ -849,11 +849,11 @@ fn sigsegv_memory_tracker<S>(
                             }
                         }
                         (FaultKind::Missing, ReadWrite::Write) => {
-                            println!("[handler] Handling missing page fault for write access");
+                            // println!("[handler] Handling missing page fault for write access");
 
                             let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
-                            println!("[handler] Missing page for write access res: {:?}", res);
+                            // println!("[handler] Missing page for write access res: {:?}", res);
 
                             if let Some((start_addr, size)) = res {
                                 uffd.wake(start_addr, size).expect("wake failed");
@@ -863,9 +863,9 @@ fn sigsegv_memory_tracker<S>(
                             unreachable!("Should not receive notification");
                         }
                         (FaultKind::WriteProtected, ReadWrite::Write) => {
-                            println!(
-                                "[handler] Handling write-protect page fault for write access"
-                            );
+                            // println!(
+                            //     "[handler] Handling write-protect page fault for write access"
+                            // );
                             let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
 
                             if let Some((start_addr, size)) = res {
@@ -884,12 +884,12 @@ fn sigsegv_memory_tracker<S>(
             let base = base as *mut libc::c_void;
             uffd.unregister(base, max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES)
                 .expect("Failed to unregister uffd region");
-            println!(
-                "Unregistered uffd region at {:?} for mem_type: {} size {}",
-                base,
-                mem_type,
-                max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
-            );
+            // println!(
+            //     "Unregistered uffd region at {:?} for mem_type: {} size {}",
+            //     base,
+            //     mem_type,
+            //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
+            // );
         });
 
         result.insert(mem_type, (sigsegv_memory_tracker_clone, handle));
@@ -994,7 +994,7 @@ impl WasmtimeInstance {
         // Big hack incoming. Need to do this here because having a `Drop` conflicts
         // with consuming `self` in this method.
         // Stop the uffd handler threads.
-        println!("Stopping uffd handler threads");
+        // println!("Stopping uffd handler threads");
         for (_, handle) in self.memory_trackers.into_values() {
             handle.stop().join().unwrap();
         }

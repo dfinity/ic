@@ -810,18 +810,18 @@ pub fn uffd_handler(
             assert!(!dirty_bitmap.is_marked(faulting_page));
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
-            println!(
-                "[memory tracker] Handling write access to page: {:?}, prefetch_range: {:?}, tracking enabled",
-                faulting_page, prefetch_range
-            );
+            // println!(
+            //     "[memory tracker] Handling write access to page: {:?}, prefetch_range: {:?}, tracking enabled",
+            //     faulting_page, prefetch_range
+            // );
             // Ensure that we don't overwrite an already dirty page.
             let prefetch_range =
                 dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
-                println!(
-                    "[memory tracker] Handling write access to already accessed page: {:?}",
-                    faulting_page
-                );
+                // println!(
+                //     "[memory tracker] Handling write access to already accessed page: {:?}",
+                //     faulting_page
+                // );
                 tracker
                     .read_before_write_stats
                     .read_before_write_count
@@ -833,10 +833,10 @@ pub fn uffd_handler(
                 // Amortize the prefetch work based on the previously written pages.
                 let prefetch_range =
                     dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
-                println!(
-                    "[memory tracker] Prefetching range for dirty bitmap: {:?}",
-                    prefetch_range
-                );
+                // println!(
+                //     "[memory tracker] Prefetching range for dirty bitmap: {:?}",
+                //     prefetch_range
+                // );
                 tracker
                     .memory_instructions_stats
                     .mprotect_count
@@ -845,10 +845,10 @@ pub fn uffd_handler(
                 tracker.add_dirty_pages(faulting_page, prefetch_range.clone());
                 prefetch_range
             } else {
-                println!(
-                    "[memory tracker] Handling write access to a page that was missing: {:?}",
-                    faulting_page
-                );
+                // println!(
+                //     "[memory tracker] Handling write access to a page that was missing: {:?}",
+                //     faulting_page
+                // );
                 tracker
                     .read_before_write_stats
                     .direct_write_count
@@ -870,10 +870,10 @@ pub fn uffd_handler(
                     prefetch_range.clone(),
                     prefetch_range,
                 );
-                println!(
-                    "[memory tracker] Handled write access for range {:?}",
-                    prefetch_range
-                );
+                // println!(
+                //     "[memory tracker] Handled write access for range {:?}",
+                //     prefetch_range
+                // );
                 accessed_bitmap.mark_range(&prefetch_range);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range.clone());
@@ -904,8 +904,8 @@ fn map_unaccessed_pages(
     min_prefetch_range: Range<PageIndex>,
     max_prefetch_range: Range<PageIndex>,
 ) -> Range<PageIndex> {
-    println!("[memory tracker] Mapping unaccessed pages: min_prefetch_range:{:?}, max_prefetch_range:{:?}",
-        min_prefetch_range, max_prefetch_range);
+    // println!("[memory tracker] Mapping unaccessed pages: min_prefetch_range:{:?}, max_prefetch_range:{:?}",
+    //     min_prefetch_range, max_prefetch_range);
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
@@ -920,10 +920,10 @@ fn map_unaccessed_pages(
 
     let range = instructions.range.clone();
 
-    println!(
-        "[memory tracker] Applying memory instructions: {:?}, instructions: {:?}",
-        range, instructions.range
-    );
+    // println!(
+    //     "[memory tracker] Applying memory instructions: {:?}, instructions: {:?}",
+    //     range, instructions.range
+    // );
 
     apply_memory_instructions(tracker, uffd, page_protection_flags, instructions);
 
@@ -942,6 +942,9 @@ fn apply_memory_instructions(
         range: prefetch_range,
         instructions,
     } = memory_instructions;
+
+    // println!("prefetch_range: {:?}", prefetch_range);
+    // println!("instructions: {:?}", instructions);
     let mut handled = BTreeMap::new();
     for i in prefetch_range.start.get()..prefetch_range.end.get() {
         handled.insert(i, false);
@@ -962,10 +965,10 @@ fn apply_memory_instructions(
                 FileDescriptor { fd },
                 offset,
             ) => {
-                println!(
-                    "Mapping range: {:?} from fd: {}, offset: {}",
-                    range, fd, offset
-                );
+                // println!(
+                //     "Mapping range: {:?} from fd: {}, offset: {}",
+                //     range, fd, offset
+                // );
                 match uffd {
                     Some(uffd) => {
                         let mut file = unsafe { File::from_raw_fd(fd) };
@@ -1036,7 +1039,7 @@ fn apply_memory_instructions(
                     debug_assert_eq!(data.len(), range_size_in_bytes(&range));
                     match uffd {
                         Some(uffd) => {
-                            println!("Copying data to uffd: {:?}", range);
+                            // println!("Copying data to uffd: {:?}", range);
                             uffd.copy(
                                 data.as_ptr() as *const libc::c_void,
                                 tracker.page_start_addr_from(range.start),
@@ -1046,7 +1049,7 @@ fn apply_memory_instructions(
                             .expect("uffd copy failed");
                         }
                         None => {
-                            println!("Copying data to memory: {:?}", range);
+                            // println!("Copying data to memory: {:?}", range);
                             std::ptr::copy_nonoverlapping(
                                 data.as_ptr() as *const libc::c_void,
                                 tracker.page_start_addr_from(range.start),
@@ -1064,15 +1067,37 @@ fn apply_memory_instructions(
         }
     }
 
-    for (i, _) in handled.iter().filter(|(_, v)| !*v) {
-        let page_start_addr = tracker.page_start_addr_from(PageIndex::from(*i));
-        println!(
-            "Handling zero page index {}, page_start_addr: {:?}, range_size: {}",
-            i, page_start_addr, PAGE_SIZE
-        );
+    let mut zeropage_ranges = vec![];
+    let mut i = 0;
+    let mut start;
+    let handled = handled.into_iter().collect::<Vec<(u64, bool)>>();
+    // println!("handled: {:?}", handled);
+    while i < handled.len() {
+        if handled[i].1 {
+            i += 1;
+        } else {
+            start = handled[i].0;
+            while i < handled.len() && !handled[i].1 {
+                i += 1;
+            }
+            zeropage_ranges.push(Range {
+                start: PageIndex::from(start),
+                end: PageIndex::from(handled[i - 1].0 + 1),
+            });
+        }
+    }
+
+    // println!("zero page ranges: {:?}", zeropage_ranges);
+
+    for range in zeropage_ranges.iter() {
+        let page_start_addr = tracker.page_start_addr_from(PageIndex::from(range.start));
+        // println!(
+        //     "Handling zero page index {}, page_start_addr: {:?}, range_size: {}",
+        //     i, page_start_addr, PAGE_SIZE
+        // );
         if let Some(uffd) = uffd {
             unsafe {
-                uffd.zeropage(page_start_addr, PAGE_SIZE, false)
+                uffd.zeropage(page_start_addr, range_size_in_bytes(range), false)
                     .expect("uffd zeropage failed");
             }
         }
