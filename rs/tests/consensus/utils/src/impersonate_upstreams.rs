@@ -64,8 +64,6 @@ pub fn uvm_serve_recovery_artifacts(
 }
 
 fn uvm_serve_file(env: &TestEnv, file: Vec<u8>, uri: &Path) -> Result<()> {
-    println!("Serving file {} at {}", file.len(), uri.display(),);
-
     let uvm = get_upstreams_uvm(env);
 
     // Create the web root directory and the uri subdirectories.
