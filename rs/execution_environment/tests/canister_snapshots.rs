@@ -178,7 +178,7 @@ fn test_env_for_global_timer_on_low_wasm_memory(
 
     // Set the global timer into far future and grow wasm memory by at least `30 MiB` to trigger the on low wasm memory hook.
     let now = env.get_time().as_nanos_since_unix_epoch();
-    let global_timer = now + 1_000_000; // set global timer in many rounds from now so that it stays active up until the canister is uninstalled
+    let global_timer = now + 1_000_000; // set global timer in many rounds from now so that it stays active up until the canister is reinstalled
     env.execute_ingress(
         canister_id,
         "update",
@@ -209,6 +209,7 @@ fn test_env_for_global_timer_on_low_wasm_memory(
         .unwrap()
         .snapshot_id();
 
+    // The value of the counter bumped by on low wasm memory hook.
     let on_low_wasm_memory_hook = env
         .execute_ingress(
             canister_id,
