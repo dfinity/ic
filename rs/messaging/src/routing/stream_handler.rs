@@ -734,7 +734,7 @@ impl StreamHandlerImpl {
                     stream_index
                 );
                 match msg.try_into() {
-                    Ok::<RequestOrResponse, _>(msg) => {
+                    Ok(msg) => {
                         // Got a `RequestOrResponse`, induct it.
                         lost_cycles += self.induct_message(
                             msg,
@@ -744,6 +744,9 @@ impl StreamHandlerImpl {
                             available_guaranteed_response_memory,
                         );
                     }
+
+                    // This match is type specific so that we don't accidentally end
+                    // up here for something other than a `StreamBlocker`.
                     Err::<_, Arc<StreamBlocker>>(_blocker) => {
                         // Got a `StreamBlocker`, record its observation then drop it.
                         self.metrics.incoming_stream_blockers.inc();
