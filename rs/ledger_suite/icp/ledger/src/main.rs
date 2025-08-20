@@ -1,7 +1,6 @@
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
-#[cfg(not(feature = "canbench-rs"))]
 use candid::Decode;
 use candid::{candid_method, Nat, Principal};
 #[cfg(feature = "notify-method")]
