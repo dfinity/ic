@@ -27,7 +27,7 @@ use ic_https_outcalls_consensus::{
 use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
+    consensus_pool::ConsensusPoolCache,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::{artifact_manager::JoinGuard, state_sync::StateSyncClient},
@@ -60,10 +60,7 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedSender},
-    watch,
-};
+use tokio::sync::{mpsc::Sender, watch};
 use tower_http::trace::TraceLayer;
 
 /// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
@@ -152,7 +149,6 @@ impl Bouncers {
         time_source: Arc<dyn TimeSource>,
         message_router: Arc<dyn MessageRouting>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let ingress = Arc::new(IngressBouncer::new(time_source.clone()));
@@ -165,7 +161,7 @@ impl Bouncers {
         let idkg = Arc::new(IDkgBouncer::new(
             metrics_registry,
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache.clone(),
             state_reader.clone(),
         ));
 
@@ -209,7 +205,6 @@ impl AbortableBroadcastChannels {
         artifact_pools: &ArtifactPools,
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-        let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
         let bouncers = Bouncers::new(
             log,
             metrics_registry,
@@ -217,7 +212,6 @@ impl AbortableBroadcastChannels {
             time_source.clone(),
             message_router.clone(),
             consensus_pool_cache.clone(),
-            consensus_block_cache,
             state_reader.clone(),
         );
 
@@ -251,7 +245,6 @@ impl AbortableBroadcastChannels {
         };
 
         let ingress = {
-            #[allow(clippy::disallowed_methods)]
             let assembler = ic_artifact_downloader::FetchArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
@@ -363,7 +356,7 @@ pub fn setup_consensus_and_p2p(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());
@@ -500,7 +493,7 @@ fn start_consensus(
     time_source: Arc<dyn TimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
@@ -586,11 +579,9 @@ fn start_consensus(
         consensus_pool.clone(),
         metrics_registry.clone(),
     ));
-    #[allow(clippy::disallowed_methods)]
-    let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
+    let user_ingress_tx = abortable_broadcast_channels.ingress.inbound_tx.clone();
     join_handles.push(create_ingress_handlers(
         abortable_broadcast_channels.ingress,
-        user_ingress_rx,
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&artifact_pools.ingress_pool),
         ingress_manager,

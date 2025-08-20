@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/candid_utils",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
@@ -32,6 +33,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/temporary",
     "//rs/nervous_system/timestamp",
     "//rs/nns/constants",
     "//rs/protobuf",
@@ -55,6 +57,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -291,6 +294,7 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     add_test = True,
+    opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.

@@ -20,15 +20,15 @@ use icp_ledger::{
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
     IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
     LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TimeStamp, TipOfChainRes, UpgradeArgs, DEFAULT_TRANSFER_FEE,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, UpgradeArgs,
+    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
-    account::Account,
+    account::{Account, Subaccount},
     transfer::{Memo, TransferArg, TransferError},
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
@@ -226,29 +226,65 @@ fn test_minting_account() {
 }
 
 #[test]
-fn test_anonymous_transfers() {
+fn test_icp_anonymous_transfers() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const TRANSFER_AMOUNT: u64 = 1_000_000;
     let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
     let anon = PrincipalId::new_anonymous();
     let (env, canister_id) = setup(
         ledger_wasm(),
         encode_init_args,
-        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (Account::from(anon.0), INITIAL_BALANCE),
+        ],
     );
 
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(0u64, balance_of(&env, canister_id, anon.0));
+    let mut expected_total_supply = INITIAL_BALANCE * 2;
+    let mut expected_balance_p1 = INITIAL_BALANCE;
+    let mut expected_balance_p2 = 0;
+    let mut expected_balance_anon = INITIAL_BALANCE;
+
+    let check_expected_balances_and_total_supply =
+        |expected_total_supply: &u64,
+         expected_balance_p1: &u64,
+         expected_balance_p2: &u64,
+         expected_balance_anon: &u64| {
+            assert_eq!(expected_total_supply, &total_supply(&env, canister_id));
+            assert_eq!(expected_balance_p1, &balance_of(&env, canister_id, p1.0));
+            assert_eq!(expected_balance_p2, &balance_of(&env, canister_id, p2.0));
+            assert_eq!(
+                expected_balance_anon,
+                &balance_of(&env, canister_id, anon.0)
+            );
+        };
+
+    // Check initial balances and total supply
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
-    // The expected block index after the transfer is 1 (0 is the initial mint to `p1`).
-    let mut expected_block_index = 1u64;
+    // The expected block index after the transfer is 2 (0 and 1 are the initial mints to `p1` and `anon`).
+    let mut expected_block_index = 2u64;
     assert_eq!(
         transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed"),
         expected_block_index
     );
     expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
@@ -273,35 +309,40 @@ fn test_anonymous_transfers() {
     )
     .expect("failed to decode transfer response");
     assert_eq!(result, Ok(expected_block_index));
+    expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using `icrc1_transfer` fails
-    let transfer_arg = TransferArg {
-        from_subaccount: None,
-        to: Account::from(p1.0),
-        fee: None,
-        created_at_time: None,
-        amount: Nat::from(TRANSFER_AMOUNT),
-        memo: None,
-    };
-    let transfer_error = env
-        .execute_ingress_as(
-            anon,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&transfer_arg).unwrap(),
-        )
-        .unwrap_err();
-    assert!(transfer_error
-        .description()
-        .contains("Anonymous principal cannot hold tokens on the ledger."));
+    // Transfer from the account of the anonymous principal using `icrc1_transfer` succeeds
+    assert_eq!(
+        transfer(&env, canister_id, anon.0, p2.0, TRANSFER_AMOUNT).expect("transfer failed"),
+        expected_block_index
+    );
+    expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
+    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
         memo: icp_ledger::Memo(0u64),
         amount: Tokens::from_e8s(TRANSFER_AMOUNT),
         fee: Tokens::from_e8s(FEE),
         from_subaccount: None,
-        to: AccountIdentifier::new(p1, None).to_address(),
+        to: AccountIdentifier::new(p2, None).to_address(),
         created_at_time: None,
     };
     let response = env.execute_ingress_as(
@@ -310,58 +351,23 @@ fn test_anonymous_transfers() {
         "transfer",
         Encode!(&transfer_args).unwrap(),
     );
-    assert!(response.is_err());
-    if let Err(err) = response {
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(err.description().contains("Canister called `ic0.trap` with message: 'Panicked at 'Sending from 2vxsx-fae is not allowed'"));
-    }
-
-    assert_eq!(INITIAL_BALANCE - FEE * 2, total_supply(&env, canister_id));
-    assert_eq!(
-        INITIAL_BALANCE - (TRANSFER_AMOUNT + FEE) * 2,
-        balance_of(&env, canister_id, p1.0)
+    let result = Decode!(
+        &response
+        .expect("failed to transfer funds")
+        .bytes(),
+        Result<BlockIndex, TransferError>
+    )
+    .expect("failed to decode transfer response");
+    assert_eq!(result, Ok(expected_block_index));
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
     );
-    assert_eq!(TRANSFER_AMOUNT * 2, balance_of(&env, canister_id, anon.0));
-}
-
-#[test]
-fn test_anonymous_approval() {
-    const INITIAL_BALANCE: u64 = 10_000_000;
-    const APPROVE_AMOUNT: u64 = 1_000_000;
-    let p1 = PrincipalId::new_user_test_id(1);
-    let anon = PrincipalId::new_anonymous();
-    let (env, canister_id) = setup(
-        ledger_wasm(),
-        encode_init_args,
-        vec![(Account::from(anon.0), INITIAL_BALANCE)],
-    );
-
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(0, balance_of(&env, canister_id, p1.0));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
-
-    // Approve transfers for p1 from the account of the anonymous principal
-    let approve_args = ApproveArgs {
-        from_subaccount: None,
-        spender: p1.0.into(),
-        amount: Nat::from(APPROVE_AMOUNT),
-        fee: None,
-        memo: None,
-        expires_at: None,
-        expected_allowance: None,
-        created_at_time: None,
-    };
-    let approve_error = env
-        .execute_ingress_as(
-            anon,
-            canister_id,
-            "icrc2_approve",
-            Encode!(&approve_args).unwrap(),
-        )
-        .unwrap_err();
-    assert!(approve_error
-        .description()
-        .contains("Anonymous principal cannot approve token transfers on the ledger."));
 }
 
 #[test]
@@ -450,6 +456,16 @@ fn test_tx_deduplication() {
 #[test]
 fn test_mint_burn() {
     ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_transfers() {
+    ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_approval() {
+    ic_ledger_suite_state_machine_tests::test_anonymous_approval(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -2162,6 +2178,174 @@ fn test_tip_of_chain() {
         .bytes();
     let tip_candid = Decode!(&res, TipOfChainRes).expect("Failed to decode TipOfChainRes");
     assert_eq!(tip, tip_candid);
+}
+
+#[test]
+fn test_remove_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    const SUBACCOUNT: [u8; 32] = [1u8; 32];
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+    let p4 = PrincipalId::new_user_test_id(4);
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (
+                Account {
+                    owner: p1.0,
+                    subaccount: Some(SUBACCOUNT),
+                },
+                INITIAL_BALANCE,
+            ),
+        ],
+    );
+
+    let approve = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let approve_args = ApproveArgs {
+            from_subaccount,
+            spender: spender.0.into(),
+            amount: Nat::from(APPROVE_AMOUNT),
+            fee: None,
+            memo: None,
+            expires_at: None,
+            expected_allowance: None,
+            created_at_time: None,
+        };
+        let response = env.execute_ingress_as(
+            p1,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        );
+        let result = Decode!(&response.expect("failed to create approval").bytes(), Result<Nat, ApproveError> )
+        .expect("failed to decode approve response");
+        assert!(result.is_ok());
+    };
+
+    approve(None, p2);
+    approve(Some(SUBACCOUNT), p3);
+    approve(None, p4);
+
+    let verify_allowance =
+        |from_subaccount: Option<Subaccount>, spender: PrincipalId, allowance: u64| {
+            let allowance_args = AllowanceArgs {
+                account: Account {
+                    owner: p1.0,
+                    subaccount: from_subaccount,
+                },
+                spender: Account {
+                    owner: spender.0,
+                    subaccount: None,
+                },
+            };
+
+            let response = env.execute_ingress_as(
+                p1,
+                canister_id,
+                "icrc2_allowance",
+                Encode!(&allowance_args).unwrap(),
+            );
+
+            let result = Decode!(
+                &response.expect("failed to get allowance").bytes(),
+                Allowance
+            )
+            .expect("failed to decode allowance response");
+            assert_eq!(result.allowance.0.to_u64(), Some(allowance));
+        };
+
+    verify_allowance(None, p2, APPROVE_AMOUNT);
+    verify_allowance(Some(SUBACCOUNT), p3, APPROVE_AMOUNT);
+    verify_allowance(None, p4, APPROVE_AMOUNT);
+
+    let remove_approval = |from_subaccount: Option<Subaccount>, spender: PrincipalId| {
+        let spender_address = AccountIdentifier::new(spender, None).to_address();
+        let args = RemoveApprovalArgs {
+            from_subaccount,
+            spender: spender_address,
+            fee: Some(Nat::from(FEE)),
+        };
+        let response =
+            env.execute_ingress_as(p1, canister_id, "remove_approval", Encode!(&args).unwrap());
+        let result = Decode!(&response.expect("failed to remove approval").bytes(), Result<Nat, ApproveError> )
+        .expect("failed to decode remove_approval response");
+        assert!(result.is_ok());
+    };
+
+    remove_approval(None, p2);
+    remove_approval(Some(SUBACCOUNT), p3);
+
+    verify_allowance(None, p2, 0);
+    verify_allowance(Some(SUBACCOUNT), p3, 0);
+    // The last one was not removed
+    verify_allowance(None, p4, APPROVE_AMOUNT);
+}
+
+#[test]
+fn test_burn_whole_balance() {
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let fee_e8s = 100u64;
+    let initial_balance = 150u64;
+    initial_balances.insert(
+        AccountIdentifier::from(Account::from(p1.0)),
+        Tokens::from_e8s(initial_balance),
+    );
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(fee_e8s))
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let burn = |amount: u64, error_tokens: Option<Tokens>| {
+        let args = icp_ledger::TransferArgs {
+            memo: icp_ledger::Memo(0u64),
+            amount: Tokens::from_e8s(amount),
+            fee: Tokens::ZERO,
+            from_subaccount: None,
+            to: AccountIdentifier::from(MINTER).to_address(),
+            created_at_time: None,
+        };
+        let response = env.execute_ingress_as(p1, canister_id, "transfer", Encode!(&args).unwrap());
+        if let Some(error_tokens) = error_tokens {
+            assert!(response.is_err());
+            assert!(response.unwrap_err().description().contains(
+                &format!("Burns lower than {} are not allowed", error_tokens).to_string()
+            ));
+        } else {
+            let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )
+        .expect("failed to decode transfer response");
+            assert!(result.is_ok());
+        }
+    };
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), initial_balance);
+
+    // Balance is greater than fee, burning less than fee should not be allowed.
+    burn(fee_e8s - 1, Some(Tokens::from(fee_e8s)));
+
+    // Burning fee is ok.
+    burn(fee_e8s, None);
+
+    // Balance is now less than fee.
+    assert_eq!(balance_of(&env, canister_id, p1.0), fee_e8s / 2);
+
+    // Burning less than the whole balance is not allowed.
+    burn(fee_e8s / 2 - 1, Some(Tokens::from(fee_e8s / 2)));
+
+    // Burning whole balance is allowed, even if it is less than fee.
+    burn(fee_e8s / 2, None);
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), 0);
 }
 
 mod metrics {

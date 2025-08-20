@@ -38,7 +38,9 @@ HTTP_ENDPOINTS_DEPS = [
     # Keep sorted.
     "//rs/crypto/tree_hash",
     "//rs/http_endpoints/test_agent",
+    "//rs/tests/consensus/utils",
     "//rs/types/types",
+    "@crate_index//:url",
 ]
 
 system_test_nns(
@@ -46,7 +48,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -84,7 +85,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "dynamic_testnet",
         "manual",
@@ -211,6 +211,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/limits",
+        "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
@@ -283,7 +284,7 @@ system_test_nns(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "http_endpoints_public_spec_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = False,
@@ -297,8 +298,8 @@ system_test(
 
 system_test_nns(
     name = "network_large_test",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
@@ -316,10 +317,10 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "system_test_large",
     ],
@@ -350,7 +351,7 @@ system_test_nns(
     name = "query_workload_long_test",
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
     ],
@@ -365,7 +366,7 @@ system_test_nns(
     name = "update_workload_large_payload",
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",
     ],
     test_timeout = "long",

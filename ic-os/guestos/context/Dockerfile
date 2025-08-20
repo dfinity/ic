@@ -194,14 +194,6 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
-# The "filebeat" account. Used to run filebeat binary to send logs of the
-# GuestOS.
-RUN addgroup filebeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
-    adduser filebeat filebeat && \
-    adduser filebeat systemd-journal && \
-    chown root:root /usr/local/bin/filebeat
-
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -236,6 +228,9 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
+
+# Prepare mount point for config device coming from the HostOS
+RUN mkdir /mnt/config
 
 # ------ DEV VARIANT ---------------------------------------------
 

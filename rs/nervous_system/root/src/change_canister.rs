@@ -14,8 +14,10 @@ use ic_nervous_system_clients::{
         canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
     },
 };
+use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
+use std::{cell::RefCell, collections::BTreeMap};
 
 /// The structure allows reconstructing a potentially large WASM from chunks needed to upgrade or
 /// reinstall some target canister.
@@ -218,12 +220,30 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
+// Thread-local storage for per-canister locks
+// Key: CanisterId, Value: ChangeCanisterRequest (for debugging/logging)
+thread_local! {
+    static CANISTER_CHANGE_LOCKS: RefCell<BTreeMap<CanisterId, ChangeCanisterRequest>> =
+        const {RefCell::new(BTreeMap::new()) };
+}
+
 pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
 {
     let canister_id = request.canister_id;
     let stop_before_installing = request.stop_before_installing;
+
+    // Try to acquire lock for this canister - fail immediately if locked
+    let _guard = match acquire_for(&CANISTER_CHANGE_LOCKS, canister_id, request.clone()) {
+        Ok(guard) => guard,
+        Err(conflicting_request) => {
+            return Err(format!(
+                "Canister {} is currently locked by another change operation. Conflicting request: {:?}",
+                canister_id, conflicting_request
+            ));
+        }
+    };
 
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
@@ -393,5 +413,110 @@ where
     match nat.as_ref() {
         Some(num) => serializer.serialize_str(&num.to_string()),
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use candid::utils::{ArgumentDecoder, ArgumentEncoder};
+    use dfn_core::api::CanisterId;
+    use std::future::Future;
+
+    // Mock runtime that returns errors for all inter-canister calls
+    // This allows us to test the locking behavior without actually making calls
+    struct MockRuntime;
+
+    #[async_trait]
+    impl Runtime for MockRuntime {
+        async fn call_without_cleanup<In, Out>(
+            _id: CanisterId,
+            _method: &str,
+            _args: In,
+        ) -> Result<Out, (i32, String)>
+        where
+            In: ArgumentEncoder + Send,
+            Out: for<'a> ArgumentDecoder<'a>,
+        {
+            Err((
+                1,
+                "MockRuntime: call_without_cleanup not implemented".to_string(),
+            ))
+        }
+
+        async fn call_with_cleanup<In, Out>(
+            _id: CanisterId,
+            _method: &str,
+            _args: In,
+        ) -> Result<Out, (i32, String)>
+        where
+            In: ArgumentEncoder + Send,
+            Out: for<'a> ArgumentDecoder<'a>,
+        {
+            Err((
+                1,
+                "MockRuntime: call_with_cleanup not implemented".to_string(),
+            ))
+        }
+
+        async fn call_bytes_with_cleanup(
+            _id: CanisterId,
+            _method: &str,
+            _args: &[u8],
+        ) -> Result<Vec<u8>, (i32, String)> {
+            Err((
+                1,
+                "MockRuntime: call_bytes_with_cleanup not implemented".to_string(),
+            ))
+        }
+
+        fn spawn_future<F: 'static + Future<Output = ()>>(_future: F) {
+            // Do nothing - we don't need to actually spawn
+        }
+
+        fn canister_version() -> u64 {
+            1
+        }
+    }
+
+    #[tokio::test]
+    async fn test_change_canister_fails_when_lock_exists() {
+        let canister_id = CanisterId::from_u64(42);
+
+        // Create a request that we'll use to pre-populate the lock
+        let conflicting_request = ChangeCanisterRequest {
+            stop_before_installing: false,
+            canister_id,
+            mode: CanisterInstallMode::Install,
+            wasm_module: vec![1, 2, 3],
+            chunked_canister_wasm: None,
+            arg: vec![7, 8, 9],
+        };
+
+        // Manually insert a lock for this canister to simulate a concurrent operation
+        CANISTER_CHANGE_LOCKS.with(|locks| {
+            locks
+                .borrow_mut()
+                .insert(canister_id, conflicting_request.clone());
+        });
+
+        // Now try to call change_canister on the same canister - this should fail
+        let new_request = ChangeCanisterRequest {
+            stop_before_installing: true,
+            canister_id,
+            mode: CanisterInstallMode::Upgrade,
+            wasm_module: vec![10, 11, 12],
+            chunked_canister_wasm: None,
+            arg: vec![16, 17, 18],
+        };
+
+        let result = change_canister::<MockRuntime>(new_request).await;
+
+        // Should return an error indicating the canister is locked
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("currently locked by another change operation"));
+        assert!(error_msg.contains(&format!("{}", canister_id)));
     }
 }

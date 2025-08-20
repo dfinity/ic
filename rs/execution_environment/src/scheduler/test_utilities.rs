@@ -182,7 +182,9 @@ impl SchedulerTest {
     }
 
     pub fn set_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
-        self.state.as_mut().unwrap().metadata.cost_schedule = cost_schedule;
+        if let Some(state) = self.state.as_mut() {
+            state.set_own_cost_schedule(cost_schedule);
+        }
         self.registry_settings.canister_cycles_cost_schedule = cost_schedule;
     }
 
@@ -210,7 +212,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            self.state.as_ref().unwrap().metadata.cost_schedule,
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
             WasmExecutionMode::Wasm32,
         )
     }
@@ -625,15 +627,17 @@ impl SchedulerTest {
     }
 
     pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .ecdsa_signature_fee(self.registry_settings.subnet_size)
+        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
+            self.registry_settings.subnet_size,
+            self.state().get_own_cost_schedule(),
+        )
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .schnorr_signature_fee(self.registry_settings.subnet_size)
+        self.scheduler.cycles_account_manager.schnorr_signature_fee(
+            self.registry_settings.subnet_size,
+            self.state().get_own_cost_schedule(),
+        )
     }
 
     pub fn http_request_fee(
@@ -645,7 +649,7 @@ impl SchedulerTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
-            self.state.as_ref().unwrap().metadata.cost_schedule,
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
         )
     }
 
@@ -654,7 +658,7 @@ impl SchedulerTest {
             bytes,
             duration,
             self.subnet_size(),
-            self.state.as_ref().unwrap().metadata.cost_schedule,
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
         )
     }
 
@@ -796,6 +800,11 @@ impl SchedulerTestBuilder {
             master_public_key_ids,
             ..self
         }
+    }
+
+    pub fn with_store_pre_signatures_in_state(mut self, status: FlagStatus) -> Self {
+        self.scheduler_config.store_pre_signatures_in_state = status;
+        self
     }
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {

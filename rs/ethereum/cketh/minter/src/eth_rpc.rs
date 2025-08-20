@@ -1,8 +1,7 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use evm_rpc_client::{Hex32, HttpOutcallError};
-use ic_cdk::api::call::RejectionCode;
+use evm_rpc_client::{Hex32, HttpOutcallError, LegacyRejectionCode};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
@@ -72,7 +71,7 @@ impl From<Vec<Hex32>> for Topic {
 pub fn is_response_too_large(response: &HttpOutcallError) -> bool {
     match response {
         HttpOutcallError::IcError { code, message } => {
-            code == &RejectionCode::SysFatal
+            code == &LegacyRejectionCode::SysFatal
                 && (message.contains("size limit") || message.contains("length limit"))
         }
         _ => false,

@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
