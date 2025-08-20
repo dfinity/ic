@@ -6,11 +6,6 @@
 
 set -euo pipefail
 
-grafana_dashboards_path=$(
-    cd "$(dirname ${BASH_SOURCE[0]})"
-    pwd -P
-)/dashboards
-
 function usage() {
     cat <<EOF
 Usage:
@@ -30,15 +25,9 @@ Usage:
     Let grafana listen on port GRAFANA_PORT.
     Defaults to 3000.
 
-  --dont-provision-grafana-dashboards
+  --grafana-dashboards-dir
 
-    By default the mainnet grafana dashboards from:
-
-      $grafana_dashboards_path
-
-    are automatically provisioned in the local grafana server.
-
-    This option disables that default behaviour.
+    Provision Grafana dashboards from the specified directory.
 
   --help
 
@@ -67,8 +56,8 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
-        --dont-provision-grafana-dashboards)
-            DONT_PROVISION_GRAFANA_DASHBOARDS="1"
+        --grafana-dashboards-dir)
+            GRAFANA_DASHBOARDS_DIR="$2"
             shift
             ;;
         *)
@@ -150,9 +139,9 @@ cat <<EOF >"$grafana_data_dir/datasources/datasource.yaml"
 }
 EOF
 
-if [ -z "${DONT_PROVISION_GRAFANA_DASHBOARDS:-}" ]; then
+if [ -n "${GRAFANA_DASHBOARDS_DIR:-}" ]; then
     provisioned_grafana_dashboards="$grafana_data_dir/dashboards/provisioned"
-    cp -r "$grafana_dashboards_path" "$provisioned_grafana_dashboards"
+    cp -r "$GRAFANA_DASHBOARDS_DIR" "$provisioned_grafana_dashboards"
     cat <<EOF >"$grafana_data_dir/dashboards/dashboard.yaml"
 {
     "apiVersion": 1,
