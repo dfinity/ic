@@ -328,7 +328,13 @@ def system_test(
         # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(
+            git_commit_id = MAINNET_NNS_SUBNET_REVISION,
+            variant = "guest-os",
+            update = True,
+            test = False,
+            dev = False,
+        ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
@@ -356,7 +362,13 @@ def system_test(
     if uses_guestos_mainnet_update:
         # NOTE: Uses the "NNS" subnet to determine mainnet version
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(
+            git_commit_id = MAINNET_NNS_SUBNET_REVISION,
+            variant = "guest-os",
+            update = True,
+            test = False,
+            dev = False,
+        ) + "update-img.tar.zst"
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
 
         # _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
@@ -392,7 +404,12 @@ def system_test(
 
     if uses_hostos_mainnet_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_LATEST_HOSTOS_REVISION, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(
+            git_commit_id = MAINNET_LATEST_HOSTOS_REVISION,
+            variant = "host-os",
+            update = True,
+            test = False,
+        ) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS_HASH
 
     deps = list(runtime_deps)
@@ -416,7 +433,7 @@ def system_test(
         info_file_vars = info_file_vars,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
-               (["manual"] if "experimental_system_test_colocation" in tags else []),
+               (["manual"] if "colocate" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
@@ -455,7 +472,7 @@ def system_test(
         icos_images = icos_images,
         info_file_vars = info_file_vars,
         tags = tags + ["requires-network", "system_test"] +
-               (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
+               (["colocated"] if "colocate" in tags else ["manual"]) +
                additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
@@ -464,7 +481,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -472,9 +489,10 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     * One with the given name which uses the NNS from mainnet as specified by mainnet-canisters.bzl.
     * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
 
-    The latter one is additionally tagged with "system_test_large" so that it can be excluded.
-    You can override the latter behaviour by specifying different `extra_head_nns_tags`.
-    If you set `extra_head_nns_tags` to `[]` the head_nns variant will have the same tags as the default variant.
+    The head_nns variant is additionally tagged with either:
+    * ["manual"] if enable_head_nns_variant is disabled.
+    * [] if "long_test" in tags to ensure the head_nns variant runs once on daily
+    * ["system_test_large"] otherwise.
 
     The idea being that for most system-tests which test the replica it's more realistic to test against the
     mainnet NNS since that version would be active when the replica would be released.
@@ -484,7 +502,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
 
     Args:
         name: the name of the system-tests.
-        extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
+        enable_head_nns_variant: whether to run the head_nns variant daily.
         **kwargs: the arguments of the system-tests.
 
     Returns:
@@ -502,6 +520,16 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_large"], **kwargs)
     )
 
     original_tags = kwargs.pop("tags", [])
+
+    extra_head_nns_tags = (
+        # Disable the head_nns variant if requested
+        ["manual"] if not enable_head_nns_variant else
+        # Don't include the default "system_test_large" tag for the head_nns variant of long_tests to ensure it only runs once.
+        [] if "long_test" in original_tags else
+        # Run the head_nns variant daily.
+        ["system_test_large"]
+    )
+
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",

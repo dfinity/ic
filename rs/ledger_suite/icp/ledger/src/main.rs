@@ -865,7 +865,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 if let Some(upgrade_args) = upgrade_args {
                     ledger.upgrade(upgrade_args);
                 }
-        }
+            }
     }
         }
         set_certified_data(
@@ -1016,7 +1016,7 @@ async fn icrc1_transfer(
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     let from_account = Account {
@@ -1053,7 +1053,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1520,7 +1520,7 @@ fn icrc2_approve_not_async(
     override_spender: Option<AccountIdentifier>,
 ) -> Result<Nat, ApproveError> {
     if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
-        trap("Anonymous principal cannot approve token transfers on the ledger.");
+        trap("Caller cannot approve token transfers on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {

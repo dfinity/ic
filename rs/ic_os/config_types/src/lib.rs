@@ -17,7 +17,7 @@
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 //!
-//! ## Logging Safety
+//! ## Logging safety
 //!
 //! All configuration objects defined in this file are safe to log. They do not contain any secret material.
 use ic_types::malicious_behavior::MaliciousBehavior;
@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.4.0";
+pub const CONFIG_VERSION: &str = "1.5.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -252,13 +252,9 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
+// NODE-1681: Leftover from push-based logging. Remove now that it's fully deprecated
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
-pub struct Logging {
-    /// Space-separated lists of hosts to ship logs to.
-    pub elasticsearch_hosts: Option<String>,
-    /// Space-separated list of tags to apply to exported log records.
-    pub elasticsearch_tags: Option<String>,
-}
+pub struct Logging {}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {
