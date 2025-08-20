@@ -11,6 +11,7 @@ use crate::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
     CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
@@ -25,7 +26,8 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats},
+    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
+    consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
@@ -658,6 +660,43 @@ impl ReplicatedState {
         &self.metadata
     }
 
+    /// Returns the cost schedule of this subnet.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        let subnet_id = self.metadata.own_subnet_id;
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+            .unwrap_or_default()
+    }
+
+    /// Returns the cost schedule of the provided subnet, if it exists.
+    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+    }
+
+    /// Every round, the cost schedule flag is read from the registry and the
+    /// replicated state's flag is updated.
+    ///
+    /// Don't use this outside of tests or `execute_round`, or state may become
+    /// inconsistent.
+    pub fn set_own_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        let own_subnet_id = self.metadata.own_subnet_id;
+        if let Some(subnet_topology) = self
+            .metadata
+            .network_topology
+            .subnets
+            .get_mut(&own_subnet_id)
+        {
+            subnet_topology.cost_schedule = cost_schedule
+        }
+    }
+
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
@@ -710,6 +749,14 @@ impl ReplicatedState {
             .sign_with_threshold_contexts
     }
 
+    /// Returns all pre-signature stashes.
+    pub fn pre_signature_stashes(&self) -> &BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> {
+        &self
+            .metadata
+            .subnet_call_context_manager
+            .pre_signature_stashes
+    }
+
     /// Returns all reshare chain key contexts.
     pub fn reshare_chain_key_contexts(&self) -> &BTreeMap<CallbackId, ReshareChainKeyContext> {
         &self
@@ -733,7 +780,7 @@ impl ReplicatedState {
     }
 
     /// Canister migrations require that a canister is stopped, has no guaranteed responses
-    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
+    /// in any outgoing stream, and nothing in the input or output queue (guaranteed or otherwise).
     pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
         let streams_flushed = || {
             self.metadata
@@ -749,7 +796,7 @@ impl ReplicatedState {
 
         let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
 
-        stopped && !canister_state.has_output() && streams_flushed()
+        stopped && !canister_state.has_input() && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.
@@ -951,7 +998,7 @@ impl ReplicatedState {
     /// Pushes an ingress message into the induction pool (canister or subnet
     /// ingress queue).
     pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), IngressInductionError> {
-        if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
+        if msg.is_addressed_to_subnet() {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;

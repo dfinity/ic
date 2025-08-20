@@ -1,4 +1,4 @@
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
@@ -29,8 +29,11 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    methods::{Callback, WasmClosure},
+};
 use ic_types::{
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
@@ -153,6 +156,7 @@ impl ReplicatedStateBuilder {
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
         );
 
@@ -471,7 +475,7 @@ impl SystemStateBuilder {
         mut self,
         environment_variables: BTreeMap<String, String>,
     ) -> Self {
-        self.system_state.environment_variables = environment_variables;
+        self.system_state.environment_variables = EnvironmentVariables::new(environment_variables);
         self
     }
 

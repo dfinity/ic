@@ -6,10 +6,10 @@ use axum::{
     response::{Html, IntoResponse, Response as AxumResponse},
 };
 use bitcoin::Network;
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload, SetAuthorizedSubnetworkListArgs,
-    SubnetListWithType, UpdateSubnetTypeArgs,
+    SubnetListWithType, UpdateSubnetTypeArgs, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
 };
 use futures::future::BoxFuture;
 use futures::FutureExt;
@@ -39,10 +39,13 @@ use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServi
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
+use ic_icp_index::InitArg as IcpIndexInitArg;
+use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{RegistryValue, ZERO_REGISTRY_VERSION};
 use ic_interfaces_state_manager::StateReader;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{no_op_logger, ReplicaLogger};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, EcdsaCurve,
@@ -53,14 +56,20 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
+use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
     are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ic_state_machine_tests::{
     add_global_registry_records, add_initial_registry_records, FakeVerifier, StateMachine,
     StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
@@ -79,14 +88,14 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus, SignedIngress,
+        QueryResponseHash, ReplicaHealthStatus,
     },
     time::GENESIS,
     CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
-use icp_ledger::AccountIdentifier;
+use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount, Tokens};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
@@ -98,16 +107,17 @@ use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::{Deserialize, Serialize};
 use slog::Level;
+use std::cmp::max;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs::{remove_file, File},
     io::{BufReader, Read, Write},
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use strum::IntoEnumIterator;
 use tempfile::{NamedTempFile, TempDir};
@@ -125,6 +135,28 @@ include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
     include_bytes!(env!("CYCLES_MINTING_CANISTER_WASM_PATH"));
+const ICP_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_LEDGER_CANISTER_WASM_PATH"));
+const ICP_INDEX_CANISTER_WASM: &[u8] = include_bytes!(env!("ICP_INDEX_CANISTER_WASM_PATH"));
+const CYCLES_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("CYCLES_LEDGER_CANISTER_WASM_PATH"));
+const CYCLES_LEDGER_INDEX_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH"));
+const GOVERNANCE_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("GOVERNANCE_TEST_CANISTER_WASM_PATH"));
+const ROOT_CANISTER_WASM: &[u8] = include_bytes!(env!("ROOT_CANISTER_WASM_PATH"));
+const SNS_WASM_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_WASM_CANISTER_WASM_PATH"));
+const SNS_ROOT_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_ROOT_CANISTER_WASM_PATH"));
+const SNS_GOVERNANCE_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_GOVERNANCE_CANISTER_WASM_PATH"));
+const SNS_SWAP_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_SWAP_CANISTER_WASM_PATH"));
+const SNS_LEDGER_CANISTER_WASM: &[u8] = include_bytes!(env!("SNS_LEDGER_CANISTER_WASM_PATH"));
+const SNS_LEDGER_ARCHIVE_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH"));
+const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
+const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
+
+const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
@@ -134,6 +166,19 @@ const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+
+fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
+    // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
+    if icp_features
+        .as_ref()
+        .map(|icp_features| icp_features.cycles_minting)
+        .unwrap_or_default()
+    {
+        UNIX_EPOCH + Duration::from_secs(DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1)
+    } else {
+        GENESIS.into()
+    }
+}
 
 /// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
@@ -198,15 +243,10 @@ fn compute_subnet_seed(
 
 #[derive(Clone, Deserialize, Serialize)]
 struct RawTopologyInternal {
-    pub subnet_configs: Vec<RawSubnetConfigInternal>,
+    pub subnet_configs: Vec<SubnetConfigInternal>,
     pub default_effective_canister_id: RawCanisterId,
     pub icp_features: Option<IcpFeatures>,
     pub synced_registry_version: Option<u64>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-struct RawSubnetConfigInternal {
-    pub subnet_config: SubnetConfigInternal,
     pub time: SystemTime,
 }
 
@@ -259,7 +299,7 @@ impl BitcoinAdapterParts {
         runtime: Arc<Runtime>,
     ) -> Self {
         let bitcoin_adapter_config = BitcoinAdapterConfig {
-            network: Network::Regtest,
+            network: Network::Regtest.into(),
             nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,
@@ -466,6 +506,8 @@ struct PocketIcSubnets {
     subnet_configs: Vec<SubnetConfigInternal>,
     subnets: Arc<SubnetsImpl>,
     nns_subnet: Option<Arc<Subnet>>,
+    sns_subnet: Option<Arc<Subnet>>,
+    ii_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     state_dir: Option<PathBuf>,
@@ -475,6 +517,7 @@ struct PocketIcSubnets {
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
+    initial_time: SystemTime,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
@@ -488,7 +531,6 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        time: SystemTime,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
@@ -534,18 +576,12 @@ impl PocketIcSubnets {
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-        let t = time
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        let time = Time::from_nanos_since_unix_epoch(t);
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
-            .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
@@ -560,6 +596,7 @@ impl PocketIcSubnets {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
+        initial_time: SystemTime,
         synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -574,6 +611,8 @@ impl PocketIcSubnets {
             subnet_configs: vec![],
             subnets: Arc::new(SubnetsImpl::new()),
             nns_subnet: None,
+            sns_subnet: None,
+            ii_subnet: None,
             runtime,
             state_dir,
             registry_data_provider,
@@ -583,8 +622,24 @@ impl PocketIcSubnets {
             log_level,
             bitcoind_addr,
             icp_features,
+            initial_time,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
+        }
+    }
+
+    fn persist_topology(&self, default_effective_canister_id: Principal) {
+        if let Some(ref state_dir) = self.state_dir {
+            let raw_topology: RawTopologyInternal = RawTopologyInternal {
+                subnet_configs: self.subnet_configs.clone(),
+                default_effective_canister_id: default_effective_canister_id.into(),
+                icp_features: self.icp_features.clone(),
+                synced_registry_version: Some(self.synced_registry_version.get()),
+                time: self.time(),
+            };
+            let topology_json = serde_json::to_string(&raw_topology).unwrap();
+            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
+            topology_file.write_all(topology_json.as_bytes()).unwrap();
         }
     }
 
@@ -602,6 +657,8 @@ impl PocketIcSubnets {
     fn clear(&mut self) {
         self.subnets.clear();
         self.nns_subnet.take();
+        self.sns_subnet.take();
+        self.ii_subnet.take();
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
@@ -610,14 +667,13 @@ impl PocketIcSubnets {
     }
 
     fn time(&self) -> SystemTime {
-        self.subnets
-            .get_all()
-            .first()
-            .map(|subnet| subnet.state_machine.time())
-            .unwrap_or(GENESIS.into())
+        self.subnets.get_all().first().unwrap().state_machine.time()
     }
 
-    fn create_subnet(&mut self, subnet_config_info: SubnetConfigInfo) -> SubnetConfigInternal {
+    fn create_subnet(
+        &mut self,
+        subnet_config_info: SubnetConfigInfo,
+    ) -> Result<SubnetConfigInternal, String> {
         let SubnetConfigInfo {
             ranges,
             alloc_range,
@@ -625,18 +681,8 @@ impl PocketIcSubnets {
             subnet_state_dir,
             subnet_kind,
             instruction_config,
-            mut time,
+            expected_state_time,
         } = subnet_config_info;
-
-        // All subnets must eventually have the same time and time can only advance =>
-        // advance time of the new subnet if other subnets have higher time;
-        // the maximum time must be determined before adding a `StateMachine`
-        // for the new subnet to `self.subnets` because `self.time()`
-        // is only sound if all subnets in `self.subnets` have the same time.
-        let current_time = self.time();
-        if current_time > time {
-            time = current_time;
-        }
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
@@ -669,7 +715,6 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            time,
             self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
@@ -719,9 +764,26 @@ impl PocketIcSubnets {
         // if one was provided).
         let subnet_id = sm.get_subnet_id();
 
+        if let Some(expected_time) = expected_state_time {
+            let actual_time: SystemTime = sm.get_state_time().into();
+            if actual_time != expected_time {
+                return Err(format!(
+                    "The state of subnet with seed {} is incomplete.",
+                    hex::encode(subnet_seed)
+                ));
+            }
+        }
+
         // The subnet created first is marked as the NNS subnet.
         if self.nns_subnet.is_none() {
             self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
+
+        if let SubnetKind::SNS = subnet_kind {
+            self.sns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
+        if let SubnetKind::II = subnet_kind {
+            self.ii_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
 
         // We need the actual subnet ID to update the chain keys.
@@ -784,6 +846,13 @@ impl PocketIcSubnets {
             subnet.state_machine.reload_registry();
         }
 
+        // All subnets must have the same time and time can only advance =>
+        // set the time to the maximum time in the latest state across all subnets.
+        let mut time: SystemTime = self.initial_time;
+        for subnet in self.subnets.get_all() {
+            time = max(time, subnet.state_machine.get_state_time().into());
+        }
+
         // Make sure time is strictly monotone.
         time += Duration::from_nanos(1);
 
@@ -815,15 +884,37 @@ impl PocketIcSubnets {
         self.subnet_configs.push(subnet_config.clone());
 
         if let Some(icp_features) = self.icp_features.clone() {
-            if icp_features.registry {
+            // using `let IcpFeatures { }` with explicit field names
+            // to force an update after adding a new field to `IcpFeatures`
+            let IcpFeatures {
+                registry,
+                cycles_minting,
+                icp_token,
+                cycles_token,
+                nns_governance,
+                sns,
+            } = icp_features;
+            if registry {
                 self.update_registry();
             }
-            if icp_features.cmc {
+            if cycles_minting {
                 self.update_cmc();
+            }
+            if icp_token {
+                self.deploy_icp_token();
+            }
+            if cycles_token {
+                self.deploy_cycles_token();
+            }
+            if nns_governance {
+                self.deploy_nns_governance();
+            }
+            if sns {
+                self.deploy_sns();
             }
         }
 
-        subnet_config
+        Ok(subnet_config)
     }
 
     fn get_nns(&self) -> Option<Arc<StateMachine>> {
@@ -834,7 +925,7 @@ impl PocketIcSubnets {
 
     fn update_registry(&mut self) {
         let nns_subnet = self.nns_subnet.clone().expect(
-            "The NNS subnet is supposed to already exist if the registry is to be deployed.",
+            "The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.",
         );
 
         if !nns_subnet
@@ -909,7 +1000,7 @@ impl PocketIcSubnets {
         let nns_subnet = self
             .nns_subnet
             .clone()
-            .expect("The NNS subnet is supposed to already exist if the CMC is to be deployed.");
+            .expect("The NNS subnet is supposed to already exist if the `cycles_minting` ICP feature is specified.");
 
         if !nns_subnet
             .state_machine
@@ -947,6 +1038,16 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, CYCLES_MINTING_CANISTER_ID);
 
             // Install the CMC.
+            let cycles_ledger_canister_id = if self
+                .icp_features
+                .as_ref()
+                .map(|icp_features| icp_features.cycles_token)
+                .unwrap_or_default()
+            {
+                Some(CYCLES_LEDGER_CANISTER_ID)
+            } else {
+                None
+            };
             let cmc_init_payload = Some(CyclesCanisterInitPayload {
                 ledger_canister_id: Some(LEDGER_CANISTER_ID),
                 governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
@@ -956,7 +1057,7 @@ impl PocketIcSubnets {
                 )),
                 last_purged_notification: None,
                 exchange_rate_canister: None,
-                cycles_ledger_canister_id: None,
+                cycles_ledger_canister_id,
             });
             nns_subnet
                 .state_machine
@@ -975,7 +1076,14 @@ impl PocketIcSubnets {
             //       xdr_permyriad_per_icp = 35_200 : nat64;
             //       timestamp_seconds = 1_751_617_980 : nat64;
             //     };
-            let timestamp_seconds = 1_751_617_980;
+            // We use the PocketIC time (instead of the actual time at which the rate was obtained by the above call)
+            // because CMC does not expect rates in the future w.r.t. the PocketIC time.
+            let timestamp_seconds = nns_subnet
+                .state_machine
+                .time()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
             let xdr_permyriad_per_icp = 35_200;
             let update_icp_xdr_conversion_rate_payload = UpdateIcpXdrConversionRatePayload {
                 data_source: "PocketIC".to_string(),
@@ -1047,6 +1155,553 @@ impl PocketIcSubnets {
         }
     }
 
+    fn deploy_icp_token(&self) {
+        let nns_subnet = self
+            .nns_subnet
+            .clone()
+            .expect("The NNS subnet is supposed to already exist if the `icp_token` ICP feature is specified.");
+
+        if !nns_subnet.state_machine.canister_exists(LEDGER_CANISTER_ID) {
+            // Create the ICP ledger with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"ryjl3-tyaaa-aaaaa-aaaba-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (4_294_967_296 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(4_294_967_296_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(LEDGER_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, LEDGER_CANISTER_ID);
+
+            // Install the ICP ledger.
+            // The following initial values are used by the `dfx nns extension` (https://github.com/dfinity/dfx-extensions/blob/2949dd3cbf6e8a52093da32c7ff27011f5ff3f3d/extensions/nns/src/install_nns.rs#L128-L131).
+            let mut initial_values = HashMap::new();
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "2b8fbde99de881f695f279d2a892b1137bfe81a42d7694e064b1be58701e1138",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
+            let icp_ledger_init_payload =
+                LedgerCanisterInitPayloadBuilder::new_with_mainnet_settings()
+                    .initial_values(initial_values)
+                    .build()
+                    .unwrap();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    ICP_LEDGER_CANISTER_WASM.to_vec(),
+                    Encode!(&icp_ledger_init_payload).unwrap(),
+                )
+                .unwrap();
+        }
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(LEDGER_INDEX_CANISTER_ID)
+        {
+            // Create the ICP index with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"qhbym-qaaaa-aaaaa-aaafq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(LEDGER_INDEX_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, LEDGER_INDEX_CANISTER_ID);
+
+            // Install the ICP index.
+            let icp_index_init_arg = IcpIndexInitArg {
+                ledger_id: LEDGER_CANISTER_ID.get().0,
+            };
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    ICP_INDEX_CANISTER_WASM.to_vec(),
+                    Encode!(&icp_index_init_arg).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_cycles_token(&self) {
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        // Cycles ledger init args.
+        #[derive(CandidType)]
+        struct CyclesLedgerConfig {
+            max_blocks_per_request: u64,
+            index_id: Option<Principal>,
+        }
+        #[derive(CandidType)]
+        enum CyclesLedgerArgs {
+            Init(CyclesLedgerConfig),
+        }
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(CYCLES_LEDGER_CANISTER_ID)
+        {
+            // Create the cycles ledger with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"um5iw-rqaaa-aaaaq-qaaba-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // Create the cycles ledger canister and top it up with cycles so that
+            // - test identities can be initialized to have a large cycles balance on the ledger that is actually backed by ICP cycles;
+            // - additional cycles can be deposited to the ledger without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(CYCLES_LEDGER_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, CYCLES_LEDGER_CANISTER_ID);
+
+            // Install the cycles ledger.
+            // The values of the initial payload have been obtained by calling
+            // `dfx canister call um5iw-rqaaa-aaaaq-qaaba-cai icrc1_metadata --ic --update`:
+            //   record { "dfn:max_blocks_per_request"; variant { Nat = 50 : nat } };
+            //   record { "dfn:index_id"; variant { Blob = blob "\00\00\00\00\02\10\00\03\01\01" }; };
+            let cycles_ledger_config = CyclesLedgerConfig {
+                max_blocks_per_request: 50,
+                index_id: Some(CYCLES_LEDGER_INDEX_CANISTER_ID.into()),
+            };
+            let cycles_ledger_args = CyclesLedgerArgs::Init(cycles_ledger_config);
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    CYCLES_LEDGER_CANISTER_WASM.to_vec(),
+                    Encode!(&cycles_ledger_args).unwrap(),
+                )
+                .unwrap();
+        }
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(CYCLES_LEDGER_INDEX_CANISTER_ID)
+        {
+            // Create the ICP index with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"ul4oc-4iaaa-aaaaq-qaabq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(CYCLES_LEDGER_INDEX_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, CYCLES_LEDGER_INDEX_CANISTER_ID);
+
+            // Install the cycles ledger index.
+            let cycles_ledger_index_init_arg = CyclesLedgerIndexInitArg {
+                ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
+                retrieve_blocks_from_ledger_interval_seconds: None,
+            };
+            let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_index_init_arg);
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    CYCLES_LEDGER_INDEX_CANISTER_WASM.to_vec(),
+                    Encode!(&cycles_ledger_index_arg).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_nns_governance(&self) {
+        let nns_subnet = self
+            .nns_subnet
+            .clone()
+            .expect("The NNS subnet is supposed to already exist if the `nns_governance` ICP feature is specified.");
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(GOVERNANCE_CANISTER_ID)
+        {
+            // Create the governance canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"rrkah-fqaaa-aaaaa-aaaaq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (4_294_967_296 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(4_294_967_296_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(GOVERNANCE_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
+
+            // The following fixed principal has a high ICP balance in test environments.
+            let rich_principal = Principal::from_text(
+                "hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe",
+            )
+            .unwrap();
+
+            // Install the governance canister with a tiny initial neuron to satisfy the governance canister invariants.
+            let mut governance_init_payload_builder = GovernanceCanisterInitPayloadBuilder::new();
+            let neuron_id = governance_init_payload_builder.new_neuron_id();
+            let current_timestamp_seconds = nns_subnet
+                .state_machine
+                .time()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let initial_neuron = Neuron {
+                id: Some(neuron_id.into()),
+                controller: Some(PrincipalId(rich_principal)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(183 * 86400)), // 183 days so that it contributes to the total voting power
+                cached_neuron_stake_e8s: 100_000_000,                                   // 1 ICP
+                created_timestamp_seconds: current_timestamp_seconds,
+                aging_since_timestamp_seconds: 0,
+                account: DEFAULT_SUBACCOUNT.into(),
+                not_for_profit: false,
+                voting_power_refreshed_timestamp_seconds: Some(current_timestamp_seconds),
+                ..Default::default()
+            };
+            let network_economics = NetworkEconomics::with_mainnet_values();
+            let governance_init_payload = GovernanceCanisterInitPayloadBuilder::new()
+                .with_network_economics(network_economics)
+                .with_genesis_timestamp_seconds(current_timestamp_seconds)
+                .with_additional_neurons(vec![initial_neuron])
+                .build();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    GOVERNANCE_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&governance_init_payload).unwrap(),
+                )
+                .unwrap();
+        }
+
+        if !nns_subnet.state_machine.canister_exists(ROOT_CANISTER_ID) {
+            // Create the root canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"r7inp-6aaaa-aaaaa-aaabq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "rno2w-sqaaa-aaaaa-aaacq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (1_073_741_824 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![LIFELINE_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(1_073_741_824_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(ROOT_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, ROOT_CANISTER_ID);
+
+            // Install the root canister.
+            let root_canister_init_payload = RootCanisterInitPayloadBuilder::new().build();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    ROOT_CANISTER_WASM.to_vec(),
+                    Encode!(&root_canister_init_payload).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_sns(&self) {
+        // Nothing to do if the SNS subnet does not exist (yet).
+        let Some(ref sns_subnet) = self.sns_subnet else {
+            return;
+        };
+
+        let nns_subnet = self.nns_subnet.clone().expect(
+            "The NNS subnet is supposed to already exist if the `sns` ICP feature is specified.",
+        );
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(SNS_WASM_CANISTER_ID)
+        {
+            // Create the SNS-W canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"qaa6y-5yaaa-aaaaa-aaafa-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(SNS_WASM_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, SNS_WASM_CANISTER_ID);
+
+            // Install the SNS-W canister and upload SNS canister WASMs.
+            let sns_subnet_id = sns_subnet.get_subnet_id();
+            let sns_wasm_init_payload = SnsWasmCanisterInitPayloadBuilder::new()
+                .with_sns_subnet_ids(vec![sns_subnet_id])
+                .build();
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    SNS_WASM_CANISTER_WASM.to_vec(),
+                    Encode!(&sns_wasm_init_payload).unwrap(),
+                )
+                .unwrap();
+
+            for (sns_canister_type, sns_canister_wasm) in [
+                (SnsCanisterType::Root, SNS_ROOT_CANISTER_WASM),
+                (SnsCanisterType::Governance, SNS_GOVERNANCE_CANISTER_WASM),
+                (SnsCanisterType::Swap, SNS_SWAP_CANISTER_WASM),
+                (SnsCanisterType::Ledger, SNS_LEDGER_CANISTER_WASM),
+                (SnsCanisterType::Archive, SNS_LEDGER_ARCHIVE_CANISTER_WASM),
+                (SnsCanisterType::Index, SNS_LEDGER_INDEX_CANISTER_WASM),
+            ] {
+                let mut hasher = Sha256::new();
+                hasher.write(sns_canister_wasm);
+                let sns_canister_wasm_hash = hasher.finish();
+                let add_sns_wasm_request = AddWasmRequest {
+                    wasm: Some(SnsWasm {
+                        wasm: sns_canister_wasm.to_vec(),
+                        canister_type: sns_canister_type as i32,
+                        // `proposal_id` would have been filled by NNS governance if there was an actual NNS proposal
+                        proposal_id: None,
+                    }),
+                    hash: sns_canister_wasm_hash.to_vec(),
+                };
+                self.execute_ingress_on(
+                    nns_subnet.clone(),
+                    GOVERNANCE_CANISTER_ID.get(),
+                    SNS_WASM_CANISTER_ID,
+                    "add_wasm".to_string(),
+                    Encode!(&add_sns_wasm_request).unwrap(),
+                );
+            }
+        }
+
+        if !sns_subnet
+            .state_machine
+            .canister_exists(SNS_AGGREGATOR_CANISTER_ID)
+        {
+            // Create the SNS aggregator canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"3r4gx-wqaaa-aaaaq-aaaia-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec {
+            //         principal "r7inp-6aaaa-aaaaa-aaabq-cai";
+            //         principal "qaa6y-5yaaa-aaaaa-aaafa-cai";
+            //       };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![
+                    ROOT_CANISTER_ID.get(),
+                    SNS_WASM_CANISTER_ID.get(),
+                ])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // The SNS aggregator canister is created on an *application* subnet
+            // and thus we have to top it up with cycles:
+            // - the canister should have enough cycles to never run out of cycles;
+            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
+                Some(SNS_AGGREGATOR_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, SNS_AGGREGATOR_CANISTER_ID);
+
+            // Install the SNS aggregator canister.
+            // The configuration values have been obtained by calling
+            // `dfx canister call 3r4gx-wqaaa-aaaaq-aaaia-cai get_canister_config --update --ic`:
+            //     record {
+            //       update_interval_ms = 120_000 : nat64;
+            //       fast_interval_ms = 10_000 : nat64;
+            //     },
+            #[derive(CandidType)]
+            struct Config {
+                update_interval_ms: u64,
+                fast_interval_ms: u64,
+            }
+            let sns_aggregator_init_payload = Config {
+                update_interval_ms: 120_000,
+                fast_interval_ms: 10_000,
+            };
+            sns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    SNS_AGGREGATOR_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&Some(sns_aggregator_init_payload)).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
     // This function should only be called for ingress messages that complete quickly
     // (within 100 rounds).
     fn execute_ingress_on(
@@ -1097,7 +1752,7 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        if let Some(ref state_dir) = self.subnets.state_dir {
+        if self.subnets.state_dir.is_some() {
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
@@ -1105,27 +1760,8 @@ impl Drop for PocketIc {
             for subnet in &subnets {
                 subnet.state_machine.await_state_hash();
             }
-            let subnet_configs = self
-                .subnets
-                .subnet_configs
-                .iter()
-                .map(|config| {
-                    let time = self.subnets.get(config.subnet_id).unwrap().time();
-                    RawSubnetConfigInternal {
-                        subnet_config: config.clone(),
-                        time,
-                    }
-                })
-                .collect();
-            let raw_topology: RawTopologyInternal = RawTopologyInternal {
-                subnet_configs,
-                default_effective_canister_id: self.default_effective_canister_id.into(),
-                icp_features: self.subnets.icp_features.clone(),
-                synced_registry_version: Some(self.subnets.synced_registry_version.get()),
-            };
-            let topology_json = serde_json::to_string(&raw_topology).unwrap();
-            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
-            topology_file.write_all(topology_json.as_bytes()).unwrap();
+            self.subnets
+                .persist_topology(self.default_effective_canister_id);
         }
         for subnet in self.subnets.get_all() {
             subnet.state_machine.drop_payload_builder();
@@ -1202,10 +1838,24 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
+        allow_incomplete_state: Option<bool>,
+        initial_time: Option<Time>,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
         }
+        if let Some(time) = initial_time {
+            let systime: SystemTime = time.into();
+            let minimum_systime = default_timestamp(&icp_features);
+            if systime < minimum_systime {
+                return Err(format!("The initial timestamp (unix timestamp in nanoseconds) must be no earlier than {} (provided {}).",
+                    systemtime_to_unix_epoch_nanos(minimum_systime),
+                    systemtime_to_unix_epoch_nanos(systime)));
+            }
+        }
+        let initial_time: SystemTime = initial_time
+            .map(|time| time.into())
+            .unwrap_or_else(|| default_timestamp(&icp_features));
 
         let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
             let registry_file_path = state_dir.join("registry.proto");
@@ -1244,20 +1894,23 @@ impl PocketIc {
                 .subnet_configs
                 .into_iter()
                 .map(|config| {
-                    range_gen
-                        .add_assigned(config.subnet_config.ranges.clone())
-                        .unwrap();
-                    if let Some(allocation_range) = config.subnet_config.alloc_range {
+                    range_gen.add_assigned(config.ranges.clone()).unwrap();
+                    if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
+                    let expected_state_time = if let Some(true) = allow_incomplete_state {
+                        None
+                    } else {
+                        Some(topology.time)
+                    };
                     SubnetConfigInfo {
-                        ranges: config.subnet_config.ranges,
-                        alloc_range: config.subnet_config.alloc_range,
-                        subnet_id: Some(config.subnet_config.subnet_id),
+                        ranges: config.ranges,
+                        alloc_range: config.alloc_range,
+                        subnet_id: Some(config.subnet_id),
                         subnet_state_dir: None,
-                        subnet_kind: config.subnet_config.subnet_kind,
-                        instruction_config: config.subnet_config.instruction_config,
-                        time: config.time,
+                        subnet_kind: config.subnet_kind,
+                        instruction_config: config.instruction_config,
+                        expected_state_time,
                     }
                 })
                 .collect()
@@ -1305,7 +1958,7 @@ impl PocketIc {
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
             for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
-                let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
+                let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
                     match std::fs::read_dir(subnet_state_dir) {
@@ -1355,7 +2008,6 @@ impl PocketIc {
                     };
 
                     let subnet_id = metadata.own_subnet_id;
-                    let time = metadata.batch_time;
                     let ranges: Vec<_> = metadata
                         .network_topology
                         .routing_table
@@ -1390,14 +2042,14 @@ impl PocketIc {
                         }
                     }
 
-                    (ranges, None, Some(subnet_id), time)
+                    (ranges, None, Some(subnet_id))
                 } else {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
                     } = get_range_config(subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None, GENESIS)
+                    (ranges, alloc_range, None)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -1407,7 +2059,7 @@ impl PocketIc {
                     subnet_state_dir,
                     subnet_kind,
                     instruction_config,
-                    time: time.into(),
+                    expected_state_time: None,
                 });
             }
 
@@ -1429,11 +2081,12 @@ impl PocketIc {
             log_level,
             bitcoind_addr,
             icp_features,
+            initial_time,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
         for subnet_config_info in subnet_config_info.into_iter() {
-            let subnet_config_internal = subnets.create_subnet(subnet_config_info);
+            let subnet_config_internal = subnets.create_subnet(subnet_config_info)?;
             subnet_configs.push(subnet_config_internal);
         }
 
@@ -1460,6 +2113,8 @@ impl PocketIc {
                     })
             })
             .default_effective_canister_id();
+
+        subnets.persist_topology(default_effective_canister_id);
 
         let state_label = StateLabel::new(seed);
 
@@ -1655,7 +2310,7 @@ struct SubnetConfigInfo {
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
     pub instruction_config: SubnetInstructionConfig,
-    pub time: SystemTime,
+    pub expected_state_time: Option<SystemTime>,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -1915,10 +2570,7 @@ async fn setup_adapter_mock(
                 if let Some(client) = client {
                     Ok(hyper_util::rt::TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))
@@ -2527,9 +3179,7 @@ impl Operation for CallRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
-                #[allow(clippy::disallowed_methods)]
-                let (s, mut r) =
-                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
+                let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
@@ -3233,8 +3883,10 @@ fn route(
                         subnet_state_dir: None,
                         subnet_kind,
                         instruction_config,
-                        time: GENESIS.into(),
-                    });
+                        expected_state_time: None,
+                    })?;
+                    pic.subnets
+                        .persist_topology(pic.default_effective_canister_id);
                     Ok(pic.try_route_canister(canister_id).unwrap())
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,
@@ -3338,6 +3990,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -3349,6 +4003,8 @@ mod tests {
                 },
                 None,
                 false,
+                None,
+                None,
                 None,
                 None,
                 None,

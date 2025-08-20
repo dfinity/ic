@@ -3,10 +3,11 @@ use crate::index::verify_ledger_archive_and_index_block_parity;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::Block;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
+    AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
 use ic_ledger_suite_state_machine_tests::{
@@ -19,6 +20,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use lazy_static::lazy_static;
 use std::str::FromStr;
+use std::time::Duration;
 
 mod common;
 
@@ -137,6 +139,12 @@ impl Wasms {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Icrc106CheckError {
+    IndexPrincipalNotSet,
+    NotSupported,
+}
+
 struct LedgerSuiteConfig {
     ledger_id: &'static str,
     index_id: &'static str,
@@ -191,6 +199,9 @@ impl LedgerSuiteConfig {
         // Top up the ledger suite canisters so that they do not risk running out of cycles as
         // part of the upgrade/downgrade testing.
         top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
+        // Advance the time to make sure the ledger gets the current time for checking allowances.
+        state_machine.advance_time(Duration::from_secs(1u64));
+        state_machine.tick();
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
@@ -199,8 +210,13 @@ impl LedgerSuiteConfig {
                 index_canister_id,
                 self.burns_without_spender.clone(),
                 None,
+                AllowancesRecentlyPurged::No,
             ));
         }
+        // Check if the ledger supports ICRC-106, and if so, if the index principal is set.
+        let index_principal_set = self
+            .check_index_principal(state_machine, ledger_canister_id, index_canister_id)
+            .is_ok();
         // Upgrade to the new canister versions
         self.upgrade_to_master(state_machine);
         if self.extended_testing {
@@ -210,10 +226,19 @@ impl LedgerSuiteConfig {
                 index_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
+                AllowancesRecentlyPurged::Yes,
             ));
         }
         // Verify that the index principal was set in the ledger
-        self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
+        if index_principal_set {
+            let index_principal_check =
+                self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
+            assert!(
+                index_principal_check.is_ok(),
+                "ICRC-106 index principal was set before upgrading the ledger to master, but now it is no longer set: {:?}",
+                index_principal_check
+            );
+        }
         // Downgrade back to the mainnet canister versions
         self.downgrade_to_mainnet(state_machine);
         if self.extended_testing {
@@ -223,6 +248,7 @@ impl LedgerSuiteConfig {
                 index_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
+                AllowancesRecentlyPurged::Yes,
             );
         }
     }
@@ -232,7 +258,30 @@ impl LedgerSuiteConfig {
         env: &StateMachine,
         ledger_canister_id: CanisterId,
         index_canister_id: CanisterId,
-    ) {
+    ) -> Result<(), Icrc106CheckError> {
+        // Check if the ledger supports ICRC-106
+        let supported_standards = Decode!(
+            &env.query(
+                ledger_canister_id,
+                "icrc1_supported_standards",
+                Encode!().unwrap()
+            )
+            .expect("failed to query supported standards")
+            .bytes(),
+            Vec<StandardRecord>
+        )
+        .expect("failed to decode icrc1_supported_standards response");
+        let mut found = false;
+        for standard in supported_standards {
+            if standard.name == "ICRC-106" {
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err(Icrc106CheckError::NotSupported);
+        }
+        // If the ledger supports ICRC-106, check if the index principal is set
         match Decode!(
             &env.query(ledger_canister_id, "icrc106_get_index_principal", Encode!().unwrap())
                 .expect("failed to query icrc106_get_index_principal")
@@ -246,13 +295,15 @@ impl LedgerSuiteConfig {
                     index_principal,
                     index_canister_id.get().0,
                     "Index principal does not match index canister id"
-                )
+                );
+                Ok(())
             }
             Err(err) => {
-                panic!(
+                println!(
                     "Failed to get index principal for ledger {}: {:?}",
                     ledger_canister_id, err
                 );
+                Err(Icrc106CheckError::IndexPrincipalNotSet)
             }
         }
     }
@@ -454,6 +505,7 @@ impl LedgerState {
         &self,
         state_machine: &StateMachine,
         canister_id: CanisterId,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         let num_ledger_blocks =
             get_blocks(state_machine, Principal::from(canister_id), 0, 0).chain_length;
@@ -461,6 +513,7 @@ impl LedgerState {
             state_machine,
             canister_id,
             num_ledger_blocks,
+            allowances_recently_purged,
         );
     }
 
@@ -481,6 +534,7 @@ impl LedgerState {
         index_id: CanisterId,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         previous_ledger_state: Option<LedgerState>,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) -> Self {
         let num_blocks_to_fetch = previous_ledger_state
             .as_ref()
@@ -498,7 +552,11 @@ impl LedgerState {
                 ledger_id,
                 num_blocks_to_fetch,
             );
-        ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
+        ledger_state.verify_balances_and_allowances(
+            state_machine,
+            ledger_id,
+            allowances_recently_purged,
+        );
         // Verify parity between the blocks in the ledger+archive, and those in the index
         verify_ledger_archive_and_index_block_parity(
             state_machine,
@@ -799,11 +857,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "co4lr-qaaaa-aaaaq-aacxa-cai",
         "ICPSwap",
     );
-    const ICVC_LEDGER_SUITE: (&str, &str, &str) = (
-        "m6xut-mqaaa-aaaaq-aadua-cai",
-        "mqvz3-xaaaa-aaaaq-aadva-cai",
-        "ICVC",
-    );
     const KINIC_LEDGER_SUITE: (&str, &str, &str) = (
         "73mez-iiaaa-aaaaq-aaasq-cai",
         "7vojr-tyaaa-aaaaq-aaatq-cai",
@@ -858,11 +911,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "np5km-uyaaa-aaaaq-aadrq-cai",
         "n535v-yiaaa-aaaaq-aadsq-cai",
         "PokedBots",
-    );
-    const SEERS_LEDGER_SUITE: (&str, &str, &str) = (
-        "rffwt-piaaa-aaaaq-aabqq-cai",
-        "rlh33-uyaaa-aaaaq-aabrq-cai",
-        "Seers",
     );
     const SNEED_LEDGER_SUITE: (&str, &str, &str) = (
         "hvgxa-wqaaa-aaaaq-aacia-cai",
@@ -926,7 +974,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ICPANDA_LEDGER_SUITE,
         ICPEX_LEDGER_SUITE,
         ICPSWAP_LEDGER_SUITE,
-        ICVC_LEDGER_SUITE,
         KINIC_LEDGER_SUITE,
         KONG_SWAP_LEDGER_SUITE,
         MIMIC_LEDGER_SUITE,
@@ -937,7 +984,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ORIGYN_LEDGER_SUITE,
         PERSONAL_DAO_LEDGER_SUITE,
         POKEDBOTS_LEDGER_SUITE,
-        SEERS_LEDGER_SUITE,
         SNEED_LEDGER_SUITE,
         SONIC_LEDGER_SUITE,
         SWAMPIES_LEDGER_SUITE,

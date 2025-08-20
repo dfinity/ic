@@ -1119,8 +1119,7 @@ fn sub_account_test() {
 }
 
 #[test]
-#[should_panic(expected = "Sending from 2vxsx-fae is not allowed")]
-fn check_anonymous_cannot_send() {
+fn check_anonymous_can_send() {
     local_test_e(|r| async move {
         let proj = Project::new();
         let sub_account = |x| Some(Subaccount([x; 32]));
@@ -1145,8 +1144,8 @@ fn check_anonymous_cannot_send() {
             )
             .await?;
 
-        // Send a payment from an anonymous user, should fail.
-        let _: BlockIndex = ledger_canister
+        // Send a payment from an anonymous user, should succeed.
+        let block_index: BlockIndex = ledger_canister
             .update_(
                 "send_pb",
                 protobuf,
@@ -1160,6 +1159,8 @@ fn check_anonymous_cannot_send() {
                 },
             )
             .await?;
+        assert_eq!(block_index, 1);
+
         Ok(())
     })
 }

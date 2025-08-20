@@ -22,6 +22,7 @@
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
 /WORKSPACE.bazel                   @dfinity/idx
+/PULL_REQUEST_BAZEL_TARGETS        @dfinity/idx
 
 # [Rust Lang]
 rust-toolchain.toml       @dfinity/consensus
@@ -148,6 +149,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
+/rs/interfaces/src/consensus/                           @dfinity/consensus
 /rs/interfaces/src/consensus_pool.rs                    @dfinity/consensus
 /rs/interfaces/src/crypto.rs                            @dfinity/crypto-team
 /rs/interfaces/src/crypto/                              @dfinity/crypto-team

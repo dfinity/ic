@@ -10,7 +10,6 @@ documentation.workspace = true
 bit-vec = "0.6.3"
 cvt = "0.1.1"
 ic-base-types = { path = "../types/base_types" }
-ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }

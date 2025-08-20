@@ -24,8 +24,6 @@ component_files = {
     Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
-    Label("hostos-scripts/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
-    Label("hostos-scripts/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -44,7 +42,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
-    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/config/hostos/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
@@ -88,7 +86,7 @@ component_files = {
     # ssh
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
-    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-hostos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
 
     # upgrade
@@ -96,4 +94,5 @@ component_files = {
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
+    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
 }

@@ -1,15 +1,18 @@
-use crate::mutations::node_management::common::{
-    get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+use crate::{
+    common::LOG_PREFIX,
+    mutations::node_management::common::{
+        get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+    },
+    pb::v1::SubnetForCanister,
+    registry::Registry,
+    storage::with_chunks,
 };
-use crate::storage::with_chunks;
-use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_canister_ranges_key, make_routing_table_record_key,
-    CANISTER_RANGES_PREFIX,
+    make_canister_migrations_record_key, make_canister_ranges_key, CANISTER_RANGES_PREFIX,
 };
 use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
@@ -218,15 +221,7 @@ pub(crate) fn routing_table_into_registry_mutation(
     registry: &Registry,
     routing_table: RoutingTable,
 ) -> Vec<RegistryMutation> {
-    let mut mutations = mutations_for_canister_ranges(registry, &routing_table);
-
-    let new_routing_table = pb::RoutingTable::from(routing_table);
-    mutations.push(upsert(
-        make_routing_table_record_key().as_bytes(),
-        new_routing_table.encode_to_vec(),
-    ));
-
-    mutations
+    mutations_for_canister_ranges(registry, &routing_table)
 }
 
 /// Returns the given `CanisterMigrations` as a registry mutation of the given type.
@@ -971,3 +966,7 @@ mod tests {
         compare_rt_mutations(expected, mutations);
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+#[path = "routing_table_benches.rs"]
+mod benches;

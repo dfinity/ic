@@ -25,7 +25,8 @@ use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemSta
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    batch::CanisterCyclesCostSchedule, time::UNIX_EPOCH, ComputeAllocation, Cycles,
+    MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -68,8 +69,8 @@ fn test_wasmtime_system_api() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
-    let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
@@ -83,7 +84,6 @@ fn test_wasmtime_system_api() {
                 MAX_NUM_INSTRUCTIONS,
                 MAX_NUM_INSTRUCTIONS,
             ),
-            canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()

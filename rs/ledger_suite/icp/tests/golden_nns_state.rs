@@ -4,7 +4,7 @@ use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
+    AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
 use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
@@ -12,10 +12,6 @@ use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_ledger_tip};
-use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
-};
 use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
@@ -24,7 +20,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The number of instructions that can be executed in a single canister upgrade as per
 /// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
@@ -105,12 +101,14 @@ impl LedgerState {
         &mut self,
         state_machine: &StateMachine,
         canister_id: CanisterId,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         let num_ledger_blocks = icp_ledger_tip(state_machine, canister_id) + 1;
         self.in_memory_ledger.verify_balances_and_allowances(
             state_machine,
             canister_id,
             num_ledger_blocks,
+            allowances_recently_purged,
         );
     }
 
@@ -132,6 +130,7 @@ impl LedgerState {
         burns_without_spender: Option<BurnsWithoutSpender<AccountIdentifier>>,
         previous_ledger_state: Option<LedgerState>,
         should_verify_balances_and_allowances: bool,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) -> Self {
         let num_blocks_to_fetch = previous_ledger_state
             .as_ref()
@@ -150,7 +149,11 @@ impl LedgerState {
                 num_blocks_to_fetch,
             );
         if should_verify_balances_and_allowances {
-            ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
+            ledger_state.verify_balances_and_allowances(
+                state_machine,
+                ledger_id,
+                allowances_recently_purged,
+            );
         }
         // Verify parity between the blocks in the ledger+archive, and those in the index
         LedgerState::verify_ledger_archive_index_block_parity(
@@ -235,12 +238,16 @@ impl LedgerState {
 fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
+    // Advance the time to make sure the ledger gets the current time for checking allowances.
+    setup.state_machine.advance_time(Duration::from_secs(1u64));
+    setup.state_machine.tick();
+
     // Perform upgrade and downgrade testing
     // (verify ledger balances and allowances, parity between ledger+archives and index)
     // Verifying the balances requires the ledger having the (currently test-only) allowance
     // endpoint for retrieving allowances based on AccountIdentifier pair key, so this check needs
     // to be skipped for a ledger running the mainnet production version of the ledger.
-    setup.perform_upgrade_downgrade_testing(false);
+    setup.perform_upgrade_downgrade_testing(false, AllowancesRecentlyPurged::No);
 
     // Upgrade all the canisters to the latest version
     setup.upgrade_to_master();
@@ -248,7 +255,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.upgrade_to_master();
 
     // Perform upgrade and downgrade testing
-    setup.perform_upgrade_downgrade_testing(true);
+    setup.perform_upgrade_downgrade_testing(true, AllowancesRecentlyPurged::Yes);
 
     // Downgrade all the canisters to the mainnet version
     // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
@@ -258,7 +265,7 @@ fn should_create_state_machine_with_golden_nns_state() {
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
-    setup.perform_upgrade_downgrade_testing(false);
+    setup.perform_upgrade_downgrade_testing(false, AllowancesRecentlyPurged::Yes);
 }
 
 struct Wasms {
@@ -279,15 +286,35 @@ impl Setup {
         let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
         let master_wasms = Wasms {
-            ledger: build_ledger_wasm(),
-            index: build_ledger_index_wasm(),
-            archive: build_ledger_archive_wasm(),
+            ledger: Wasm::from_bytes(
+                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                    .expect("Could not read ledger wasm"),
+            ),
+            index: Wasm::from_bytes(
+                std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read index wasm"),
+            ),
+            archive: Wasm::from_bytes(
+                std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read archive wasm"),
+            ),
         };
 
         let mainnet_wasms = Wasms {
-            ledger: build_mainnet_ledger_wasm(),
-            index: build_mainnet_ledger_index_wasm(),
-            archive: build_mainnet_ledger_archive_wasm(),
+            ledger: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet ledger wasm"),
+            ),
+            index: Wasm::from_bytes(
+                std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet index wasm"),
+            ),
+            archive: Wasm::from_bytes(
+                std::fs::read(
+                    std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap(),
+                )
+                .expect("Could not read mainnet archive wasm"),
+            ),
         };
 
         Self {
@@ -347,6 +374,7 @@ impl Setup {
     pub fn perform_upgrade_downgrade_testing(
         &mut self,
         should_verify_balances_and_allowances: bool,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         self.previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
             &self.state_machine,
@@ -355,6 +383,7 @@ impl Setup {
             None,
             self.previous_ledger_state.take(),
             should_verify_balances_and_allowances,
+            allowances_recently_purged,
         ));
     }
 

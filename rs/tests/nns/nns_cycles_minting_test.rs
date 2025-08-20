@@ -1,47 +1,33 @@
 use anyhow::Result;
 use canister_test::{Canister, Project, Wasm};
 use cycles_minting::{make_user_ed25519, TestAgent, UserHandle};
-use cycles_minting_canister::{
-    IcpXdrConversionRateCertifiedResponse, TokensToCycles, CREATE_CANISTER_REFUND_FEE,
-    DEFAULT_CYCLES_PER_XDR,
-};
+use cycles_minting_canister::{TokensToCycles, CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR};
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client::{HttpClient, Sender};
-use ic_certification::verify_certified_data;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_crypto_tree_hash::MixedHashTree;
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult as RootCanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
-    TEST_USER2_KEYPAIR,
+    TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
 };
-use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::NnsFunction;
-use ic_nns_test_utils::governance::{
-    submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
-};
+use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
-        test_env::{HasIcPrepDir, TestEnv},
+        test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
         },
     },
-    nns::{
-        get_governance_canister, set_authorized_subnetwork_list,
-        submit_external_proposal_with_test_id, update_xdr_per_icp,
-    },
+    nns::set_authorized_subnetwork_list,
     util::{block_on, runtime_from_url},
 };
 use ic_types::Cycles;
@@ -113,57 +99,11 @@ pub fn test(env: TestEnv) {
             CYCLES_MINTING_CANISTER_ID,
         );
 
-        let xdr_permyriad_per_icp = 5_000; // = 0.5 XDR/ICP
+        let xdr_permyriad_per_icp = 1_000_000; // = 100 XDR/ICP
         let icpts_to_cycles = TokensToCycles {
             xdr_permyriad_per_icp,
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
         };
-
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Set the XDR-to-cycles conversion rate.
-        info!(logger, "setting CYCLES_PER_XDR");
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
-            .await
-            .unwrap();
-
-        // Set the XDR-to-cycles conversion rate, but expect it to fail
-        info!(logger, "setting conversion rate to 0, failure expected");
-        let governance_canister = get_governance_canister(&nns);
-        let proposal_payload = UpdateIcpXdrConversionRatePayload {
-            timestamp_seconds: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            xdr_permyriad_per_icp: 0,
-            ..Default::default()
-        };
-
-        submit_external_update_proposal_allowing_error(
-            &governance_canister,
-            Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-            NeuronId(TEST_NEURON_1_ID),
-            NnsFunction::IcpXdrConversionRate,
-            proposal_payload,
-            "Test Title".to_string(),
-            "Test Summary".to_string(),
-        )
-        .await
-        .unwrap_err();
-
-        let canister = Canister::new(&nns, CYCLES_MINTING_CANISTER_ID);
-        /* Test getting the conversion rate */
-        let mut conversion_rate_response = canister
-            .query_(
-                "get_icp_xdr_conversion_rate",
-                candid_one::<IcpXdrConversionRateCertifiedResponse, ()>,
-                (),
-            )
-            .await
-            .unwrap();
 
         let cmc_canister_status: RootCanisterStatusResult = Canister::new(&nns, ROOT_CANISTER_ID)
             .update_from_sender(
@@ -176,70 +116,11 @@ pub fn test(env: TestEnv) {
             .unwrap();
         let cmc_initial_cycles_balance = cmc_canister_status.cycles.0.to_u64().unwrap();
 
-        let icp_xdr_conversion_rate = conversion_rate_response.data;
-        // Check that the first call changed the value but not the second one
-        assert_eq!(
-            icp_xdr_conversion_rate.xdr_permyriad_per_icp,
-            xdr_permyriad_per_icp
-        );
-
-        let pk_bytes = env
-            .prep_dir("")
-            .unwrap()
-            .root_public_key()
-            .expect("failed to read threshold sig PK bytes");
-        let pk = threshold_sig_public_key_from_der(&pk_bytes[..])
-            .expect("failed to decode threshold sig PK");
-
-        let mixed_hash_tree: MixedHashTree =
-            serde_cbor::from_slice(&conversion_rate_response.hash_tree).unwrap();
-        // Verify the authenticity of the root hash stored by the canister in the
-        // certified_data field
-        verify_certified_data(
-            &conversion_rate_response.certificate[..],
-            &CYCLES_MINTING_CANISTER_ID,
-            &pk,
-            mixed_hash_tree.digest().as_bytes(),
-        )
-        .unwrap();
-
-        let proposal_payload = UpdateIcpXdrConversionRatePayload {
-            timestamp_seconds: timestamp,
-            xdr_permyriad_per_icp: xdr_permyriad_per_icp + 1234,
-            ..Default::default()
-        };
-
-        // Set the XDR-to-cycles conversion rate again but with the same timestamp.
-        // No change expected.
-        info!(logger, "setting CYCLES_PER_XDR");
-        submit_external_proposal_with_test_id(
-            &governance_canister,
-            NnsFunction::IcpXdrConversionRate,
-            proposal_payload,
-        )
-        .await;
-
-        conversion_rate_response = canister
-            .query_(
-                "get_icp_xdr_conversion_rate",
-                candid_one::<IcpXdrConversionRateCertifiedResponse, ()>,
-                (),
-            )
-            .await
-            .unwrap();
-
-        let icp_xdr_conversion_rate = conversion_rate_response.data;
-        // Check rate hasn't changed
-        assert_eq!(
-            icp_xdr_conversion_rate.xdr_permyriad_per_icp,
-            xdr_permyriad_per_icp
-        );
-
         /* The first attempt to create a canister should fail because we
          * haven't registered subnets with the cycles minting canister. */
         info!(logger, "creating canister (no subnets)");
 
-        let send_amount = Tokens::new(2, 0).unwrap();
+        let send_amount = Tokens::new(0, 1_000_000).unwrap();
 
         let (err, refund_block) = user1
             .create_canister_cmc(send_amount, None, &controller_user, None, None)
@@ -271,36 +152,12 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         /* Create with funds < the canister creation fee. */
-        info!(logger, "creating canister (not enough funds 1)");
+        info!(logger, "creating canister (not enough funds)");
 
-        let small_amount = Tokens::new(0, 500_000).unwrap();
-
-        let (err, refund_block) = user1
-            .create_canister_cmc(small_amount, None, &controller_user, None, None)
-            .await
-            .unwrap_err();
-
-        info!(logger, "error: {}", err);
-        assert!(err.contains("Creating a canister requires a fee of"));
-
-        let refund_block = refund_block.unwrap();
-        tst.check_refund(
-            refund_block,
-            small_amount,
-            CREATE_CANISTER_REFUND_FEE,
-            *TEST_USER1_PRINCIPAL,
-        )
-        .await;
-
-        /* Create with funds < the refund fee. */
-        info!(logger, "creating canister (not enough funds 2)");
-
-        let tiny_amount = DEFAULT_TRANSFER_FEE
-            .checked_add(&Tokens::from_e8s(10_000))
-            .unwrap();
+        let small_amount = Tokens::new(0, 30_000).unwrap();
 
         let (err, no_refund_block) = user1
-            .create_canister_cmc(tiny_amount, None, &controller_user, None, None)
+            .create_canister_cmc(small_amount, None, &controller_user, None, None)
             .await
             .unwrap_err();
 
@@ -319,7 +176,7 @@ pub fn test(env: TestEnv) {
                 amount,
                 spender,
             } => {
-                assert_eq!(tiny_amount, amount);
+                assert_eq!(small_amount, amount);
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 assert_eq!(spender, None);
             }
@@ -329,7 +186,7 @@ pub fn test(env: TestEnv) {
         /* Create with sufficient funds. */
         info!(logger, "creating canister");
 
-        let initial_amount = Tokens::new(10_000, 0).unwrap();
+        let initial_amount = Tokens::new(50, 0).unwrap();
 
         let bh = user1
             .pay_for_canister(initial_amount, None, &controller_pid)
@@ -374,9 +231,9 @@ pub fn test(env: TestEnv) {
 
         info!(logger, "topping up");
 
-        let topup1 = Tokens::new(1000, 0).unwrap();
-        let topup2 = Tokens::new(1000, 0).unwrap();
-        let topup3 = Tokens::new(3000, 0).unwrap();
+        let topup1 = Tokens::new(5, 0).unwrap();
+        let topup2 = Tokens::new(5, 0).unwrap();
+        let topup3 = Tokens::new(15, 0).unwrap();
         let top_up_amount = topup1
             .checked_add(&topup2)
             .unwrap()
@@ -502,7 +359,7 @@ pub fn test(env: TestEnv) {
 
         info!(logger, "creating NNS canister");
 
-        let nns_amount = Tokens::new(2, 0).unwrap();
+        let nns_amount = Tokens::new(0, 1_000_000).unwrap();
 
         let new_canister_id = user1
             .create_canister_cmc(nns_amount, None, &controller_user, None, None)
@@ -604,7 +461,7 @@ pub fn test(env: TestEnv) {
         /* Exceed the daily cycles minting limit. */
         info!(logger, "creating canister (exceeding daily limit)");
 
-        let amount = Tokens::new(300_000, 0).unwrap();
+        let amount = Tokens::new(1_500, 0).unwrap();
 
         let (err, refund_block) = user1
             .create_canister_cmc(amount, None, &controller_user, None, None)

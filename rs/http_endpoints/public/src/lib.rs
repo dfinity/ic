@@ -10,7 +10,6 @@ mod common;
 mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
-mod nns_delegation_manager;
 mod pprof;
 mod query;
 mod read_state;
@@ -29,7 +28,6 @@ pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, Ingres
 pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
 use ic_http_endpoints_async_utils::start_tcp_listener;
-pub use nns_delegation_manager::start_nns_delegation_manager;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
@@ -94,7 +92,7 @@ use std::{
 use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{Receiver, UnboundedSender},
+    sync::mpsc::{Receiver, Sender},
     sync::watch,
     time::{sleep, timeout, Instant},
 };
@@ -247,7 +245,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -287,7 +285,7 @@ pub fn start_server(
         ingress_verifier.clone(),
         ingress_filter.clone(),
         ingress_throttler.clone(),
-        ingress_tx.clone(),
+        ingress_tx,
     )
     .with_malicious_flags(malicious_flags.clone())
     .build();

@@ -156,6 +156,20 @@ message PreSignature {
   }
 }
 
+message EcdsaMatchedPreSignature {
+  uint64 pre_signature_id = 1;
+  uint64 height = 2;
+  EcdsaPreSignatureQuadruple pre_signature = 3;
+  registry.subnet.v1.IDkgTranscript key_transcript = 4;
+}
+
+message SchnorrMatchedPreSignature {
+  uint64 pre_signature_id = 1;
+  uint64 height = 2;
+  SchnorrPreSignatureTranscript pre_signature = 3;
+  registry.subnet.v1.IDkgTranscript key_transcript = 4;
+}
+
 message QuadrupleInCreation {
   reserved 1, 2, 5;
 

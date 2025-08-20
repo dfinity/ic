@@ -1,3 +1,5 @@
+use crate::extensions;
+use crate::extensions::get_extension_operation_spec_from_cache;
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
@@ -43,7 +45,7 @@ pub struct ListTopicsResponse {
 }
 
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
-/// Topics may be nested within other topics, and each topic may have a list of built-in functions that are categorized within that topic.
+/// Each topic may have a list of built-in functions that are categorized within that topic.
 pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
     use crate::types::native_action_ids::{
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
@@ -141,14 +143,18 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
 }
 
 impl Governance {
+    // TODO(NNS1-4036): List all registered extensions in their topic, which would require a cache
+    // We would need to iterate through registered extensions to find all the different
+    // operations that they support?  And Add something to TopicInfo for this.
     pub fn list_topics(&self) -> ListTopicsResponse {
         let mut uncategorized_functions = vec![];
 
-        let topic_id_to_functions: HashMap<u64, NervousSystemFunction> =
+        let function_id_to_functions: HashMap<u64, NervousSystemFunction> =
             native_action_ids::nervous_system_functions()
                 .into_iter()
                 .map(|function| (function.id, function))
                 .collect();
+
         let custom_functions = self
             .proto
             .id_to_nervous_system_functions
@@ -185,7 +191,7 @@ impl Governance {
                         .functions
                         .native_functions
                         .into_iter()
-                        .map(|id| topic_id_to_functions[&id].clone())
+                        .map(|id| function_id_to_functions[&id].clone())
                         .collect(),
                     custom_functions: custom_functions
                         .get(&topic.topic)
@@ -210,6 +216,19 @@ impl Governance {
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
             return Ok((Some(topic), topic.proposal_criticality()));
         };
+
+        // While these are "native actions", they should return an error if the name of the function
+        // does not map to a known operation spec.
+        if let pb::proposal::Action::ExecuteExtensionOperation(execute_extension_operation) = action
+        {
+            // NOTE: This will not work if the proposal has not been validated already, since that
+            // also serves to populate the cache.  If the cache is unpopulated, then the action
+            // will not be found.
+            let spec = get_extension_operation_spec_from_cache(execute_extension_operation)?;
+            let topic = spec.topic;
+            let criticality = topic.proposal_criticality();
+            return Ok((Some(topic), criticality));
+        }
 
         let action_code = u64::from(action);
 
@@ -370,6 +389,20 @@ impl pb::Topic {
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
+        // Check if the topic comes from the extension spec.
+        if let pb::proposal::Action::RegisterExtension(pb::RegisterExtension {
+            chunked_canister_wasm:
+                Some(pb::ChunkedCanisterWasm {
+                    wasm_module_hash, ..
+                }),
+            ..
+        }) = action
+        {
+            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
+                return Some(extension_spec.topic);
+            }
+        }
+
         let action_code = u64::from(action);
 
         topic_descriptions()

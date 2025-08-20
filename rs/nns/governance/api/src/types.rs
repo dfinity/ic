@@ -617,6 +617,12 @@ pub mod proposal {
         StopOrStartCanister(super::StopOrStartCanister),
         /// Update the settings of a canister that is controlled by the NNS.
         UpdateCanisterSettings(super::UpdateCanisterSettings),
+        /// The main thing this does is create a subnet where the "user" of the
+        /// rental request has exclusive authorization to create canisters. The
+        /// other special property of this subnet is that canisters are not
+        /// charged for the use of computational resources (mainly, executing
+        /// instructions, storing data, network, etc.)
+        FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1370,6 +1376,7 @@ pub enum ProposalActionRequest {
     InstallCode(InstallCodeRequest),
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
+    FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
 }
 
 #[derive(
@@ -2599,6 +2606,14 @@ pub mod update_canister_settings {
             }
         }
     }
+}
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct FulfillSubnetRentalRequest {
+    pub user: Option<PrincipalId>,
+    pub node_ids: Option<Vec<PrincipalId>>,
+    pub replica_version_id: Option<String>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept

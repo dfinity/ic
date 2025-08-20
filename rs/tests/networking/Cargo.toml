@@ -28,6 +28,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
@@ -48,7 +49,6 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-wabt-tests = { path = "../idx/wabt-tests" }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"

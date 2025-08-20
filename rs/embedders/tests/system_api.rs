@@ -24,13 +24,14 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     messages::{
         CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
     },
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
@@ -1342,8 +1343,10 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
-        - Cycles::from(10u128);
+    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    ) - Cycles::from(10u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
@@ -1410,6 +1413,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1490,6 +1494,7 @@ fn helper_test_on_low_wasm_memory(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let mut api = SystemApiImpl::new(
@@ -1511,8 +1516,13 @@ fn helper_test_on_low_wasm_memory(
     if grow_wasm_memory {
         api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
     } else {
-        api.try_grow_stable_memory(0, additional_wasm_pages, StableMemoryApi::Stable64)
-            .unwrap();
+        api.try_grow_stable_memory(
+            0,
+            additional_wasm_pages,
+            MAX_STABLE_MEMORY_IN_BYTES,
+            StableMemoryApi::Stable64,
+        )
+        .unwrap();
     }
 
     let system_state_modifications = api.take_system_state_modifications();
@@ -1707,6 +1717,7 @@ fn push_output_request_respects_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1817,6 +1828,7 @@ fn push_output_request_oversized_request_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -2232,6 +2244,7 @@ fn get_system_api_for_best_effort_response(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     SystemApiImpl::new(

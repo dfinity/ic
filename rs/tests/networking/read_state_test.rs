@@ -31,22 +31,28 @@ Success::
   principal than who made the original request with request ID R;
 . Read state requests for two paths /request_status/R and /request_status/S with two different request
   IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
+. Read state requests for the path /canister_ranges/{subnet_id} succeed and return a correct list of canister
+  ranges assigned to the subnet. Both /api/v2/subnet/{subnet_id}/read_state and
+  /api/v2/canister/{canister_id}/read_state endpoints are tested.
 
 end::catalog[] */
 
 use std::collections::BTreeSet;
+use std::panic;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{Encode, Principal};
-use canister_test::{Canister, Wasm};
+use canister_test::{Canister, CanisterInstallMode, Wasm};
 use ic_agent::agent::CallResponse;
-use ic_agent::hash_tree::Label;
+use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_message::ForwardParams;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
     agent_with_identity, block_on, get_identity, random_ed25519_identity, runtime_from_url,
     MessageCanister,
@@ -60,9 +66,49 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use slog::info;
-use wabt_tests::with_custom_sections;
+
+/// Encodes an unsigned integer into its binary representation using `leb128`.
+fn enc_leb128(x: usize) -> Vec<u8> {
+    let mut buf = [0; 1024];
+    let mut writable = &mut buf[..];
+    let num_bytes =
+        leb128::write::unsigned(&mut writable, x.try_into().unwrap()).expect("Should write number");
+    buf[..num_bytes].to_vec()
+}
+
+struct CustomSection {
+    name: Vec<u8>,
+    content: Vec<u8>,
+}
+
+/// Encodes a WASM custom section with a given name and content into its binary representation,
+/// following the WebAssembly standard: https://webassembly.github.io/spec/core/binary/modules.html#custom-section
+fn encode_custom_section(custom_section: CustomSection) -> Vec<u8> {
+    let mut name = custom_section.name;
+    let mut content = custom_section.content;
+    let mut name_len_leb128 = enc_leb128(name.len());
+    let mut section_len_leb128 = enc_leb128(name_len_leb128.len() + name.len() + content.len());
+    let mut buf = vec![0x00]; // Custom sections have the id 0.
+    buf.append(&mut section_len_leb128);
+    buf.append(&mut name_len_leb128);
+    buf.append(&mut name);
+    buf.append(&mut content);
+    buf
+}
+
+/// Creates a valid WASM binary with the provided custom sections.
+fn wasm_with_custom_sections(custom_sections: Vec<CustomSection>) -> Wasm {
+    // We start with the trivial WASM represented as `(module)` in the WebAssembly textual representation (WAT)
+    let mut buf = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    // and append the binary representations of the individual custom sections
+    // (which are self-contained and can thus be simply appended).
+    for custom_section in custom_sections {
+        buf.append(&mut encode_custom_section(custom_section));
+    }
+    Wasm::from_bytes(buf)
+}
 
 /// Sets up a testnet with
 /// 1. System subnet with a single node
@@ -86,13 +132,17 @@ fn setup(env: TestEnv) {
 }
 
 fn get_first_app_node(env: &TestEnv) -> IcNodeSnapshot {
+    get_first_app_subnet(env)
+        .nodes()
+        .next()
+        .expect("Every subnet should have at least one node")
+}
+
+fn get_first_app_subnet(env: &TestEnv) -> SubnetSnapshot {
     env.topology_snapshot()
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("There should be at least one subnet for every subnet type")
-        .nodes()
-        .next()
-        .expect("Every subnet should have at least one node")
 }
 
 async fn build_agent_with_identity(env: &TestEnv, identity: impl Identity + 'static) -> Agent {
@@ -149,6 +199,23 @@ fn read_state_with_identity_and_canister_id(
             let agent = build_agent_with_identity(env, identity).await;
             agent
                 .read_state_raw(paths, effective_canister_id.into())
+                .await
+        })
+}
+
+/// Call the `api/v2/subnet/{}/read_state` endpoint with the given paths, identity and subnet ID
+fn read_subnet_state_with_identity_and_subnet_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    identity: impl Identity + 'static,
+    subnet_id: SubnetId,
+) -> Result<Certificate, AgentError> {
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(async move {
+            let agent = build_agent_with_identity(env, identity).await;
+            agent
+                .read_subnet_state_raw(paths, subnet_id.get().into())
                 .await
         })
 }
@@ -256,17 +323,12 @@ fn test_absent_request(env: TestEnv) {
     }
 }
 
+// The paths `/` (root), `/<>` (empty label), and `/<foo>` are invalid.
 fn test_invalid_path_rejected(env: TestEnv) {
-    for invalid_path in ["", "foo"] {
-        let path = vec![invalid_path.into()];
-        let cert = read_state(&env, vec![path]);
+    for invalid_path in [vec![], vec!["".into()], vec!["foo".into()]] {
+        let cert = read_state(&env, vec![invalid_path]);
         assert_matches!(cert, Err(AgentError::HttpError(payload)) if payload.status == 404);
     }
-}
-
-/// Create a wasm with custom metadata sections
-fn wasm_with_custom_sections(sections: Vec<(Vec<u8>, Vec<u8>)>) -> Wasm {
-    Wasm::from_bytes(with_custom_sections(sections))
 }
 
 /// Look up the value of the given metadata section for the given canister
@@ -288,8 +350,43 @@ fn lookup_metadata(
         "metadata".into(),
         metadata_section.into(),
     ];
-    let cert = read_state_with_identity(env, vec![path.clone()], identity)?;
+    let cert = read_state_with_identity_and_canister_id(
+        env,
+        vec![path.clone()],
+        identity,
+        canister_id.get(),
+    )?;
     lookup_value(&cert, path).map(|s| s.to_vec())
+}
+
+// The following system test is included here because it requires ability to craft an invalid custom section name
+// using `wasm_with_custom_sections`.
+fn test_non_utf8_metadata(env: TestEnv) {
+    let node = get_first_app_node(&env);
+    let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+    let mut canister: Canister<'_> =
+        block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
+
+    let non_utf8_vec = b"\xe2\x28\xa1".to_vec();
+    assert!(String::from_utf8(non_utf8_vec.clone()).is_err());
+
+    let custom_section = CustomSection {
+        name: non_utf8_vec,
+        content: b"test".to_vec(),
+    };
+
+    // Create a wasm with non UTF-8 custom section name.
+    let wasm = wasm_with_custom_sections(vec![custom_section]);
+
+    // Installing the wasm fails
+    let err = block_on(wasm.install_onto_canister(
+        &mut canister,
+        CanisterInstallMode::Install,
+        None,
+        None,
+    ))
+    .unwrap_err();
+    assert!(err.contains("Canister's Wasm module is not valid"));
 }
 
 fn test_metadata_path(env: TestEnv) {
@@ -299,18 +396,21 @@ fn test_metadata_path(env: TestEnv) {
         block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
     let canister_id = canister.canister_id();
 
+    let non_ascii_vec = "☃️".as_bytes().to_vec();
+    let non_ascii_str = String::from_utf8(non_ascii_vec.clone()).unwrap();
+    assert!(!non_ascii_str.is_ascii());
+
     let metadata_sections = vec![
         // ASCII
         (b"test".to_vec(), b"test 1".to_vec()),
         // Non-ASCII UTF-8
-        (b"\x0e2\x028\x0a1".to_vec(), b"test 2".to_vec()),
-        ("☃️".as_bytes().to_vec(), b"test 3".to_vec()),
+        (non_ascii_vec, b"test 2".to_vec()),
         // Empty blob
-        (vec![], b"test 4".to_vec()),
+        (vec![], b"test 3".to_vec()),
         // ASCII string with spaces
         (
             b"metadata section name with spaces".to_vec(),
-            b"test 5".to_vec(),
+            b"test 4".to_vec(),
         ),
     ];
 
@@ -319,8 +419,9 @@ fn test_metadata_path(env: TestEnv) {
         metadata_sections
             .iter()
             .cloned()
-            .map(|(section_name, content)| {
-                ([b"icp:public ".to_vec(), section_name].concat(), content)
+            .map(|(section_name, content)| CustomSection {
+                name: [b"icp:public ".to_vec(), section_name].concat(),
+                content,
             })
             .collect(),
     );
@@ -330,8 +431,9 @@ fn test_metadata_path(env: TestEnv) {
         metadata_sections
             .iter()
             .cloned()
-            .map(|(section_name, content)| {
-                ([b"icp:private ".to_vec(), section_name].concat(), content)
+            .map(|(section_name, content)| CustomSection {
+                name: [b"icp:private ".to_vec(), section_name].concat(),
+                content,
             })
             .collect(),
     );
@@ -340,7 +442,9 @@ fn test_metadata_path(env: TestEnv) {
     block_on(wasm_public.install_with_retries_onto_canister(&mut canister, None, None)).unwrap();
 
     // Invalid utf-8 bytes in metadata request
-    let cert = lookup_metadata(&env, &canister_id, &[0xff, 0xfe, 0xfd], get_identity());
+    let non_utf8 = [0xff, 0xfe, 0xfd];
+    assert!(String::from_utf8(non_utf8.to_vec()).is_err());
+    let cert = lookup_metadata(&env, &canister_id, &non_utf8, get_identity());
     assert_matches!(cert, Err(AgentError::HttpError(payload)) if payload.status == 400);
 
     // Non-existing metadata section
@@ -399,6 +503,7 @@ fn test_canister_path(env: TestEnv) {
     let mut installed_canister: Canister<'_> =
         block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
     let wasm = wasm_with_custom_sections(vec![]);
+    let expected_module_hash = wasm.sha256_hash();
     block_on(wasm.install_with_retries_onto_canister(&mut installed_canister, None, None)).unwrap();
 
     // Test /module_hash and /controllers paths by setting canister controllers to:
@@ -417,7 +522,7 @@ fn test_canister_path(env: TestEnv) {
         });
         test_module_hash_and_controllers(&env, &installed_canister, controllers, |res| {
             // Installed canister should have a module hash
-            !res.unwrap().is_empty()
+            res.unwrap() == expected_module_hash
         });
     }
 }
@@ -474,7 +579,7 @@ fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u
             Encode!(&ForwardParams {
                 receiver: Principal::management_canister(),
                 method: "raw_rand".to_string(),
-                cycles: u64::MAX.into(),
+                cycles: 0,
                 payload: Encode!().unwrap(),
             })
             .unwrap(),
@@ -554,14 +659,105 @@ fn test_request_path_access(env: TestEnv) {
         assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 
-    let (request_id2, _) = make_update_call(&agent, &canister_id);
-    // Reading both requests at the same time should fail
+    // Reading both requests (to the same canister) at the same time should fail
     let paths = vec![
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
     let result = read_state_with_identity(&env, paths.clone(), get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
+
+    // Reading both requests (to different canisters) at the same time should fail
+    let another_canister_id = block_on(async {
+        let mcan = MessageCanister::new_with_cycles(&agent, effective_canister_id, u128::MAX).await;
+        mcan.canister_id()
+    });
+    let (request_id2, _) = make_update_call(&agent, &another_canister_id);
+    let paths = vec![
+        vec!["request_status".into(), (*request_id1).into()],
+        vec!["request_status".into(), (*request_id2).into()],
+    ];
+    let result = read_state_with_identity(&env, paths.clone(), get_identity());
+    assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
+}
+
+// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
+// and compares the result with the canister ranges obtained from the registry.
+fn test_canister_canister_ranges_paths(env: TestEnv) {
+    let subnet = get_first_app_subnet(&env);
+    let node = subnet.nodes().next().unwrap();
+    let effective_canister_id = node.effective_canister_id();
+
+    let path: Vec<Label<Vec<u8>>> = vec![
+        "canister_ranges".into(),
+        subnet.subnet_id.get_ref().as_slice().into(),
+    ];
+
+    let cert = read_state_with_identity_and_canister_id(
+        &env,
+        vec![path.clone()],
+        get_identity(),
+        effective_canister_id,
+    )
+    .expect("Failed to read state");
+
+    validate_canister_ranges(&subnet, &path, &cert);
+}
+
+// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+// and compares the result with the canister ranges obtained from the registry.
+fn test_subnet_canister_ranges_paths(env: TestEnv) {
+    let subnet = get_first_app_subnet(&env);
+
+    let path: Vec<Label<Vec<u8>>> = vec![
+        "canister_ranges".into(),
+        subnet.subnet_id.get_ref().as_slice().into(),
+    ];
+
+    let cert = read_subnet_state_with_identity_and_subnet_id(
+        &env,
+        vec![path.clone()],
+        get_identity(),
+        subnet.subnet_id,
+    )
+    .expect("Failed to read state");
+
+    validate_canister_ranges(&subnet, &path, &cert);
+}
+
+fn validate_canister_ranges(
+    subnet: &SubnetSnapshot,
+    path: &Vec<Label<Vec<u8>>>,
+    cert: &Certificate,
+) {
+    let SubtreeLookupResult::Found(subtree) = cert.tree.lookup_subtree(path) else {
+        panic!("State tree does not contain canister ranges subtree");
+    };
+
+    let mut canister_ranges_from_state_tree = Vec::new();
+    for path in subtree.list_paths() {
+        let LookupResult::Found(value) = subtree.lookup_path(&path) else {
+            panic!("State tree doesn't contain the requested path: {path:?}");
+        };
+        let ranges: Vec<(PrincipalId, PrincipalId)> =
+            serde_cbor::from_slice(value).expect("Failed to deserialize a canister ranges leaf");
+
+        canister_ranges_from_state_tree.extend(ranges.into_iter().map(|(start, end)| {
+            CanisterIdRange {
+                start: CanisterId::try_from_principal_id(start).unwrap(),
+                end: CanisterId::try_from_principal_id(end).unwrap(),
+            }
+        }));
+    }
+    canister_ranges_from_state_tree.sort();
+
+    let mut canister_ranges_from_registry = subnet.subnet_canister_ranges();
+    canister_ranges_from_registry.sort();
+
+    assert_eq!(
+        canister_ranges_from_registry,
+        canister_ranges_from_state_tree
+    );
 }
 
 fn main() -> Result<()> {
@@ -573,10 +769,13 @@ fn main() -> Result<()> {
         .add_test(systest!(test_invalid_request_rejected))
         .add_test(systest!(test_absent_request))
         .add_test(systest!(test_invalid_path_rejected))
+        .add_test(systest!(test_non_utf8_metadata))
         .add_test(systest!(test_metadata_path))
         .add_test(systest!(test_canister_path))
         .add_test(systest!(test_request_path))
         .add_test(systest!(test_request_path_access))
+        .add_test(systest!(test_canister_canister_ranges_paths))
+        .add_test(systest!(test_subnet_canister_ranges_paths))
         .execute_from_args()?;
     Ok(())
 }

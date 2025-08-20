@@ -43,7 +43,6 @@ bitcoind = "0.32.0"
 criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
-ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
@@ -55,5 +54,5 @@ harness = false
 
 [[bin]]
 name = "adapter-stress-test"
-path = "src/stress_test.rs"
+path = "bin/adapter-stress-test.rs"
 required-features = ["tower"]

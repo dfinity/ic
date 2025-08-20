@@ -584,27 +584,27 @@ impl From<pb_api::RegisterDappCanisters> for pb::RegisterDappCanisters {
     }
 }
 
-impl From<pb::precise_value::PreciseValue> for pb_api::PreciseValue {
-    fn from(item: pb::precise_value::PreciseValue) -> Self {
+impl From<pb::precise::Value> for pb_api::PreciseValue {
+    fn from(item: pb::precise::Value) -> Self {
         match item {
-            pb::precise_value::PreciseValue::Bool(v) => Self::Bool(v),
-            pb::precise_value::PreciseValue::Blob(v) => Self::Blob(v),
-            pb::precise_value::PreciseValue::Text(v) => Self::Text(v),
-            pb::precise_value::PreciseValue::Nat(v) => Self::Nat(v),
-            pb::precise_value::PreciseValue::Int(v) => Self::Int(v),
-            pb::precise_value::PreciseValue::Array(pb::PreciseArray { array }) => {
+            pb::precise::Value::Bool(v) => Self::Bool(v),
+            pb::precise::Value::Blob(v) => Self::Blob(v),
+            pb::precise::Value::Text(v) => Self::Text(v),
+            pb::precise::Value::Nat(v) => Self::Nat(v),
+            pb::precise::Value::Int(v) => Self::Int(v),
+            pb::precise::Value::Array(pb::PreciseArray { array }) => {
                 let api_array = array
                     .into_iter()
-                    .filter_map(|pb::PreciseValue { precise_value }| precise_value.map(Self::from))
+                    .filter_map(|pb::Precise { value }| value.map(Self::from))
                     .collect();
 
                 Self::Array(api_array)
             }
-            pb::precise_value::PreciseValue::Map(pb::PreciseMap { map }) => {
+            pb::precise::Value::Map(pb::PreciseMap { map }) => {
                 let api_map = map
                     .into_iter()
-                    .filter_map(|(key, pb::PreciseValue { precise_value })| {
-                        precise_value.map(|value| (key, Self::from(value)))
+                    .filter_map(|(key, pb::Precise { value })| {
+                        value.map(|value| (key, Self::from(value)))
                     })
                     .collect();
 
@@ -614,18 +614,18 @@ impl From<pb::precise_value::PreciseValue> for pb_api::PreciseValue {
     }
 }
 
-impl From<pb_api::PreciseValue> for pb::PreciseValue {
+impl From<pb_api::PreciseValue> for pb::Precise {
     fn from(item: pb_api::PreciseValue) -> Self {
-        let precise_value = Some(match item {
-            pb_api::PreciseValue::Bool(v) => pb::precise_value::PreciseValue::Bool(v),
-            pb_api::PreciseValue::Blob(v) => pb::precise_value::PreciseValue::Blob(v),
-            pb_api::PreciseValue::Text(v) => pb::precise_value::PreciseValue::Text(v),
-            pb_api::PreciseValue::Nat(v) => pb::precise_value::PreciseValue::Nat(v),
-            pb_api::PreciseValue::Int(v) => pb::precise_value::PreciseValue::Int(v),
+        let value = Some(match item {
+            pb_api::PreciseValue::Bool(v) => pb::precise::Value::Bool(v),
+            pb_api::PreciseValue::Blob(v) => pb::precise::Value::Blob(v),
+            pb_api::PreciseValue::Text(v) => pb::precise::Value::Text(v),
+            pb_api::PreciseValue::Nat(v) => pb::precise::Value::Nat(v),
+            pb_api::PreciseValue::Int(v) => pb::precise::Value::Int(v),
             pb_api::PreciseValue::Array(array) => {
                 let array = array.into_iter().map(Self::from).collect();
                 let array = pb::PreciseArray { array };
-                pb::precise_value::PreciseValue::Array(array)
+                pb::precise::Value::Array(array)
             }
             pb_api::PreciseValue::Map(map) => {
                 let map = map
@@ -638,11 +638,11 @@ impl From<pb_api::PreciseValue> for pb::PreciseValue {
 
                 let map = pb::PreciseMap { map };
 
-                pb::precise_value::PreciseValue::Map(map)
+                pb::precise::Value::Map(map)
             }
         });
 
-        Self { precise_value }
+        Self { value }
     }
 }
 
@@ -650,9 +650,7 @@ impl From<pb::ExtensionInit> for pb_api::ExtensionInit {
     fn from(item: pb::ExtensionInit) -> Self {
         let pb::ExtensionInit { value } = item;
 
-        let value = value.and_then(|pb::PreciseValue { precise_value }| {
-            precise_value.map(pb_api::PreciseValue::from)
-        });
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
 
         Self { value }
     }
@@ -662,7 +660,7 @@ impl From<pb_api::ExtensionInit> for pb::ExtensionInit {
     fn from(item: pb_api::ExtensionInit) -> Self {
         let pb_api::ExtensionInit { value } = item;
 
-        let value = value.map(pb::PreciseValue::from);
+        let value = value.map(pb::Precise::from);
 
         Self { value }
     }
@@ -700,6 +698,62 @@ impl From<pb_api::RegisterExtension> for pb::RegisterExtension {
         Self {
             chunked_canister_wasm,
             extension_init,
+        }
+    }
+}
+
+impl From<pb::ExtensionOperationArg> for pb_api::ExtensionOperationArg {
+    fn from(item: pb::ExtensionOperationArg) -> Self {
+        let pb::ExtensionOperationArg { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionOperationArg> for pb::ExtensionOperationArg {
+    fn from(item: pb_api::ExtensionOperationArg) -> Self {
+        let pb_api::ExtensionOperationArg { value } = item;
+
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExecuteExtensionOperation> for pb_api::ExecuteExtensionOperation {
+    fn from(item: pb::ExecuteExtensionOperation) -> Self {
+        let pb::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb_api::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        }
+    }
+}
+
+impl From<pb_api::ExecuteExtensionOperation> for pb::ExecuteExtensionOperation {
+    fn from(item: pb_api::ExecuteExtensionOperation) -> Self {
+        let pb_api::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
         }
     }
 }
@@ -861,6 +915,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
             }
+            pb::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb_api::proposal::Action::ExecuteExtensionOperation(v.into())
+            }
             pb::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb_api::proposal::Action::UpgradeSnsToNextVersion(v.into())
             }
@@ -916,6 +973,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
+            }
+            pb_api::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb::proposal::Action::ExecuteExtensionOperation(v.into())
             }
             pb_api::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb::proposal::Action::UpgradeSnsToNextVersion(v.into())

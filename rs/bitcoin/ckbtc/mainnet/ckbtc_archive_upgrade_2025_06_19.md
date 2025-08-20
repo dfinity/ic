@@ -1,0 +1,46 @@
+# Proposal to upgrade the ckBTC archive canister
+
+Repository: `https://github.com/dfinity/ic.git`
+
+Git hash: `83923a194d39835e8a7d9549f9f0831b962a60c2`
+
+New compressed Wasm hash: `50adf544839d3e9f6f51cae4aad4baa028ef536e0e2714984389c5c989e55fae`
+
+Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
+
+Target canister: `nbsys-saaaa-aaaar-qaaga-cai`
+
+Previous ckBTC archive proposal: https://dashboard.internetcomputer.org/proposal/136743
+
+---
+
+## Motivation
+
+Upgrade ckBTC archive canister to the latest
+version [ledger-suite-icrc-2025-06-19](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-06-19).
+
+## Release Notes
+
+```
+git log --format='%C(auto) %h %s' fda8ae420732b21f0ddbbcc5dfbd4ddbe0db9c26..83923a194d39835e8a7d9549f9f0831b962a60c2 -- rs/ledger_suite/icrc1/archive
+83923a194d feat(ICRC_Ledger): FI-1771: Add 1xfer to icrc3_supported_block_types (#5608)
+ ```
+
+## Upgrade args
+
+```
+git fetch
+git checkout 83923a194d39835e8a7d9549f9f0831b962a60c2
+didc encode '()' | xxd -r -p | sha256sum
+```
+
+## Wasm Verification
+
+Verify that the hash of the gzipped WASM matches the proposed hash.
+
+```
+git fetch
+git checkout 83923a194d39835e8a7d9549f9f0831b962a60c2
+"./ci/container/build-ic.sh" "--canisters"
+sha256sum ./artifacts/canisters/ic-icrc1-archive.wasm.gz
+```

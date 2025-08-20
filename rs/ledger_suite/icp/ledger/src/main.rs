@@ -41,8 +41,9 @@ use icp_ledger::{
     BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -210,7 +211,8 @@ async fn send(
         Operation::Mint { to, amount }
     } else if to == minting_acc {
         assert_eq!(fee, Tokens::ZERO, "Fee for burning should be zero");
-        let min_burn_amount = LEDGER.read().unwrap().transfer_fee;
+        let balance = LEDGER.read().unwrap().balances().account_balance(&from);
+        let min_burn_amount = LEDGER.read().unwrap().transfer_fee.min(balance);
         if amount < min_burn_amount {
             panic!("Burns lower than {} are not allowed", min_burn_amount);
         }
@@ -671,7 +673,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 if let Some(upgrade_args) = upgrade_args {
                     ledger.upgrade(upgrade_args);
                 }
-        }
+            }
     }
         }
         set_certified_data(
@@ -799,7 +801,7 @@ async fn icrc1_transfer(
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     let from_account = Account {
@@ -836,7 +838,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -892,6 +894,12 @@ fn tip_of_chain_() {
         from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
     let res = to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
     reply_raw(&res)
+}
+
+#[query(name = "tip_of_chain")]
+#[candid_method(query, rename = "tip_of_chain")]
+fn tip_of_chain_candid() -> TipOfChainRes {
+    tip_of_chain()
 }
 
 #[export_name = "canister_query get_archive_index_pb"]
@@ -1103,10 +1111,7 @@ fn get_nodes_() {
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let ledger = LEDGER.try_read().map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to get a LEDGER for read: {}", err),
-        )
+        std::io::Error::other(format!("Failed to get a LEDGER for read: {}", err))
     })?;
     let archive_guard = ledger.blockchain.archive.read().unwrap();
     let num_archives = archive_guard
@@ -1273,9 +1278,13 @@ fn query_encoded_blocks(
     }
 }
 
-fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, ApproveError> {
+fn icrc2_approve_not_async(
+    caller: Principal,
+    arg: ApproveArgs,
+    override_spender: Option<AccountIdentifier>,
+) -> Result<Nat, ApproveError> {
     if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
-        trap("Anonymous principal cannot approve token transfers on the ledger.");
+        trap("Caller cannot approve token transfers on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1291,7 +1300,11 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, A
     if from_account.owner == arg.spender.owner {
         trap("self approval is not allowed");
     }
-    let spender = AccountIdentifier::from(arg.spender);
+    let spender = if let Some(override_spender) = override_spender {
+        override_spender
+    } else {
+        AccountIdentifier::from(arg.spender)
+    };
     let minting_acc = LEDGER
         .read()
         .unwrap()
@@ -1377,7 +1390,7 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, A
 #[update]
 #[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    let block_index = icrc2_approve_not_async(caller(), arg)?;
+    let block_index = icrc2_approve_not_async(caller(), arg, None)?;
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
@@ -1392,6 +1405,32 @@ fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowan
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
     }
+}
+
+#[update]
+#[candid_method(update)]
+async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> {
+    let approve_arg = ApproveArgs {
+        from_subaccount: args.from_subaccount,
+        spender: Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        },
+        amount: Nat::from(0u64),
+        expected_allowance: None,
+        expires_at: None,
+        fee: args.fee,
+        memo: None,
+        created_at_time: None,
+    };
+    let spender = AccountIdentifier::from_address(args.spender).unwrap_or_else(|e| {
+        trap(&format!("Invalid account identifier: {}", e));
+    });
+    let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;
+
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    Ok(block_index)
 }
 
 #[query]
@@ -1420,6 +1459,7 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = caller();
     let ledger_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
     let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+    let token_name = LEDGER.read().unwrap().token_name.clone();
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -1427,6 +1467,7 @@ fn icrc21_canister_call_consent_message(
         caller_principal,
         ledger_fee,
         token_symbol,
+        token_name,
         decimals,
     )
 }
