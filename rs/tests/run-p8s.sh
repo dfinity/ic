@@ -25,9 +25,9 @@ Usage:
     Let grafana listen on port GRAFANA_PORT.
     Defaults to 3000.
 
-  --grafana-dashboards-dir
+  --grafana-dashboards-dir GRAFANA_DASHBOARDS_DIR
 
-    Provision Grafana dashboards from the specified directory.
+    Provision Grafana dashboards from the specified GRAFANA_DASHBOARDS_DIR directory.
 
   --help
 
