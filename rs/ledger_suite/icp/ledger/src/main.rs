@@ -75,7 +75,7 @@ use icrc_ledger_types::{
 };
 use icrc_ledger_types::{
     icrc2::allowance::{Allowance, AllowanceArgs},
-    icrc21::lib::build_icrc21_consent_info_for_generic_transfer,
+    icrc21::lib::build_icrc21_consent_info,
 };
 use ledger_canister::{
     balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
@@ -1759,13 +1759,14 @@ fn icrc21_canister_call_consent_message(
             amount: Nat::from(amount.get_e8s()),
             memo: Some(GenericMemo::IntMemo(memo.0)),
         };
-        build_icrc21_consent_info_for_generic_transfer(
+        build_icrc21_consent_info(
             consent_msg_request,
-            args,
+            caller_principal,
             ledger_fee,
             token_symbol,
             token_name,
             decimals,
+            Some(args),
         )
     } else {
         build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(

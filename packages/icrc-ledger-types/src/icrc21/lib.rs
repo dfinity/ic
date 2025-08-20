@@ -47,7 +47,7 @@ impl AccountOrId {
 impl Display for AccountOrId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AccountOrId::Account(account) => write!(f, "{}", account.to_string()),
+            AccountOrId::Account(account) => write!(f, "{}", account),
             AccountOrId::AccountIdAddress(str) => write!(f, "{}", str.clone().unwrap_or_default()),
         }
     }
@@ -301,13 +301,34 @@ pub struct GenericTransferArgs {
     pub memo: Option<GenericMemo>,
 }
 
-fn prepare_message_builder(
+pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     consent_msg_request: ConsentMessageRequest,
+    caller_principal: Principal,
     ledger_fee: Nat,
     token_symbol: String,
     token_name: String,
     decimals: u8,
-) -> Result<(ConsentMessageBuilder, ConsentMessageMetadata), Icrc21Error> {
+) -> Result<ConsentInfo, Icrc21Error> {
+    build_icrc21_consent_info(
+        consent_msg_request,
+        caller_principal,
+        ledger_fee,
+        token_symbol,
+        token_name,
+        decimals,
+        None,
+    )
+}
+
+pub fn build_icrc21_consent_info(
+    consent_msg_request: ConsentMessageRequest,
+    caller_principal: Principal,
+    ledger_fee: Nat,
+    token_symbol: String,
+    token_name: String,
+    decimals: u8,
+    transfer_args: Option<GenericTransferArgs>,
+) -> Result<ConsentInfo, Icrc21Error> {
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
             description: format!(
@@ -343,60 +364,7 @@ fn prepare_message_builder(
     if let Some(display_type) = consent_msg_request.user_preferences.device_spec {
         display_message_builder = display_message_builder.with_display_type(display_type);
     }
-    Ok((display_message_builder, metadata))
-}
 
-pub fn build_icrc21_consent_info_for_generic_transfer(
-    consent_msg_request: ConsentMessageRequest,
-    transfer_args: GenericTransferArgs,
-    ledger_fee: Nat,
-    token_symbol: String,
-    token_name: String,
-    decimals: u8,
-) -> Result<ConsentInfo, Icrc21Error> {
-    let (mut display_message_builder, metadata) = prepare_message_builder(
-        consent_msg_request,
-        ledger_fee,
-        token_symbol,
-        token_name,
-        decimals,
-    )?;
-    let consent_message = match display_message_builder.function {
-        Icrc21Function::GenericTransfer => {
-            display_message_builder = display_message_builder
-                .with_amount(transfer_args.amount)
-                .with_receiver_account(transfer_args.receiver)
-                .with_from_account(transfer_args.from);
-            if let Some(memo) = transfer_args.memo {
-                display_message_builder = display_message_builder.with_memo(memo);
-            }
-            display_message_builder.build()
-        }
-        _ => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: "Only generic transfer is supported".to_string(),
-        })),
-    }?;
-    Ok(ConsentInfo {
-        metadata,
-        consent_message,
-    })
-}
-
-pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
-    consent_msg_request: ConsentMessageRequest,
-    caller_principal: Principal,
-    ledger_fee: Nat,
-    token_symbol: String,
-    token_name: String,
-    decimals: u8,
-) -> Result<ConsentInfo, Icrc21Error> {
-    let (mut display_message_builder, metadata) = prepare_message_builder(
-        consent_msg_request.clone(),
-        ledger_fee,
-        token_symbol,
-        token_name,
-        decimals,
-    )?;
     let consent_message = match display_message_builder.function {
         Icrc21Function::Transfer => {
             let TransferArg {
@@ -497,9 +465,24 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
-        Icrc21Function::GenericTransfer => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: "Generic transfer is not supported".to_string(),
-        })),
+        Icrc21Function::GenericTransfer => {
+            let transfer_args = match transfer_args {
+                Some(args) => args,
+                None => {
+                    return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: "transfer args should be provided".to_string(),
+                    }))
+                }
+            };
+            display_message_builder = display_message_builder
+                .with_amount(transfer_args.amount)
+                .with_receiver_account(transfer_args.receiver)
+                .with_from_account(transfer_args.from);
+            if let Some(memo) = transfer_args.memo {
+                display_message_builder = display_message_builder.with_memo(memo);
+            }
+            display_message_builder.build()
+        }
     }?;
 
     Ok(ConsentInfo {
