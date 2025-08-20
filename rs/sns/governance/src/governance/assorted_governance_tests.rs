@@ -4768,6 +4768,7 @@ fn test_list_topics() {
                     function_1,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo {
@@ -4805,6 +4806,7 @@ fn test_list_topics() {
                     function_2
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4852,6 +4854,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4862,6 +4865,7 @@ fn test_list_topics() {
                 native_functions: vec![],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4885,6 +4889,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4920,6 +4925,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo {
@@ -4991,6 +4997,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
     ];

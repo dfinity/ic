@@ -1,5 +1,5 @@
 use crate::extensions;
-use crate::extensions::get_extension_operation_spec_from_cache;
+use crate::extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec};
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
@@ -19,6 +19,7 @@ pub struct TopicInfo<C> {
     pub name: String,
     pub description: String,
     pub functions: C,
+    pub extension_operations: Vec<ExtensionOperationSpec>,
     pub is_critical: bool,
 }
 
@@ -67,6 +68,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MANAGE_SNS_METADATA,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo::<NativeFunctions> {
@@ -79,6 +81,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     ADVANCE_SNS_TARGET_VERSION,
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -92,6 +95,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MANAGE_DAPP_CANISTER_SETTINGS,
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -101,6 +105,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             functions: NativeFunctions {
                 native_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -110,6 +115,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             functions: NativeFunctions {
                 native_functions: vec![MOTION],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -122,6 +128,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MINT_SNS_TOKENS,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo::<NativeFunctions> {
@@ -137,6 +144,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     REGISTER_EXTENSION,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
     ]
@@ -199,6 +207,7 @@ impl Governance {
                         .unwrap_or_default()
                         .clone(),
                 },
+                extension_operations: vec![],
                 is_critical: topic.is_critical,
             })
             .to_vec();

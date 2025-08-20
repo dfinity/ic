@@ -28,6 +28,30 @@ pub enum Topic {
     TreasuryAssetManagement,
     CriticalDappOperations,
 }
+
+/// Types of extension operations
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub enum ExtensionOperationType {
+    TreasuryManagerDeposit,
+    TreasuryManagerWithdraw,
+    Custom(String),
+}
+
+/// Specification for an extension operation
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub struct ExtensionOperationSpec {
+    pub operation_type: Option<ExtensionOperationType>,
+    pub description: Option<String>,
+    pub extension_type: Option<ExtensionType>,
+    pub topic: Option<Topic>,
+}
+
+/// Types of extensions that can be registered
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub enum ExtensionType {
+    TreasuryManager,
+}
+
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
 #[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
@@ -37,6 +61,7 @@ pub struct TopicInfo {
     pub description: Option<String>,
     pub native_functions: Option<Vec<NervousSystemFunction>>,
     pub custom_functions: Option<Vec<NervousSystemFunction>>,
+    pub extension_operations: Option<Vec<ExtensionOperationSpec>>,
     pub is_critical: Option<bool>,
 }
 

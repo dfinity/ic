@@ -4412,16 +4412,13 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                     native_functions,
                     custom_functions,
                 },
+            extension_operations,
             is_critical,
         } = value;
 
-        // Collect extension operations for this topic from the global specs
-        let extension_operations: Vec<pb_api::topics::ExtensionOperationSpec> = 
-            crate::extensions::EXTENSION_OPERATION_SPECS
-                .values()
-                .filter(|spec| pb_api::topics::Topic::try_from(spec.topic).unwrap() == topic)
-                .map(|spec| pb_api::topics::ExtensionOperationSpec::from(spec.clone()))
-                .collect();
+        let extension_operations = extension_operations
+            .map(|op| pb_api::topics::ExtensionOperationSpec::from(op))
+            .collect();
 
         pb_api::topics::TopicInfo {
             topic: Some(topic),
@@ -4503,7 +4500,9 @@ impl From<pb_api::topics::ExtensionType> for crate::extensions::ExtensionType {
 impl From<crate::extensions::ExtensionOperationSpec> for pb_api::topics::ExtensionOperationSpec {
     fn from(value: crate::extensions::ExtensionOperationSpec) -> Self {
         pb_api::topics::ExtensionOperationSpec {
-            operation_type: Some(pb_api::topics::ExtensionOperationType::from(value.operation_type)),
+            operation_type: Some(pb_api::topics::ExtensionOperationType::from(
+                value.operation_type,
+            )),
             description: Some(value.description),
             extension_type: Some(pb_api::topics::ExtensionType::from(value.extension_type)),
             topic: Some(pb_api::topics::Topic::try_from(value.topic).unwrap()),
@@ -4515,15 +4514,13 @@ impl From<pb_api::topics::ExtensionOperationSpec> for crate::extensions::Extensi
     fn from(value: pb_api::topics::ExtensionOperationSpec) -> Self {
         crate::extensions::ExtensionOperationSpec {
             operation_type: crate::extensions::OperationType::from(
-                value.operation_type.expect("operation_type is required")
+                value.operation_type.expect("operation_type is required"),
             ),
             description: value.description.expect("description is required"),
             extension_type: crate::extensions::ExtensionType::from(
-                value.extension_type.expect("extension_type is required")
+                value.extension_type.expect("extension_type is required"),
             ),
-            topic: pb::Topic::from(
-                value.topic.expect("topic is required")
-            ),
+            topic: pb::Topic::from(value.topic.expect("topic is required")),
         }
     }
 }

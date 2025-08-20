@@ -773,6 +773,23 @@ type ExecuteExtensionOperation = record {
   operation_arg : opt ExtensionOperationArg;
 };
 
+type ExtensionOperationSpec = record {
+  operation_type : opt ExtensionOperationType;
+  description : opt text;
+  extension_type : opt ExtensionType;
+  topic : opt Topic;
+};
+
+type ExtensionOperationType = variant {
+  TreasuryManagerDeposit;
+  TreasuryManagerWithdraw;
+  Custom : text;
+};
+
+type ExtensionType = variant {
+  TreasuryManager;
+};
+
 type RegisterVote = record {
   vote : int32;
   proposal : opt ProposalId;
@@ -1010,6 +1027,7 @@ type TopicInfo = record {
   description : opt text;
   native_functions : opt vec NervousSystemFunction;
   custom_functions : opt vec NervousSystemFunction;
+  extension_operations : opt vec ExtensionOperationSpec;
   is_critical : opt bool;
 };
 
