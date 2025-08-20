@@ -712,9 +712,8 @@ pub(crate) mod test {
 
     impl Routes {
         // Check if given node exists in the lookup table
-        // It's O(n) and used only in tests
         pub fn node_exists(&self, node_id: Principal) -> bool {
-            for s in self.subnets.iter() {
+            for s in self.subnet_map.values() {
                 for n in s.nodes.iter() {
                     if n.id == node_id {
                         return true;
@@ -841,7 +840,7 @@ pub(crate) mod test {
             if routes.load().is_some() {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         let rt = routes.load_full().unwrap();
@@ -978,13 +977,13 @@ pub(crate) mod test {
             if routes.load().is_some() {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         let rt = routes.load_full().unwrap();
         assert_eq!(rt.node_count, snapshot.nodes.len() as u32);
         for (i, j) in [(0, 1), (1, 0)].iter() {
-            let mut nodes_left = rt.subnets[*i].nodes.clone();
+            let mut nodes_left = rt.routes[*i].subnet.nodes.clone();
             let mut nodes_right = snapshot.subnets[*j].nodes.clone();
             nodes_left.sort_by_key(|n| n.id);
             nodes_right.sort_by_key(|n| n.id);

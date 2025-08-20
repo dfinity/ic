@@ -40,9 +40,8 @@ use tracing::info;
 use crate::{
     errors::ErrorCause,
     http::middleware::{cache::CacheState, geoip, retry::RetryResult},
-    persist::RouteSubnet,
     routes::{Health, RequestContext, RequestType},
-    snapshot::{Node, RegistrySnapshot},
+    snapshot::{Node, RegistrySnapshot, Subnet},
 };
 
 const KB: f64 = 1024.0;
@@ -496,11 +495,8 @@ pub async fn metrics_middleware(
     let response = next.run(request).await;
     let proc_duration = start_time.elapsed().as_secs_f64();
 
-    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the RouteSubnet extension
-    let subnet_id = subnet_id.or(response
-        .extensions()
-        .get::<Arc<RouteSubnet>>()
-        .map(|x| x.id));
+    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the Subnet extension
+    let subnet_id = subnet_id.or(response.extensions().get::<Arc<Subnet>>().map(|x| x.id));
     let subnet_id_str = subnet_id_str.or(subnet_id.map(|x| x.to_string()));
 
     // Extract extensions

@@ -11,6 +11,7 @@ use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
+use ethnum::u256;
 use ic_bn_lib::tasks::Run;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
@@ -24,6 +25,7 @@ use ic_registry_client_helpers::{
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use rand::seq::SliceRandom;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
@@ -31,8 +33,10 @@ use url::{ParseError, Url};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
+    errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
+    persist::principal_to_u256,
     routes::RequestType,
 };
 
@@ -94,19 +98,82 @@ pub struct ApiBoundaryNode {
     pub _port: u16,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
 
-#[derive(Clone, Debug)]
+impl CanisterRange {
+    /// Calculates the length of the range
+    pub fn len(&self) -> u256 {
+        (principal_to_u256(&self.end) - principal_to_u256(&self.start)) + 1
+    }
+
+    /// Returns a list of canister IDs in this range in u256 format
+    pub fn canisters(&self) -> Vec<u256> {
+        let mut x = principal_to_u256(&self.start);
+        let end = principal_to_u256(&self.end);
+
+        let mut r = Vec::with_capacity((end - x).as_usize() + 1);
+        while x <= end {
+            r.push(x);
+            x += 1;
+        }
+
+        r
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
     pub ranges: Vec<CanisterRange>,
     pub nodes: Vec<Arc<Node>>,
     pub replica_version: String,
+}
+
+impl Subnet {
+    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        let nodes = self
+            .nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(nodes)
+    }
+
+    // max acceptable number of malicious nodes in a subnet
+    pub fn fault_tolerance_factor(&self) -> usize {
+        (self.nodes.len() - 1) / 3
+    }
+
+    pub fn pick_n_out_of_m_closest(
+        &self,
+        n: usize,
+        m: usize,
+    ) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        // nodes should already be sorted by latency after persist() invocation
+        let m = m.min(self.nodes.len());
+        let nodes = &self.nodes[0..m];
+
+        let picked_nodes = nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if picked_nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(picked_nodes)
+    }
 }
 
 impl fmt::Display for Subnet {

@@ -45,9 +45,8 @@ use super::{
 
 use crate::{
     errors::{ErrorCause, RateLimitCause},
-    persist::RouteSubnet,
     routes::{RequestContext, RequestType},
-    snapshot::RegistrySnapshot,
+    snapshot::{RegistrySnapshot, Subnet},
 };
 
 // Converts between different request types
@@ -468,7 +467,7 @@ impl Run for GenericLimiter {
 pub async fn middleware(
     State(state): State<Arc<GenericLimiter>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(subnet): Extension<Arc<Subnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
     request: Request<Body>,
     next: Next,
