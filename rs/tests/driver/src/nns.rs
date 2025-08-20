@@ -154,30 +154,6 @@ pub async fn get_software_version_from_snapshot(
     }
 }
 
-pub async fn update_xdr_per_icp(
-    nns_api: &'_ Runtime,
-    timestamp_seconds: u64,
-    xdr_permyriad_per_icp: u64,
-) -> Result<(), String> {
-    let governance_canister = get_governance_canister(nns_api);
-    let proposal_payload = ic_nns_common::types::UpdateIcpXdrConversionRatePayload {
-        data_source: "".to_string(),
-        timestamp_seconds,
-        xdr_permyriad_per_icp,
-        reason: None,
-    };
-
-    let proposal_id = submit_external_proposal_with_test_id(
-        &governance_canister,
-        NnsFunction::IcpXdrConversionRate,
-        proposal_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-    Ok(())
-}
-
 pub async fn set_authorized_subnetwork_list(
     nns_api: &'_ Runtime,
     who: Option<PrincipalId>,
