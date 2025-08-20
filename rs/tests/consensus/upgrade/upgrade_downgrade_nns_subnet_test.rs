@@ -39,7 +39,9 @@ fn setup(env: TestEnv) {
 // Tests an upgrade of the NNS subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
+
     let target_version = bless_target_version(&env, &nns_node);
+    info!("Upgrading NNS subnet to {} ...", target_version);
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
@@ -48,7 +50,9 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
+
     let initial_version = get_guestos_img_version().expect("Failed to find initial version");
+    info!("Downgrading NNS subnet to {} ...", initial_version);
     upgrade(
         &env,
         &nns_node,
@@ -57,7 +61,8 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ true,
     );
-    // Make sure we can still read the message stored before the first upgrade
+
+    info!("Make sure we can still read the message stored before the first upgrade ...");
     assert!(can_read_msg_with_retries(
         &env.logger(),
         &faulty_node.get_public_url(),
