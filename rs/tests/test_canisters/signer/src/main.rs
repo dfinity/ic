@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::Principal;
 use ic_cdk::{
     api::{

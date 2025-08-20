@@ -6,8 +6,9 @@ use crate::metrics::{
 };
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
+    AdapterClient, BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
+    SendTransactionResponse,
 };
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
@@ -166,13 +167,12 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BrokenConnectionBitcoinC
     }
 }
 
-fn setup_bitcoin_adapter_client(
+fn setup_adapter_client(
     log: ReplicaLogger,
     metrics: Metrics,
     rt_handle: tokio::runtime::Handle,
     uds_path: Option<PathBuf>,
-) -> Box<dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>>
-{
+) -> AdapterClient {
     match uds_path {
         None => Box::new(BrokenConnectionBitcoinClient::new(metrics)),
         Some(uds_path) => {
@@ -204,18 +204,10 @@ fn setup_bitcoin_adapter_client(
 }
 
 pub struct BitcoinAdapterClients {
-    pub btc_testnet_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
-    pub btc_mainnet_client: Box<
-        dyn RpcAdapterClient<
-            BitcoinAdapterRequestWrapper,
-            Response = BitcoinAdapterResponseWrapper,
-        >,
-    >,
+    pub btc_testnet_client: AdapterClient,
+    pub btc_mainnet_client: AdapterClient,
+    pub doge_testnet_client: AdapterClient,
+    pub doge_mainnet_client: AdapterClient,
 }
 
 pub fn setup_bitcoin_adapter_clients(
@@ -226,7 +218,7 @@ pub fn setup_bitcoin_adapter_clients(
 ) -> BitcoinAdapterClients {
     let metrics = Metrics::new(metrics_registry);
 
-    // Register bitcoin adapters metrics.
+    // Register adapters metrics.
     if let Some(metrics_uds_path) = adapters_config.bitcoin_testnet_uds_metrics_path {
         metrics_registry.register_adapter(AdapterMetrics::new(
             "btctestnet",
@@ -241,19 +233,45 @@ pub fn setup_bitcoin_adapter_clients(
             rt_handle.clone(),
         ));
     }
+    if let Some(metrics_uds_path) = adapters_config.dogecoin_testnet_uds_metrics_path {
+        metrics_registry.register_adapter(AdapterMetrics::new(
+            "dogetestnet",
+            metrics_uds_path,
+            rt_handle.clone(),
+        ));
+    }
+    if let Some(metrics_uds_path) = adapters_config.dogecoin_mainnet_uds_metrics_path {
+        metrics_registry.register_adapter(AdapterMetrics::new(
+            "dogemainnet",
+            metrics_uds_path,
+            rt_handle.clone(),
+        ));
+    }
 
     BitcoinAdapterClients {
-        btc_testnet_client: setup_bitcoin_adapter_client(
+        btc_testnet_client: setup_adapter_client(
             log.clone(),
             metrics.clone(),
             rt_handle.clone(),
             adapters_config.bitcoin_testnet_uds_path,
         ),
-        btc_mainnet_client: setup_bitcoin_adapter_client(
+        btc_mainnet_client: setup_adapter_client(
+            log.clone(),
+            metrics.clone(),
+            rt_handle.clone(),
+            adapters_config.bitcoin_mainnet_uds_path,
+        ),
+        doge_testnet_client: setup_adapter_client(
+            log.clone(),
+            metrics.clone(),
+            rt_handle.clone(),
+            adapters_config.dogecoin_testnet_uds_path,
+        ),
+        doge_mainnet_client: setup_adapter_client(
             log,
             metrics,
             rt_handle,
-            adapters_config.bitcoin_mainnet_uds_path,
+            adapters_config.dogecoin_mainnet_uds_path,
         ),
     }
 }
