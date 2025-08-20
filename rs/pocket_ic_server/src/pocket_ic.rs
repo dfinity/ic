@@ -1725,7 +1725,7 @@ impl PocketIcSubnets {
             .state_machine
             .canister_exists(IDENTITY_CANISTER_ID)
         {
-            // Create the cycles ledger with its ICP mainnet settings.
+            // Create the Internet Identity canister with its ICP mainnet settings.
             // These settings have been obtained by calling
             // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"rdmx6-jaaaa-aaaaa-aaadq-cai";})' --ic`:
             //     settings = record {
@@ -1749,8 +1749,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
             };
-            // Create the II canister.
-            // Although the II canister is created on a system subnet, it always attaches cycles to canister http outcalls and thus it needs cycles:
+            // Create the Internet Identity canister.
+            // Although the Internet Identity canister is created on a system subnet, it always attaches cycles to canister http outcalls and thus it needs cycles:
             // - the canister should have enough cycles to never run out of cycles;
             // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
             // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
@@ -1761,7 +1761,7 @@ impl PocketIcSubnets {
             );
             assert_eq!(canister_id, IDENTITY_CANISTER_ID);
 
-            // Install the II canister.
+            // Install the Internet Identity canister.
             // The initial values have been adapted from the mainnet values obtained by calling
             // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             // record {
@@ -1809,7 +1809,7 @@ impl PocketIcSubnets {
             //   };
             // },
             let openid_google = if self.auto_progress_enabled {
-                // II makes canister http outcalls if an `OpenIdConfig` is provided
+                // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
                 // and thus we should only provide one if auto progress is enabled
                 // (and canister http outcalls are handled by PocketIC automically).
                 Some(Some(OpenIdConfig {
