@@ -73,9 +73,8 @@ impl<T: RegistryClient + ?Sized> ApiBoundaryNodeRegistry for T {
         version: RegistryVersion,
     ) -> Result<Vec<NodeId>, RegistryClientError> {
         let all_ids = self.get_api_boundary_node_ids(version)?;
-        let system_ids: HashSet<NodeId> = HashSet::from_iter(self
-            .get_system_api_boundary_node_ids(version)?
-        );
+        let system_ids: HashSet<NodeId> =
+            HashSet::from_iter(self.get_system_api_boundary_node_ids(version)?);
 
         let app_ids: Vec<NodeId> = all_ids
             .into_iter()
