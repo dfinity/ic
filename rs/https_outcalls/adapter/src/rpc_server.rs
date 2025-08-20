@@ -340,9 +340,12 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
-        // we do the requests through the socks proxy. If not we use the default IPv6 route.
-        let http_resp = if !req.socks_proxy_addrs.is_empty() { // System subnet
+        // For the moment, if there are socks proxy address in the request, it means that we should try via them
+        // in case the direct connection fails.
+        // Otherwise, we should use the config address as a backup
+        // This is temporary until we open some of the API boundary nodes to the app subnets too.
+        let http_resp = if !req.socks_proxy_addrs.is_empty() {
+            // System subnet
             // Http request does not implement clone. So we have to manually construct a clone.
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
@@ -355,18 +358,19 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    self
-                        .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                    self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
                         .await
                         .map_err(|socks_err| {
-                            format!("Request failed direct connect {:?} and connect through socks {:?}",
-                                    direct_err, socks_err
-                                )
+                            format!(
+                                "Request failed direct connect {:?} and connect through socks {:?}",
+                                direct_err, socks_err
+                            )
                         })
                 }
                 Ok(resp) => Ok(resp),
             }
-        } else { // Application subnet.
+        } else {
+            // Application subnet.
             // TODO: as technically socks proxies are now tried all the time, instead of using
             // the "socks_proxy_allowed" flag, we should instead send the relevant URLs in the
             // "socks_proxy_addrs" param. Particularly, the caller should send the API BNs in
@@ -376,23 +380,27 @@ impl HttpsOutcallsService for CanisterHttp {
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
             let http_req_clone = http_req.clone();
-            match self.client
-                .request(http_req)
-                .await {
+            match self.client.request(http_req).await {
                 Ok(http_resp) => Ok(http_resp),
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    self
-                        .socks_client
+                    self.socks_client
                         .request(http_req_clone)
                         .await
                         .map_err(|socks_err| {
                             format!(
-                                "Request failed direct connect {:?} and connect through socks {:?} (Please note that the canister HTTPS outcalls feature is an IPv6-only feature. While IPv4 is an experimental feature, it cannot be relied upon for this functionality. For more information, please consult the Internet Computer developer documentation)",
+                                "Request failed direct connect {:?} \
+                                and connect through socks {:?}. \
+                                (Please note that the canister HTTPS outcalls feature \
+                                is an IPv6-only feature. \
+                                While IPv4 is an experimental feature, \
+                                it cannot be relied upon for this functionality. \
+                                For more information, please consult \
+                                the Internet Computer developer documentation)",
                                 direct_err, socks_err
                             )
                         })
-                    }
+                }
             }
         }
         .map_err(|err| {

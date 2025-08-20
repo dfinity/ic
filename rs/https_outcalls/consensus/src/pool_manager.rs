@@ -154,13 +154,15 @@ impl CanisterHttpPoolManagerImpl {
     fn get_socks_proxy_addrs(&self) -> Vec<String> {
         let latest_registry_version = self.registry_client.get_latest_version();
 
-        let allowed_boundary_nodes = if matches!(self.subnet_type, SubnetType::System) {
-            self.registry_client
-                .get_system_api_boundary_node_ids(latest_registry_version)
-        } else {
-            //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
-            // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
-            Ok(vec![])
+        let allowed_boundary_nodes = match self.subnet_type {
+            SubnetType::System => self
+                .registry_client
+                .get_system_api_boundary_node_ids(latest_registry_version),
+            SubnetType::Application | SubnetType::VerifiedApplication => {
+                //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
+                // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
+                Ok(vec![])
+            }
         };
 
         allowed_boundary_nodes
