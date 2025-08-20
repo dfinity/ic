@@ -25,13 +25,9 @@ pub enum PersistStatus {
     SkippedEmpty,
 }
 
-// Converts principal to a u256
+/// Converts Principal to a u256
 pub fn principal_to_u256(p: &Principal) -> u256 {
     let b = p.as_slice();
-
-    if b.len() > 29 {
-        panic!("Principal length should be <30 bytes");
-    }
 
     // Since Principal length can be anything in 0..29 range - prepend it with zeros to 32
     let pad = 32 - b.len();
@@ -147,18 +143,19 @@ impl Persist for Persister {
             // Sort nodes by an average latency before publishing
             subnet
                 .nodes
-                .sort_by(|a, b| a.avg_latency_secs.partial_cmp(&b.avg_latency_secs).unwrap());
+                .sort_by(|a, b| a.avg_latency_secs.total_cmp(&b.avg_latency_secs));
 
             let subnet = Arc::new(subnet);
             subnet_map.insert(subnet.id, subnet.clone());
 
             for range in &subnet.ranges {
-                // For smaller ranges create a direct mapping from canister id to a subnet
+                // For smaller ranges create a direct mapping from the canister id to a subnet
                 if range.len() <= 5 {
                     for canister_id in range.canisters() {
                         direct.insert(canister_id, subnet.clone());
                     }
                 } else {
+                    // The rest goes into normal binary search array
                     let route = Route {
                         subnet: subnet.clone(),
                         range_start: principal_to_u256(&range.start),
@@ -173,7 +170,7 @@ impl Persist for Persister {
         // Sort subnets by range_start for the binary search to work in lookup()
         routes.sort_by_key(|x| x.range_start);
 
-        let rt: Arc<Routes> = Arc::new(Routes {
+        let rt = Arc::new(Routes {
             node_count,
             range_count,
             routes,
@@ -429,7 +426,7 @@ pub(crate) mod test {
         let subnets = generate_test_subnets(0);
 
         let rt_init = Arc::new(ArcSwapOption::empty());
-        let persister = Persister::new(Arc::clone(&rt_init));
+        let persister = Persister::new(rt_init.clone());
 
         // Persist the routing table
         let result = persister.persist(subnets.clone());

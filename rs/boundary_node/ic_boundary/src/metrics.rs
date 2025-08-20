@@ -804,7 +804,7 @@ mod test {
         // - ftjgm-3pkam-aaaaa-aaaap-2ai
         // - fat3m-uhiam-aaaaa-aaaap-2ai
         let snapshot = Arc::new(generate_custom_registry_snapshot(1, 3, 0));
-        let mfs = remove_stale_metrics(Arc::clone(&snapshot), gen_metric_families());
+        let mfs = remove_stale_metrics(snapshot.clone(), gen_metric_families());
         assert_eq!(mfs.len(), 6);
 
         let mut only_node_id = 0;

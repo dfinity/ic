@@ -647,8 +647,7 @@ pub(crate) mod test {
         let reg = Arc::new(reg);
 
         let (channel_send, _) = watch::channel(None);
-        let snapshotter =
-            Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
+        let snapshotter = Snapshotter::new(snapshot.clone(), channel_send, reg, Duration::ZERO);
         snapshotter.snapshot().unwrap();
 
         (

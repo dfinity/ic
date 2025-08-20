@@ -178,13 +178,13 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
+    let dns_resolver = DnsResolver::new(registry_snapshot.clone());
 
     // TLS client
     let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
         Arc::new(NoopServerCertVerifier::default())
     } else {
-        Arc::new(TlsVerifier::new(Arc::clone(&registry_snapshot)))
+        Arc::new(TlsVerifier::new(registry_snapshot.clone()))
     };
 
     let mut tls_config_client =
@@ -227,7 +227,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     );
 
     // Setup registry-related stuff
-    let persister = Persister::new(Arc::clone(&routing_table));
+    let persister = Persister::new(routing_table.clone());
 
     // Snapshot update notification channels
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
@@ -475,7 +475,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         metrics_cache,
         metrics_registry.clone(),
         cache_state,
-        Arc::clone(&registry_snapshot),
+        registry_snapshot.clone(),
         proxy_router,
     ));
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
@@ -576,7 +576,7 @@ async fn create_identity(
     registry_client: Arc<RegistryClientImpl>,
 ) -> Result<Box<dyn Identity>, Error> {
     let crypto_component = tokio::task::spawn_blocking({
-        let registry_client = Arc::clone(&registry_client);
+        let registry_client = registry_client.clone();
 
         move || {
             Arc::new(CryptoComponent::new(
@@ -591,7 +591,7 @@ async fn create_identity(
     .await?;
 
     let public_key = tokio::task::spawn_blocking({
-        let crypto_component = Arc::clone(&crypto_component);
+        let crypto_component = crypto_component.clone();
 
         move || {
             crypto_component
@@ -661,7 +661,7 @@ fn setup_registry(
     let snapshotter = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
-                Arc::clone(&registry_snapshot),
+                registry_snapshot.clone(),
                 channel_snapshot_send,
                 registry_client.clone(),
                 cli.registry.registry_min_version_age,

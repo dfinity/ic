@@ -794,7 +794,7 @@ pub(crate) mod test {
     #[tokio::test]
     async fn test_check_some_unhealthy() -> Result<(), Error> {
         let routes = Arc::new(ArcSwapOption::empty());
-        let persister = Arc::new(Persister::new(Arc::clone(&routes)));
+        let persister = Arc::new(Persister::new(routes.clone()));
 
         let mut checker = MockCheck::new();
         checker
@@ -858,7 +858,7 @@ pub(crate) mod test {
     #[tokio::test]
     async fn test_check_nodes_gone() -> Result<(), Error> {
         let routes = Arc::new(ArcSwapOption::empty());
-        let persister = Arc::new(Persister::new(Arc::clone(&routes)));
+        let persister = Arc::new(Persister::new(routes.clone()));
 
         let mut checker = MockCheck::new();
         checker
@@ -950,7 +950,7 @@ pub(crate) mod test {
         checker.expect_check().returning(|_| Ok(check_result(1000)));
 
         let routes = Arc::new(ArcSwapOption::empty());
-        let persister = Arc::new(Persister::new(Arc::clone(&routes)));
+        let persister = Arc::new(Persister::new(routes.clone()));
 
         let (channel_send, channel_recv) = watch::channel(None);
         let runner = Runner::new(

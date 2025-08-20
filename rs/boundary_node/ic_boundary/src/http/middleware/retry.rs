@@ -270,7 +270,7 @@ mod test {
 
         // Check update call retried
         let mut app = Router::new()
-            .route("/", post(handler).with_state(Arc::clone(&state)))
+            .route("/", post(handler).with_state(state.clone()))
             .layer(middleware::from_fn_with_state(
                 RetryParams {
                     retry_count: 3,
