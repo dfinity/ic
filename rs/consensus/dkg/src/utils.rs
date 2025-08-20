@@ -1,6 +1,6 @@
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{debug, warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
@@ -39,7 +39,7 @@ pub fn get_vetkey_public_keys(
         .collect::<BTreeMap<_, _>>();
     for (tag, transcript) in summary.current_transcripts().iter() {
         if !transcripts.contains_key(tag) {
-            warn!(logger, "Reusing current transcript for tag {:?}", tag);
+            debug!(logger, "Reusing current transcript for tag {:?}", tag);
             transcripts.insert(tag, transcript);
         }
     }
