@@ -1774,7 +1774,7 @@ Charged for processing the transfer.
         expected_fields_message, fields_message
     );
 
-    // If the from account is anonymous, the message should not include the account information.
+    // If the caller is anonymous, the message should not include the From information.
     args.arg = Encode!(&transfer_args.clone()).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
