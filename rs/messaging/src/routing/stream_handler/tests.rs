@@ -865,17 +865,20 @@ fn garbage_collect_messages_success() {
 }
 
 /// Tests that messages are gc'ed according to the `signals_end` provided. Messages for which
-/// a reject signal is given must be returned.
+/// a reject signal is given must be returned; stream blockers for which a signal was received
+/// must be returned.
 #[test]
 fn garbage_collect_messages_with_reject_signals_success() {
     use RejectReason::*;
     with_test_setup(
-        // An outgoing stream with 3 messages.
+        // An outgoing stream with 3 messages and 2 stream blockers.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
                 Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                StreamBlocker(CANISTER_MIGRATION_SUBNET, 123),
                 Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                StreamBlocker(CANISTER_MIGRATION_SUBNET, 456),
                 Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
@@ -884,10 +887,12 @@ fn garbage_collect_messages_with_reject_signals_success() {
         // An incoming `StreamSlice` with a `signals_end` that should trigger gc'ing the first two
         // messages; reject signals for the messages @31 and @32.
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
-            signals_end: 33,
+            signals_end: 35,
             reject_signals: vec![
                 RejectSignal::new(CanisterNotFound, 31.into()),
-                RejectSignal::new(CanisterMigrating, 32.into()),
+                RejectSignal::new(CanisterMigrating, 33.into()),
+                // Reject signal for the 2nd stream blocker @34.
+                RejectSignal::new(CanisterStopped, 34.into()),
             ],
             ..StreamSliceConfig::default()
         }],
@@ -897,8 +902,8 @@ fn garbage_collect_messages_with_reject_signals_success() {
             // The expected stream has the first 2 messages garbage collected.
             let outgoing_stream = streams.get(&REMOTE_SUBNET);
             let expected_stream = stream_from_config(StreamConfig {
-                begin: 33,
-                messages: vec![message_in_stream(outgoing_stream, 33).clone()],
+                begin: 35,
+                messages: vec![message_in_stream(outgoing_stream, 35).clone()],
                 signals_end: 43,
                 ..StreamConfig::default()
             });
@@ -911,7 +916,7 @@ fn garbage_collect_messages_with_reject_signals_success() {
                 ),
                 (
                     CanisterMigrating,
-                    clone_message_in_stream(outgoing_stream, 32),
+                    clone_message_in_stream(outgoing_stream, 33),
                 ),
             ];
 
@@ -926,9 +931,14 @@ fn garbage_collect_messages_with_reject_signals_success() {
             assert_eq!(expected_rejected_messages, rejected_messages);
             assert_eq!(Some(&expected_stream), streams.get(&REMOTE_SUBNET));
             assert_eq!(
-                Some(2),
+                Some(4),
                 metrics.fetch_int_counter(METRIC_GCED_XNET_MESSAGES),
             );
+            // One critical error raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                stream_blocker_rejected: 1,
+                ..CriticalErrorCounts::default()
+            });
         },
     );
 }
@@ -2489,7 +2499,7 @@ fn induct_stream_slices_partial_success() {
             assert_eq!(
                 1,
                 metrics
-                    .fetch_int_counter(METRIC_OBSERVED_XNET_STREAM_BLOCKERS)
+                    .fetch_int_counter(METRIC_INCOMING_STREAM_BLOCKERS)
                     .unwrap()
             );
             // Three critical errors raised.
@@ -4699,7 +4709,11 @@ impl MetricsFixture {
                         &CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH.to_string()
                     )],
                     counts.receiver_subnet_mismatch
-                )
+                ),
+                (
+                    &[("error", &CRITICAL_ERROR_STREAM_BLOCKER_REJECTED.to_string())],
+                    counts.stream_blocker_rejected
+                ),
             ])),
             nonzero_values(fetch_int_counter_vec(&self.registry, "critical_errors"))
         );
@@ -4713,6 +4727,7 @@ struct CriticalErrorCounts {
     pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
     pub request_misrouted: u64,
+    pub stream_blocker_rejected: u64,
 }
 
 /// Populates the given `state`'s canister migrations with a single entry,

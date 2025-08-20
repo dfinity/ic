@@ -26,7 +26,8 @@ use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
     messages::{
-        CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response, StreamMessage,
+        CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+        StreamBlocker, StreamMessage,
     },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
@@ -930,12 +931,17 @@ impl Stream {
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
-    /// messages for which a reject signal was received.
+    /// messages for which a reject signal was received; also returning all stream
+    /// blockers for which a signal was received (indicating a problem).
+    #[allow(clippy::type_complexity)]
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
-    ) -> Vec<(RejectReason, RequestOrResponse)> {
+    ) -> (
+        Vec<(RejectReason, RequestOrResponse)>,
+        Vec<(RejectSignal, Arc<StreamBlocker>)>,
+    ) {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -961,6 +967,7 @@ impl Stream {
 
         // Garbage collect all messages up to `new_begin`.
         let mut rejected_messages = Vec::new();
+        let mut rejected_stream_blockers = Vec::new();
         while self.messages.begin() < new_begin {
             let (index, msg) = self.messages.pop().unwrap();
 
@@ -968,12 +975,7 @@ impl Stream {
             self.messages_size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
-            // Exclude blockers at this point.
-            let Ok(msg) = msg.try_into() else {
-                continue;
-            };
-
-            if let RequestOrResponse::Response(response) = &msg {
+            if let StreamMessage::Response(response) = &msg {
                 if !response.is_best_effort() {
                     match self
                         .guaranteed_response_counts
@@ -996,15 +998,21 @@ impl Stream {
             );
 
             // If we received a reject signal for this message, collect it in
-            // `rejected_messages`.
+            // `rejected_messages`; if the message is a stream blocker, collect
+            // it in `rejected_stream_blockers`.
             if let Some(reject_signal) = reject_signals.peek() {
                 if reject_signal.index == index {
-                    rejected_messages.push((reject_signal.reason, msg));
+                    match msg.try_into() {
+                        Ok(msg) => rejected_messages.push((reject_signal.reason, msg)),
+                        Err(blocker) => {
+                            rejected_stream_blockers.push(((*reject_signal).clone(), blocker))
+                        }
+                    }
                     reject_signals.next();
                 }
             }
         }
-        rejected_messages
+        (rejected_messages, rejected_stream_blockers)
     }
 
     /// Garbage collects signals before `new_signals_begin`.

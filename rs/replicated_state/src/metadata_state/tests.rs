@@ -1439,9 +1439,10 @@ fn stream_discard_messages_before_returns_no_rejected_messages() {
     let slice_signals_end = 40.into();
     let slice_reject_signals = VecDeque::new();
 
-    let rejected_messages =
+    let (rejected_messages, rejected_stream_blockers) =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
     assert!(rejected_messages.is_empty());
+    assert!(rejected_stream_blockers.is_empty());
 }
 
 #[test]
@@ -1486,11 +1487,34 @@ fn stream_discard_messages_before_returns_expected_messages() {
         ),
     ];
 
-    let rejected_messages =
+    let (rejected_messages, rejected_stream_blockers) =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
     assert_eq!(expected_stream, stream);
     assert_eq!(rejected_messages, expected_rejected_messages);
+    assert!(rejected_stream_blockers.is_empty());
+}
+
+#[test]
+fn stream_discard_messages_before_returns_expected_stream_blockers() {
+    let blocker = Arc::new(StreamBlocker {
+        subnet_id: SUBNET_0,
+        index: 123.into(),
+    });
+    let reject_signal = RejectSignal::new(RejectReason::CanisterMigrating, 30.into());
+
+    let mut messages = StreamIndexedQueue::with_begin(30.into());
+    messages.push(StreamMessage::StreamBlocker(blocker.clone()));
+    let mut stream = Stream::new(messages, 42.into());
+
+    let slice_reject_signals: VecDeque<RejectSignal> = vec![reject_signal.clone()].into();
+    let slice_signals_end = 31.into();
+
+    let (rejected_messages, rejected_stream_blockers) =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    assert!(rejected_messages.is_empty());
+    assert_eq!(vec![(reject_signal, blocker)], rejected_stream_blockers);
 }
 
 #[test]
@@ -1510,11 +1534,12 @@ fn stream_discard_messages_before_removes_no_messages() {
     .into();
     let slice_signals_end = stream.messages_begin();
 
-    let rejected_messages =
+    let (rejected_messages, rejected_stream_blockers) =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
     assert_eq!(expected_stream, stream);
     assert!(rejected_messages.is_empty());
+    assert!(rejected_stream_blockers.is_empty());
 }
 
 #[test]
@@ -1535,11 +1560,12 @@ fn stream_discard_messages_before_removes_all_messages() {
         },
         SignalConfig { end: 43 },
     );
-    let rejected_messages =
+    let (rejected_messages, rejected_stream_blockers) =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
     assert_eq!(expected_stream, stream);
     assert!(rejected_messages.is_empty());
+    assert!(rejected_stream_blockers.is_empty());
 }
 
 #[test]
