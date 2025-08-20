@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use std::{collections::HashSet, time::Duration};
 
 use crate::{
