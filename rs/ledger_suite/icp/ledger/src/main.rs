@@ -1726,7 +1726,7 @@ fn icrc21_canister_call_consent_message(
     let token_name = LEDGER.read().unwrap().token_name.clone();
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
-    if consent_msg_request.method == "transfer".to_string() {
+    if consent_msg_request.method == "transfer" {
         let TransferArgs {
             memo,
             amount,

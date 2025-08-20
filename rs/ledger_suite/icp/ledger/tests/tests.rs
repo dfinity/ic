@@ -1669,7 +1669,7 @@ fn test_icrc21_for_legacy_transfer() {
         memo: icp_ledger::Memo(15u64),
         amount: Tokens::from(1_000_000u64),
         fee: Tokens::from(12),
-        from_subaccount: from_account.subaccount.map(|sa| icp_ledger::Subaccount(sa)),
+        from_subaccount: from_account.subaccount.map(icp_ledger::Subaccount),
         to: AccountIdentifier::from(receiver_account).to_address(),
         created_at_time: None,
     };
