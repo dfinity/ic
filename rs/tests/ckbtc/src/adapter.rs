@@ -5,8 +5,8 @@ use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
-    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, Method as Ic00Method, Payload,
+    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinGetSuccessorsResponsePartial,
+    Method as Ic00Method, Payload,
 };
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::retry, universal_vm::UniversalVms},
@@ -24,9 +24,28 @@ use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 
 #[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
 pub enum Network {
+    /// Mainnet.
+    #[serde(rename = "mainnet")]
     Mainnet,
+    /// Testnet.
+    #[serde(rename = "testnet")]
     Testnet,
+    /// Regtest.
+    ///
+    /// This is only available when developing with local replica.
+    #[serde(rename = "regtest")]
     Regtest,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub enum GetSuccessorsRequest {
+    /// A request containing the hashes of blocks we'd like to retrieve succeessors for.
+    #[serde(rename = "initial")]
+    Initial(GetSuccessorsRequestInitial),
+
+    /// A follow-up request to retrieve the `FollowUp` response associated with the given page.
+    #[serde(rename = "follow_up")]
+    FollowUp(u8),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -99,12 +118,11 @@ impl<'a> AdapterProxy<'a> {
         anchor: Vec<u8>,
         headers: Vec<Vec<u8>>,
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
-        let get_successors_request =
-            BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::Regtest,
-                anchor,
-                processed_block_hashes: headers,
-            });
+        let get_successors_request = GetSuccessorsRequest::Initial(GetSuccessorsRequestInitial {
+            network: Network::Regtest,
+            anchor,
+            processed_block_hashes: headers,
+        });
 
         let result = self
             .msg_can
