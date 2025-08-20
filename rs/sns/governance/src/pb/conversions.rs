@@ -4417,7 +4417,7 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
 
         let extension_operations = extension_operations
             .into_iter()
-            .map(pb_api::RegisteredExtensionOperationSpec::from)
+            .map(pb_api::topics::RegisteredExtensionOperationSpec::from)
             .collect();
 
         pb_api::topics::TopicInfo {
@@ -4484,10 +4484,10 @@ impl From<crate::extensions::ExtensionOperationSpec> for pb_api::ExtensionOperat
 
 // Conversions for RegisteredExtensionOperationSpec
 impl From<crate::topics::RegisteredExtensionOperationSpec>
-    for pb_api::RegisteredExtensionOperationSpec
+    for pb_api::topics::RegisteredExtensionOperationSpec
 {
     fn from(value: crate::topics::RegisteredExtensionOperationSpec) -> Self {
-        pb_api::RegisteredExtensionOperationSpec {
+        pb_api::topics::RegisteredExtensionOperationSpec {
             canister_id: Some(value.canister_id.get()),
             spec: Some(pb_api::ExtensionOperationSpec::from(value.spec)),
         }
