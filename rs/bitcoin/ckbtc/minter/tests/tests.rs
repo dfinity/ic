@@ -933,6 +933,45 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn deposit_utxos_with_value(
+        &self,
+        account: impl Into<Account>,
+        values: &[u64],
+    ) -> BTreeSet<Utxo> {
+        assert!(
+            values.len() < u16::MAX as usize,
+            "Adapt logic below to create more unique UTXOs!"
+        );
+        let account = account.into();
+        let utxos = values
+            .iter()
+            .enumerate()
+            .map(|(i, &value)| {
+                let mut txid = vec![0; 32];
+                txid[0] = (i % 256) as u8;
+                txid[1] = (i / 256) as u8;
+                Utxo {
+                    height: 0,
+                    outpoint: OutPoint {
+                        txid: vec_to_txid(txid),
+                        vout: 1,
+                    },
+                    value,
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(values.len(), utxos.len());
+
+        self.deposit_utxos(account, utxos.clone().into_iter().collect());
+
+        let known_utxos = self
+            .get_known_utxos(account)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert!(utxos.is_subset(&known_utxos));
+        utxos
+    }
+
     pub fn deposit_utxo(&self, account: impl Into<Account>, utxo: Utxo) {
         self.deposit_utxos(account, vec![utxo])
     }
@@ -1551,27 +1590,12 @@ fn test_transaction_resubmission_finalize_new() {
     // Create many utxos that exceeds threshold by 2 so that after consuming
     // one, the remaining available count is still greater than the threshold.
     // This is to make sure utxo count optimization is triggered.
-    let count = UTXOS_COUNT_THRESHOLD + 2;
-    let utxos = (0..count)
-        .map(|i| {
-            let mut txid = vec![0; 32];
-            txid[0] = (i % 256) as u8;
-            txid[1] = (i / 256) as u8;
-            Utxo {
-                height: 0,
-                outpoint: OutPoint {
-                    txid: vec_to_txid(txid),
-                    vout: 1,
-                },
-                value: deposit_value,
-            }
-        })
-        .collect::<Vec<_>>();
-    ckbtc.deposit_utxos(user, utxos);
+    const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
+    let _deposited_utxos = ckbtc.deposit_utxos_with_value(user, &[deposit_value; COUNT]);
 
     assert_eq!(
         ckbtc.balance_of(user),
-        Nat::from(count as u64 * (deposit_value - CHECK_FEE))
+        Nat::from(COUNT as u64 * (deposit_value - CHECK_FEE))
     );
 
     // Step 2: request a withdrawal
@@ -2337,36 +2361,14 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     };
 
     // Step 1: deposit a lot of small UTXOs
-    let num_uxtos = 2_000;
+    const NUM_UXTOS: usize = 2_000;
     let deposit_value = 100_000_u64;
-    let utxos = (0..num_uxtos)
-        .map(|i| {
-            let mut txid = vec![0; 32];
-            txid[0] = (i % 256) as u8;
-            txid[1] = (i / 256) as u8;
-            Utxo {
-                height: 0,
-                outpoint: OutPoint {
-                    txid: vec_to_txid(txid),
-                    vout: 1,
-                },
-                value: deposit_value,
-            }
-        })
-        .collect::<BTreeSet<_>>();
-    ckbtc.deposit_utxos(user_account, utxos.clone().into_iter().collect());
-    assert_eq!(
-        ckbtc
-            .get_known_utxos(user_account)
-            .into_iter()
-            .collect::<BTreeSet<_>>(),
-        utxos
-    );
-
+    let _deposited_utxos =
+        ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UXTOS]);
     let balance_after_deposit = ckbtc.balance_of(user_account);
     assert_eq!(
         balance_after_deposit,
-        Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
+        Nat::from(NUM_UXTOS as u64 * (deposit_value - CHECK_FEE))
     );
 
     let withdrawal_amount = 1_800 * deposit_value;
@@ -2422,7 +2424,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
             )
         }),
         None,
-        "BUG: should not have issue any Bitcoin transaction when too many inputs are used"
+        "BUG: should not have issued any Bitcoin transaction when too many inputs are used"
     );
     let reimbursed_event = events.pop().unwrap();
     assert_eq!(
