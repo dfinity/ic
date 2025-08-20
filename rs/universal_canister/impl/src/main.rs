@@ -502,6 +502,7 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::RootKey => {
                 stack.push_blob(api::root_key());
             }
+            Ops::SetOnLowWasmMemoryMethod => set_on_low_wasm_memory_method(stack.pop_blob()),
         }
     }
 }
@@ -552,6 +553,12 @@ fn heartbeat() {
 fn global_timer() {
     setup();
     eval(&get_global_timer_method());
+}
+
+#[export_name = "canister_on_low_wasm_memory"]
+fn on_low_wasm_memory() {
+    setup();
+    eval(&get_on_low_wasm_memory_method());
 }
 
 #[export_name = "canister_inspect_message"]
@@ -617,6 +624,17 @@ fn set_global_timer_method(data: Vec<u8>) {
 }
 fn get_global_timer_method() -> Vec<u8> {
     GLOBAL_TIMER_METHOD.lock().unwrap().clone()
+}
+
+/* A variable to store what to execute in canister_on_low_wasm_memory */
+lazy_static! {
+    static ref ON_LOW_WASM_MEMORY: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+}
+fn set_on_low_wasm_memory_method(data: Vec<u8>) {
+    *ON_LOW_WASM_MEMORY.lock().unwrap() = data;
+}
+fn get_on_low_wasm_memory_method() -> Vec<u8> {
+    ON_LOW_WASM_MEMORY.lock().unwrap().clone()
 }
 
 lazy_static! {

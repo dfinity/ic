@@ -24,7 +24,7 @@ system_test_nns(
 system_test_nns(
     name = "api_bn_update_workload_test",
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",
     ],
     test_timeout = "long",
@@ -196,7 +196,6 @@ system_test(
 
 system_test_nns(
     name = "api_bn_decentralization_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

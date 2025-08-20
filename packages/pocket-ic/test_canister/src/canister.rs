@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{define_function, CandidType, Nat, Principal};
 use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
 use ic_cdk::api::instruction_counter;

@@ -108,7 +108,6 @@ rust_test(
         # Keep sorted.
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/replica_types",
-        "@crate_index//:ic-btc-interface",
         "@crate_index//:tempfile",
     ],
 )
@@ -145,7 +144,6 @@ rust_test(
         "@crate_index//:bitcoin",
         "@crate_index//:bitcoincore-rpc",
         "@crate_index//:bitcoind",
-        "@crate_index//:ic-btc-interface",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],
