@@ -106,7 +106,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
         TopicInfo::<NativeFunctions> {
             topic: Topic::Governance,
             name: "Governance".to_string(),
-            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![MOTION],
             },
