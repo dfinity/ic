@@ -300,7 +300,12 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
     assert!(!requests.is_empty());
     let fees = distribute(total_fee, requests.len() as u64);
     // This assertion makes sure the fee is smaller than each request amount
-    assert!(fees[0] <= state.retrieve_btc_min_amount);
+    assert!(
+        fees[0] <= state.retrieve_btc_min_amount,
+        "BUG: fees {fees:?} for {} withdrawal requests are larger than `retrieve_btc_min_amount` {}",
+        requests.len(),
+        state.retrieve_btc_min_amount
+    );
     for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
@@ -406,7 +411,8 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 );
                 // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
                 // is reasonable to charge a fee based on it.
-                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
+                // Note that each withdrawal request involved in the transaction to cancel must have value at least retrieve_btc_min_amount.
+                let fee = s.retrieve_btc_min_amount / 10;
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
                 reimburse_canceled_requests(s, batch, reason, fee, runtime);
                 None
