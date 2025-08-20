@@ -476,6 +476,9 @@ impl StreamHandlerImpl {
     /// Garbage collects the messages of an outgoing `Stream` based on the
     /// signals in an incoming stream slice. Returns any rejected messages.
     ///
+    /// Stream blockers are gc'ed silently except if a reject signal was received
+    /// for them which; then a critical error is recorded.
+    ///
     /// Panics if the slice's `signals_end` refers to a nonexistent (already
     /// garbage collected or future) message; or if `reject_signals` plus
     /// `signals_end` are invalid (not strictly increasing).
@@ -698,6 +701,9 @@ impl StreamHandlerImpl {
 
     /// Inducts the messages in the provided stream slices into the
     /// `InductionPool`, generating a signal for each message.
+    ///
+    /// Stream blockers are recorded and then gc'ed by pushing an accept signal
+    /// and then dropping them.
     ///
     /// See [`Self::induct_message`] for the possible outcomes of inducting a
     /// message.
