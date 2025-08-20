@@ -53,8 +53,6 @@ use icp_ledger::{
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     MEMO_SIZE_BYTES,
 };
-use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
-use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
@@ -68,6 +66,17 @@ use icrc_ledger_types::{
 use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
+};
+use icrc_ledger_types::{
+    icrc1::transfer::TransferError as Icrc1TransferError,
+    icrc21::{
+        errors::ErrorInfo,
+        lib::{AccountOrId, GenericMemo, GenericTransferArgs},
+    },
+};
+use icrc_ledger_types::{
+    icrc2::allowance::{Allowance, AllowanceArgs},
+    icrc21::lib::build_icrc21_consent_info_for_generic_transfer,
 };
 use ledger_canister::{
     balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
@@ -1718,14 +1727,57 @@ fn icrc21_canister_call_consent_message(
     let token_name = LEDGER.read().unwrap().token_name.clone();
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
-    build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
-        consent_msg_request,
-        caller_principal,
-        ledger_fee,
-        token_symbol,
-        token_name,
-        decimals,
-    )
+    if consent_msg_request.method == "transfer".to_string() {
+        let TransferArgs {
+            memo,
+            amount,
+            fee: _,
+            from_subaccount,
+            to,
+            created_at_time: _,
+        } = Decode!(&consent_msg_request.arg, TransferArgs).map_err(|e| {
+            Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: format!("Failed to decode TransferArgs: {}", e),
+            })
+        })?;
+        let from = if caller() == Principal::anonymous() {
+            AccountOrId::AccountIdAddress(None)
+        } else {
+            let account = Account {
+                owner: caller(),
+                subaccount: from_subaccount.map(|sa| sa.0),
+            };
+            AccountOrId::AccountIdAddress(Some(AccountIdentifier::from(account).to_hex()))
+        };
+        let receiver = AccountIdentifier::from_slice(&to).map_err(|e| {
+            Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: format!("Failed to parse receiver account id: {}", e),
+            })
+        })?;
+        let args = GenericTransferArgs {
+            from,
+            receiver: AccountOrId::AccountIdAddress(Some(receiver.to_hex())),
+            amount: Nat::from(amount.get_e8s()),
+            memo: Some(GenericMemo::IntMemo(memo.0)),
+        };
+        build_icrc21_consent_info_for_generic_transfer(
+            consent_msg_request,
+            args,
+            ledger_fee,
+            token_symbol,
+            token_name,
+            decimals,
+        )
+    } else {
+        build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+            consent_msg_request,
+            caller_principal,
+            ledger_fee,
+            token_symbol,
+            token_name,
+            decimals,
+        )
+    }
 }
 
 #[query]
