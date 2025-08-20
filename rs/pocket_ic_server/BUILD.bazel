@@ -1,3 +1,4 @@
+load("//bazel:defs.bzl", "rust_ic_test")
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
@@ -113,6 +114,8 @@ TEST_DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+    "@crate_index//:flate2",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
@@ -129,6 +132,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:walrus",
     "@crate_index//:wat",
 ]
 
@@ -207,6 +211,7 @@ rust_library(
     testonly = True,
     srcs = [
         "src/lib.rs",
+        "src/external_canister_types.rs",
         "src/nonmainnet_features.rs",
         "src/pocket_ic.rs",
     ] + glob([
@@ -254,6 +259,13 @@ rust_library(
     },
     version = "9.0.3",
     deps = LIB_DEPENDENCIES + [":build_script"],
+)
+
+rust_ic_test(
+    name = "pocket-ic-server-lib-test",
+    crate = ":pocket-ic-server-lib",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
 )
 
 [

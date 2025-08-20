@@ -1554,6 +1554,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "walkdir": crate.spec(
                 version = "^2.3.1",
             ),
+            "walrus": crate.spec(
+                version = "^0.23.3",
+            ),
             "warp": crate.spec(
                 version = "^0.3.7",
                 features = ["tls"],

@@ -1,3 +1,7 @@
+use crate::external_canister_types::{
+    CaptchaConfig, CaptchaTrigger, InternetIdentityInit, OpenIdConfig, RateLimitConfig,
+    StaticCaptchaTrigger,
+};
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
@@ -1758,75 +1762,6 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, IDENTITY_CANISTER_ID);
 
             // Install the II canister.
-            type AnchorNumber = u64;
-            #[derive(CandidType)]
-            struct ArchiveConfig {
-                module_hash: [u8; 32],
-                entries_buffer_limit: u64,
-                polling_interval_ns: u64,
-                entries_fetch_limit: u16,
-            }
-            #[derive(CandidType)]
-            struct RateLimitConfig {
-                time_per_token_ns: u64,
-                max_tokens: u64,
-            }
-            #[derive(CandidType)]
-            enum StaticCaptchaTrigger {
-                #[allow(dead_code)]
-                CaptchaEnabled,
-                CaptchaDisabled,
-            }
-            #[derive(CandidType)]
-            enum CaptchaTrigger {
-                #[allow(dead_code)]
-                Dynamic {
-                    threshold_pct: u16,
-                    current_rate_sampling_interval_s: u64,
-                    reference_rate_sampling_interval_s: u64,
-                },
-                Static(StaticCaptchaTrigger),
-            }
-            #[derive(CandidType)]
-            struct CaptchaConfig {
-                max_unsolved_captchas: u64,
-                captcha_trigger: CaptchaTrigger,
-            }
-            #[derive(CandidType)]
-            struct OpenIdConfig {
-                client_id: String,
-            }
-            #[allow(dead_code)]
-            #[derive(CandidType)]
-            enum AnalyticsConfig {
-                Plausible {
-                    domain: Option<String>,
-                    hash_mode: Option<bool>,
-                    track_localhost: Option<bool>,
-                    api_host: Option<String>,
-                },
-            }
-            #[derive(CandidType)]
-            struct DummyAuthConfig {
-                prompt_for_index: bool,
-            }
-            #[derive(CandidType)]
-            struct InternetIdentityInit {
-                assigned_user_number_range: Option<(AnchorNumber, AnchorNumber)>,
-                archive_config: Option<ArchiveConfig>,
-                canister_creation_cycles_cost: Option<u64>,
-                register_rate_limit: Option<RateLimitConfig>,
-                captcha_config: Option<CaptchaConfig>,
-                related_origins: Option<Vec<String>>,
-                new_flow_origins: Option<Vec<String>>,
-                openid_google: Option<Option<OpenIdConfig>>,
-                analytics_config: Option<Option<AnalyticsConfig>>,
-                fetch_root_key: Option<bool>,
-                enable_dapps_explorer: Option<bool>,
-                is_production: Option<bool>,
-                dummy_auth: Option<Option<DummyAuthConfig>>,
-                feature_flag_continue_from_another_device: Option<bool>,
-            }
             // The initial values have been adapted from the mainnet values obtained by calling
             // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             // record {
@@ -1885,7 +1820,7 @@ impl PocketIcSubnets {
             } else {
                 None
             };
-            let internet_identity_test_args = InternetIdentityInit {
+            let internet_identity_test_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
                 canister_creation_cycles_cost: Some(0),
@@ -1906,7 +1841,7 @@ impl PocketIcSubnets {
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
                 feature_flag_continue_from_another_device: None,
-            };
+            });
             ii_subnet
                 .state_machine
                 .install_wasm_in_mode(
