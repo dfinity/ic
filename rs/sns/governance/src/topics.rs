@@ -205,7 +205,7 @@ impl Governance {
                 .into_iter()
                 .flat_map(|(canister_id, extension_spec)| {
                     let operations = extension_spec.all_operations();
-                    operations.into_values().map(|operation| {
+                    operations.into_values().map(move |operation| {
                         let topic = Topic::try_from(operation.topic).expect("Topic is unknown");
                         let registered_spec = RegisteredExtensionOperationSpec {
                             canister_id,
