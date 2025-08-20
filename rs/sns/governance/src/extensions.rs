@@ -9,7 +9,7 @@ use crate::{
         v1::{
             governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
             ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
-            RegisterExtension, Topic,
+            RegisterExtension,
         },
     },
     types::{Environment, Wasm},
@@ -34,6 +34,7 @@ use crate::storage::{cache_registered_extension, get_registered_extension_from_c
 use futures::future::BoxFuture;
 use ic_ledger_core::Tokens;
 
+use crate::pb::v1::Topic;
 use std::fmt::Formatter;
 use std::{collections::BTreeMap, fmt::Display};
 

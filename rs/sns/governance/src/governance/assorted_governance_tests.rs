@@ -10,6 +10,8 @@ use super::test_helpers::{
     TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
 };
 use super::*;
+use crate::extensions::ExtensionSpec;
+use crate::storage::cache_registered_extension;
 use crate::{
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
@@ -4717,6 +4719,14 @@ fn test_list_topics() {
         topics: topic_infos,
         uncategorized_functions,
     } = governance.list_topics();
+
+    let registered_spec = ExtensionSpec {
+        name: "KongSwap".to_string(),
+        version: ExtensionVersion(1),
+        topic: Topic::TreasuryAssetManagement.into(),
+        extension_type: ExtensionType::TreasuryManager,
+    };
+    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec);
 
     // Assert the results are as expected
     assert_eq!(uncategorized_functions, vec![function_3]);
