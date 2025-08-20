@@ -65,7 +65,6 @@ mod tests {
             node_reward_type: Some("type3.1".to_string()),
             mgmt_mac: "ec:2a:72:31:a2:0c".parse().unwrap(),
             deployment_environment: DeploymentEnvironment::Mainnet,
-            logging: Logging::default(),
             use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             use_node_operator_private_key: true,
