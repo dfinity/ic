@@ -24,7 +24,7 @@ end::catalog[] */
 use anyhow::{anyhow, ensure, Result};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams::{
-        get_upstreams_uvm_ipv6, setup_upstreams_uvm_and_serve_recovery_artifacts, spoof_node_dns,
+        get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
     },
     ssh_access::execute_bash_command,
 };
@@ -141,10 +141,11 @@ fn verify_permissions_recursively(
 }
 
 pub fn setup(env: TestEnv) {
-    setup_upstreams_uvm_and_serve_recovery_artifacts(
+    setup_upstreams_uvm(&env);
+    uvm_serve_recovery_artifacts(
         &env,
         read_env_var_path("RECOVERY_ARTIFACTS_PATH"),
-        read_env_var_path_to_string("RECOVERY_HASH_PATH"),
+        read_env_var_path_to_string("RECOVERY_HASH_PATH").trim(),
     )
     .unwrap();
 
@@ -161,7 +162,7 @@ pub fn setup(env: TestEnv) {
         .unwrap();
 
     let server_ipv6 = get_upstreams_uvm_ipv6(&env);
-    spoof_node_dns(&env, &node, &server_ipv6);
+    spoof_node_dns(&node, &server_ipv6);
 }
 
 pub fn test(env: TestEnv) {

@@ -1,16 +1,18 @@
-use std::{io::Write, net::Ipv6Addr, path::PathBuf};
+use std::{io::Write, net::Ipv6Addr, path::Path};
 
 use anyhow::{anyhow, Result};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, IcNodeSnapshot, SshSession},
+    test_env_api::{get_dependency_path, SshSession},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
-use slog::info;
 
-const UNIVERSAL_VM_NAME: &str = "upstream";
+const UNIVERSAL_VM_NAME: &str = "upstreams";
 
 const UPSTREAMS: [&str; 2] = ["download.dfinity.systems", "download.dfinity.network"];
+
+const CERTS_ROOT: &str = "/tmp/certs";
+const WEB_ROOT: &str = "/tmp/web";
 
 pub fn get_upstreams_uvm(env: &TestEnv) -> DeployedUniversalVm {
     env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap()
@@ -29,96 +31,80 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         ))
         .start(env)
         .expect("failed to setup universal VM");
-}
 
-pub fn setup_upstreams_uvm_and_serve_recovery_artifacts(
-    env: &TestEnv,
-    artifacts: Vec<u8>,
-    artifacts_hash: String,
-) -> Result<()> {
-    setup_upstreams_uvm(env);
-    uvm_serve_recovery_artifacts(env, artifacts, artifacts_hash)
+    get_upstreams_uvm(env)
+        .block_on_bash_script(&format!(
+            r#"
+                # Generate TLS certificates for the upstreams.
+                mkdir {CERTS_ROOT}
+                cd {CERTS_ROOT}
+                cp /config/minica.pem .
+                cp /config/minica-key.pem .
+                docker load -i /config/minica.tar
+                docker run -v "$(pwd)":/output minica:image --domains {domains}
+                sudo mv {common_name}/cert.pem {common_name}/key.pem .
+                sudo chmod 644 cert.pem key.pem
+            "#,
+            domains = UPSTREAMS.join(","),
+            common_name = UPSTREAMS[0],
+        ))
+        .unwrap();
 }
 
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
     artifacts: Vec<u8>,
-    artifacts_hash: String,
+    artifacts_hash: &str,
 ) -> Result<()> {
-    let logger = env.logger();
+    uvm_serve_file(
+        env,
+        artifacts,
+        Path::new(&format!("ic/{}/recovery.tar.zst", artifacts_hash)),
+    )
+}
 
-    info!(
-        logger,
-        "Setting up archive server UVM at {} with upstreams: {:?} and recovery hash: {}",
-        get_upstreams_uvm_ipv6(env),
-        UPSTREAMS,
-        artifacts_hash,
-    );
+fn uvm_serve_file(env: &TestEnv, file: Vec<u8>, uri: &Path) -> Result<()> {
+    println!("Serving file {} at {}", file.len(), uri.display(),);
 
-    let artifacts_path = PathBuf::from("/tmp/recovery.tar.zst");
-    let session = get_upstreams_uvm(env).block_on_ssh_session()?;
-    let mut remote_artifacts =
-        session.scp_send(&artifacts_path, 0o644, artifacts.len() as u64, None)?;
-    remote_artifacts.write_all(&artifacts)?;
+    let uvm = get_upstreams_uvm(env);
+
+    // Create the web root directory and the uri subdirectories.
+    let file_path = Path::new(WEB_ROOT).join(uri);
+    uvm.block_on_bash_script(&format!(
+        "mkdir -p {}",
+        file_path.parent().unwrap().display(),
+    ))?;
+    // Send the file to the UVM.
+    let session = uvm.block_on_ssh_session()?;
+    let mut remote_artifacts = session.scp_send(&file_path, 0o644, file.len() as u64, None)?;
+    remote_artifacts.write_all(&file)?;
     remote_artifacts.send_eof()?;
     remote_artifacts.wait_eof()?;
     remote_artifacts.close()?;
     remote_artifacts.wait_close()?;
 
-    info!(
-        logger,
-        "{}",
-        get_upstreams_uvm(env)
-            .block_on_bash_script(
-                &format!(
-                    r#"
-                        ## Impersonate the upstreams where the recovery artifacts are normally stored.
-
-                        # Generate TLS certificates for the upstreams.
-                        mkdir /tmp/certs
-                        cd /tmp/certs
-                        cp /config/minica.pem .
-                        cp /config/minica-key.pem .
-                        docker load -i /config/minica.tar
-                        docker run -v "$(pwd)":/output minica:image --domains {domains}
-                        sudo mv {common_name}/cert.pem {common_name}/key.pem .
-                        sudo chmod 644 cert.pem key.pem
-
-                        echo {artifacts_path}
-                        ls -al {artifacts_path}
-
-                        # Serve the recovery artifacts with a static file server.
-                        mkdir /tmp/web
-                        cd /tmp/web
-                        sudo mv {artifacts_path} .
-                        docker load -i /config/static-file-server.tar
-                        docker run -d \
-                                   -p 443:8080 \
-                                   -e TLS_CERT=/certs/cert.pem \
-                                   -e TLS_KEY=/certs/key.pem \
-                                   -e URL_PREFIX=/ic/{artifacts_hash} \
-                                   -v /tmp/certs:/certs \
-                                   -v "$(pwd)":/web \
-                                   static-file-server:image
-                    "#,
-                    domains = UPSTREAMS.join(","),
-                    common_name = UPSTREAMS[0],
-                    artifacts_path = artifacts_path.display(),
-                    artifacts_hash = artifacts_hash.trim(),
-                )
-            )?,
-    );
+    uvm.block_on_bash_script(&format!(
+        r#"
+            # Serve the recovery artifacts with a static file server.
+            cd {WEB_ROOT}
+            docker load -i /config/static-file-server.tar
+            docker run -d \
+                       -p 443:8080 \
+                       -e TLS_CERT=/certs/cert.pem \
+                       -e TLS_KEY=/certs/key.pem \
+                       -v {CERTS_ROOT}:/certs \
+                       -v "$(pwd)":/web \
+                       static-file-server:image
+        "#,
+    ))?;
 
     Ok(())
 }
 
-pub fn spoof_node_dns(env: &TestEnv, node: &IcNodeSnapshot, server_ipv6: &Ipv6Addr) {
-    let logger = env.logger();
-    info!(
-        logger,
-        "Spoofing node DNS to point the upstreams to the UVM at {}", server_ipv6,
-    );
-
+pub fn spoof_node_dns<T>(node: &T, server_ipv6: &Ipv6Addr)
+where
+    T: SshSession,
+{
     // File-system is read-only, so we modify /etc/hosts in a temporary file and replace the
     // original with a bind mount.
     let mut command = String::from(
@@ -145,6 +131,6 @@ pub fn spoof_node_dns(env: &TestEnv, node: &IcNodeSnapshot, server_ipv6: &Ipv6Ad
     );
 
     node.block_on_bash_script(&command)
-        .map_err(|e| anyhow!("Failed to spoof DNS for node {}: {}", node.node_id, e))
+        .map_err(|e| anyhow!("Failed to spoof DNS: {}", e))
         .unwrap();
 }
