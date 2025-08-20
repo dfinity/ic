@@ -49,7 +49,7 @@ system_test_nns(
     name = "sr_app_same_nodes_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
@@ -69,7 +69,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
         "subnet_recovery",
@@ -88,7 +88,7 @@ system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
         "subnet_recovery",
@@ -107,7 +107,7 @@ system_test_nns(
     name = "sr_app_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
@@ -127,7 +127,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
         "subnet_recovery",
@@ -148,7 +148,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
         "subnet_recovery",
@@ -168,7 +168,7 @@ system_test_nns(
     name = "sr_app_no_upgrade_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
@@ -187,7 +187,7 @@ system_test_nns(
     name = "sr_app_no_upgrade_local_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
@@ -206,7 +206,7 @@ system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
         "subnet_recovery",
@@ -227,7 +227,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
         "subnet_recovery",
@@ -249,7 +249,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "subnet_recovery",
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
@@ -268,7 +268,7 @@ system_test_nns(
     name = "sr_nns_same_nodes_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
@@ -292,7 +292,7 @@ system_test_nns(
     name = "sr_nns_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",

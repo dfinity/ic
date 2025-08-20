@@ -6781,7 +6781,6 @@ dependencies = [
  "ic-adapter-metrics-server",
  "ic-btc-adapter-client",
  "ic-btc-adapter-test-utils",
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-btc-service",
  "ic-btc-validation",
@@ -6884,7 +6883,6 @@ dependencies = [
 name = "ic-btc-consensus"
 version = "0.9.0"
 dependencies = [
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-config",
  "ic-error-types 0.2.0",
@@ -6930,8 +6928,8 @@ name = "ic-btc-replica-types"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-btc-interface",
  "ic-error-types 0.2.0",
+ "ic-interfaces-adapter-client",
  "ic-protobuf",
  "serde",
  "serde_bytes",
@@ -11988,6 +11986,7 @@ dependencies = [
  "maplit",
  "mockall",
  "pocket-ic",
+ "pretty_assertions",
  "prost 0.13.4",
  "rewards-calculation",
  "serde",
@@ -12852,6 +12851,7 @@ dependencies = [
  "ic-peer-manager",
  "ic-quic-transport",
  "ic-registry-client-helpers",
+ "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-manager",
  "ic-state-sync-manager",
@@ -12925,7 +12925,6 @@ dependencies = [
  "criterion-time",
  "cvt",
  "ic-base-types",
- "ic-btc-interface",
  "ic-btc-replica-types",
  "ic-certification-version",
  "ic-config",
@@ -20796,6 +20795,7 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
