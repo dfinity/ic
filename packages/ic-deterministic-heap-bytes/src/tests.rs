@@ -8,6 +8,9 @@ fn empty_total_bytes() {
     struct S {}
     assert_eq!(S::default().deterministic_total_bytes(), 0);
     #[derive(DeterministicHeapBytes, Default)]
+    struct T();
+    assert_eq!(T::default().deterministic_total_bytes(), 0);
+    #[derive(DeterministicHeapBytes, Default)]
     enum E {
         #[default]
         One,
@@ -67,6 +70,73 @@ fn struct_basic_fields_total_bytes() {
         v2: u128,
     }
     assert_eq!(S::default().deterministic_total_bytes(), size_of::<S>());
+}
+
+macro_rules! assert_tuple_struct_basic_field_total_bytes_eq {
+    ($field_type:ty, $expected_size:expr) => {{
+        #[derive(DeterministicHeapBytes, Default)]
+        struct S($field_type);
+        assert_eq!(S::default().deterministic_total_bytes(), $expected_size);
+    }};
+}
+
+#[test]
+fn tuple_struct_basic_field_total_bytes() {
+    assert_tuple_struct_basic_field_total_bytes_eq!(u8, size_of::<u8>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(u16, size_of::<u16>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(u32, size_of::<u32>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(u64, size_of::<u64>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(u128, size_of::<u128>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(usize, size_of::<usize>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(i8, size_of::<i8>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(i16, size_of::<i16>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(i32, size_of::<i32>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(i64, size_of::<i64>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(i128, size_of::<i128>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(isize, size_of::<isize>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(f32, size_of::<f32>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(f64, size_of::<f64>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(bool, size_of::<bool>());
+    assert_tuple_struct_basic_field_total_bytes_eq!(char, size_of::<char>());
+}
+
+#[test]
+fn tuple_struct_basic_fields_total_bytes() {
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T1(u8);
+    assert_eq!(T1::default().deterministic_total_bytes(), size_of::<T1>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T2(u8, bool);
+    assert!(size_of::<T2>() > size_of::<T1>());
+    assert_eq!(T2::default().deterministic_total_bytes(), size_of::<T2>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T3(u8, bool, u16);
+    assert!(size_of::<T3>() > size_of::<T2>());
+    assert_eq!(T3::default().deterministic_total_bytes(), size_of::<T3>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T4(u8, bool, u16, u32);
+    assert!(size_of::<T4>() > size_of::<T3>());
+    assert_eq!(T4::default().deterministic_total_bytes(), size_of::<T4>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T5(u8, bool, u16, u32, f32);
+    assert!(size_of::<T5>() > size_of::<T4>());
+    assert_eq!(T5::default().deterministic_total_bytes(), size_of::<T5>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T6(u8, bool, u16, u32, f32, char);
+    assert!(size_of::<T6>() > size_of::<T5>());
+    assert_eq!(T6::default().deterministic_total_bytes(), size_of::<T6>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T7(u8, bool, u16, u32, f32, char, u64);
+    assert!(size_of::<T7>() > size_of::<T6>());
+    assert_eq!(T7::default().deterministic_total_bytes(), size_of::<T7>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T8(u8, bool, u16, u32, f32, char, u64, f64);
+    assert!(size_of::<T8>() > size_of::<T7>());
+    assert_eq!(T8::default().deterministic_total_bytes(), size_of::<T8>());
+    #[derive(DeterministicHeapBytes, Default)]
+    struct T9(u8, bool, u16, u32, f32, char, u64, f64, u128);
+    assert!(size_of::<T9>() > size_of::<T8>());
+    assert_eq!(T9::default().deterministic_total_bytes(), size_of::<T9>());
 }
 
 macro_rules! assert_enum_basic_field_total_bytes_eq {
