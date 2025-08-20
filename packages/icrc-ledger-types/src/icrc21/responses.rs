@@ -24,9 +24,6 @@ pub enum Value {
     Text {
         content: String,
     },
-    Memo {
-        value: u64,
-    },
 }
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -308,9 +305,14 @@ impl ConsentMessage {
                 ConsentMessage::GenericDisplayMessage(message) => {
                     message.push_str(&format!("\n\n**Memo:**\n`{}`", memo));
                 }
-                ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
-                    .fields
-                    .push(("Memo".to_string(), Value::Memo { value: memo })),
+                ConsentMessage::FieldsDisplayMessage(fields_display) => {
+                    fields_display.fields.push((
+                        "Memo".to_string(),
+                        Value::Text {
+                            content: memo.to_string(),
+                        },
+                    ))
+                }
             },
         };
     }

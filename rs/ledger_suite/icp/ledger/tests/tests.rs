@@ -1738,7 +1738,12 @@ Charged for processing the transfer.
                     symbol: "ICP".to_string(),
                 },
             ),
-            ("Memo".to_string(), Icrc21Value::Memo { value: 15 }),
+            (
+                "Memo".to_string(),
+                Icrc21Value::Text {
+                    content: "15".to_string(),
+                },
+            ),
         ],
     };
 
