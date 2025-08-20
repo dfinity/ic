@@ -24,6 +24,7 @@ use ic_icrc_rosetta::{
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 
+use config::{Args, ParsedConfig, Store, TokenDef};
 use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::watchdog::WatchdogThread;
 use std::collections::HashMap;
@@ -40,11 +41,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 use url::Url;
-use config::{Args, ParsedConfig, Store, TokenDef};
 
 const MAXIMUM_BLOCKS_PER_REQUEST: u64 = 2000;
-
-
 
 fn init_logs(log_level: Level, log_file_path: &PathBuf) -> anyhow::Result<WorkerGuard> {
     let stdout_layer = tracing_subscriber::fmt::Layer::default()
@@ -184,8 +182,6 @@ async fn load_metadata(
     Metadata::from_metadata_entries(&ic_metadata_entries)
 }
 
-
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -241,7 +237,8 @@ async fn main() -> Result<()> {
             }
         };
 
-        let metadata = match load_metadata(token_def, &icrc1_agent, &storage, config.offline).await {
+        let metadata = match load_metadata(token_def, &icrc1_agent, &storage, config.offline).await
+        {
             Ok(metadata) => metadata,
             Err(err) => {
                 warn!(

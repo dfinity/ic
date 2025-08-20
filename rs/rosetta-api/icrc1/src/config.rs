@@ -42,7 +42,10 @@ impl TokenDef {
     pub fn from_string(token_description: &str) -> Result<Self> {
         let parts: Vec<&str> = token_description.split(':').collect();
         if parts.is_empty() || parts.len() > 3 {
-            return Err(anyhow::Error::msg(format!("Invalid token description: {}", token_description)));
+            return Err(anyhow::Error::msg(format!(
+                "Invalid token description: {}",
+                token_description
+            )));
         }
 
         let principal_id = PrincipalId::from_str(parts[0])
@@ -170,18 +173,16 @@ pub struct ParsedConfig {
 impl ParsedConfig {
     pub fn from_args(args: Args) -> Result<Self> {
         let tokens = Self::extract_token_defs_from_args(&args)?;
-        
+
         // Compute the effective network URL based on network_type and provided URL
-        let network_url_str = args.network_url.unwrap_or_else(|| {
-            match args.network_type {
-                NetworkType::Mainnet => MAINNET_DEFAULT_URL.to_string(),
-                NetworkType::Testnet => TESTNET_DEFAULT_URL.to_string(),
-            }
+        let network_url_str = args.network_url.unwrap_or_else(|| match args.network_type {
+            NetworkType::Mainnet => MAINNET_DEFAULT_URL.to_string(),
+            NetworkType::Testnet => TESTNET_DEFAULT_URL.to_string(),
         });
-        
+
         let network_url = Url::parse(&network_url_str)
             .context(format!("Failed to parse network URL: {}", network_url_str))?;
-        
+
         // Construct the appropriate store type
         let store = match args.store_type {
             StoreType::InMemory => Store::Memory,
@@ -189,7 +190,7 @@ impl ParsedConfig {
                 dir_path: args.multi_tokens_store_dir,
             },
         };
-        
+
         Ok(Self {
             tokens,
             store,
@@ -215,7 +216,7 @@ impl ParsedConfig {
 
     pub fn is_mainnet(&self) -> bool {
         // Handle both with and without trailing slash since URL parsing normalizes
-        self.network_url.as_str() == MAINNET_DEFAULT_URL 
+        self.network_url.as_str() == MAINNET_DEFAULT_URL
             || self.network_url.as_str() == "https://ic0.app/"
     }
 
@@ -242,13 +243,19 @@ impl ParsedConfig {
             input_tokens.push(token_dec);
         } else {
             if args.ledger_id.is_some() {
-                return Err(anyhow::Error::msg("Cannot provide both multi-tokens and ledger-id"));
+                return Err(anyhow::Error::msg(
+                    "Cannot provide both multi-tokens and ledger-id",
+                ));
             }
             if args.icrc1_symbol.is_some() {
-                return Err(anyhow::Error::msg("Cannot provide both multi-tokens and icrc1-symbol"));
+                return Err(anyhow::Error::msg(
+                    "Cannot provide both multi-tokens and icrc1-symbol",
+                ));
             }
             if args.icrc1_decimals.is_some() {
-                return Err(anyhow::Error::msg("Cannot provide both multi-tokens and icrc1-decimals"));
+                return Err(anyhow::Error::msg(
+                    "Cannot provide both multi-tokens and icrc1-decimals",
+                ));
             }
         }
 
@@ -293,7 +300,7 @@ mod tests {
     fn test_token_def_from_string_valid_canister_only() {
         let canister_id = "rdmx6-jaaaa-aaaaa-aaadq-cai";
         let token_def = TokenDef::from_string(canister_id).unwrap();
-        
+
         assert_eq!(token_def.ledger_id.to_string(), canister_id);
         assert_eq!(token_def.icrc1_symbol, None);
         assert_eq!(token_def.icrc1_decimals, None);
@@ -303,8 +310,11 @@ mod tests {
     fn test_token_def_from_string_with_symbol() {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP";
         let token_def = TokenDef::from_string(token_desc).unwrap();
-        
-        assert_eq!(token_def.ledger_id.to_string(), "rdmx6-jaaaa-aaaaa-aaadq-cai");
+
+        assert_eq!(
+            token_def.ledger_id.to_string(),
+            "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        );
         assert_eq!(token_def.icrc1_symbol, Some("ICP".to_string()));
         assert_eq!(token_def.icrc1_decimals, None);
     }
@@ -313,8 +323,11 @@ mod tests {
     fn test_token_def_from_string_with_decimals() {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:d=8";
         let token_def = TokenDef::from_string(token_desc).unwrap();
-        
-        assert_eq!(token_def.ledger_id.to_string(), "rdmx6-jaaaa-aaaaa-aaadq-cai");
+
+        assert_eq!(
+            token_def.ledger_id.to_string(),
+            "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        );
         assert_eq!(token_def.icrc1_symbol, None);
         assert_eq!(token_def.icrc1_decimals, Some(8));
     }
@@ -323,8 +336,11 @@ mod tests {
     fn test_token_def_from_string_with_symbol_and_decimals() {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP:d=8";
         let token_def = TokenDef::from_string(token_desc).unwrap();
-        
-        assert_eq!(token_def.ledger_id.to_string(), "rdmx6-jaaaa-aaaaa-aaadq-cai");
+
+        assert_eq!(
+            token_def.ledger_id.to_string(),
+            "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        );
         assert_eq!(token_def.icrc1_symbol, Some("ICP".to_string()));
         assert_eq!(token_def.icrc1_decimals, Some(8));
     }
@@ -334,7 +350,10 @@ mod tests {
         let result = TokenDef::from_string("");
         assert!(result.is_err());
         // Empty string gets split into one empty part, so it fails on principal parsing
-        assert!(result.unwrap_err().to_string().contains("Failed to parse PrincipalId"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse PrincipalId"));
     }
 
     #[test]
@@ -342,14 +361,20 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP:d=8:extra";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid token description"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid token description"));
     }
 
     #[test]
     fn test_token_def_from_string_invalid_principal() {
         let result = TokenDef::from_string("invalid-principal");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse PrincipalId"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse PrincipalId"));
     }
 
     #[test]
@@ -357,7 +382,10 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:invalid=value";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("It must be canister_id[:s=symbol][:d=decimals]"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("It must be canister_id[:s=symbol][:d=decimals]"));
     }
 
     #[test]
@@ -365,7 +393,10 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:d=invalid";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse u8"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse u8"));
     }
 
     #[test]
@@ -375,12 +406,12 @@ mod tests {
             icrc1_symbol: None,
             icrc1_decimals: None,
         };
-        
+
         assert!(!token_def.are_metadata_args_set());
-        
+
         token_def.icrc1_symbol = Some("ICP".to_string());
         assert!(!token_def.are_metadata_args_set());
-        
+
         token_def.icrc1_decimals = Some(8);
         assert!(token_def.are_metadata_args_set());
     }
@@ -391,11 +422,14 @@ mod tests {
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.icrc1_symbol = Some("ICP".to_string());
         args.icrc1_decimals = Some(8);
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.tokens.len(), 1);
-        assert_eq!(config.tokens[0].ledger_id.to_string(), "rdmx6-jaaaa-aaaaa-aaadq-cai");
+        assert_eq!(
+            config.tokens[0].ledger_id.to_string(),
+            "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        );
         assert_eq!(config.tokens[0].icrc1_symbol, Some("ICP".to_string()));
         assert_eq!(config.tokens[0].icrc1_decimals, Some(8));
     }
@@ -407,13 +441,19 @@ mod tests {
             "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP:d=8".to_string(),
             "rrkah-fqaaa-aaaaa-aaaaq-cai".to_string(),
         ];
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.tokens.len(), 2);
-        assert_eq!(config.tokens[0].ledger_id.to_string(), "rdmx6-jaaaa-aaaaa-aaadq-cai");
+        assert_eq!(
+            config.tokens[0].ledger_id.to_string(),
+            "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        );
         assert_eq!(config.tokens[0].icrc1_symbol, Some("ICP".to_string()));
-        assert_eq!(config.tokens[1].ledger_id.to_string(), "rrkah-fqaaa-aaaaa-aaaaq-cai");
+        assert_eq!(
+            config.tokens[1].ledger_id.to_string(),
+            "rrkah-fqaaa-aaaaa-aaaaq-cai"
+        );
         assert_eq!(config.tokens[1].icrc1_symbol, None);
     }
 
@@ -422,7 +462,10 @@ mod tests {
         let args = create_test_args();
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No token definitions provided"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No token definitions provided"));
     }
 
     #[test]
@@ -430,10 +473,13 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.multi_tokens = vec!["rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()];
-        
+
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Cannot provide both multi-tokens and ledger-id"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot provide both multi-tokens and ledger-id"));
     }
 
     #[test]
@@ -441,10 +487,13 @@ mod tests {
         let mut args = create_test_args();
         args.icrc1_symbol = Some("ICP".to_string());
         args.multi_tokens = vec!["rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()];
-        
+
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Cannot provide both multi-tokens and icrc1-symbol"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot provide both multi-tokens and icrc1-symbol"));
     }
 
     #[test]
@@ -452,10 +501,13 @@ mod tests {
         let mut args = create_test_args();
         args.icrc1_decimals = Some(8);
         args.multi_tokens = vec!["rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()];
-        
+
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Cannot provide both multi-tokens and icrc1-decimals"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot provide both multi-tokens and icrc1-decimals"));
     }
 
     #[test]
@@ -463,9 +515,9 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.network_type = NetworkType::Mainnet;
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.network_url.as_str(), "https://ic0.app/"); // URL parsing adds trailing slash
         assert!(config.is_mainnet());
     }
@@ -475,10 +527,13 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.network_type = NetworkType::Testnet;
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
-        assert_eq!(config.network_url.as_str(), "https://exchanges.testnet.dfinity.network/"); // URL parsing adds trailing slash
+
+        assert_eq!(
+            config.network_url.as_str(),
+            "https://exchanges.testnet.dfinity.network/"
+        ); // URL parsing adds trailing slash
         assert!(!config.is_mainnet());
     }
 
@@ -487,9 +542,9 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.network_url = Some("https://custom.network.com".to_string());
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.network_url.as_str(), "https://custom.network.com/"); // URL parsing adds trailing slash
         assert!(!config.is_mainnet()); // Custom URL is not considered mainnet
     }
@@ -499,10 +554,13 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.network_url = Some("invalid-url".to_string());
-        
+
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse network URL"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse network URL"));
     }
 
     #[test]
@@ -510,11 +568,11 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.store_type = StoreType::InMemory;
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         match config.store {
-            Store::Memory => {},
+            Store::Memory => {}
             Store::File { .. } => panic!("Expected Memory store type"),
         }
     }
@@ -525,13 +583,13 @@ mod tests {
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.store_type = StoreType::File;
         args.multi_tokens_store_dir = PathBuf::from("/custom/path");
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         match config.store {
             Store::File { dir_path } => {
                 assert_eq!(dir_path, PathBuf::from("/custom/path"));
-            },
+            }
             Store::Memory => panic!("Expected File store type"),
         }
     }
@@ -540,9 +598,9 @@ mod tests {
     fn test_parsed_config_get_port_default() {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.get_port(), 8080);
     }
 
@@ -551,9 +609,9 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.port = Some(9090);
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.get_port(), 9090);
     }
 
@@ -562,9 +620,9 @@ mod tests {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
         args.port_file = Some(PathBuf::from("/tmp/port"));
-        
+
         let config = ParsedConfig::from_args(args).unwrap();
-        
+
         assert_eq!(config.get_port(), 0);
     }
 }
