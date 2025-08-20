@@ -24,7 +24,6 @@ def generate_dummy_recovery_archive(name):
             "cup.proto.b64",
             "ic_registry_local_store_1.b64",
             "ic_registry_local_store_2.b64",
-            "expected_recovery_hash",
         ],
         cmd = r"""
             set -euo pipefail
@@ -54,9 +53,8 @@ def generate_dummy_recovery_archive(name):
 
             RECOVERY_HASH="$$(sha256sum recovery.tar.zst | cut -d' ' -f1)"
             echo "$$RECOVERY_HASH" > recovery.tar.zst.sha256
-            echo "$$RECOVERY_HASH" > expected_recovery_hash
 
-            mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 expected_recovery_hash $(RULEDIR)
+            mv recovery.tar.zst recovery.tar.zst.sha256 cup.proto.b64 ic_registry_local_store_1.b64 ic_registry_local_store_2.b64 $(RULEDIR)
         """,
         target_compatible_with = [
             "@platforms//os:linux",

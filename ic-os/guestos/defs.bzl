@@ -106,7 +106,7 @@ def image_deps(mode, malicious = False):
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
     if mode in ["recovery", "recovery-dev"]:
-        expected_recovery_hash_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:expected_recovery_hash"
+        expected_recovery_hash_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256"
 
         deps["component_files"].update({
             expected_recovery_hash_path: "/opt/ic/share/expected_recovery_hash",
