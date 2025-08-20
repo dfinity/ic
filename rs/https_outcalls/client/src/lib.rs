@@ -11,7 +11,6 @@ use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
     messages::CertificateDelegation,
@@ -28,7 +27,6 @@ pub fn setup_canister_http_client(
     query_handler: QueryExecutionService,
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
-    subnet_type: SubnetType,
     delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
@@ -76,7 +74,6 @@ pub fn setup_canister_http_client(
                         query_handler,
                         max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
-                        subnet_type,
                         delegation_from_nns,
                         log,
                     ))

@@ -12851,6 +12851,7 @@ dependencies = [
  "ic-peer-manager",
  "ic-quic-transport",
  "ic-registry-client-helpers",
+ "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-manager",
  "ic-state-sync-manager",
