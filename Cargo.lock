@@ -19093,7 +19093,6 @@ dependencies = [
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
- "lazy_static",
  "reqwest 0.12.15",
  "schemars",
  "serde",
