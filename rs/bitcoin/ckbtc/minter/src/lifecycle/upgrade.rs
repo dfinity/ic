@@ -49,11 +49,6 @@ pub struct UpgradeArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
-    /// a testing key for testnet and mainnet
-    pub ecdsa_key_name: Option<String>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

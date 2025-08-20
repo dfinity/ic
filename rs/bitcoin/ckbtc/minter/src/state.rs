@@ -465,8 +465,6 @@ pub struct CkBtcMinterState {
 
     /// Cache of get_utxos call results
     pub get_utxos_cache: GetUtxosCache,
-
-    pub enable_non_standard_tx: bool,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -553,7 +551,6 @@ impl CkBtcMinterState {
             kyt_principal: _,
             kyt_fee,
             get_utxos_cache_expiration_seconds,
-            ecdsa_key_name,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -589,9 +586,6 @@ impl CkBtcMinterState {
         if let Some(expiration) = get_utxos_cache_expiration_seconds {
             self.get_utxos_cache
                 .set_expiration(Duration::from_secs(expiration));
-        }
-        if let Some(key_name) = ecdsa_key_name {
-            self.ecdsa_key_name = key_name;
         }
     }
 
@@ -1008,13 +1002,6 @@ impl CkBtcMinterState {
         self.stuck_transactions.push(tx);
         self.replacement_txid.insert(*old_txid, new_txid);
         self.rev_replacement_txid.insert(new_txid, *old_txid);
-        ic_cdk::println!(
-            "[replace_transaction]: replaced {old_txid}. Submitted transactions: {:?}",
-            self.submitted_transactions
-                .iter()
-                .map(|tx| tx.txid.to_string())
-                .collect::<Vec<_>>()
-        )
     }
 
     /// Returns the identifier of the most recent replacement transaction for the given stuck
@@ -1834,7 +1821,6 @@ impl From<InitArgs> for CkBtcMinterState {
             )),
             pending_withdrawal_reimbursements: Default::default(),
             reimbursed_withdrawals: Default::default(),
-            enable_non_standard_tx: false,
         }
     }
 }

@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
@@ -39,7 +39,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -1209,7 +1209,6 @@ impl CkBtcSetup {
         }
         for _ in 0..max_ticks {
             self.env.tick();
-            self.env.advance_time(Duration::from_nanos(1));
             if let Some(result) = condition(self) {
                 return result;
             }
@@ -1378,60 +1377,6 @@ impl CkBtcSetup {
         MetricsAssert::from_http_query(self)
     }
 
-    pub fn upload_events_v1(&self, events: &Vec<Event>) {
-        self.env
-            .execute_ingress_as(
-                Principal::anonymous().into(),
-                self.minter_id,
-                "upload_events_v1",
-                Encode!(events).unwrap(),
-            )
-            .unwrap();
-    }
-
-    pub fn upload_mainnet_events(&self) {
-        use serde::Deserialize as SerdeDeserialize;
-
-        #[derive(Clone, Debug, CandidType, SerdeDeserialize)]
-        pub struct GetEventsResult {
-            pub events: Vec<Event>,
-            pub total_event_count: u64,
-        }
-
-        fn path_to_events_file() -> PathBuf {
-            let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-            path.push(format!("test_resources/{}", "mainnet_events.gz"));
-            path
-        }
-
-        fn read_events_file(file_name: &Path) -> GetEventsResult {
-            use candid::Decode;
-            use flate2::read::GzDecoder;
-            use std::fs::File;
-            use std::io::Read;
-
-            let file = File::open(file_name).unwrap();
-            let mut gz = GzDecoder::new(file);
-            let mut decompressed_buffer = Vec::new();
-            gz.read_to_end(&mut decompressed_buffer)
-                .expect("BUG: failed to decompress events");
-            Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
-        }
-
-        let events = read_events_file(&path_to_events_file());
-        self.upload_events_v1(&events.events);
-        // let total = events.events.len();
-        // let mut start = 0;
-        // while start < total {
-        //     let mut end = start + 2000;
-        //     if end > total {
-        //         end = total;
-        //     };
-        //     self.upload_events_v1(&events.events[start..end].to_vec());
-        //     start = end;
-        // }
-    }
-
     pub fn upgrade(&self) {
         self.env
             .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&()).unwrap())
@@ -1441,17 +1386,6 @@ impl CkBtcSetup {
     pub fn upgrade_with(&self, arg: Option<MinterArg>) {
         self.env
             .upgrade_canister(self.minter_id, minter_wasm(), Encode!(&arg).unwrap())
-            .unwrap();
-    }
-
-    pub fn enable_non_standard_tx(&self, enable: bool) {
-        self.env
-            .execute_ingress_as(
-                Principal::anonymous().into(),
-                self.minter_id,
-                "enable_non_standard_transaction",
-                Encode!(&enable).unwrap(),
-            )
             .unwrap();
     }
 
@@ -2568,7 +2502,7 @@ fn should_cancel_non_standard_transaction() {
         Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
     );
 
-    ckbtc.enable_non_standard_tx(true);
+    // ckbtc.enable_non_standard_tx(true);
 
     // Step 2: request a withdrawal
     let withdrawal_amount = 1_800 * deposit_value;
@@ -2616,7 +2550,7 @@ fn should_cancel_non_standard_transaction() {
         RetrieveBtcStatusV2::Submitted { .. }
     );
 
-    ckbtc.enable_non_standard_tx(false);
+    // ckbtc.enable_non_standard_tx(false);
     ckbtc.env.checkpointed_tick();
     ckbtc.upgrade();
 
@@ -2723,10 +2657,10 @@ fn should_cancel_non_standard_transaction() {
 fn should_reimburse_withdrawals_in_non_standard_transaction() {
     let ckbtc = CkBtcSetup::new();
     ckbtc.env.set_time(std::time::SystemTime::now());
-    ckbtc.upload_mainnet_events();
+    // ckbtc.upload_mainnet_events();
     ckbtc.env.checkpointed_tick();
     let upgrade_args = UpgradeArgs {
-        ecdsa_key_name: Some("master_ecdsa_public_key".to_string()),
+        // ecdsa_key_name: Some("master_ecdsa_public_key".to_string()),
         ..Default::default()
     };
     ckbtc.upgrade_with(Some(MinterArg::Upgrade(Some(upgrade_args)))); //replay events to repopulate the minter's state

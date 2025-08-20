@@ -236,20 +236,6 @@ async fn reimburse_pending_withdrawal(ledger_burn_index: u64) {
     })
 }
 
-#[cfg(feature = "self_check")]
-#[update]
-async fn upload_events_v1(events: Vec<Event>) {
-    for event in events {
-        storage::record_event_v1(event);
-    }
-}
-
-#[cfg(feature = "self_check")]
-#[update]
-async fn enable_non_standard_transaction(enable: bool) {
-    ic_ckbtc_minter::state::mutate_state(|s| s.enable_non_standard_tx = enable);
-}
-
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {

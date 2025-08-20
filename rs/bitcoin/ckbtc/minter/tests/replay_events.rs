@@ -210,7 +210,6 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         outputs,
         main_address.clone(),
         tx_fee_per_vbyte,
-        false,
     )
     .unwrap_err();
 
@@ -256,7 +255,6 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         },
         |old_txid, new_tx, reason| replaced.borrow_mut().push((old_txid, new_tx, reason)),
         &runtime,
-        false,
     )
     .await;
     let replaced = replaced.borrow();

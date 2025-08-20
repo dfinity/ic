@@ -141,10 +141,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
 
             let _guard = match crate::guard::TimerLogicGuard::new() {
                 Some(guard) => guard,
-                None => {
-                    ic_cdk::println!("[global_timer]: couldn't guard timer");
-                    return;
-                }
+                None => return,
             };
 
             submit_pending_requests(&IC_CANISTER_RUNTIME).await;
