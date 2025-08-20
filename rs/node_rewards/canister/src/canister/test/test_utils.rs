@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
 use crate::storage::METRICS_MANAGER;

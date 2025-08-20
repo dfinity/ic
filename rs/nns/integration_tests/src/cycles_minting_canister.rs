@@ -3,11 +3,10 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
     AuthorizedSubnetsResponse, CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs,
-    CreateCanister, CreateCanisterError, IcpXdrConversionRateCertifiedResponse,
-    NotifyCreateCanister, NotifyError, NotifyErrorCode, NotifyMintCyclesArg,
-    NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType, SubnetTypesToSubnetsResponse,
-    UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER,
-    MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    CreateCanister, CreateCanisterError, NotifyCreateCanister, NotifyError, NotifyErrorCode,
+    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
+    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
+    MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
@@ -24,7 +23,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
     TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
-use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
+use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
@@ -64,67 +63,6 @@ const CYCLES_MINTING_LIMIT: u128 = 150e15 as u128;
 // per month
 const SUBNET_RENTAL_CYCLES_MINTING_LIMIT: u128 = 500e15 as u128;
 
-/// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
-/// proposal.
-#[test]
-fn test_set_icp_xdr_conversion_rate() {
-    state_machine_test_on_nns_subnet(|runtime| async move {
-        let nns_init_payload = NnsInitPayloadsBuilder::new()
-            .with_initial_invariant_compliant_mutations()
-            .with_test_neurons()
-            .build();
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
-
-        let payload = UpdateIcpXdrConversionRatePayload {
-            data_source: "test_set_icp_xdr_conversion_rate".to_string(),
-            timestamp_seconds: 1665782922,
-            xdr_permyriad_per_icp: 200,
-            reason: None,
-        };
-
-        set_icp_xdr_conversion_rate(&nns_canisters, payload).await;
-
-        Ok(())
-    });
-}
-
-async fn set_icp_xdr_conversion_rate(
-    nns: &NnsCanisters<'_>,
-    payload: UpdateIcpXdrConversionRatePayload,
-) {
-    let proposal_id: ProposalId = submit_external_update_proposal(
-        &nns.governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::IcpXdrConversionRate,
-        payload.clone(),
-        "<proposal created by set_icp_xdr_conversion_rate>".to_string(),
-        "".to_string(),
-    )
-    .await;
-
-    let proposal_info = wait_for_final_state(&nns.governance, proposal_id).await;
-    // Wait for the proposal to be accepted and executed.
-    assert_eq!(
-        proposal_info.status,
-        ProposalStatus::Executed as i32,
-        "Proposal should have been executed but was not: {:?}",
-        proposal_info
-    );
-
-    let response: IcpXdrConversionRateCertifiedResponse = nns
-        .cycles_minting
-        .query_("get_icp_xdr_conversion_rate", candid_one, ())
-        .await
-        .unwrap();
-
-    assert_eq!(response.data.timestamp_seconds, payload.timestamp_seconds);
-    assert_eq!(
-        response.data.xdr_permyriad_per_icp,
-        payload.xdr_permyriad_per_icp
-    );
-}
-
 /// Test that we can top-up the Governance canister with cycles when the CMC has
 /// a set exchange rate
 #[test]
@@ -144,15 +82,6 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
             .build();
 
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
-
-        let payload = UpdateIcpXdrConversionRatePayload {
-            data_source: "test_set_icp_xdr_conversion_rate".to_string(),
-            timestamp_seconds: 1665782922,
-            xdr_permyriad_per_icp: 20_000,
-            reason: None,
-        };
-
-        set_icp_xdr_conversion_rate(&nns_canisters, payload).await;
 
         let governance_status_initial: CanisterStatusResult = nns_canisters
             .root
@@ -219,7 +148,7 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
         // Assert that the expected amount of cycles were added to governance.
         assert_eq!(
             governance_cycles_final - governance_cycles_initial,
-            Nat::from(20000000000000u64)
+            Nat::from(1000000000000000u64)
         );
 
         Ok(())

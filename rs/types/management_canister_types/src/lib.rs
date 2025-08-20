@@ -3191,15 +3191,14 @@ pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
     GetBlockHeadersRequest as BitcoinGetBlockHeadersArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
-    GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
-    SendTransactionRequest as BitcoinSendTransactionArgs,
+    GetUtxosRequest as BitcoinGetUtxosArgs, SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 pub use ic_btc_replica_types::{
     GetSuccessorsRequest as BitcoinGetSuccessorsArgs,
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
-    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial,
+    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
