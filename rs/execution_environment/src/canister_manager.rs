@@ -1284,12 +1284,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
-        if state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(specified_id)
-            == Some(state.metadata.own_subnet_id)
+        if state.metadata.network_topology.route(specified_id) == Some(state.metadata.own_subnet_id)
         {
             Ok(new_canister_id)
         } else {
