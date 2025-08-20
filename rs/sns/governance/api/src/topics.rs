@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::pb::v1::NervousSystemFunction;
+use crate::pb::v1::{ExtensionOperationSpec, NervousSystemFunction};
 
 /// Functions are categorized into topics.
 /// (As a reminder, a function is either a built-in proposal type, or a generic function that has been added via an
@@ -27,29 +27,6 @@ pub enum Topic {
     Governance,
     TreasuryAssetManagement,
     CriticalDappOperations,
-}
-
-/// Types of extension operations
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
-pub enum ExtensionOperationType {
-    TreasuryManagerDeposit,
-    TreasuryManagerWithdraw,
-    Custom(String),
-}
-
-/// Specification for an extension operation
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
-pub struct ExtensionOperationSpec {
-    pub operation_type: Option<ExtensionOperationType>,
-    pub description: Option<String>,
-    pub extension_type: Option<ExtensionType>,
-    pub topic: Option<Topic>,
-}
-
-/// Types of extensions that can be registered
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
-pub enum ExtensionType {
-    TreasuryManager,
 }
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has

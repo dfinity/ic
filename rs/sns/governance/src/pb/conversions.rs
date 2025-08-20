@@ -4417,7 +4417,8 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
         } = value;
 
         let extension_operations = extension_operations
-            .map(|op| pb_api::topics::ExtensionOperationSpec::from(op))
+            .into_iter()
+            .map(pb_api::ExtensionOperationSpec::from)
             .collect();
 
         pb_api::topics::TopicInfo {
@@ -4443,32 +4444,32 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
 }
 
 // Conversions for ExtensionOperationType
-impl From<crate::extensions::OperationType> for pb_api::topics::ExtensionOperationType {
+impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
     fn from(value: crate::extensions::OperationType) -> Self {
         match value {
             crate::extensions::OperationType::TreasuryManagerDeposit => {
-                pb_api::topics::ExtensionOperationType::TreasuryManagerDeposit
+                pb_api::ExtensionOperationType::TreasuryManagerDeposit
             }
             crate::extensions::OperationType::TreasuryManagerWithdraw => {
-                pb_api::topics::ExtensionOperationType::TreasuryManagerWithdraw
+                pb_api::ExtensionOperationType::TreasuryManagerWithdraw
             }
             crate::extensions::OperationType::Custom(name) => {
-                pb_api::topics::ExtensionOperationType::Custom(name)
+                pb_api::ExtensionOperationType::Custom(name)
             }
         }
     }
 }
 
-impl From<pb_api::topics::ExtensionOperationType> for crate::extensions::OperationType {
-    fn from(value: pb_api::topics::ExtensionOperationType) -> Self {
+impl From<pb_api::ExtensionOperationType> for crate::extensions::OperationType {
+    fn from(value: pb_api::ExtensionOperationType) -> Self {
         match value {
-            pb_api::topics::ExtensionOperationType::TreasuryManagerDeposit => {
+            pb_api::ExtensionOperationType::TreasuryManagerDeposit => {
                 crate::extensions::OperationType::TreasuryManagerDeposit
             }
-            pb_api::topics::ExtensionOperationType::TreasuryManagerWithdraw => {
+            pb_api::ExtensionOperationType::TreasuryManagerWithdraw => {
                 crate::extensions::OperationType::TreasuryManagerWithdraw
             }
-            pb_api::topics::ExtensionOperationType::Custom(name) => {
+            pb_api::ExtensionOperationType::Custom(name) => {
                 crate::extensions::OperationType::Custom(name)
             }
         }
@@ -4476,20 +4477,20 @@ impl From<pb_api::topics::ExtensionOperationType> for crate::extensions::Operati
 }
 
 // Conversions for ExtensionType
-impl From<crate::extensions::ExtensionType> for pb_api::topics::ExtensionType {
+impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
     fn from(value: crate::extensions::ExtensionType) -> Self {
         match value {
             crate::extensions::ExtensionType::TreasuryManager => {
-                pb_api::topics::ExtensionType::TreasuryManager
+                pb_api::ExtensionType::TreasuryManager
             }
         }
     }
 }
 
-impl From<pb_api::topics::ExtensionType> for crate::extensions::ExtensionType {
-    fn from(value: pb_api::topics::ExtensionType) -> Self {
+impl From<pb_api::ExtensionType> for crate::extensions::ExtensionType {
+    fn from(value: pb_api::ExtensionType) -> Self {
         match value {
-            pb_api::topics::ExtensionType::TreasuryManager => {
+            pb_api::ExtensionType::TreasuryManager => {
                 crate::extensions::ExtensionType::TreasuryManager
             }
         }
@@ -4497,21 +4498,19 @@ impl From<pb_api::topics::ExtensionType> for crate::extensions::ExtensionType {
 }
 
 // Conversions for ExtensionOperationSpec
-impl From<crate::extensions::ExtensionOperationSpec> for pb_api::topics::ExtensionOperationSpec {
+impl From<crate::extensions::ExtensionOperationSpec> for pb_api::ExtensionOperationSpec {
     fn from(value: crate::extensions::ExtensionOperationSpec) -> Self {
-        pb_api::topics::ExtensionOperationSpec {
-            operation_type: Some(pb_api::topics::ExtensionOperationType::from(
-                value.operation_type,
-            )),
+        pb_api::ExtensionOperationSpec {
+            operation_type: Some(pb_api::ExtensionOperationType::from(value.operation_type)),
             description: Some(value.description),
-            extension_type: Some(pb_api::topics::ExtensionType::from(value.extension_type)),
+            extension_type: Some(pb_api::ExtensionType::from(value.extension_type)),
             topic: Some(pb_api::topics::Topic::try_from(value.topic).unwrap()),
         }
     }
 }
 
-impl From<pb_api::topics::ExtensionOperationSpec> for crate::extensions::ExtensionOperationSpec {
-    fn from(value: pb_api::topics::ExtensionOperationSpec) -> Self {
+impl From<pb_api::ExtensionOperationSpec> for crate::extensions::ExtensionOperationSpec {
+    fn from(value: pb_api::ExtensionOperationSpec) -> Self {
         crate::extensions::ExtensionOperationSpec {
             operation_type: crate::extensions::OperationType::from(
                 value.operation_type.expect("operation_type is required"),
