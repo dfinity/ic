@@ -8,7 +8,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "base_download_url")
-load("//rs/tests:common.bzl", "MAINNET_APPLICATION_SUBNET_HASH", "MAINNET_APPLICATION_SUBNET_REVISION", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SUBNET_HASH", "MAINNET_NNS_SUBNET_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_APP_GUESTOS_HASH", "MAINNET_APP_GUESTOS_REVISION", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_GUESTOS_HASH", "MAINNET_NNS_GUESTOS_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -214,19 +214,19 @@ def system_test(
         colocated_test_driver_vm_enable_ipv4 = False,
         colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_img = True,
-        uses_guestos_nns_mainnet_img = False,
-        uses_guestos_latest_release_mainnet_img = False,
+        uses_guestos_mainnet_latest_img = False,
+        uses_guestos_mainnet_nns_img = False,
         uses_guestos_recovery_dev_img = False,
         uses_guestos_malicious_img = False,
         uses_guestos_update = False,
         uses_guestos_test_update = False,
-        uses_guestos_nns_mainnet_update = False,
+        uses_guestos_mainnet_nns_update = False,
         uses_guestos_malicious_update = False,
         uses_setupos_img = False,
-        uses_setupos_latest_release_mainnet_img = False,
+        uses_setupos_mainnet_latest_img = False,
         uses_hostos_update = False,
         uses_hostos_test_update = False,
-        uses_hostos_latest_release_mainnet_update = False,
+        uses_hostos_mainnet_latest_update = False,
         env = {},
         env_inherit = [],
         exclude_logs = ["prometheus", "vector"],
@@ -256,19 +256,19 @@ def system_test(
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
       uses_guestos_img: the test uses the branch GuestOS image
-      uses_guestos_nns_mainnet_img: the test uses the NNS subnet mainnet GuestOS image
-      uses_guestos_latest_release_mainnet_img: the test uses the latest release mainnet GuestOS image
+      uses_guestos_mainnet_latest_img: the test uses the latest release mainnet GuestOS image
+      uses_guestos_mainnet_nns_img: the test uses the NNS subnet mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
       uses_guestos_malicious_img: the test uses the malicious GuestOS image
       uses_guestos_update: the test uses the branch GuestOS update image
       uses_guestos_test_update: the test uses the branch GuestOS update-test image
-      uses_guestos_nns_mainnet_update: the test uses the NNS subnet mainnet GuestOS update image
+      uses_guestos_mainnet_nns_update: the test uses the NNS subnet mainnet GuestOS update image
       uses_guestos_malicious_update: the test uses the malicious GuestOS update image
       uses_setupos_img: the test uses the branch SetupOS image
-      uses_setupos_latest_release_mainnet_img: the test uses the latest release mainnet SetupOS image
+      uses_setupos_mainnet_latest_img: the test uses the latest release mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
       uses_hostos_test_update: the test uses the branch HostOS update-test image
-      uses_hostos_latest_release_mainnet_update: the test uses the latest release mainnet HostOS update image
+      uses_hostos_mainnet_latest_update: the test uses the latest release mainnet HostOS update image
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -306,73 +306,70 @@ def system_test(
     icos_images = dict()
     info_file_vars = dict()
 
-    _guestos = "//ic-os/guestos/envs/dev:"
-    _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"
-
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_nns_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_latest_img) + int(uses_guestos_mainnet_nns_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
-    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_nns_mainnet_update) + int(uses_guestos_malicious_update) >= 2:
+    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_nns_update) + int(uses_guestos_malicious_update) >= 2:
         fail("More than one target GuestOS (upgrade) image was specified!")
 
-    if int(uses_setupos_img) + int(uses_setupos_latest_release_mainnet_img) >= 2:
+    if int(uses_setupos_img) + int(uses_setupos_mainnet_latest_img) >= 2:
         fail("More than one initial SetupOS (disk) image was provided!")
 
-    if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_latest_release_mainnet_update) >= 2:
+    if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_mainnet_latest_update) >= 2:
         fail("More than one target HostOS (upgrade) image was specified!")
 
     if uses_guestos_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev:disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
 
-    if uses_guestos_nns_mainnet_img:
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
+    if uses_guestos_mainnet_latest_img:
+        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP_GUESTOS_REVISION
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-nns-guest-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True, False)
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP_GUESTOS_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
-    if uses_guestos_latest_release_mainnet_img:
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APPLICATION_SUBNET_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_APPLICATION_SUBNET_REVISION, "guest-os", True, False)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APPLICATION_SUBNET_HASH
+    if uses_guestos_mainnet_nns_img:
+        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_GUESTOS_REVISION
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-nns-guest-img.tar.zst"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True, False)
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_GUESTOS_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_guestos_recovery_dev_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/recovery-dev:disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos + "update-img.tar.zst"  # use the branch update image for initial update image
+        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"  # use the branch update image for initial update image
 
     if uses_guestos_malicious_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos_malicious + "disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = _guestos_malicious + "update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = _guestos_malicious + "launch-measurements.json"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
 
     if uses_guestos_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos + "launch-measurements.json"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
     if uses_guestos_test_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img-test.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos + "launch-measurements-test.json"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img-test.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements-test.json"
 
-    if uses_guestos_nns_mainnet_update:
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_SUBNET_REVISION, "guest-os", True, False)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_SUBNET_HASH
+    if uses_guestos_mainnet_nns_update:
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_GUESTOS_REVISION
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True, False)
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_GUESTOS_HASH
 
         # _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_guestos_malicious_update:
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos_malicious + "update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = _guestos_malicious + "launch-measurements-test.json"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements-test.json"
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
@@ -382,10 +379,10 @@ def system_test(
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
-    if uses_setupos_latest_release_mainnet_img:
+    if uses_setupos_mainnet_latest_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-test-img.tar.zst"
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
@@ -398,7 +395,7 @@ def system_test(
         info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
-    if uses_hostos_latest_release_mainnet_update:
+    if uses_hostos_mainnet_latest_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_LATEST_HOSTOS_REVISION, "host-os", True, False)
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS_HASH
