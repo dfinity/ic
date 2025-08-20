@@ -359,7 +359,7 @@ fn can_insert_valid_route() {
         end: CanisterId::from(2000u64),
     };
     let new_subnet_id = subnet_test_id(2);
-    assert_eq!(rt.insert(new_range.clone(), new_subnet_id), Ok(()));
+    assert_eq!(rt.insert(new_range, new_subnet_id), Ok(()));
     assert_eq!(rt.well_formed(), Ok(()));
     assert_eq!(
         rt.lookup_entry(CanisterId::from(1001u64)),
@@ -433,26 +433,20 @@ fn can_reassign_ranges() {
 
             for i in 0u64..start {
                 assert_eq!(
-                    rt.lookup_entry(CanisterId::from(i).into()).map(|(_, s)| s),
-                    rt_copy
-                        .lookup_entry(CanisterId::from(i).into())
-                        .map(|(_, s)| s)
+                    rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
+                    rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)
                 );
             }
             for i in start..=end {
                 assert_eq!(
-                    rt_copy
-                        .lookup_entry(CanisterId::from(i).into())
-                        .map(|(_, s)| s),
+                    rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
                     Some(dst)
                 );
             }
             for i in (end + 1)..=30u64 {
                 assert_eq!(
-                    rt.lookup_entry(CanisterId::from(i).into()).map(|(_, s)| s),
-                    rt_copy
-                        .lookup_entry(CanisterId::from(i).into())
-                        .map(|(_, s)| s)
+                    rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
+                    rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)
                 );
             }
         }
