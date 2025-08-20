@@ -12,8 +12,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/certification/test-utils",
-        "//rs/crypto/tree_hash",
-        "//rs/crypto/utils/threshold_sig_der",
         "//rs/types/types",
         "@crate_index//:rand",
     ],
