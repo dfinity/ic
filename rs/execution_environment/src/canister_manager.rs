@@ -2152,8 +2152,9 @@ impl CanisterManager {
             .certified_data
             .clone_from(snapshot.certified_data());
 
-        // Restoring the state of global timer and on low wasm memory hook for snapshots created via `take_canister_snapshot`
-        // would be a breaking change.
+        // We don't restore the state of global timer and on low wasm memory hook
+        // for snapshots created via `take_canister_snapshot`
+        // since that would be a breaking change.
         if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
             if let Some(global_timer) = execution_snapshot.global_timer {
                 system_state.global_timer = global_timer;
