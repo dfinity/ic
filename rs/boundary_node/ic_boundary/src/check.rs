@@ -30,14 +30,21 @@ use crate::{
     snapshot::{Node, Subnet},
 };
 
+/// An error that can occur during check
 #[derive(Clone, PartialEq, Debug)]
 pub enum CheckError {
+    /// Generic error
     Generic(String),
-    Network(String),  // Unable to make HTTP request
-    Http(u16),        // Got non-200 status code
-    ReadBody(String), // Cannot read response body
-    Cbor(String),     // Cannot parse CBOR payload
-    Health,           // Node reported itself as un-healthy
+    /// Unable to make HTTP request
+    Network(String),
+    /// Got non-200 status code
+    Http(u16),
+    /// Cannot read response body
+    ReadBody(String),
+    /// Cannot parse CBOR payload
+    Cbor(String),
+    /// Node reported itself as un-healthy
+    Health,
 }
 
 impl CheckError {
@@ -76,13 +83,13 @@ struct NodeState {
     avg_latency_secs: f64,
 }
 
-// Send node's state message to the SubnetActor after this number of health checks have passed.
+/// Send node's state message to the SubnetActor after this number of health checks have passed.
 const CHECKS_MSG_PERIODICITY: usize = 10;
-// Send node's state message to the SubnetActor, if node's latency has deviated from the average by more than this threshold value.
+/// Send node's state message to the SubnetActor, if node's latency has deviated from the average by more than this threshold value.
 const LATENCY_CHANGE_THRESHOLD: f64 = 0.15;
 
-// NodeActor periodically runs the health checking with given interval and sends the NodeState down to
-// SubnetActor when it changes
+/// NodeActor periodically runs the health checking with given interval and sends the NodeState down to
+/// SubnetActor when it changes
 struct NodeActor {
     idx: usize,
     node: Arc<Node>,
@@ -114,7 +121,7 @@ impl NodeActor {
         }
     }
 
-    // Perform the health check
+    /// Perform the health check
     async fn check(&mut self) {
         self.checks_counter += 1;
 
@@ -181,8 +188,8 @@ impl NodeActor {
     }
 }
 
-// SubnetActor spawns NodeActors, receives their state, computes minimum height for the subnet and sends the
-// Subnet with healthy nodes down to GlobalActor when the health state changes
+/// SubnetActor spawns NodeActors, receives their state, computes minimum height for the subnet and sends the
+/// Subnet with healthy nodes down to GlobalActor when the health state changes
 struct SubnetActor {
     idx: usize,
     subnet: Subnet,
@@ -242,6 +249,7 @@ impl SubnetActor {
         }
     }
 
+    /// Calculate the minimum height across all nodes in this subnet
     fn calc_min_height(&self) -> u64 {
         let mut heights = self
             .states
@@ -268,7 +276,7 @@ impl SubnetActor {
         }
     }
 
-    // This remembers if we have passed the init state so that we don't have to iterate each time
+    /// This remembers if we have passed the init state so that we don't have to iterate each time
     fn init_done(&mut self) -> bool {
         if !self.init_done {
             self.init_done = !self.states.iter().any(|x| x.is_none());
@@ -372,7 +380,7 @@ impl SubnetActor {
     }
 }
 
-// GlobalActor spawns SubnetActors, receives & aggregates their state and persists the new routing table snapshots
+/// GlobalActor spawns SubnetActors, receives & aggregates their state and persists the new routing table snapshots
 struct GlobalActor {
     subnets: Vec<Option<Subnet>>,
     token: CancellationToken,
@@ -425,7 +433,7 @@ impl GlobalActor {
         }
     }
 
-    // This remembers if we have passed the init state so that we don't have to iterate each time
+    /// This remembers if we have passed the init state so that we don't have to iterate each time
     fn init_done(&mut self) -> bool {
         if !self.init_done {
             self.init_done = !self.subnets.iter().any(|x| x.is_none());
@@ -434,7 +442,7 @@ impl GlobalActor {
         self.init_done
     }
 
-    // Persist the current health state in a routing table
+    /// Persist the current health state in a routing table
     fn persist(&mut self) {
         // Don't do anything unless we already got an initial iteration of states from all subnet actors
         if !self.init_done() {
@@ -567,6 +575,7 @@ pub trait Check: Send + Sync {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError>;
 }
 
+/// Checks the node's health
 pub struct Checker {
     http_client: Arc<dyn Client>,
     timeout: Duration,

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, bail, Context, Error};
 use arc_swap::ArcSwapOption;
 use axum::{
     extract::Request,
@@ -130,7 +130,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if !(cli.registry.registry_local_store_path.is_none()
         ^ cli.registry.registry_stub_replica.is_empty())
     {
-        return Err(anyhow!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"));
+        bail!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified");
     }
 
     #[cfg(feature = "tls")]
@@ -138,16 +138,14 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         && cli.listen.listen_http_unix_socket.is_none()
         && cli.listen.listen_https_port.is_none()
     {
-        return Err(anyhow!(
+        bail!(
             "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
-        ));
+        );
     }
 
     #[cfg(not(feature = "tls"))]
     if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
-        return Err(anyhow!(
-            "at least one of --listen-http-port / --listen-http-unix-socket must be specified"
-        ));
+        bail!("at least one of --listen-http-port / --listen-http-unix-socket must be specified");
     }
 
     // Make sure ic-boundary is the leader of its own process group
@@ -274,9 +272,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
         if cli.misc.crypto_config.is_some() && registry_client.is_none() {
-            return Err(anyhow!(
-                "IC-Agent: registry client is required when crypto-config is in use"
-            ));
+            bail!("IC-Agent: registry client is required when crypto-config is in use");
         }
 
         if cli.misc.crypto_config.is_none() {
@@ -819,7 +815,7 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
         Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
     }
 
-    Err(anyhow!("TLS: no resolvers were able to load"))
+    bail!("TLS: no resolvers were able to load")
 }
 
 #[cfg(feature = "tls")]

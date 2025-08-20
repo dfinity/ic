@@ -501,6 +501,7 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use anyhow::bail;
     use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
@@ -512,7 +513,7 @@ mod test {
     #[async_trait]
     impl FetchesRules for BrokenFetcher {
         async fn fetch_rules(&self) -> Result<Vec<RateLimitRule>, Error> {
-            Err(anyhow::anyhow!("boo"))
+            bail!("boo")
         }
     }
 

@@ -1,6 +1,6 @@
 use std::{net::IpAddr, sync::Arc};
 
-use anyhow::anyhow;
+use anyhow::bail;
 use axum::Router;
 use candid::Principal;
 use http::request::Request;
@@ -23,7 +23,7 @@ impl TryFrom<u32> for RateLimit {
     type Error = anyhow::Error;
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value == 0 {
-            Err(anyhow!("rate limit cannot be 0"))
+            bail!("rate limit cannot be 0")
         } else {
             Ok(RateLimit {
                 requests_per_second: value,
