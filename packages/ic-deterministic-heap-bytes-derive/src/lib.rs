@@ -57,6 +57,7 @@ fn struct_heap_bytes(fields: &darling::ast::Fields<FieldReceiver>) -> proc_macro
         let accessor = if let Some(ident) = &field.ident {
             quote! { self.#ident }
         } else {
+            // Tuple struct fields can only be accessed by index, e.g. `struct S(u8, u16)`
             quote! { self.#index }
         };
         if let Some(closure) = &field.with {
