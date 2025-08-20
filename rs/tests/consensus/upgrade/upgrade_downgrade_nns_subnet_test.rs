@@ -16,6 +16,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
+use slog::info;
 
 const DKG_INTERVAL: u64 = 9;
 const ALLOWED_FAILURES: usize = 1;
@@ -38,10 +39,11 @@ fn setup(env: TestEnv) {
 
 // Tests an upgrade of the NNS subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_nns_subnet(env: TestEnv) {
+    let log = env.logger();
     let nns_node = env.get_first_healthy_system_node_snapshot();
 
     let target_version = bless_target_version(&env, &nns_node);
-    info!("Upgrading NNS subnet to {} ...", target_version);
+    info!(log, "Upgrading NNS subnet to {} ...", target_version);
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
@@ -52,7 +54,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     );
 
     let initial_version = get_guestos_img_version().expect("Failed to find initial version");
-    info!("Downgrading NNS subnet to {} ...", initial_version);
+    info!(log, "Downgrading NNS subnet to {} ...", initial_version);
     upgrade(
         &env,
         &nns_node,
@@ -62,7 +64,10 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
         /*assert_graceful_orchestrator_tasks_exits=*/ true,
     );
 
-    info!("Make sure we can still read the message stored before the first upgrade ...");
+    info!(
+        log,
+        "Make sure we can still read the message stored before the first upgrade ..."
+    );
     assert!(can_read_msg_with_retries(
         &env.logger(),
         &faulty_node.get_public_url(),
