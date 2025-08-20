@@ -42,9 +42,9 @@ genrule(
 
 # Postprocess SetupOS mainnet into a "test" image for use in nested tests
 genrule(
-    name = "mainnet-test-img",
+    name = "mainnet-latest-test-img",
     srcs = ["@mainnet_latest_setupos_disk_image//file"],
-    outs = ["mainnet-test-img.tar.zst"],
+    outs = ["mainnet-latest-test-img.tar.zst"],
     cmd = """
         tar -xf $<
         $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
@@ -61,9 +61,9 @@ genrule(
 
 # Extract the GuestOS image from SetupOS
 genrule(
-    name = "mainnet-guest-img",
+    name = "mainnet-nns-guest-img",
     srcs = ["@mainnet_nns_setupos_disk_image//file"],
-    outs = ["mainnet-guest-img.tar.zst"],
+    outs = ["mainnet-nns-guest-img.tar.zst"],
     cmd = """
         $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     """,

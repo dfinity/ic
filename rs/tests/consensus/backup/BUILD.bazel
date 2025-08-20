@@ -69,7 +69,7 @@ system_test_nns(
     test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -88,7 +88,7 @@ system_test_nns(
     test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     uses_guestos_img = True,
-    uses_guestos_nns_mainnet_update = True,
+    uses_guestos_mainnet_nns_update = True,
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS + ["//bazel:version.txt"],
