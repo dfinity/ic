@@ -27,7 +27,8 @@ use ic_ckbtc_minter::updates::update_balance::{
 };
 use ic_ckbtc_minter::{
     Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION,
-    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY, UTXOS_COUNT_THRESHOLD,
+    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -2352,7 +2353,6 @@ fn test_retrieve_btc_with_approval_fail() {
 #[test]
 fn should_cancel_and_reimburse_large_withdrawal() {
     let ckbtc = CkBtcSetup::new();
-    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     let user = Principal::from(ckbtc.caller);
     let subaccount: Option<[u8; 32]> = Some([1; 32]);
     let user_account = Account {
@@ -2404,8 +2404,8 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     );
 
     let reimbursement_block_index = block_index + 1;
-    let reimbursement_fee = retrieve_btc_min_amount / 10;
-    let reimbursement_amount = withdrawal_amount - reimbursement_fee;
+    let reimbursement_amount =
+        withdrawal_amount - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS;
 
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
@@ -2453,6 +2453,6 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        balance_before_withdrawal.clone() - reimbursement_fee
+        balance_before_withdrawal.clone() - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS
     );
 }
