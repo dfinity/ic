@@ -562,86 +562,6 @@ fn install_code_preserves_messages() {
 }
 
 #[test]
-fn can_create_canister() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let expected_generated_id1 = CanisterId::from(0);
-    let expected_generated_id2 = CanisterId::from(1);
-
-    let canister_id1 = test.create_canister(*INITIAL_CYCLES);
-    assert_eq!(canister_id1, expected_generated_id1);
-
-    let canister_id2 = test.create_canister(*INITIAL_CYCLES);
-    assert_eq!(canister_id2, expected_generated_id2);
-
-    assert_eq!(test.state().canister_states.len(), 2);
-}
-
-#[test]
-fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test
-        .universal_canister_with_cycles(*INITIAL_CYCLES)
-        .unwrap();
-
-    let create_canister_args = CreateCanisterArgs {
-        settings: None,
-        sender_canister_version: None,
-    }
-    .encode();
-    let payload = wasm()
-        .call_simple(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(create_canister_args)
-                .on_reject(wasm().reject_message().reject()),
-        )
-        .build();
-    let result = test.ingress(canister_id, "update", payload).unwrap();
-
-    match result {
-        WasmResult::Reply(_) => panic!("expected reject"),
-        WasmResult::Reject(msg) => {
-            assert!(
-                msg.contains("but only 0 cycles were received with the create_canister request")
-            );
-        }
-    }
-    assert_eq!(test.state().canister_states.len(), 1);
-}
-
-#[test]
-fn can_create_canister_with_extra_cycles() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test
-        .universal_canister_with_cycles(*INITIAL_CYCLES)
-        .unwrap();
-
-    let create_canister_args = CreateCanisterArgs {
-        settings: None,
-        sender_canister_version: None,
-    }
-    .encode();
-    let cycles = Cycles::from(1_000_000_000_200u64);
-    let payload = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(create_canister_args)
-                .on_reply(wasm().message_payload().append_and_reply()),
-            cycles,
-        )
-        .build();
-    let result = test.ingress(canister_id, "update", payload);
-    let _ = get_reply(result);
-    assert_eq!(test.state().canister_states.len(), 2);
-}
-
-#[test]
 fn cannot_install_non_empty_canister() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -693,130 +613,6 @@ fn install_code_with_wrong_controller_fails() {
         "Only the controllers of the canister {} can control it",
         canister_id
     )));
-}
-
-#[test]
-fn create_canister_sets_correct_allocations() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let compute_allocation = 50;
-    let memory_allocation = 1024 * 1024 * 1024;
-    let canister_id = test
-        .create_canister_with_settings(
-            Cycles::from(u64::MAX),
-            CanisterSettingsArgsBuilder::new()
-                .with_compute_allocation(compute_allocation)
-                .with_memory_allocation(memory_allocation)
-                .build(),
-        )
-        .unwrap();
-
-    let canister_state = test.canister_state(canister_id);
-    assert_eq!(
-        canister_state.compute_allocation().as_percent(),
-        compute_allocation
-    );
-    assert_eq!(
-        canister_state.memory_allocation().bytes().get(),
-        memory_allocation
-    );
-}
-
-#[test]
-fn create_canister_updates_consumed_cycles_metric_correctly() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test
-        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
-        .unwrap();
-
-    let create_canister_args = CreateCanisterArgs {
-        settings: None,
-        sender_canister_version: None,
-    }
-    .encode();
-    let payload = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(create_canister_args)
-                .on_reply(wasm().message_payload().append_and_reply()),
-            *INITIAL_CYCLES,
-        )
-        .build();
-
-    test.ingress(canister_id, "update", payload).unwrap();
-
-    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let creation_fee = cycles_account_manager.canister_creation_fee(
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
-    // There's only 2 canisters on the subnet, so the one created from the first one
-    // with have the test id corresponding to `1`.
-    let canister = test.canister_state(canister_test_id(1));
-    assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
-        creation_fee.get()
-    );
-    assert_eq!(
-        canister
-            .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::CanisterCreation)
-            .unwrap()
-            .get(),
-        creation_fee.get()
-    );
-    assert_eq!(
-        canister.system_state.balance(),
-        *INITIAL_CYCLES - creation_fee
-    );
-}
-
-#[test]
-fn create_canister_free() {
-    let cost_schedule = CanisterCyclesCostSchedule::Free;
-    let mut test = ExecutionTestBuilder::new()
-        .with_cost_schedule(cost_schedule)
-        .build();
-
-    let canister_id = test
-        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
-        .unwrap();
-
-    let create_canister_args = CreateCanisterArgs {
-        settings: None,
-        sender_canister_version: None,
-    }
-    .encode();
-    let payload = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(create_canister_args)
-                .on_reply(wasm().message_payload().append_and_reply()),
-            *INITIAL_CYCLES,
-        )
-        .build();
-
-    test.ingress(canister_id, "update", payload).unwrap();
-
-    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let creation_fee =
-        cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
-    assert_eq!(creation_fee, Cycles::new(0));
-    // There's only 2 canisters on the subnet, so the one created from the first one
-    // with have the test id corresponding to `1`.
-    let canister = test.canister_state(canister_test_id(1));
-    assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
-        0
-    );
-    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
@@ -1588,110 +1384,6 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         cycles_balance_before + cycles_to_deposit
-    );
-}
-
-#[test]
-fn create_canister_with_cycles_sender_in_whitelist() {
-    let subnet_id = subnet_test_id(1);
-    let subnet_type = SubnetType::Application;
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(subnet_type)
-        .build();
-
-    let canister_manager = CanisterManagerBuilder::default()
-        .with_subnet_id(subnet_id)
-        .with_cycles_account_manager(cycles_account_manager)
-        .build();
-
-    let mut state = initial_state(subnet_id, false);
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-    };
-    let sender = canister_test_id(1).get();
-    let canister_id = canister_manager
-        .create_canister_with_cycles(
-            canister_change_origin_from_principal(&sender),
-            Some(123),
-            CanisterSettings::default(),
-            None,
-            &mut state,
-            &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
-            MAX_NUMBER_OF_CANISTERS,
-            &mut round_limits,
-            ResourceSaturation::default(),
-            SMALL_APP_SUBNET_MAX_SIZE,
-            &no_op_counter(),
-        )
-        .unwrap();
-
-    let canister = state.take_canister_state(&canister_id).unwrap();
-
-    // Verify cycles are set as expected.
-    assert_eq!(canister.system_state.balance(), Cycles::new(123));
-}
-
-fn create_canister_with_specified_id(
-    specified_id: PrincipalId,
-) -> (Result<CanisterId, CanisterManagerError>, ReplicatedState) {
-    let subnet_id = subnet_test_id(1);
-    let canister_manager = CanisterManagerBuilder::default()
-        .with_subnet_id(subnet_id)
-        .build();
-
-    let mut state = initial_state(subnet_id, true);
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-    };
-
-    let creator = canister_test_id(1).get();
-
-    let creation_result = canister_manager.create_canister_with_cycles(
-        canister_change_origin_from_principal(&creator),
-        Some(123),
-        CanisterSettings::default(),
-        Some(specified_id),
-        &mut state,
-        &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
-        MAX_NUMBER_OF_CANISTERS,
-        &mut round_limits,
-        ResourceSaturation::default(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        &no_op_counter(),
-    );
-
-    (creation_result, state)
-}
-
-#[test]
-fn create_canister_with_valid_specified_id_creator_in_whitelist() {
-    let specified_id = CanisterId::from(u64::MAX / 4).get();
-
-    let (creation_result, mut state) = create_canister_with_specified_id(specified_id);
-
-    let canister_id = creation_result.unwrap();
-
-    let canister = state.take_canister_state(&canister_id).unwrap();
-
-    // Verify canister ID is set as expected.
-    assert_eq!(canister.canister_id().get(), specified_id);
-}
-
-#[test]
-fn create_canister_with_invalid_specified_id_creator_in_whitelist() {
-    let specified_id = CanisterId::from(u64::MAX / 4 * 3).get();
-
-    let creation_result = create_canister_with_specified_id(specified_id).0;
-
-    assert_matches!(
-        creation_result,
-        Err(CanisterManagerError::CanisterNotHostedBySubnet { .. })
     );
 }
 
@@ -3300,147 +2992,6 @@ fn frozen_canister_reveal_top_up() {
 }
 
 #[test]
-fn create_canister_fails_if_memory_capacity_exceeded() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(MEMORY_CAPACITY.get() as i64)
-        .with_subnet_memory_reservation(0)
-        .build();
-    let uc = test.universal_canister().unwrap();
-
-    test.canister_state_mut(uc)
-        .system_state
-        .set_balance(Cycles::new(1_000_000_000_000_000_000));
-
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_freezing_threshold(1)
-        .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // There should be not enough memory for CAPACITY/2 because universal
-    // canister already consumed some
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_freezing_threshold(1)
-        .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister).unwrap();
-    assert_matches!(result, WasmResult::Reject(_));
-}
-
-#[test]
-fn create_canister_makes_subnet_oversubscribed() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(100)
-        .build();
-    let uc = test.universal_canister().unwrap();
-
-    test.canister_state_mut(uc)
-        .system_state
-        .set_balance(Cycles::new(u128::MAX));
-
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_freezing_threshold(1)
-        .with_compute_allocation(50)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_freezing_threshold(1)
-        .with_compute_allocation(25)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_freezing_threshold(1)
-        .with_compute_allocation(30)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister).unwrap();
-    match result {
-        WasmResult::Reject(msg) => {
-            assert!(msg.contains("compute allocation"))
-        }
-        _ => panic!("Expected WasmResult::Reject"),
-    }
-}
-
-#[test]
 fn update_settings_makes_subnet_oversubscribed() {
     // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
@@ -3525,86 +3076,6 @@ fn update_settings_makes_subnet_oversubscribed() {
         .subnet_message(Method::UpdateSettings, args.encode())
         .unwrap_err();
     assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
-}
-
-#[test]
-fn create_canister_when_compute_capacity_is_oversubscribed() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(0)
-        .build();
-    let uc = test.universal_canister().unwrap();
-
-    // Manually set the compute allocation higher to emulate the state after
-    // replica upgrade that decreased compute capacity.
-    test.canister_state_mut(uc)
-        .scheduler_state
-        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
-    test.canister_state_mut(uc)
-        .system_state
-        .set_balance(Cycles::new(2_000_000_000_000_000));
-
-    // Create a canister with default settings.
-    let args = CreateCanisterArgs::default();
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args().other_side(args.encode()),
-            test.canister_creation_fee(),
-        )
-        .build();
-
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with zero compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_compute_allocation(0)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_compute_allocation(10)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
-        )
-        .build();
-    test.ingress(uc, "update", create_canister)
-        .unwrap()
-        .assert_contains_reject(
-            "Canister requested a compute allocation of 10% which \
-            cannot be satisfied because the Subnet's remaining \
-            compute capacity is 0%.",
-        );
 }
 
 #[test]
@@ -4220,44 +3691,6 @@ fn update_settings_checks_freezing_threshold_for_compute_allocation() {
 }
 
 #[test]
-fn create_canister_checks_freezing_threshold_for_memory_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let err = test
-        .create_canister_with_allocation(
-            Cycles::new(1_000_000_000_000),
-            None,
-            Some(10 * 1024 * 1024 * 1024),
-        )
-        .unwrap_err();
-
-    assert!(
-        err.description()
-            .contains("Cannot increase memory allocation to 10.00 GiB due to insufficient cycles."),
-        "{}",
-        err.description(),
-    );
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
-}
-
-#[test]
-fn create_canister_checks_freezing_threshold_for_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let err = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
-        .unwrap_err();
-
-    assert!(
-        err.description()
-            .contains("Cannot increase compute allocation to 50% due to insufficient cycles."),
-        "{}",
-        err.description(),
-    );
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInComputeAllocation);
-}
-
-#[test]
 fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
@@ -4567,73 +4000,6 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
         .system_state
         .reserved_balance();
     assert_eq!(reserved_cycles, Cycles::zero());
-}
-
-#[test]
-fn create_canister_reserves_cycles_for_memory_allocation() {
-    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
-        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-        const CAPACITY: u64 = 20_000_000_000;
-        const THRESHOLD: u64 = CAPACITY / 2;
-        const USAGE: u64 = CAPACITY - THRESHOLD;
-
-        let mut test = ExecutionTestBuilder::new()
-            .with_subnet_type(subnet_type)
-            .with_subnet_execution_memory(CAPACITY as i64)
-            .with_subnet_memory_reservation(0)
-            .with_subnet_memory_threshold(THRESHOLD as i64)
-            .build();
-
-        test.create_canister_with_allocation(CYCLES, None, Some(USAGE))
-            .unwrap();
-
-        let subnet_memory_usage =
-            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-
-        let balance_before = CYCLES;
-        let canister_id = test
-            .create_canister_with_settings(
-                balance_before,
-                CanisterSettingsArgsBuilder::new()
-                    .with_memory_allocation(USAGE)
-                    .with_reserved_cycles_limit(CYCLES.get())
-                    .build(),
-            )
-            .unwrap();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
-
-        assert_eq!(
-            test.canister_state(canister_id)
-                .memory_allocation()
-                .bytes()
-                .get(),
-            USAGE,
-        );
-
-        let reserved_cycles = test
-            .canister_state(canister_id)
-            .system_state
-            .reserved_balance();
-
-        assert_gt!(reserved_cycles, Cycles::zero());
-        assert_eq!(
-            reserved_cycles,
-            test.cycles_account_manager().storage_reservation_cycles(
-                NumBytes::new(USAGE),
-                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            )
-        );
-
-        assert_ge!(
-            balance_before - balance_after,
-            reserved_cycles,
-            "Unexpected balance change: {} >= {}",
-            balance_before - balance_after,
-            reserved_cycles,
-        );
-    });
 }
 
 #[test]
@@ -4992,144 +4358,6 @@ fn install_respects_reserved_cycles_limit_on_memory_grow() {
     assert!(err
         .description()
         .contains("due to its reserved cycles limit"));
-}
-
-#[test]
-fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(0)
-        .build();
-
-    let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-
-    // Set the memory allocation to exceed the reserved cycles limit.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_memory_allocation(1_000_000)
-        .with_reserved_cycles_limit(1)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::new(CYCLES.get() / 2),
-        )
-        .build();
-
-    let result = test.ingress(uc, "update", create_canister).unwrap();
-
-    let err_msg = match result {
-        WasmResult::Reply(_) => unreachable!("Unexpected reply, expected reject"),
-        WasmResult::Reject(err_msg) => err_msg,
-    };
-
-    assert!(err_msg.contains("Cannot increase memory allocation"));
-    assert!(err_msg.contains("due to its reserved cycles limit"));
-}
-
-#[test]
-fn create_canister_can_set_reserved_cycles_limit() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(0)
-        .build();
-
-    let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-
-    // Since we are not setting the memory allocation and the memory usage of an
-    // empty canister is zero, setting the reserved cycles limit should succeed.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_reserved_cycles_limit(1)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::new(CYCLES.get() / 2),
-        )
-        .build();
-
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    let canister_id = Decode!(reply.as_slice(), CanisterIdRecord)
-        .unwrap()
-        .get_canister_id();
-
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .reserved_balance_limit(),
-        Some(Cycles::new(1))
-    );
-}
-
-#[test]
-fn create_canister_sets_default_reserved_cycles_limit() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-
-    let args = CreateCanisterArgs {
-        settings: None,
-        sender_canister_version: None,
-    };
-
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::new(CYCLES.get() / 2),
-        )
-        .build();
-
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    let canister_id = CanisterIdRecord::decode(&reply).unwrap().get_canister_id();
-
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .reserved_balance_limit(),
-        Some(
-            test.cycles_account_manager()
-                .default_reserved_balance_limit()
-        )
-    );
 }
 
 #[test]
@@ -7653,4 +6881,780 @@ fn only_controllers_can_rename() {
         false,
     );
     assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("Only the controllers of the canister"));
+}
+
+
+#[test]
+fn can_create_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let expected_generated_id1 = CanisterId::from(0);
+    let expected_generated_id2 = CanisterId::from(1);
+
+    let canister_id1 = test.create_canister(*INITIAL_CYCLES);
+    assert_eq!(canister_id1, expected_generated_id1);
+
+    let canister_id2 = test.create_canister(*INITIAL_CYCLES);
+    assert_eq!(canister_id2, expected_generated_id2);
+
+    assert_eq!(test.state().canister_states.len(), 2);
+}
+
+#[test]
+fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
+
+    match result {
+        WasmResult::Reply(_) => panic!("expected reject"),
+        WasmResult::Reject(msg) => {
+            assert!(
+                msg.contains("but only 0 cycles were received with the create_canister request")
+            );
+        }
+    }
+    assert_eq!(test.state().canister_states.len(), 1);
+}
+
+#[test]
+fn can_create_canister_with_extra_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let cycles = Cycles::from(1_000_000_000_200u64);
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            cycles,
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", payload);
+    let _ = get_reply(result);
+    assert_eq!(test.state().canister_states.len(), 2);
+}
+
+
+#[test]
+fn create_canister_sets_correct_allocations() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let compute_allocation = 50;
+    let memory_allocation = 1024 * 1024 * 1024;
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::from(u64::MAX),
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(compute_allocation)
+                .with_memory_allocation(memory_allocation)
+                .build(),
+        )
+        .unwrap();
+
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(
+        canister_state.compute_allocation().as_percent(),
+        compute_allocation
+    );
+    assert_eq!(
+        canister_state.memory_allocation().bytes().get(),
+        memory_allocation
+    );
+}
+
+#[test]
+fn create_canister_updates_consumed_cycles_metric_correctly() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            *INITIAL_CYCLES,
+        )
+        .build();
+
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let creation_fee = cycles_account_manager.canister_creation_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    );
+    // There's only 2 canisters on the subnet, so the one created from the first one
+    // with have the test id corresponding to `1`.
+    let canister = test.canister_state(canister_test_id(1));
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles.get(),
+        creation_fee.get()
+    );
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics
+            .get_consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::CanisterCreation)
+            .unwrap()
+            .get(),
+        creation_fee.get()
+    );
+    assert_eq!(
+        canister.system_state.balance(),
+        *INITIAL_CYCLES - creation_fee
+    );
+}
+
+#[test]
+fn create_canister_free() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            *INITIAL_CYCLES,
+        )
+        .build();
+
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let creation_fee =
+        cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
+    assert_eq!(creation_fee, Cycles::new(0));
+    // There's only 2 canisters on the subnet, so the one created from the first one
+    // with have the test id corresponding to `1`.
+    let canister = test.canister_state(canister_test_id(1));
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles.get(),
+        0
+    );
+    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
+}
+
+#[test]
+fn create_canister_with_cycles_sender_in_whitelist() {
+    let subnet_id = subnet_test_id(1);
+    let subnet_type = SubnetType::Application;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(subnet_type)
+        .build();
+
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .with_cycles_account_manager(cycles_account_manager)
+        .build();
+
+    let mut state = initial_state(subnet_id, false);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+    };
+    let sender = canister_test_id(1).get();
+    let canister_id = canister_manager
+        .create_canister_with_cycles(
+            canister_change_origin_from_principal(&sender),
+            Some(123),
+            CanisterSettings::default(),
+            None,
+            &mut state,
+            &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
+            MAX_NUMBER_OF_CANISTERS,
+            &mut round_limits,
+            ResourceSaturation::default(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            &no_op_counter(),
+        )
+        .unwrap();
+
+    let canister = state.take_canister_state(&canister_id).unwrap();
+
+    // Verify cycles are set as expected.
+    assert_eq!(canister.system_state.balance(), Cycles::new(123));
+}
+
+fn create_canister_with_specified_id(
+    specified_id: PrincipalId,
+) -> (Result<CanisterId, CanisterManagerError>, ReplicatedState) {
+    let subnet_id = subnet_test_id(1);
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .build();
+
+    let mut state = initial_state(subnet_id, true);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+    };
+
+    let creator = canister_test_id(1).get();
+
+    let creation_result = canister_manager.create_canister_with_cycles(
+        canister_change_origin_from_principal(&creator),
+        Some(123),
+        CanisterSettings::default(),
+        Some(specified_id),
+        &mut state,
+        &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
+        MAX_NUMBER_OF_CANISTERS,
+        &mut round_limits,
+        ResourceSaturation::default(),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        &no_op_counter(),
+    );
+
+    (creation_result, state)
+}
+
+#[test]
+fn create_canister_with_valid_specified_id_creator_in_whitelist() {
+    let specified_id = CanisterId::from(u64::MAX / 4).get();
+
+    let (creation_result, mut state) = create_canister_with_specified_id(specified_id);
+
+    let canister_id = creation_result.unwrap();
+
+    let canister = state.take_canister_state(&canister_id).unwrap();
+
+    // Verify canister ID is set as expected.
+    assert_eq!(canister.canister_id().get(), specified_id);
+}
+
+#[test]
+fn create_canister_with_invalid_specified_id_creator_in_whitelist() {
+    let specified_id = CanisterId::from(u64::MAX / 4 * 3).get();
+
+    let creation_result = create_canister_with_specified_id(specified_id).0;
+
+    assert_matches!(
+        creation_result,
+        Err(CanisterManagerError::CanisterNotHostedBySubnet { .. })
+    );
+}
+
+#[test]
+fn create_canister_fails_if_memory_capacity_exceeded() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(MEMORY_CAPACITY.get() as i64)
+        .with_subnet_memory_reservation(0)
+        .build();
+    let uc = test.universal_canister().unwrap();
+
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(1_000_000_000_000_000_000));
+
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
+        .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // There should be not enough memory for CAPACITY/2 because universal
+    // canister already consumed some
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
+        .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister).unwrap();
+    assert_matches!(result, WasmResult::Reject(_));
+}
+
+#[test]
+fn create_canister_makes_subnet_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(100)
+        .build();
+    let uc = test.universal_canister().unwrap();
+
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(u128::MAX));
+
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
+        .with_compute_allocation(50)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
+        .with_compute_allocation(25)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with compute allocation.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
+        .with_compute_allocation(30)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister).unwrap();
+    match result {
+        WasmResult::Reject(msg) => {
+            assert!(msg.contains("compute allocation"))
+        }
+        _ => panic!("Expected WasmResult::Reject"),
+    }
+}
+
+
+#[test]
+fn create_canister_when_compute_capacity_is_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(0)
+        .build();
+    let uc = test.universal_canister().unwrap();
+
+    // Manually set the compute allocation higher to emulate the state after
+    // replica upgrade that decreased compute capacity.
+    test.canister_state_mut(uc)
+        .scheduler_state
+        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(2_000_000_000_000_000));
+
+    // Create a canister with default settings.
+    let args = CreateCanisterArgs::default();
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args().other_side(args.encode()),
+            test.canister_creation_fee(),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with zero compute allocation.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(0)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee(),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with compute allocation.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(10)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee(),
+        )
+        .build();
+    test.ingress(uc, "update", create_canister)
+        .unwrap()
+        .assert_contains_reject(
+            "Canister requested a compute allocation of 10% which \
+            cannot be satisfied because the Subnet's remaining \
+            compute capacity is 0%.",
+        );
+}
+
+
+#[test]
+fn create_canister_checks_freezing_threshold_for_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let err = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(10 * 1024 * 1024 * 1024),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase memory allocation to 10.00 GiB due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
+}
+
+#[test]
+fn create_canister_checks_freezing_threshold_for_compute_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let err = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase compute allocation to 50% due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInComputeAllocation);
+}
+
+#[test]
+fn create_canister_reserves_cycles_for_memory_allocation() {
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
+        const USAGE: u64 = CAPACITY - THRESHOLD;
+
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
+
+        test.create_canister_with_allocation(CYCLES, None, Some(USAGE))
+            .unwrap();
+
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+
+        let balance_before = CYCLES;
+        let canister_id = test
+            .create_canister_with_settings(
+                balance_before,
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(USAGE)
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+
+        assert_eq!(
+            test.canister_state(canister_id)
+                .memory_allocation()
+                .bytes()
+                .get(),
+            USAGE,
+        );
+
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
+
+        assert_gt!(reserved_cycles, Cycles::zero());
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                NumBytes::new(USAGE),
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
+        );
+
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+    });
+}
+
+#[test]
+fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Set the memory allocation to exceed the reserved cycles limit.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(1_000_000)
+        .with_reserved_cycles_limit(1)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister).unwrap();
+
+    let err_msg = match result {
+        WasmResult::Reply(_) => unreachable!("Unexpected reply, expected reject"),
+        WasmResult::Reject(err_msg) => err_msg,
+    };
+
+    assert!(err_msg.contains("Cannot increase memory allocation"));
+    assert!(err_msg.contains("due to its reserved cycles limit"));
+}
+
+#[test]
+fn create_canister_can_set_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Since we are not setting the memory allocation and the memory usage of an
+    // empty canister is zero, setting the reserved cycles limit should succeed.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_reserved_cycles_limit(1)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    let canister_id = Decode!(reply.as_slice(), CanisterIdRecord)
+        .unwrap()
+        .get_canister_id();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance_limit(),
+        Some(Cycles::new(1))
+    );
+}
+
+#[test]
+fn create_canister_sets_default_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    let canister_id = CanisterIdRecord::decode(&reply).unwrap().get_canister_id();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance_limit(),
+        Some(
+            test.cycles_account_manager()
+                .default_reserved_balance_limit()
+        )
+    );
 }
