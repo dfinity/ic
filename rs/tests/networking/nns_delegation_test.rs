@@ -174,13 +174,13 @@ async fn get_nns_delegation_timestamp(
     let tree = LabeledTree::try_from(parsed_delegation.tree)
         .expect("Should return a state tree which can be parsed");
 
-    let timestamp: Vec<u8> =
+    let timestamp: &Vec<u8> =
         match lookup_path(&tree, &[b"time"]).expect("Every delegation has a '/time' path") {
-            LabeledTree::Leaf(value) => value.clone(),
+            LabeledTree::Leaf(value) => value,
             LabeledTree::SubTree(_) => panic!("Not a leaf"),
         };
 
-    Some(leb128::read::unsigned(&mut std::io::Cursor::new(&timestamp)).unwrap())
+    Some(leb128::read::unsigned(&mut std::io::Cursor::new(timestamp)).unwrap())
 }
 
 /// Responses to `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
@@ -387,7 +387,7 @@ fn validate_delegation(
         .expect("Should return a state tree which can be parsed");
 
     match lookup_path(&tree, &[b"time"]).expect("Every delegation has a '/time' path") {
-        LabeledTree::Leaf(value) => value.clone(),
+        LabeledTree::Leaf(value) => value,
         LabeledTree::SubTree(_) => panic!("Not a leaf"),
     };
 
@@ -396,7 +396,7 @@ fn validate_delegation(
         &[b"subnet", subnet_id.get_ref().as_ref(), b"canister_ranges"],
     )
     .map(|tree| match tree {
-        LabeledTree::Leaf(value) => value.clone(),
+        LabeledTree::Leaf(value) => value,
         LabeledTree::SubTree(_) => panic!("Not a leaf"),
     });
 
@@ -404,7 +404,7 @@ fn validate_delegation(
         lookup_path(&tree, &[b"canister_ranges", subnet_id.get_ref().as_ref()]).map(|tree| {
             match tree {
                 LabeledTree::Leaf(_) => panic!("Not a subtree"),
-                LabeledTree::SubTree(sub_tree) => sub_tree.clone(),
+                LabeledTree::SubTree(sub_tree) => sub_tree,
             }
         });
 
