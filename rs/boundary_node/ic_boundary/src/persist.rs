@@ -41,13 +41,15 @@ pub fn principal_to_u256(p: &Principal) -> u256 {
     u256::from_be_bytes(padded)
 }
 
-// Principals are 2^232 max so we can use the u256 type to efficiently store them
-// Under the hood u256 is using two u128
-// This is more efficient than lexographically sorted hexadecimal strings as done in JS router
-// Currently the largest canister_id range is somewhere around 2^40 - so probably using one u128 would work for a long time
-// But going u256 makes it future proof and according to spec
+/// Route from a canister id range to a subnet.
+///
+/// Principals can be up to 2^232 long, so we can use the u256 type to efficiently store them.
+/// Under the hood u256 is using two u128, this is more efficient than lexographically sorted hexadecimal strings as was done in JS router.
+///
+/// Currently the largest canister id is somewhere around 2^40 - so probably using one u128 would work for a long time,
+/// but going u256 makes it future proof and according to spec.
 #[derive(Eq, PartialEq, Debug)]
-pub struct RouteSubnet {
+pub struct Route {
     pub subnet: Arc<Subnet>,
     pub range_start: u256,
     pub range_end: u256,
@@ -58,8 +60,8 @@ pub struct Routes {
     pub node_count: u32,
     pub range_count: u32,
 
-    // This here should be sorted by `range_start` field for the binary search to work
-    pub routes: Vec<RouteSubnet>,
+    // Routes should be sorted by `range_start` field for the binary search to work
+    pub routes: Vec<Route>,
     // Direct mapping from the Canister ID to the subnet for faster lookups
     pub direct: HashMap<u256, Arc<Subnet>>,
     // Mapping from Subnet ID to subnet
@@ -157,7 +159,7 @@ impl Persist for Persister {
                         direct.insert(canister_id, subnet.clone());
                     }
                 } else {
-                    let route = RouteSubnet {
+                    let route = Route {
                         subnet: subnet.clone(),
                         range_start: principal_to_u256(&range.start),
                         range_end: principal_to_u256(&range.end),
@@ -375,25 +377,25 @@ pub(crate) mod test {
             .map(|x| (x.id, x.clone()))
             .collect::<HashMap<_, _>>();
 
-        let route1 = RouteSubnet {
+        let route1 = Route {
             subnet: subnets[0].clone(),
             range_start: principal_to_u256(&principal!("f7crg-kabae")),
             range_end: principal_to_u256(&principal!("sxiki-5ygae-aq")),
         };
 
-        let route2 = RouteSubnet {
+        let route2 = Route {
             subnet: subnets[0].clone(),
             range_start: principal_to_u256(&principal!("t5his-7iiae-aq")),
             range_end: principal_to_u256(&principal!("jlzvg-byp77-7qcai")),
         };
 
-        let route3 = RouteSubnet {
+        let route3 = Route {
             subnet: subnets[2].clone(),
             range_start: principal_to_u256(&principal!("zdpgc-saqaa-aacai")),
             range_end: principal_to_u256(&principal!("fij4j-bi777-7qcai")),
         };
 
-        let route4 = RouteSubnet {
+        let route4 = Route {
             subnet: subnets[1].clone(),
             range_start: principal_to_u256(&principal!("6l3jn-7icca-aaaai-b")),
             range_end: principal_to_u256(&principal!("ca5tg-macd7-776ai-b")),
