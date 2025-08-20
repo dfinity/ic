@@ -55,7 +55,7 @@ perform_recovery() {
         return 1
     fi
 
-    EXPECTED_RECOVERY_HASH=$(cat "$EXPECTED_RECOVERY_HASH_FILE" | tr -d '\n\r')
+    EXPECTED_RECOVERY_HASH="$(cat "$EXPECTED_RECOVERY_HASH_FILE" | tr -d '\n\r')"
 
     if [ -z "$EXPECTED_RECOVERY_HASH" ]; then
         echo "ERROR: Expected recovery hash file is empty"
