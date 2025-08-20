@@ -49,7 +49,7 @@ impl ConsentMessage {
     pub fn add_intent(&mut self, intent: Icrc21Function, token_name: Option<String>) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => match intent {
-                Icrc21Function::Transfer | Icrc21Function::LegacyTransfer => {
+                Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                     assert!(token_name.is_some());
                     message.push_str(&format!("# Send {}", token_name.unwrap()));
                     message
@@ -70,7 +70,7 @@ impl ConsentMessage {
                 }
             },
             ConsentMessage::FieldsDisplayMessage(fields_display) => match intent {
-                Icrc21Function::Transfer | Icrc21Function::LegacyTransfer => {
+                Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                     assert!(token_name.is_some());
                     fields_display.intent = format!("Send {}", token_name.unwrap());
                 }
@@ -147,7 +147,7 @@ impl ConsentMessage {
                     )),
                     Icrc21Function::Transfer
                     | Icrc21Function::TransferFrom
-                    | Icrc21Function::LegacyTransfer => message.push_str(&format!(
+                    | Icrc21Function::GenericTransfer => message.push_str(&format!(
                         "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
                         fee, token_symbol
                     )),
@@ -165,7 +165,7 @@ impl ConsentMessage {
                         .push(("Approval fees".to_string(), token_amount)),
                     Icrc21Function::Transfer
                     | Icrc21Function::TransferFrom
-                    | Icrc21Function::LegacyTransfer => fields_display
+                    | Icrc21Function::GenericTransfer => fields_display
                         .fields
                         .push(("Fees".to_string(), token_amount)),
                 };

@@ -26,7 +26,7 @@ pub enum Icrc21Function {
     #[strum(serialize = "icrc2_transfer_from")]
     TransferFrom,
     #[strum(serialize = "transfer")]
-    LegacyTransfer,
+    GenericTransfer,
 }
 
 pub enum AccountOrId {
@@ -170,7 +170,7 @@ impl ConsentMessageBuilder {
             }
         };
         match self.function {
-            Icrc21Function::Transfer | Icrc21Function::LegacyTransfer => {
+            Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -353,7 +353,7 @@ pub fn build_icrc21_consent_info_for_generic_transfer(
         decimals,
     )?;
     let consent_message = match display_message_builder.function {
-        Icrc21Function::LegacyTransfer => {
+        Icrc21Function::GenericTransfer => {
             display_message_builder = display_message_builder
                 .with_amount(transfer_args.amount)
                 .with_receiver_account(transfer_args.receiver)
@@ -361,7 +361,7 @@ pub fn build_icrc21_consent_info_for_generic_transfer(
             display_message_builder.build()
         }
         _ => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: "Only legacy transfer is supported".to_string(),
+            description: "Only generic transfer is supported".to_string(),
         })),
     }?;
     Ok(ConsentInfo {
@@ -482,8 +482,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
-        Icrc21Function::LegacyTransfer => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: "Legacy transfer is not supported".to_string(),
+        Icrc21Function::GenericTransfer => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: "Generic transfer is not supported".to_string(),
         })),
     }?;
 
