@@ -14,6 +14,7 @@ use ic_btc_interface::{
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use ic_ckbtc_minter::state::eventlog::{Event, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
@@ -25,8 +26,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
-    MIN_RESUBMISSION_DELAY, UTXOS_COUNT_THRESHOLD,
+    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION,
+    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -1251,25 +1252,7 @@ impl CkBtcSetup {
     }
 
     pub fn print_minter_events(&self) {
-        use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
-        let events = Decode!(
-            &assert_reply(
-                self.env
-                    .query(
-                        self.minter_id,
-                        "get_events",
-                        Encode!(&GetEventsArg {
-                            start: 0,
-                            length: 2000,
-                        })
-                        .unwrap()
-                    )
-                    .expect("failed to query minter events")
-            ),
-            Vec<Event>
-        )
-        .unwrap();
-        println!("{:#?}", events);
+        println!("{:#?}", self.get_events());
     }
 
     pub fn print_minter_logs(&self) {
@@ -2440,8 +2423,42 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         reimbursement.mint_block_index == reimbursement_block_index
     );
 
-    ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
+    let mut events = ckbtc.get_events();
+    assert_eq!(
+        events.iter().find(|event| {
+            matches!(
+                event.payload,
+                EventType::SentBtcTransaction { .. } | EventType::ReplacedBtcTransaction { .. }
+            )
+        }),
+        None,
+        "BUG: should not have issue any Bitcoin transaction when too many inputs are used"
+    );
+    let reimbursed_event = events.pop().unwrap();
+    assert_eq!(
+        reimbursed_event.payload,
+        EventType::ReimbursedWithdrawal {
+            burn_block_index: block_index,
+            mint_block_index: reimbursement_block_index
+        }
+    );
+    let schedule_reimbursement_event = events.pop().unwrap();
+    assert_eq!(
+        schedule_reimbursement_event.payload,
+        EventType::ScheduleWithdrawalReimbursement {
+            account: user_account,
+            amount: reimbursement_amount,
+            reason: WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: 1800,
+                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                }
+            ),
+            burn_block_index: block_index,
+        }
+    );
 
+    ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
     assert_eq!(
         ckbtc.balance_of(user_account),
         balance_before_withdrawal.clone() - reimbursement_fee
