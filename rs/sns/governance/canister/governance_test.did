@@ -790,6 +790,11 @@ type ExtensionType = variant {
   TreasuryManager;
 };
 
+type RegisteredExtensionOperationSpec = record {
+  canister_id : opt principal;
+  spec : opt ExtensionOperationSpec;
+};
+
 type RegisterVote = record {
   vote : int32;
   proposal : opt ProposalId;
@@ -1027,7 +1032,7 @@ type TopicInfo = record {
   description : opt text;
   native_functions : opt vec NervousSystemFunction;
   custom_functions : opt vec NervousSystemFunction;
-  extension_operations : opt vec ExtensionOperationSpec;
+  extension_operations : opt vec RegisteredExtensionOperationSpec;
   is_critical : opt bool;
 };
 

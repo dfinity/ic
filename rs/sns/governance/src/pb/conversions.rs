@@ -1,8 +1,7 @@
-use core::convert::Into;
-use core::option::Option::Some;
-
 use crate::pb::v1::{self as pb};
 use crate::topics;
+use core::convert::Into;
+use core::option::Option::Some;
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -4418,7 +4417,7 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
 
         let extension_operations = extension_operations
             .into_iter()
-            .map(pb_api::ExtensionOperationSpec::from)
+            .map(pb_api::RegisteredExtensionOperationSpec::from)
             .collect();
 
         pb_api::topics::TopicInfo {
@@ -4460,38 +4459,12 @@ impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
     }
 }
 
-impl From<pb_api::ExtensionOperationType> for crate::extensions::OperationType {
-    fn from(value: pb_api::ExtensionOperationType) -> Self {
-        match value {
-            pb_api::ExtensionOperationType::TreasuryManagerDeposit => {
-                crate::extensions::OperationType::TreasuryManagerDeposit
-            }
-            pb_api::ExtensionOperationType::TreasuryManagerWithdraw => {
-                crate::extensions::OperationType::TreasuryManagerWithdraw
-            }
-            pb_api::ExtensionOperationType::Custom(name) => {
-                crate::extensions::OperationType::Custom(name)
-            }
-        }
-    }
-}
-
 // Conversions for ExtensionType
 impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
     fn from(value: crate::extensions::ExtensionType) -> Self {
         match value {
             crate::extensions::ExtensionType::TreasuryManager => {
                 pb_api::ExtensionType::TreasuryManager
-            }
-        }
-    }
-}
-
-impl From<pb_api::ExtensionType> for crate::extensions::ExtensionType {
-    fn from(value: pb_api::ExtensionType) -> Self {
-        match value {
-            pb_api::ExtensionType::TreasuryManager => {
-                crate::extensions::ExtensionType::TreasuryManager
             }
         }
     }
@@ -4509,17 +4482,14 @@ impl From<crate::extensions::ExtensionOperationSpec> for pb_api::ExtensionOperat
     }
 }
 
-impl From<pb_api::ExtensionOperationSpec> for crate::extensions::ExtensionOperationSpec {
-    fn from(value: pb_api::ExtensionOperationSpec) -> Self {
-        crate::extensions::ExtensionOperationSpec {
-            operation_type: crate::extensions::OperationType::from(
-                value.operation_type.expect("operation_type is required"),
-            ),
-            description: value.description.expect("description is required"),
-            extension_type: crate::extensions::ExtensionType::from(
-                value.extension_type.expect("extension_type is required"),
-            ),
-            topic: pb::Topic::from(value.topic.expect("topic is required")),
+// Conversions for RegisteredExtensionOperationSpec
+impl From<crate::topics::RegisteredExtensionOperationSpec>
+    for pb_api::RegisteredExtensionOperationSpec
+{
+    fn from(value: crate::topics::RegisteredExtensionOperationSpec) -> Self {
+        pb_api::RegisteredExtensionOperationSpec {
+            canister_id: Some(value.canister_id.get()),
+            spec: Some(pb_api::ExtensionOperationSpec::from(value.spec)),
         }
     }
 }

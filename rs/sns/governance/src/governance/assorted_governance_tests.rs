@@ -11,6 +11,8 @@ use super::test_helpers::{
 };
 use super::*;
 use crate::extensions::ExtensionSpec;
+use crate::extensions::ExtensionType;
+use crate::extensions::ExtensionVersion;
 use crate::storage::cache_registered_extension;
 use crate::{
     pb::v1::{

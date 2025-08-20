@@ -4,12 +4,19 @@ use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
+use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
+
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+pub struct RegisteredExtensionOperationSpec {
+    pub canister_id: CanisterId,
+    pub spec: ExtensionOperationSpec,
+}
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
@@ -19,7 +26,7 @@ pub struct TopicInfo<C> {
     pub name: String,
     pub description: String,
     pub functions: C,
-    pub extension_operations: Vec<ExtensionOperationSpec>,
+    pub extension_operations: Vec<RegisteredExtensionOperationSpec>,
     pub is_critical: bool,
 }
 
