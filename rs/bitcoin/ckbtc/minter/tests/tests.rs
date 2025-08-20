@@ -2431,6 +2431,102 @@ fn test_retrieve_btc_with_approval_fail() {
 }
 
 #[test]
+fn should_cancel_and_reimburse_large_withdrawal() {
+    let ckbtc = CkBtcSetup::new();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    let user = Principal::from(ckbtc.caller);
+    let subaccount: Option<[u8; 32]> = Some([1; 32]);
+    let user_account = Account {
+        owner: user,
+        subaccount,
+    };
+
+    // Step 1: deposit a lot of small UTXOs
+    let num_uxtos = 2_000;
+    let deposit_value = 100_000_u64;
+    let utxos = (0..num_uxtos)
+        .map(|i| {
+            let mut txid = vec![0; 32];
+            txid[0] = (i % 256) as u8;
+            txid[1] = (i / 256) as u8;
+            Utxo {
+                height: 0,
+                outpoint: OutPoint {
+                    txid: vec_to_txid(txid),
+                    vout: 1,
+                },
+                value: deposit_value,
+            }
+        })
+        .collect::<BTreeSet<_>>();
+    ckbtc.deposit_utxos(user_account, utxos.clone().into_iter().collect());
+    assert_eq!(
+        ckbtc
+            .get_known_utxos(user_account)
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        utxos
+    );
+
+    let balance_after_deposit = ckbtc.balance_of(user_account);
+    assert_eq!(
+        balance_after_deposit,
+        Nat::from(num_uxtos as u64 * (deposit_value - CHECK_FEE))
+    );
+
+    let withdrawal_amount = 1_800 * deposit_value;
+    ckbtc.approve_minter(user, withdrawal_amount, subaccount);
+    let balance_before_withdrawal = ckbtc.balance_of(user_account);
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc_with_approval(
+            WITHDRAWAL_ADDRESS.to_string(),
+            withdrawal_amount,
+            subaccount,
+        )
+        .expect("retrieve_btc failed");
+
+    let balance_after_withdrawal = ckbtc.balance_of(user_account);
+    assert_eq!(
+        balance_after_withdrawal,
+        balance_before_withdrawal.clone() - Nat::from(withdrawal_amount)
+    );
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Pending
+    );
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        0,
+        "no transaction should appear when being reimbursed"
+    );
+
+    let reimbursement_block_index = block_index + 1;
+    let reimbursement_fee = retrieve_btc_min_amount / 10;
+    let reimbursement_amount = withdrawal_amount - reimbursement_fee;
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Reimbursed(reimbursement) if
+        reimbursement.account == user_account &&
+        reimbursement.amount == reimbursement_amount &&
+        reimbursement.mint_block_index == reimbursement_block_index
+    );
+
+    ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
+
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        balance_before_withdrawal.clone() - reimbursement_fee
+    );
+}
+
+#[test]
 fn should_cancel_non_standard_transaction() {
     let ckbtc = CkBtcSetup::new();
     let main_address: BtcAddress = ckbtc
