@@ -17589,7 +17589,9 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-cdk",
+ "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",
@@ -17619,6 +17621,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
+ "time",
  "tokio",
  "url",
 ]
