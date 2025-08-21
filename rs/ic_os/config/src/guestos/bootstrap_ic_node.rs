@@ -23,9 +23,11 @@ pub fn process_bootstrap(
         .status()
         .context("Failed to extract bootstrap tar file")?;
 
-    if !status.success() {
-        anyhow::bail!("tar extraction failed with status: {}", status);
-    }
+    anyhow::ensure!(
+        status.success(),
+        "tar extraction failed with status: {}",
+        status
+    );
 
     let ic_crypto_src = tmpdir.path().join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
@@ -100,18 +102,19 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
 
     println!("Checking for bootstrap configuration");
 
-    if bootstrap_tar_path.exists() {
-        println!(
-            "Processing bootstrap data from {}",
-            bootstrap_tar_path.display()
-        );
-        process_bootstrap(bootstrap_tar_path, config_root, state_root)?;
-        println!("Successfully processed bootstrap data");
+    anyhow::ensure!(
+        bootstrap_tar_path.exists(),
+        "No registration configuration provided to bootstrap IC node"
+    );
 
-        File::create(&configured_marker)?;
-    } else {
-        anyhow::bail!("No registration configuration provided to bootstrap IC node");
-    }
+    println!(
+        "Processing bootstrap data from {}",
+        bootstrap_tar_path.display()
+    );
+    process_bootstrap(bootstrap_tar_path, config_root, state_root)?;
+    println!("Successfully processed bootstrap data");
+
+    File::create(&configured_marker)?;
 
     Ok(())
 }
