@@ -28,6 +28,7 @@ use crate::driver::{
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use chrono::Utc;
+use regex::Regex;
 use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
@@ -137,6 +138,12 @@ pub struct CliArgs {
 
     #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
     pub no_logs: bool,
+
+    #[clap(
+        long = "exclude-logs",
+        help = "The list of regexes which will be skipped from the streaming."
+    )]
+    pub exclude_logs: Vec<Regex>,
 }
 
 impl CliArgs {
@@ -590,6 +597,16 @@ impl SystemTestGroup {
                                 Ok(discovered_uvms) => {
                                     for (key, value) in discovered_uvms {
                                         streamed_uvms.entry(key.clone()).or_insert_with(|| {
+                                                let key_match = group_ctx
+                                                    .exclude_logs
+                                                    .iter()
+                                                    .any(|pattern| pattern.is_match(&key));
+
+                                                if key_match {
+                                                    debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
+                                                    return value;
+                                                }
+
                                                 let logger = logger.clone();
                                                 info!(
                                                     logger,
@@ -870,6 +887,7 @@ impl SystemTestGroup {
             args.group_base_name,
             args.k8s,
             !args.no_logs,
+            args.exclude_logs,
         )?;
 
         let with_farm = self.with_farm && !args.k8s;

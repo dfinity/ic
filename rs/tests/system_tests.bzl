@@ -89,6 +89,7 @@ def _run_system_test(ctx):
               --group-base-name {group_base_name} \
               {logs} \
               {no_summary_report} \
+              {exclude_logs} \
               "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
@@ -97,6 +98,7 @@ def _run_system_test(ctx):
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
             info_file = ctx.info_file.short_path,
             logs = "--no-logs" if no_logs else "",
+            exclude_logs = " ".join(["--exclude-logs {pattern}".format(pattern=pattern) for pattern in ctx.attr.exclude_logs])
         ),
     )
 
@@ -190,6 +192,7 @@ run_system_test = rule(
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
+        "exclude_logs": attr.string_list(doc = "Specifies uvm name patterns to exclude from streaming."),
     },
 )
 
@@ -226,6 +229,7 @@ def system_test(
         uses_hostos_latest_release_mainnet_update = False,
         env = {},
         env_inherit = [],
+        exclude_logs = [ "prometheus", "vector" ],
         additional_colocate_tags = [],
         logs = True,
         **kwargs):
@@ -450,6 +454,7 @@ def system_test(
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+        exclude_logs = exclude_logs
     )
 
     env = env | {
