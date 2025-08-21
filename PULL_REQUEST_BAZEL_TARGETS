@@ -37,7 +37,10 @@
 #
 # Tip: to test which files matches <PATTERN> you can use the following:
 # git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
-
+#
+# Run `ci/bazel-scripts/targets.py check` to see the matches for every pattern
+# and to check the correctness of this file. This is also run automatically by
+# the check-pull-request-bazel-targets job on CI.
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
@@ -57,3 +60,13 @@
 
 # XNet compatibility test for changes to certifications
 *canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility
+
+*nns_delegation* //rs/tests/networking:nns_delegation_test
+
+rs/backup/*.rs //rs/tests/consensus/backup/...
+
+rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
+                     //rs/tests/consensus:subnet_splitting_test_colocate
+                     //rs/tests/nested:nns_recovery_test
+
+rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate

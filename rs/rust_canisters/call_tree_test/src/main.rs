@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 //! This module contains a canister used for XNet integration test.
 use candid::{CandidType, Principal};
 use ic_cdk::api::{call::call_raw, id};

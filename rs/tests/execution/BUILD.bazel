@@ -175,6 +175,9 @@ system_test(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
     ],
 )
 

@@ -1,4 +1,5 @@
 // TODO: Jira ticket NNS1-3556
+#![allow(deprecated)]
 #![allow(static_mut_refs)]
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -704,7 +705,10 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {

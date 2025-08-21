@@ -1,9 +1,8 @@
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{

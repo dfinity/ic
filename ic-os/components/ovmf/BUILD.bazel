@@ -34,5 +34,6 @@ genrule(
 
         mv Build/AmdSev/RELEASE_CLANGDWARF/FV/OVMF.fd "$$out"
     """,
+    tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
 )
