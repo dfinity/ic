@@ -1,6 +1,6 @@
 #[cfg(any(feature = "test", test))]
 use ic_cdk::query;
-use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
+use ic_cdk::{init, post_upgrade, pre_upgrade, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
@@ -8,6 +8,9 @@ use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRI
 use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
@@ -52,7 +55,7 @@ const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 fn schedule_timers() {
     ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
-        spawn(async move {
+        ic_cdk::futures::spawn_017_compat(async move {
             telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
             let mut instruction_counter = telemetry::InstructionCounter::default();
             instruction_counter.lap();
@@ -84,7 +87,7 @@ fn schedule_timers() {
 }
 
 fn panic_if_caller_not_governance() {
-    if ic_cdk::caller() != GOVERNANCE_CANISTER_ID.get().0 {
+    if ic_cdk::api::msg_caller() != GOVERNANCE_CANISTER_ID.get().0 {
         panic!("Only the governance canister can call this method");
     }
 }
@@ -101,6 +104,17 @@ async fn get_node_providers_monthly_xdr_rewards(
 ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
     panic_if_caller_not_governance();
     NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
+}
+
+#[update]
+async fn get_node_providers_rewards(
+    request: GetNodeProvidersRewardsRequest,
+) -> GetNodeProvidersRewardsResponse {
+    panic_if_caller_not_governance();
+    NodeRewardsCanister::get_node_providers_rewards::<RegistryStoreStableMemoryBorrower>(
+        &CANISTER, request,
+    )
+    .await
 }
 
 #[cfg(test)]

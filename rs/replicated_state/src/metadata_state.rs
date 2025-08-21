@@ -12,7 +12,7 @@ use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSI
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
-    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
+    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse, IC_00,
 };
 use ic_registry_routing_table::{
     canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
@@ -25,9 +25,7 @@ use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{
-        is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
-    },
+    messages::{CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
@@ -656,7 +654,7 @@ impl SystemMetadata {
             // An actual local canister.
             is_local_canister(canister_id)
                 // Or this is subnet A' and message is addressed to the management canister.
-                || split_from_subnet == *own_subnet_id && is_subnet_id(canister_id, *own_subnet_id)
+                || split_from_subnet == *own_subnet_id && canister_id == IC_00
         });
 
         // Split complete, reset split marker.
