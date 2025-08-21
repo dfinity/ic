@@ -9071,6 +9071,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-deterministic-heap-bytes"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-deterministic-heap-bytes-derive",
+ "paste",
+]
+
+[[package]]
+name = "ic-deterministic-heap-bytes-derive"
+version = "0.9.0"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [

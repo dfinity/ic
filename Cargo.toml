@@ -3,6 +3,8 @@
 members = [
     "packages/canlog",
     "packages/canlog_derive",
+    "packages/ic-deterministic-heap-bytes",
+    "packages/ic-deterministic-heap-bytes-derive",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-error-types",
