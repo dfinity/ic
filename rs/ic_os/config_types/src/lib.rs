@@ -113,6 +113,7 @@ pub struct ICOSSettings {
     pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
+    #[serde(default)]
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
