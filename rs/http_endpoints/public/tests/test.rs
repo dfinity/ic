@@ -24,7 +24,7 @@ use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_http_endpoints_public::read_state;
+use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
     self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query, APPLICATION_CBOR,
 };
@@ -214,8 +214,10 @@ fn test_unauthorized_controller(
 }
 
 // Test that that http endpoint rejects queries with mismatch between canister id an effective canister id.
-#[test]
-fn test_unauthorized_query() {
+#[rstest]
+fn test_unauthorized_query(
+    #[values(query::Version::V2, query::Version::V3)] version: query::Version,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -247,14 +249,14 @@ fn test_unauthorized_query() {
 
     // Valid query call with canister_id = effective_canister_id
     rt.block_on(async move {
-        let response = Query::new(canister1, canister1).query(addr).await;
+        let response = Query::new(canister1, canister1, version).query(addr).await;
 
         assert_eq!(StatusCode::OK, response.status());
     });
 
     // Invalid query call with canister_id != effective_canister_id
     rt.block_on(async move {
-        let response = Query::new(canister1, canister2).query(addr).await;
+        let response = Query::new(canister1, canister2, version).query(addr).await;
 
         assert_eq!(StatusCode::BAD_REQUEST, response.status());
 
@@ -409,8 +411,8 @@ async fn test_connection_read_timeout() {
 }
 
 /// If the downstream service is stuck return 504.
-#[test]
-fn test_request_timeout() {
+#[rstest]
+fn test_request_timeout(#[values(query::Version::V2, query::Version::V3)] version: query::Version) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let request_timeout_seconds = 2;
@@ -435,7 +437,9 @@ fn test_request_timeout() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = Query::default().query(addr).await;
+        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
+            .query(addr)
+            .await;
         assert_eq!(StatusCode::GATEWAY_TIMEOUT, response.status());
     });
 }
@@ -683,8 +687,10 @@ fn test_too_long_paths_are_rejected(
 /// per canister certified state is unavailable. I.e. when the
 /// [`QueryExecutionService`](ic_interfaces::execution_environment::QueryExecutionService)
 /// returns [QueryExecutionError::CertifiedStateUnavailable`].
-#[test]
-fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
+#[rstest]
+fn test_query_endpoint_returns_service_unavailable_on_missing_state(
+    #[values(query::Version::V2, query::Version::V3)] version: query::Version,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -705,7 +711,9 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = Query::default().query(addr).await;
+        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
+            .query(addr)
+            .await;
         let expected_status_code = StatusCode::SERVICE_UNAVAILABLE;
 
         assert_eq!(expected_status_code, response.status());

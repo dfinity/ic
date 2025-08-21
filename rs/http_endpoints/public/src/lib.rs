@@ -11,7 +11,7 @@ mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
 mod pprof;
-mod query;
+pub mod query;
 pub mod read_state;
 mod status;
 mod tracing_flamegraph;
@@ -126,6 +126,7 @@ struct HttpHandler {
     call_v3_router: Router,
     call_v4_router: Router,
     query_v2_router: Router,
+    query_v3_router: Router,
     catchup_router: Router,
     dashboard_router: Router,
     status_router: Router,
@@ -303,7 +304,7 @@ pub fn start_server(
         cancellation_token,
     );
 
-    let call_router =
+    let call_v2_router =
         call_async::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
     let call_v3_router = call_sync::new_router(
@@ -329,11 +330,26 @@ pub fn start_server(
     let query_v2_router = QueryServiceBuilder::builder(
         log.clone(),
         node_id,
+        query_signer.clone(),
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        nns_delegation_reader.clone(),
+        query_execution_service.clone(),
+        query::Version::V2,
+    )
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags.clone())
+    .build_router();
+
+    let query_v3_router = QueryServiceBuilder::builder(
+        log.clone(),
+        node_id,
         query_signer,
         registry_client.clone(),
         ingress_verifier.clone(),
         nns_delegation_reader.clone(),
         query_execution_service,
+        query::Version::V3,
     )
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags.clone())
@@ -414,10 +430,11 @@ pub fn start_server(
     );
 
     let http_handler = HttpHandler {
-        call_v2_router: call_router,
+        call_v2_router,
         call_v3_router,
         call_v4_router,
         query_v2_router,
+        query_v3_router,
         status_router,
         catchup_router,
         dashboard_router,
@@ -611,6 +628,16 @@ fn make_router(
         .merge(http_handler.call_v4_router)
         .merge(
             http_handler.query_v2_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_query_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.query_v3_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -853,8 +880,14 @@ pub(crate) mod tests {
                 call_sync::route(call_sync::Version::V4),
                 axum::routing::post(dummy),
             ),
-            query_v2_router: Router::new()
-                .route(QueryService::route(), axum::routing::post(dummy_cbor)),
+            query_v2_router: Router::new().route(
+                QueryService::route(query::Version::V2),
+                axum::routing::post(dummy_cbor),
+            ),
+            query_v3_router: Router::new().route(
+                QueryService::route(query::Version::V3),
+                axum::routing::post(dummy_cbor),
+            ),
             catchup_router: Router::new().route(
                 CatchUpPackageService::route(),
                 axum::routing::post(dummy_cbor),

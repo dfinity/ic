@@ -1,5 +1,5 @@
-use ic_crypto_tree_hash::{Label, Path};
-use ic_http_endpoints_public::read_state;
+use ic_crypto_tree_hash::Path;
+use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -167,17 +167,22 @@ impl Call {
     }
 }
 
-#[derive(Default)]
 pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,
+    version: query::Version,
 }
 
 impl Query {
-    pub fn new(canister_id: PrincipalId, effective_canister_id: PrincipalId) -> Self {
+    pub fn new(
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+        version: query::Version,
+    ) -> Self {
         Self {
             canister_id,
             effective_canister_id,
+            version,
         }
     }
 
@@ -203,9 +208,13 @@ impl Query {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
+        let version_str = match self.version {
+            query::Version::V2 => "v2",
+            query::Version::V3 => "v3",
+        };
         let url = format!(
-            "http://{}/api/v2/canister/{}/query",
-            addr, self.effective_canister_id
+            "http://{addr}/api/{version_str}/canister/{}/query",
+            self.effective_canister_id
         );
 
         reqwest::Client::new()
@@ -222,16 +231,6 @@ pub struct CanisterReadState {
     paths: Vec<Path>,
     effective_canister_id: PrincipalId,
     version: read_state::canister::Version,
-}
-
-impl Default for CanisterReadState {
-    fn default() -> Self {
-        Self {
-            paths: vec![Path::from(Label::from("time"))],
-            effective_canister_id: PrincipalId::default(),
-            version: read_state::canister::Version::V3,
-        }
-    }
 }
 
 impl CanisterReadState {

@@ -32,7 +32,7 @@ use anyhow::Result;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
-use ic_http_endpoints_public::read_state;
+use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -116,7 +116,7 @@ fn update_calls(env: TestEnv, version: Call) {
     });
 }
 
-fn query_calls(env: TestEnv) {
+fn query_calls(env: TestEnv, version: query::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -124,7 +124,7 @@ fn query_calls(env: TestEnv) {
 
     block_on(async {
         // Test that well formed calls get accepted
-        let response = Query::new(primary.into(), primary.into())
+        let response = Query::new(primary.into(), primary.into(), version)
             .query(socket)
             .await;
         let status = inspect_response(response, "Query", &logger).await;
@@ -132,7 +132,7 @@ fn query_calls(env: TestEnv) {
 
         // Test that malformed calls get rejeceted
         for effective_canister_id in test_ids {
-            let response = Query::new(primary.into(), effective_canister_id.into())
+            let response = Query::new(primary.into(), effective_canister_id.into(), version)
                 .query(socket)
                 .await;
             let status = inspect_response(response, "Query", &logger).await;
@@ -348,7 +348,8 @@ fn assert_4xx(status: &u16) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(query_calls))
+        .add_test(systest!(query_calls; query::Version::V2))
+        .add_test(systest!(query_calls; query::Version::V3))
         .add_test(systest!(update_calls; Call::V2))
         .add_test(systest!(update_calls; Call::V3))
         .add_test(systest!(update_calls; Call::V4))
