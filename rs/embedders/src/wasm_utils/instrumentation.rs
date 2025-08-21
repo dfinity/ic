@@ -756,12 +756,11 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32 + Sync) {
         }
     }
 
-    use rayon::prelude::*;
-    module.code_sections.par_iter_mut().for_each(|func_body| {
+    for func_body in module.code_sections.iter_mut() {
         for op in &mut func_body.instructions {
             mutate_instruction(&f, op);
         }
-    });
+    }
 
     for exp in &mut module.exports {
         if let ExternalKind::Func = exp.kind {
