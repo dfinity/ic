@@ -51,7 +51,7 @@ pub struct TreasuryManagerDepositContext {
     pub icp_ledger_canister_id: CanisterId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExtensionType {
     TreasuryManager,
 }
@@ -124,7 +124,7 @@ impl RenderablePayload for Precise {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OperationType {
     TreasuryManagerDeposit,
     TreasuryManagerWithdraw,
@@ -142,7 +142,7 @@ impl Display for OperationType {
 }
 
 /// Specification for an extension operation
-#[derive(Clone, Debug, Eq, PartialEq, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtensionOperationSpec {
     pub operation_type: OperationType,
     pub description: String,
@@ -536,7 +536,7 @@ impl Governance {
         &self,
         extension_canister_id: CanisterId,
     ) -> Result<(), GovernanceError> {
-        let payload = candid::Encode!(&RegisterExtensionRequest {
+        let payload = Encode!(&RegisterExtensionRequest {
             canister_id: Some(extension_canister_id.get()),
         })
         .map_err(|err| {
