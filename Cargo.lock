@@ -17628,6 +17628,7 @@ dependencies = [
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-http-endpoints-public",
  "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",

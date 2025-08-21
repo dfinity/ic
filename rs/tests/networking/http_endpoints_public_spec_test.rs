@@ -14,10 +14,10 @@ Success::
 
 
 Effective Canister test:
-1. Update call with canister_id A to the endpoint /api/v{2,3}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
+1. Update call with canister_id A to the endpoint /api/v{2,3,4}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
 2. Query call with canister_id A to the endpoint /api/v2/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
-3. Read state request for the path /canisters/A/controllers to the endpoint /api/v2/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
-4. Read state request for the path /time to the endpoint /api/v2/canister/aaaaa-aa/read_state is rejected with 4xx.
+3. Read state request for the path /canisters/A/controllers to the endpoints /api/{v2,v3}/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
+4. Read state request for the path /time to the endpoints /api/{v2,v3}/canister/aaaaa-aa/read_state is rejected with 4xx.
 
 The different canister ID B is
 1. The canister ID of a different canister on the same subnet;
@@ -32,6 +32,7 @@ use anyhow::Result;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
+use ic_http_endpoints_public::read_state;
 use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -53,7 +54,7 @@ use slog::{info, Logger};
 use std::net::SocketAddr;
 use url::Url;
 
-const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
+const CALL_VERSIONS: [Call; 3] = [Call::V2, Call::V3, Call::V4];
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -147,7 +148,14 @@ fn query_calls(env: TestEnv) {
     });
 }
 
-fn read_state(env: TestEnv) {
+fn read_state_v2(env: TestEnv) {
+    read_state(env, read_state::canister::Version::V2)
+}
+fn read_state_v3(env: TestEnv) {
+    read_state(env, read_state::canister::Version::V3)
+}
+
+fn read_state(env: TestEnv, version: read_state::canister::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -162,6 +170,7 @@ fn read_state(env: TestEnv) {
                 Label::from("controllers"),
             ])],
             primary.into(),
+            version,
         )
         .read_state(socket)
         .await;
@@ -177,6 +186,7 @@ fn read_state(env: TestEnv) {
                     Label::from("controllers"),
                 ])],
                 effective_canister_id.into(),
+                version,
             )
             .read_state(socket)
             .await;
@@ -186,7 +196,15 @@ fn read_state(env: TestEnv) {
     });
 }
 
-fn read_time(env: TestEnv) {
+fn read_time_v2(env: TestEnv) {
+    read_time(env, read_state::canister::Version::V2);
+}
+
+fn read_time_v3(env: TestEnv) {
+    read_time(env, read_state::canister::Version::V3);
+}
+
+fn read_time(env: TestEnv, version: read_state::canister::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
@@ -199,6 +217,7 @@ fn read_time(env: TestEnv) {
             CanisterReadState::new(
                 vec![Path::from(Label::from("time"))],
                 effective_canister_id.into(),
+                version,
             )
             .read_state_at_url(url)
         };
@@ -327,8 +346,10 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(update_calls))
         .add_test(systest!(query_calls))
-        .add_test(systest!(read_state))
-        .add_test(systest!(read_time))
+        .add_test(systest!(read_state_v2))
+        .add_test(systest!(read_state_v3))
+        .add_test(systest!(read_time_v2))
+        .add_test(systest!(read_time_v3))
         .execute_from_args()?;
 
     Ok(())
