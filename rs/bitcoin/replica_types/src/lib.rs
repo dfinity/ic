@@ -18,11 +18,11 @@ use std::mem::size_of_val;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, CandidType)]
 pub enum Network {
-    #[serde(rename = "mainnet", alias = "bitcoin_mainnet")]
+    #[serde(rename = "mainnet")]
     BitcoinMainnet,
-    #[serde(rename = "testnet", alias = "bitcoin_testnet")]
+    #[serde(rename = "testnet")]
     BitcoinTestnet,
-    #[serde(rename = "regtest", alias = "bitcoin_regtest")]
+    #[serde(rename = "regtest")]
     BitcoinRegtest,
     #[serde(rename = "dogecoin_mainnet")]
     DogecoinMainnet,
