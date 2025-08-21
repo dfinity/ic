@@ -1,0 +1,332 @@
+# Create GitHub releases for the ICP and ICRC ledger suite canisters.
+#
+# This workflow creates a release with the specified type and date, generates the necessary artifacts,
+# and prepares a release body with upgrade notes, verification instructions, and a change log.
+# It also handles the creation of git tags and checks for existing tags to avoid duplicates.
+# The release is created as a draft and can be published later. The Features part of the release body
+# is marked as "TODO" and should be filled in before publishing the release.
+#
+# Input:
+# - `release_type`:  Type of release, either `icrc` or `icp`
+# - `release_date`:  Date of the release in YYYY-MM-DD format
+# - `commit_or_tag`: Optional commit hash or tag to create the release from (defaults to current HEAD).
+#                    Should be set to a commit for which the FI nightly job passed.
+name: Ledger Suite Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (icrc or icp)'
+        required: true
+        type: choice
+        options:
+          - icrc
+          - icp
+        default: icrc
+      release_date:
+        description: 'Release date (YYYY-MM-DD)'
+        required: true
+        type: string
+      commit_or_tag:
+        description: 'Commit hash or tag to create release from (leave empty for current HEAD)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for git log
+          ref: ${{ github.event.inputs.commit_or_tag || github.sha }}
+
+      - name: Validate inputs
+        run: |
+          if [[ ! "${{ github.event.inputs.release_date }}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Error: Release date must be in YYYY-MM-DD format"
+            exit 1
+          fi
+
+          if [[ "${{ github.event.inputs.release_type }}" != "icrc" && "${{ github.event.inputs.release_type }}" != "icp" ]]; then
+            echo "Error: Release type must be 'icrc' or 'icp'"
+            exit 1
+          fi
+
+      - name: Set environment variables
+        run: |
+          TAG_NAME="ledger-suite-${{ github.event.inputs.release_type }}-${{ github.event.inputs.release_date }}"
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=$TAG_NAME" >> $GITHUB_ENV
+
+          # Set paths, upgrade requirements, and human-readable title for different release types
+          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
+            echo "LOG_PATHS=rs/ledger_suite/common rs/ledger_suite/icrc1 packages/icrc-ledger-types" >> $GITHUB_ENV
+            echo "DID_FILES=rs/ledger_suite/icrc1/ledger/ledger.did rs/ledger_suite/icrc1/archive/archive.did rs/ledger_suite/icrc1/index-ng/index-ng.did" >> $GITHUB_ENV
+            echo "UPGRADE_FROM=ledger-suite-icrc-2024-10-17" >> $GITHUB_ENV
+            echo "HUMAN_TITLE=ICRC Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_ENV
+          else
+            echo "LOG_PATHS=rs/ledger_suite/common rs/ledger_suite/icp packages/icrc-ledger-types" >> $GITHUB_ENV
+            echo "DID_FILES=rs/ledger_suite/icp/ledger.did rs/ledger_suite/icp/ledger_archive.did rs/ledger_suite/icp/index/index.did" >> $GITHUB_ENV
+            echo "UPGRADE_FROM=ledger-suite-icp-2024-10-17" >> $GITHUB_ENV
+            echo "HUMAN_TITLE=ICP Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_ENV
+          fi
+
+      - name: Check if tag exists
+        id: tag_check
+        run: |
+          echo "Checking if tag '${{ env.TAG_NAME }}' already exists..."
+          if git rev-parse "${{ env.TAG_NAME }}" >/dev/null 2>&1; then
+            echo "✅ Tag ${{ env.TAG_NAME }} already exists - skipping tag creation"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "🏷️  Tag ${{ env.TAG_NAME }} does not exist - will create new tag"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create git tag
+        if: steps.tag_check.outputs.tag_exists == 'false'
+        run: |
+          echo "Creating new tag: ${{ env.TAG_NAME }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ env.TAG_NAME }}" -m "Release ${{ env.TAG_NAME }}"
+          git push origin "${{ env.TAG_NAME }}"
+          echo "✅ Successfully created and pushed tag: ${{ env.TAG_NAME }}"
+
+      - name: Tag creation summary
+        run: |
+          if [[ "${{ steps.tag_check.outputs.tag_exists }}" == "true" ]]; then
+            echo "📋 Using existing tag: ${{ env.TAG_NAME }}"
+          else
+            echo "📋 Created new tag: ${{ env.TAG_NAME }}"
+          fi
+
+      - name: Verify we're on the correct commit/tag
+        run: |
+          CURRENT_SHA=$(git rev-parse HEAD)
+          echo "📍 Current commit: $CURRENT_SHA"
+
+          if [[ -n "${{ github.event.inputs.commit_or_tag }}" ]]; then
+            echo "🎯 Requested commit/tag: ${{ github.event.inputs.commit_or_tag }}"
+            REQUESTED_SHA=$(git rev-parse "${{ github.event.inputs.commit_or_tag }}")
+            echo "🎯 Requested SHA: $REQUESTED_SHA"
+
+            if [[ "$REQUESTED_SHA" == "$CURRENT_SHA" ]]; then
+              echo "✅ Successfully checked out the requested commit/tag"
+              echo "🚀 Building release from: ${{ github.event.inputs.commit_or_tag }} ($CURRENT_SHA)"
+            else
+              echo "❌ Current HEAD ($CURRENT_SHA) doesn't match requested commit/tag ($REQUESTED_SHA)"
+              exit 1
+            fi
+          else
+            echo "🚀 Building release from current HEAD: $CURRENT_SHA"
+          fi
+
+      - name: Build artifacts
+        run: |
+          chmod +x ci/container/build-ic.sh
+          ./ci/container/build-ic.sh -c
+
+      - name: Generate SHA256SUMS
+        run: |
+          # Initialize SHA256SUMS file
+          > SHA256SUMS
+
+          # Generate checksums for WASM files
+          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
+            sha256sum artifacts/canisters/ic-icrc1-archive-u256.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ic-icrc1-archive.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ic-icrc1-index-ng.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ic-icrc1-ledger.wasm.gz >> SHA256SUMS
+          else
+            sha256sum artifacts/canisters/ledger-canister_notify-method.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ledger-archive-node-canister.wasm.gz >> SHA256SUMS
+            sha256sum artifacts/canisters/ic-icp-index-canister.wasm.gz >> SHA256SUMS
+          fi
+
+          # Generate checksums for DID files
+          for file in ${{ env.DID_FILES }}; do
+            if [[ -f "$file" ]]; then
+              sha256sum "$file" >> SHA256SUMS
+            fi
+          done
+
+          # Add checksum of SHA256SUMS itself
+          sha256sum SHA256SUMS >> SHA256SUMS.tmp
+          cat SHA256SUMS >> SHA256SUMS.tmp
+          mv SHA256SUMS.tmp SHA256SUMS
+
+      - name: Get previous release tag
+        id: prev_tag
+        run: |
+          # Find the previous release tag for the same type
+          PREV_TAG=$(git tag -l "ledger-suite-${{ github.event.inputs.release_type }}-*" | grep -v "${{ env.TAG_NAME }}" | sort -V | tail -1)
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate git log
+        id: git_log
+        run: |
+          if [[ -n "${{ steps.prev_tag.outputs.prev_tag }}" ]]; then
+            LOG_RANGE="${{ steps.prev_tag.outputs.prev_tag }}..${{ env.TAG_NAME }}"
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" $LOG_RANGE -- ${{ env.LOG_PATHS }}"
+          else
+            # If no previous tag, get all commits
+            LOG_RANGE=""
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" -- ${{ env.LOG_PATHS }}"
+          fi
+
+          if [[ -n "$LOG_RANGE" ]]; then
+            GIT_LOG=$(git log --format="%C(auto) %h %s" $LOG_RANGE -- ${{ env.LOG_PATHS }} | head -20)
+          else
+            GIT_LOG=$(git log --format="%C(auto) %h %s" -- ${{ env.LOG_PATHS }} | head -20)
+          fi
+
+          # Store git log and command in files to handle multiline output
+          echo "$GIT_LOG" > git_log.txt
+          echo "$GIT_COMMAND" > git_command.txt
+          echo "git_log_file=git_log.txt" >> $GITHUB_OUTPUT
+          echo "git_command_file=git_command.txt" >> $GITHUB_OUTPUT
+
+      - name: Create release body
+        id: release_body
+        run: |
+          cat > release_body.md << 'EOF'
+          ### ${{ env.HUMAN_TITLE }}
+
+          #### Features
+          **⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**
+
+          #### Upgrade and Downgrade Notes
+          EOF
+
+          # Add release-type specific upgrade notes
+          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
+            cat >> release_body.md << EOF
+          - For upgrading the ledger to this release, the installed ledger shall be running [${{ env.UPGRADE_FROM }}](https://github.com/${{ github.repository }}/releases/tag/${{ env.UPGRADE_FROM }}) or later
+          EOF
+          fi
+
+          cat >> release_body.md << 'EOF'
+          - It is recommended to have all ledger suite canisters running at the same version
+          - Upgrading the ledger suite canisters shall be done in the following order:
+            1. The index first
+            2. The ledger second
+            3. Any archives third
+
+          #### WASM Verification
+          ```
+          git fetch
+          git checkout ${{ env.TAG_NAME }}
+          ./ci/container/build-ic.sh -c
+          EOF
+
+          # Add sha256sum commands for verification
+          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
+            cat >> release_body.md << 'EOF'
+          sha256sum ./artifacts/canisters/ic-icrc1-archive.wasm.gz
+          sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
+          sha256sum ./artifacts/canisters/ic-icrc1-index-ng.wasm.gz
+          sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
+          sha256sum ./artifacts/canisters/ic-icrc1-ledger.wasm.gz
+          sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
+          EOF
+          else
+            cat >> release_body.md << 'EOF'
+          sha256sum ./artifacts/canisters/ledger-canister_notify-method.wasm.gz
+          sha256sum ./artifacts/canisters/ledger-archive-node-canister.wasm.gz
+          sha256sum ./artifacts/canisters/ic-icp-index-canister.wasm.gz
+          EOF
+          fi
+
+          cat >> release_body.md << 'EOF'
+          ```
+          The hashes should match the values included in the `SHA256SUMS` file. For convenience, the filenames and corresponding hashes are also included in the table below.
+
+          #### Change Log
+
+          ```
+          EOF
+
+          # Add git command
+          if [[ -f git_command.txt ]]; then
+            cat git_command.txt >> release_body.md
+            echo "" >> release_body.md
+          fi
+
+          # Add git log
+          if [[ -f git_log.txt ]]; then
+            cat git_log.txt >> release_body.md
+          fi
+
+          cat >> release_body.md << 'EOF'
+          ```
+
+          #### Files and Hashes
+
+          | Filename  | SHA256  |
+          | --- | --- |
+          EOF
+
+          # Generate file hash table
+          while IFS=' ' read -r hash file || [[ -n "$hash" ]]; do
+            # Skip empty lines
+            [[ -z "$hash" || -z "$file" ]] && continue
+
+            filename=$(basename "$file")
+
+            # Skip the SHA256SUMS file itself in the table
+            if [[ "$filename" != "SHA256SUMS" ]]; then
+              echo "| [$filename](https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/$filename) | \`$hash\` |" >> release_body.md
+            fi
+          done < SHA256SUMS
+
+          echo "release_body_file=release_body.md" >> $GITHUB_OUTPUT
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+
+          # Copy WASM files based on release type
+          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
+            cp artifacts/canisters/ic-icrc1-archive-u256.wasm.gz release_files/
+            cp artifacts/canisters/ic-icrc1-archive.wasm.gz release_files/
+            cp artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz release_files/
+            cp artifacts/canisters/ic-icrc1-index-ng.wasm.gz release_files/
+            cp artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz release_files/
+            cp artifacts/canisters/ic-icrc1-ledger.wasm.gz release_files/
+          else
+            cp artifacts/canisters/ledger-canister_notify-method.wasm.gz release_files/
+            cp artifacts/canisters/ledger-archive-node-canister.wasm.gz release_files/
+            cp artifacts/canisters/ic-icp-index-canister.wasm.gz release_files/
+          fi
+
+          # Copy DID files
+          for file in ${{ env.DID_FILES }}; do
+            if [[ -f "$file" ]]; then
+              cp "$file" "release_files/$(basename "$file")"
+            fi
+          done
+
+          # Copy SHA256SUMS
+          cp SHA256SUMS release_files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_TITLE }}
+          body_path: ${{ steps.release_body.outputs.release_body_file }}
+          files: release_files/*
+          draft: true
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
