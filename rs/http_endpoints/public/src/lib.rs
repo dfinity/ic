@@ -11,8 +11,8 @@ mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
 mod pprof;
-mod query;
-mod read_state;
+pub mod query;
+pub mod read_state;
 mod status;
 mod tracing_flamegraph;
 
@@ -24,7 +24,9 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
+pub use call::{
+    call_async, call_sync, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+};
 pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
 use ic_http_endpoints_async_utils::start_tcp_listener;
@@ -120,14 +122,17 @@ pub struct HttpError {
 /// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
-    call_router: Router,
+    call_v2_router: Router,
     call_v3_router: Router,
-    query_router: Router,
+    call_v4_router: Router,
+    query_v2_router: Router,
     catchup_router: Router,
     dashboard_router: Router,
     status_router: Router,
-    canister_read_state_router: Router,
-    subnet_read_state_router: Router,
+    canister_read_state_v2_router: Router,
+    canister_read_state_v3_router: Router,
+    subnet_read_state_v2_router: Router,
+    subnet_read_state_v3_router: Router,
     pprof_home_router: Router,
     pprof_profile_router: Router,
     pprof_flamegraph_router: Router,
@@ -299,18 +304,29 @@ pub fn start_server(
     );
 
     let call_router =
-        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+        call_async::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
-    let call_v3_router = call_v3::new_router(
+    let call_v3_router = call_sync::new_router(
+        call_handler.clone(),
+        ingress_watcher_handle.clone(),
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        nns_delegation_reader.clone(),
+        state_reader.clone(),
+        call_sync::Version::V3,
+    );
+
+    let call_v4_router = call_sync::new_router(
         call_handler,
         ingress_watcher_handle,
         metrics.clone(),
         config.ingress_message_certificate_timeout_seconds,
         nns_delegation_reader.clone(),
         state_reader.clone(),
+        call_sync::Version::V4,
     );
 
-    let query_router = QueryServiceBuilder::builder(
+    let query_v2_router = QueryServiceBuilder::builder(
         log.clone(),
         node_id,
         query_signer,
@@ -323,21 +339,46 @@ pub fn start_server(
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
 
-    let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
+    let canister_read_state_v2_router = CanisterReadStateServiceBuilder::builder(
+        log.clone(),
+        state_reader.clone(),
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        nns_delegation_reader.clone(),
+        read_state::canister::Version::V2,
+    )
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags.clone())
+    .build_router();
+
+    let canister_read_state_v3_router = CanisterReadStateServiceBuilder::builder(
         log.clone(),
         state_reader.clone(),
         registry_client.clone(),
         ingress_verifier,
         nns_delegation_reader.clone(),
+        read_state::canister::Version::V3,
     )
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags)
     .build_router();
 
-    let subnet_read_state_router =
-        SubnetReadStateServiceBuilder::builder(nns_delegation_reader.clone(), state_reader.clone())
-            .with_health_status(health_status.clone())
-            .build_router();
+    let subnet_read_state_v2_router = SubnetReadStateServiceBuilder::builder(
+        nns_delegation_reader.clone(),
+        state_reader.clone(),
+        read_state::subnet::Version::V2,
+    )
+    .with_health_status(health_status.clone())
+    .build_router();
+
+    let subnet_read_state_v3_router = SubnetReadStateServiceBuilder::builder(
+        nns_delegation_reader.clone(),
+        state_reader.clone(),
+        read_state::subnet::Version::V3,
+    )
+    .with_health_status(health_status.clone())
+    .build_router();
+
     let status_router = StatusService::build_router(
         log.clone(),
         nns_subnet_id,
@@ -373,14 +414,17 @@ pub fn start_server(
     );
 
     let http_handler = HttpHandler {
-        call_router,
+        call_v2_router: call_router,
         call_v3_router,
-        query_router,
+        call_v4_router,
+        query_v2_router,
         status_router,
         catchup_router,
         dashboard_router,
-        canister_read_state_router,
-        subnet_read_state_router,
+        canister_read_state_v2_router,
+        canister_read_state_v3_router,
+        subnet_read_state_v2_router,
+        subnet_read_state_v3_router,
         pprof_home_router,
         pprof_profile_router,
         pprof_flamegraph_router,
@@ -554,7 +598,7 @@ fn make_router(
             ),
         )
         .merge(
-            http_handler.call_router.layer(
+            http_handler.call_v2_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -564,8 +608,9 @@ fn make_router(
             ),
         )
         .merge(http_handler.call_v3_router)
+        .merge(http_handler.call_v4_router)
         .merge(
-            http_handler.query_router.layer(
+            http_handler.query_v2_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -575,7 +620,7 @@ fn make_router(
             ),
         )
         .merge(
-            http_handler.subnet_read_state_router.layer(
+            http_handler.subnet_read_state_v2_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -585,7 +630,27 @@ fn make_router(
             ),
         )
         .merge(
-            http_handler.canister_read_state_router.layer(
+            http_handler.subnet_read_state_v3_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.canister_read_state_v2_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.canister_read_state_v3_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -779,9 +844,16 @@ pub(crate) mod tests {
             "success".to_string()
         }
         let http_handler = HttpHandler {
-            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
-            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
-            query_router: Router::new()
+            call_v2_router: Router::new().route(call_async::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(
+                call_sync::route(call_sync::Version::V3),
+                axum::routing::post(dummy),
+            ),
+            call_v4_router: Router::new().route(
+                call_sync::route(call_sync::Version::V4),
+                axum::routing::post(dummy),
+            ),
+            query_v2_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(
                 CatchUpPackageService::route(),
@@ -790,12 +862,22 @@ pub(crate) mod tests {
             dashboard_router: Router::new()
                 .route(DashboardService::route(), axum::routing::get(dummy)),
             status_router: Router::new().route(StatusService::route(), axum::routing::get(dummy)),
-            canister_read_state_router: Router::new().route(
-                CanisterReadStateService::route(),
+            canister_read_state_v2_router: Router::new().route(
+                CanisterReadStateService::route(read_state::canister::Version::V2),
                 axum::routing::post(dummy),
             ),
-            subnet_read_state_router: Router::new()
-                .route(SubnetReadStateService::route(), axum::routing::post(dummy)),
+            canister_read_state_v3_router: Router::new().route(
+                CanisterReadStateService::route(read_state::canister::Version::V3),
+                axum::routing::post(dummy),
+            ),
+            subnet_read_state_v2_router: Router::new().route(
+                SubnetReadStateService::route(read_state::subnet::Version::V2),
+                axum::routing::post(dummy),
+            ),
+            subnet_read_state_v3_router: Router::new().route(
+                SubnetReadStateService::route(read_state::subnet::Version::V3),
+                axum::routing::post(dummy),
+            ),
             pprof_home_router: Router::new()
                 .route(PprofHomeService::route(), axum::routing::get(dummy)),
             pprof_profile_router: Router::new()

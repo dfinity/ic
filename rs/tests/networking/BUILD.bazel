@@ -326,7 +326,7 @@ system_test_nns(
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "colocate",
+        "experimental_system_test_colocation",
         "k8s",
         "system_test_large",
     ],
@@ -357,7 +357,7 @@ system_test_nns(
     name = "query_workload_long_test",
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "colocate",
+        "experimental_system_test_colocation",
         "k8s",
         "long_test",
     ],
@@ -372,7 +372,7 @@ system_test_nns(
     name = "update_workload_large_payload",
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "colocate",
+        "experimental_system_test_colocation",
         "long_test",
     ],
     test_timeout = "long",

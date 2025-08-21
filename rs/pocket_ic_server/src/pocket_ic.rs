@@ -27,8 +27,9 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
-    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
+    call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
+    SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter::{
     start_server as start_canister_http_server, Config as HttpsOutcallsConfig,
@@ -3218,7 +3219,7 @@ impl Operation for CallRequest {
                 });
 
                 let svc = match self.version {
-                    CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
+                    CallRequestVersion::V2 => call_async::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3234,7 +3235,7 @@ impl Operation for CallRequest {
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
-                        call_v3::new_service(
+                        call_sync::new_service(
                             ingress_validator,
                             subnet.ingress_watcher_handle.clone(),
                             metrics,
@@ -3242,6 +3243,7 @@ impl Operation for CallRequest {
                                 .ingress_message_certificate_timeout_seconds,
                             NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                             subnet.state_manager.clone(),
+                            call_sync::Version::V3,
                         )
                     }
                 };
@@ -3411,6 +3413,7 @@ impl Operation for CanisterReadStateRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    read_state::canister::Version::V2,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
@@ -3473,6 +3476,7 @@ impl Operation for SubnetReadStateRequest {
                 let svc = SubnetReadStateServiceBuilder::builder(
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    read_state::subnet::Version::V2,
                 )
                 .build_service();
 
