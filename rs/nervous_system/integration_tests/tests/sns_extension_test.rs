@@ -217,6 +217,11 @@ async fn test_treasury_manager() {
         .await
         .unwrap();
 
+        for _ in 0..1000 {
+            pocket_ic.tick().await;
+            pocket_ic.advance_time(Duration::from_secs(1)).await;
+        }
+
         let proposal_id = proposal_id.unwrap();
 
         let _proposal_data = sns::governance::wait_for_proposal_execution(
