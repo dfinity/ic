@@ -496,6 +496,7 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
         visibility = visibility,
+        exclude_logs = exclude_logs
     )
     return struct(test_driver_target = test_driver_target)
 

@@ -434,6 +434,18 @@ impl Plan<Box<dyn Task>> {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CliArguments {
+    #[serde(with = "serde_regex")]
+    pub exclude_logs: Vec<Regex>,
+}
+
+impl TestEnvAttribute for CliArguments {
+    fn attribute_name() -> String {
+        "cli_arguments".to_string()
+    }
+}
+
 impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
@@ -738,7 +750,15 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
+                    let cli_arguments = CliArguments {
+                        exclude_logs: group_ctx.exclude_logs.clone(),
+                    };
+
                     let env = ensure_setup_env(group_ctx);
+
+                    // Persist the cli arguments in case the test needs them
+                    cli_arguments.write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },

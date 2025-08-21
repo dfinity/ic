@@ -763,6 +763,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
+serde_regex = "1.1.0"
 reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
