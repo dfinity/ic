@@ -1697,7 +1697,7 @@ fn icrc21_canister_call_consent_message(
         let TransferArgs {
             memo,
             amount,
-            fee: _,
+            fee,
             from_subaccount,
             to,
             created_at_time: _,
@@ -1706,6 +1706,7 @@ fn icrc21_canister_call_consent_message(
                 description: format!("Failed to decode TransferArgs: {}", e),
             })
         })?;
+        assert_eq!(Nat::from(fee), ledger_fee);
         let from = if caller() == Principal::anonymous() {
             AccountOrId::AccountIdAddress(None)
         } else {

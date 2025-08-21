@@ -1668,7 +1668,7 @@ fn test_icrc21_for_legacy_transfer() {
     let transfer_args = TransferArgs {
         memo: icp_ledger::Memo(15u64),
         amount: Tokens::from(1_000_000u64),
-        fee: Tokens::from(12),
+        fee: Tokens::from(10000),
         from_subaccount: from_account.subaccount.map(icp_ledger::Subaccount),
         to: AccountIdentifier::from(receiver_account).to_address(),
         created_at_time: None,
