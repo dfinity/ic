@@ -48,7 +48,8 @@ impl Display for AccountOrId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AccountOrId::Account(account) => write!(f, "{}", account),
-            AccountOrId::AccountIdAddress(str) => write!(f, "{}", str.clone().unwrap_or_default()),
+            AccountOrId::AccountIdAddress(Some(str)) => write!(f, "{}", str),
+            AccountOrId::AccountIdAddress(None) => write!(f, ""),
         }
     }
 }
