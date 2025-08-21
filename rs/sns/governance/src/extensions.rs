@@ -51,7 +51,7 @@ pub struct TreasuryManagerDepositContext {
     pub icp_ledger_canister_id: CanisterId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, candid::CandidType, candid::Deserialize)]
 pub enum ExtensionType {
     TreasuryManager,
 }
@@ -124,7 +124,7 @@ impl RenderablePayload for Precise {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, candid::CandidType, candid::Deserialize)]
 pub enum OperationType {
     TreasuryManagerDeposit,
     TreasuryManagerWithdraw,
@@ -140,7 +140,7 @@ impl Display for OperationType {
 }
 
 /// Specification for an extension operation
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, candid::CandidType, candid::Deserialize)]
 pub struct ExtensionOperationSpec {
     pub operation_type: OperationType,
     pub description: String,
