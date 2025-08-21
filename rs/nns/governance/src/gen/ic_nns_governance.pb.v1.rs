@@ -4109,6 +4109,21 @@ pub struct FinalizeDisburseMaturity {
     #[prost(message, optional, tag = "5")]
     pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ArchivedBallots {
+    #[prost(int32, repeated, tag = "1")]
+    pub proposal_id_diffs: ::prost::alloc::vec::Vec<i32>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub votes: ::prost::alloc::vec::Vec<u8>,
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.

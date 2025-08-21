@@ -2630,3 +2630,8 @@ message FinalizeDisburseMaturity {
   // The account identifer to which to transfer the ICPs.
   ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
 }
+
+message ArchivedBallots {
+  repeated int32 proposal_id_diffs = 1 [packed=true];
+  bytes votes = 2;
+}

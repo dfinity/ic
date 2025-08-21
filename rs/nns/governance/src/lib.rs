@@ -168,6 +168,7 @@ mod maturity_disbursement_index;
 mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
+mod ballot_store;
 mod neuron_lock;
 mod neuron_store;
 pub mod neurons_fund;
