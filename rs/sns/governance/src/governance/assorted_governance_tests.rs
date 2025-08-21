@@ -2,20 +2,18 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-use super::test_helpers::{
-    basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
-    A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
-    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
-};
-use super::*;
-use crate::extensions::ExtensionSpec;
-use crate::extensions::ExtensionType;
-use crate::extensions::ExtensionVersion;
-use crate::storage::cache_registered_extension;
-use crate::topics::RegisteredExtensionOperationSpec;
 use crate::{
+    extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
+    governance::{
+        test_helpers::{
+            basic_governance_proto, canister_status_for_test,
+            canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
+            A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
+            TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
+            TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+        },
+        *,
+    },
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
@@ -31,7 +29,10 @@ use crate::{
         GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         SnsCanisterType, SnsVersion, SnsWasm,
     },
-    topics::{ListTopicsResponse, NervousSystemFunctions, TopicInfo},
+    storage::cache_registered_extension,
+    topics::{
+        ListTopicsResponse, NervousSystemFunctions, RegisteredExtensionOperationSpec, TopicInfo,
+    },
     types::test_helpers::NativeEnvironment,
 };
 use assert_matches::assert_matches;
@@ -55,8 +56,7 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
-use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};

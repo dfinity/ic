@@ -6,18 +6,22 @@ use crate::{
             register_extension_response, CanisterCallError, ListSnsCanistersRequest,
             ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
         },
+        v1 as pb,
         v1::{
             governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
             ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
-            RegisterExtension,
+            RegisterExtension, Topic,
         },
     },
+    storage::{cache_registered_extension, get_registered_extension_from_cache},
     types::{Environment, Wasm},
 };
 use candid::{Decode, Encode, Nat};
 use candid_utils::printing;
+use futures::future::BoxFuture;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
+use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
@@ -28,15 +32,10 @@ use maplit::btreemap;
 use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
-
-use crate::pb::v1;
-use crate::storage::{cache_registered_extension, get_registered_extension_from_cache};
-use futures::future::BoxFuture;
-use ic_ledger_core::Tokens;
-
-use crate::pb::v1::Topic;
-use std::fmt::Formatter;
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::BTreeMap,
+    fmt::{Display, Formatter},
+};
 
 lazy_static! {
     static ref ALLOWED_EXTENSIONS: BTreeMap<[u8; 32], ExtensionSpec> = btreemap! {};
@@ -1388,49 +1387,49 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
 // Extension-related conversions
 // ============================================================================
 
-impl From<ExtensionType> for v1::ExtensionType {
+impl From<ExtensionType> for pb::ExtensionType {
     fn from(item: ExtensionType) -> Self {
         match item {
-            ExtensionType::TreasuryManager => v1::ExtensionType::TreasuryManager,
+            ExtensionType::TreasuryManager => pb::ExtensionType::TreasuryManager,
         }
     }
 }
 
-impl TryFrom<v1::ExtensionType> for ExtensionType {
+impl TryFrom<pb::ExtensionType> for ExtensionType {
     type Error = String;
 
-    fn try_from(item: v1::ExtensionType) -> Result<Self, Self::Error> {
+    fn try_from(item: pb::ExtensionType) -> Result<Self, Self::Error> {
         match item {
-            v1::ExtensionType::Unspecified => Err("Unspecified ExtensionType".to_string()),
-            v1::ExtensionType::TreasuryManager => Ok(ExtensionType::TreasuryManager),
+            pb::ExtensionType::Unspecified => Err("Unspecified ExtensionType".to_string()),
+            pb::ExtensionType::TreasuryManager => Ok(ExtensionType::TreasuryManager),
         }
     }
 }
 
-impl From<ExtensionSpec> for v1::ExtensionSpec {
+impl From<ExtensionSpec> for pb::ExtensionSpec {
     fn from(item: ExtensionSpec) -> Self {
         Self {
             name: Some(item.name),
             version: Some(item.version.0),
-            topic: Some(v1::Topic::from(item.topic) as i32),
-            extension_type: Some(v1::ExtensionType::from(item.extension_type) as i32),
+            topic: Some(pb::Topic::from(item.topic) as i32),
+            extension_type: Some(pb::ExtensionType::from(item.extension_type) as i32),
         }
     }
 }
 
-impl TryFrom<v1::ExtensionSpec> for ExtensionSpec {
+impl TryFrom<pb::ExtensionSpec> for ExtensionSpec {
     type Error = String;
 
-    fn try_from(item: v1::ExtensionSpec) -> Result<Self, Self::Error> {
+    fn try_from(item: pb::ExtensionSpec) -> Result<Self, Self::Error> {
         Ok(Self {
             name: item.name.ok_or("Missing name")?,
             version: ExtensionVersion(item.version.ok_or("Missing version")?),
             topic: item
                 .topic
-                .and_then(|t| crate::pb::v1::Topic::try_from(t).ok())
+                .and_then(|t| pb::Topic::try_from(t).ok())
                 .and_then(|t| Topic::try_from(t).ok())
                 .ok_or("No valid topic")?,
-            extension_type: v1::ExtensionType::try_from(
+            extension_type: pb::ExtensionType::try_from(
                 item.extension_type.ok_or("Missing extension_type")?,
             )
             .map_err(|_| "Invalid extension_type")?
@@ -1442,12 +1441,17 @@ impl TryFrom<v1::ExtensionSpec> for ExtensionSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::governance::{Governance, ValidGovernanceProto};
-    use crate::pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse};
-    use crate::pb::v1::{
-        governance, governance::SnsMetadata, Governance as GovernanceProto, NervousSystemParameters,
+    use crate::{
+        governance::{Governance, ValidGovernanceProto},
+        pb::{
+            sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+            v1::{
+                governance, governance::SnsMetadata, Governance as GovernanceProto,
+                NervousSystemParameters,
+            },
+        },
+        types::test_helpers::NativeEnvironment,
     };
-    use crate::types::test_helpers::NativeEnvironment;
     use ic_ledger_core::Tokens;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
     use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
