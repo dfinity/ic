@@ -21,7 +21,9 @@ use ic_canister_log::log;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_nervous_system_common::{ledger::compute_distribution_subaccount_bytes, ONE_HOUR_SECONDS};
+use ic_nervous_system_common::{
+    ledger::compute_distribution_subaccount_bytes, NANO_SECONDS_PER_SECOND, ONE_HOUR_SECONDS,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -589,57 +591,6 @@ impl Governance {
         Ok(())
     }
 
-    pub async fn deposit_treasury_manager(
-        &self,
-        treasury_manager_canister_id: CanisterId,
-        sns_amount_e8s: u64,
-        icp_amount_e8s: u64,
-    ) -> Result<(), GovernanceError> {
-        let treasury_sns_subaccount = self.sns_treasury_subaccount();
-        let treasury_icp_subaccount = self.icp_treasury_subaccount();
-
-        let to = Account {
-            owner: treasury_manager_canister_id.get().0,
-            subaccount: None,
-        };
-
-        self.ledger
-            .transfer_funds(
-                sns_amount_e8s,
-                self.transaction_fee_e8s_or_panic(),
-                treasury_sns_subaccount,
-                to,
-                0,
-            )
-            .await
-            .map(|_| ())
-            .map_err(|e| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Error making SNS Token treasury transfer: {}", e),
-                )
-            })?;
-
-        self.nns_ledger
-            .transfer_funds(
-                icp_amount_e8s,
-                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
-                treasury_icp_subaccount,
-                to,
-                0,
-            )
-            .await
-            .map(|_| ())
-            .map_err(|e| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Error making ICP treasury transfer: {}", e),
-                )
-            })?;
-
-        Ok(())
-    }
-
     async fn approve_treasury_manager(
         &self,
         treasury_manager_canister_id: CanisterId,
@@ -651,12 +602,16 @@ impl Governance {
             subaccount: None,
         };
 
+        let expiry_time_sec = self.env.now().saturating_add(ONE_HOUR_SECONDS);
+        let expiry_time_nsec = expiry_time_sec.saturating_mul(NANO_SECONDS_PER_SECOND);
+
         self.ledger
             .icrc2_approve(
                 to,
-                sns_amount_e8s - self.transaction_fee_e8s_or_panic(),
-                Some(self.env.now() + ONE_HOUR_SECONDS),
+                sns_amount_e8s.saturating_sub(self.transaction_fee_e8s_or_panic()),
+                Some(expiry_time_nsec),
                 self.transaction_fee_e8s_or_panic(),
+                self.sns_treasury_subaccount(),
             )
             .await
             .map(|_| ())
@@ -670,9 +625,10 @@ impl Governance {
         self.nns_ledger
             .icrc2_approve(
                 to,
-                icp_amount_e8s - icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
-                Some(self.env.now() + ONE_HOUR_SECONDS),
+                icp_amount_e8s.saturating_sub(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
+                Some(expiry_time_nsec),
                 icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
+                self.icp_treasury_subaccount(),
             )
             .await
             .map(|_| ())
@@ -1166,7 +1122,7 @@ async fn execute_treasury_manager_deposit(
 
     // 1. Transfer funds from treasury to treasury manager
     governance
-        .deposit_treasury_manager(
+        .approve_treasury_manager(
             extension_canister_id,
             treasury_allocation_sns_e8s,
             treasury_allocation_icp_e8s,

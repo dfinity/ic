@@ -7,12 +7,15 @@ pub use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
 use icrc_ledger_client::{ICRC1Client, Runtime};
 use icrc_ledger_client_cdk::CdkRuntime;
-use icrc_ledger_types::icrc1::{
-    account::{Account, Subaccount},
-    transfer::{Memo, TransferArg},
-};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::{
+        account::{Account, Subaccount},
+        transfer::{Memo, TransferArg},
+    },
+    icrc2::approve::ApproveError,
+};
 use num_traits::ToPrimitive;
 
 pub struct LedgerCanister {
@@ -101,27 +104,35 @@ impl ICRC1Ledger for LedgerCanister {
         amount: u64,
         expires_at: Option<u64>,
         fee: u64,
+        from_subaccount: Option<Subaccount>,
     ) -> Result<Nat, NervousSystemError> {
         let args = ApproveArgs {
             spender,
             amount: Nat::from(amount),
             expires_at,
             fee: Some(Nat::from(fee)),
-            from_subaccount: None,
+            from_subaccount,
             memo: None,
             created_at_time: None,
             expected_allowance: None,
         };
 
-        let result: Result<Nat, (i32, String)> = self
+        let result: Result<Nat, ApproveError> = self
             .client
-            .runtime
-            .call(self.canister_id().into(), "icrc2_approve", (args,))
+            .approve(args)
             .await
-            .map(|result: (Nat,)| result.0);
+            .map_err(|(code, msg)| {
+                NervousSystemError::new_with_message(format!(
+                    "Error calling method 'icrc2_approve' of the icrc1 ledger canister. Code: {:?}. Message: {}",
+                    code, msg
+                ))
+            })?;
 
-        result.map_err(|(code, msg)| {
-            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {:?}. Message: {}", code, msg))
+        result.map_err(|err| {
+            NervousSystemError::new_with_message(format!(
+                "'icrc2_approve' of the icrc1 ledger canister failed. Error: {:?}",
+                err
+            ))
         })
     }
 

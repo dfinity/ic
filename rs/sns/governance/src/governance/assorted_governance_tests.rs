@@ -93,6 +93,7 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
         _amount: u64,
         _expires_at: Option<u64>,
         _fee: u64,
+        _from_subaccount: Option<Subaccount>,
     ) -> Result<Nat, NervousSystemError> {
         Err(NervousSystemError {
             error_message: "Not Implemented".to_string(),
@@ -192,6 +193,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
             _amount: u64,
             _expires_at: Option<u64>,
             _fee: u64,
+            _from_subaccount: Option<Subaccount>,
         ) -> Result<Nat, NervousSystemError> {
             Err(NervousSystemError {
                 error_message: "Not Implemented".to_string(),
@@ -339,6 +341,7 @@ async fn test_neuron_operations_exclude_one_another() {
             _amount: u64,
             _expires_at: Option<u64>,
             _fee: u64,
+            _from_subaccount: Option<Subaccount>,
         ) -> Result<Nat, NervousSystemError> {
             Err(NervousSystemError {
                 error_message: "Not Implemented".to_string(),

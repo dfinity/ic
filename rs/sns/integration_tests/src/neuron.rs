@@ -1208,6 +1208,7 @@ async fn zero_total_reward_shares() {
             _amount: u64,
             _expires_at: Option<u64>,
             _fee: u64,
+            _from_subaccount: Option<Subaccount>,
         ) -> Result<Nat, NervousSystemError> {
             Err(NervousSystemError {
                 error_message: "Not Implemented".to_string(),
@@ -1406,6 +1407,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             _amount: u64,
             _expires_at: Option<u64>,
             _fee: u64,
+            _from_subaccount: Option<Subaccount>,
         ) -> Result<Nat, NervousSystemError> {
             Err(NervousSystemError {
                 error_message: "Not Implemented".to_string(),

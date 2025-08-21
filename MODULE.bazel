@@ -596,8 +596,8 @@ http_file(
 http_file(
     name = "kongswap-adaptor-canister",
     downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
-    sha256 = "672d43889981632afc89ead7f9c7d1a7901fd4e589a3990b762234f3115661d1",
-    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250730-095528-d25cac3/kongswap-adaptor-canister.wasm.gz",
+    sha256 = "4b3445ff18b417364a25c733f377eb0eb5943dea8781de73c226023657642ad1",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250821-094346-bab9aa4/kongswap-adaptor-canister.wasm.gz"
 )
 
 # Cycles Ledger canister

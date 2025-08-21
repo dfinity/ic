@@ -14,7 +14,7 @@ use futures::{
 use ic_nervous_system_canisters::ledger::{ICRC1Ledger, IcpLedger};
 use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Tokens};
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
 mod prometheus;
 pub mod wasm_helpers;
@@ -131,6 +131,7 @@ impl ICRC1Ledger for InterleavingTestLedger {
         _amount: u64,
         _expires_at: Option<u64>,
         _fee: u64,
+        _from_subaccount: Option<Subaccount>,
     ) -> Result<Nat, NervousSystemError> {
         Err(NervousSystemError {
             error_message: "Not Implemented".to_string(),
@@ -286,6 +287,7 @@ impl ICRC1Ledger for SpyLedger {
         _amount: u64,
         _expires_at: Option<u64>,
         _fee: u64,
+        _from_subaccount: Option<Subaccount>,
     ) -> Result<Nat, NervousSystemError> {
         Err(NervousSystemError {
             error_message: "Not Implemented".to_string(),

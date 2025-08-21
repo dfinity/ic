@@ -70,9 +70,15 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         amount: u64,
         expires_at: Option<u64>,
         fee: u64,
+        from_subaccount: Option<Subaccount>,
     ) -> Result<Nat, NervousSystemError> {
         <IcpLedgerCanister<Rt> as ICRC1Ledger>::icrc2_approve(
-            self, spender, amount, expires_at, fee,
+            self,
+            spender,
+            amount,
+            expires_at,
+            fee,
+            from_subaccount,
         )
         .await
     }
@@ -227,6 +233,7 @@ pub trait ICRC1Ledger: Send + Sync {
         amount: u64,
         expires_at: Option<u64>,
         fee: u64,
+        from_subaccount: Option<Subaccount>,
     ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.
