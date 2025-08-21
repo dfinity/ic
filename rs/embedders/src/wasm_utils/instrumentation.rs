@@ -1704,10 +1704,7 @@ pub(super) fn instrument(
             .composite_type
             .inner
         {
-            if func_types.len() <= i {
-                func_types.resize(i + 1, FuncType::new(vec![], vec![]));
-            }
-            func_types[i] = t.clone();
+            func_types.push((i, t.clone()));
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
                 "Function has type which is not a function type. Found type: {:?}",
@@ -1718,13 +1715,10 @@ pub(super) fn instrument(
 
     // Inject `try_grow_wasm_memory` after `memory.grow` instructions.
     if !func_types.is_empty() {
-        module
-            .code_sections
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, func_body)| {
-                inject_try_grow_wasm_memory(func_body, &func_types[i], main_memory_type);
-            });
+        let func_bodies = &mut module.code_sections;
+        for (func_ix, func_type) in func_types.into_iter() {
+            inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type, main_memory_type);
+        }
     }
 
     module = export_additional_symbols(module, &special_indices);
