@@ -124,7 +124,7 @@ cat <<EOF >"$grafana_data_dir/datasources/datasource.yaml"
     "apiVersion": 1,
     "datasources": [
         {
-            "name": "prometheus",
+            "name": "IC Metrics (cluster local)",
             "type": "prometheus",
             "uid": "000000001",
             "url": "http://127.0.0.1:$PROMETHEUS_PORT",
