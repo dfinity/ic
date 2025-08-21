@@ -2282,7 +2282,7 @@ dependencies = [
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
  "ic-certified-map",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "mockall",
  "priority-queue",
  "prometheus 0.13.4",
@@ -2299,7 +2299,7 @@ version = "0.9.0"
 dependencies = [
  "addr",
  "candid",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "serde",
  "serde_bytes",
  "thiserror 2.0.12",
@@ -6865,7 +6865,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-metrics-assert",
  "ic-metrics-encoder",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
@@ -7442,7 +7442,7 @@ dependencies = [
  "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-secp256k1",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
@@ -7497,7 +7497,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-secp256k1",
  "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-utils-ensure",
  "icrc-cbor",
@@ -9849,7 +9849,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "icp-ledger",
  "pocket-ic",
  "serde",
@@ -9875,7 +9875,7 @@ dependencies = [
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
  "ic-rosetta-test-utils",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icp-ledger",
@@ -10080,7 +10080,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-rosetta-test-utils",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -10113,7 +10113,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-registry-subnet-type",
  "ic-rosetta-test-utils",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
@@ -10155,7 +10155,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
  "ic-metrics-encoder",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -10202,7 +10202,7 @@ dependencies = [
  "ethnum",
  "hex",
  "ic-ledger-core",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "icrc-cbor",
  "minicbor",
  "num-bigint 0.4.6",
@@ -10219,7 +10219,7 @@ dependencies = [
  "candid",
  "ciborium",
  "ic-ledger-core",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "minicbor",
  "num-traits",
  "proptest 1.6.0",
@@ -10450,7 +10450,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-limits",
  "ic-management-canister-types-private",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-utils 0.9.0",
  "serde",
 ]
@@ -10461,7 +10461,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "minicbor",
  "num-traits",
  "proptest 1.6.0",
@@ -10503,7 +10503,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic0 1.0.0",
  "icrc-ledger-types",
@@ -10879,7 +10879,7 @@ name = "ic-nervous-system-chunks"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "lazy_static",
  "prost 0.13.4",
 ]
@@ -10939,7 +10939,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-constants",
  "ic-nns-gtc",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "icp-ledger",
  "icrc-ledger-types",
  "json5",
@@ -11014,7 +11014,7 @@ name = "ic-nervous-system-governance"
 version = "0.0.1"
 dependencies = [
  "ic-base-types",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic_principal",
  "maplit",
  "num-traits",
@@ -11391,7 +11391,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-transport",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "lazy_static",
@@ -11519,7 +11519,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "ic-utils 0.9.0",
@@ -11819,7 +11819,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-test-utilities-metrics",
@@ -11978,7 +11978,7 @@ dependencies = [
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-types",
  "indexmap 2.10.0",
@@ -12357,7 +12357,7 @@ dependencies = [
  "ic-cdk 0.17.2",
  "ic-nervous-system-chunks",
  "ic-registry-transport",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "lazy_static",
  "prost 0.13.4",
 ]
@@ -12377,7 +12377,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-keys",
  "ic-registry-transport",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-types",
  "itertools 0.12.1",
  "prost 0.13.4",
@@ -13339,7 +13339,7 @@ dependencies = [
  "ic-sns-governance-protobuf-generator",
  "ic-sns-governance-token-valuation",
  "ic-sns-test-utils",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
  "ic-types",
@@ -13638,7 +13638,7 @@ dependencies = [
  "ic-neurons-fund",
  "ic-sns-governance",
  "ic-sns-swap-protobuf-generator",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-test-utilities-compare-dirs",
  "ic-utils 0.9.0",
  "icp-ledger",
@@ -13840,6 +13840,15 @@ name = "ic-stable-structures"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
+dependencies = [
+ "ic_principal",
+]
+
+[[package]]
+name = "ic-stable-structures"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e54aeb082293c69def5ab34c70593ba85ff000386f7d0eacdf73514daaeca031"
 dependencies = [
  "ic_principal",
 ]
@@ -14975,7 +14984,7 @@ dependencies = [
  "hkdf",
  "ic-cdk 0.17.2",
  "ic-cdk-macros 0.17.2",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic_bls12_381",
  "lazy_static",
  "pairing",
@@ -15479,7 +15488,7 @@ dependencies = [
  "ic-ledger-test-utils",
  "ic-nns-constants",
  "ic-nns-test-utils-golden-nns-state",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
@@ -15579,7 +15588,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "icrc-cbor",
  "itertools 0.12.1",
  "minicbor",
@@ -16581,7 +16590,7 @@ dependencies = [
  "ic-ledger-suite-state-machine-tests",
  "ic-limits",
  "ic-metrics-encoder",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icp-ledger",
@@ -17368,7 +17377,7 @@ dependencies = [
  "candid",
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
- "ic-stable-structures",
+ "ic-stable-structures 0.7.0",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -20315,7 +20324,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-http-types",
  "ic-nns-constants",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "mockall",
  "prometheus 0.13.4",
  "rand_chacha 0.3.1",
@@ -20572,7 +20581,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replica-tests",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
@@ -21548,7 +21557,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-http-types",
  "ic-nns-constants",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "prometheus 0.13.4",
  "salt-sharing-api",
  "serde",
@@ -21758,7 +21767,7 @@ version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
 dependencies = [
- "bitcoin_hashes 0.12.0",
+ "bitcoin_hashes 0.14.0",
  "rand 0.8.5",
  "secp256k1-sys 0.10.1",
  "serde",
@@ -22760,7 +22769,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk 0.17.2",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.8",
  "serde",
 ]
 
@@ -24310,7 +24319,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 

@@ -119,6 +119,10 @@ impl Storable for Request {
         Cow::Owned(to_vec(&self).expect("Request serialization failed"))
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         from_slice(&bytes).expect("Request deserialization failed")
     }
@@ -131,6 +135,10 @@ impl Storable for RequestState {
         Cow::Owned(to_vec(&self).expect("RequestState serialization failed"))
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         from_slice(&bytes).expect("RequestState deserialization failed")
     }
@@ -139,5 +147,24 @@ impl Storable for RequestState {
 }
 
 pub fn start_timers() {
+    // TODO: schedule the processing method(s) every few seconds
+}
+
+pub fn migrations_disabled() -> bool {
+    // check in stable cell
+    false
+}
+
+pub fn rate_limited() -> bool {
+    // check length of REQUESTS
+    false
+}
+
+pub fn validate_request(
+    source: Principal,
+    target: Principal,
+    caller: Principal,
+) -> Result<Request, ValidatonError> {
     // TODO
+    todo!()
 }

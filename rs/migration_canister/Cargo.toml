@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 candid = { workspace =true }
 ic-cdk = { workspace =true }
 ic-cdk-timers = { workspace =true }
-ic-stable-structures = { workspace =true }
+ic-stable-structures = "0.7.0"
 serde_cbor = { workspace = true }
 serde = { workspace =true }
 serde_bytes = { workspace =true }
