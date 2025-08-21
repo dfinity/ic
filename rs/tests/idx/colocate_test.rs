@@ -250,8 +250,7 @@ fn setup(env: TestEnv) {
     let exclude_logs_args = cli_arguments
         .exclude_logs
         .iter()
-        .map(|pattern| ["--exclude-logs", pattern.as_str()])
-        .flatten()
+        .flat_map(|pattern| ["--exclude-logs", pattern.as_str()])
         .join(" ");
 
     let prepare_docker_script = &format!(

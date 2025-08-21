@@ -98,7 +98,7 @@ def _run_system_test(ctx):
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
             info_file = ctx.info_file.short_path,
             logs = "--no-logs" if no_logs else "",
-            exclude_logs = " ".join(["--exclude-logs {pattern}".format(pattern=pattern) for pattern in ctx.attr.exclude_logs])
+            exclude_logs = " ".join(["--exclude-logs {pattern}".format(pattern = pattern) for pattern in ctx.attr.exclude_logs]),
         ),
     )
 
@@ -229,7 +229,7 @@ def system_test(
         uses_hostos_latest_release_mainnet_update = False,
         env = {},
         env_inherit = [],
-        exclude_logs = [ "prometheus", "vector" ],
+        exclude_logs = ["prometheus", "vector"],
         additional_colocate_tags = [],
         logs = True,
         **kwargs):
@@ -454,7 +454,7 @@ def system_test(
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
-        exclude_logs = exclude_logs
+        exclude_logs = exclude_logs,
     )
 
     env = env | {
@@ -496,7 +496,7 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
         visibility = visibility,
-        exclude_logs = exclude_logs
+        exclude_logs = exclude_logs,
     )
     return struct(test_driver_target = test_driver_target)
 
