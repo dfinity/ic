@@ -12,7 +12,7 @@ use ic_system_test_driver::driver::{
         NnsCustomizations,
     },
 };
-use ic_system_test_driver::nns::{set_authorized_subnetwork_list, update_xdr_per_icp};
+use ic_system_test_driver::nns::set_authorized_subnetwork_list;
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
 use ic_system_test_driver::util::{
     block_on, create_canister, install_canister, runtime_from_url, set_controller,
@@ -206,21 +206,6 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         );
         (ii_canister_id, nns_dapp_canister_id)
     })
-}
-
-pub fn set_icp_xdr_exchange_rate(env: &TestEnv, xdr_permyriad_per_icp: u64) {
-    let topology = env.topology_snapshot();
-    let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    block_on(async move {
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
-            .await
-            .unwrap();
-    });
 }
 
 pub fn set_authorized_subnets(env: &TestEnv) {

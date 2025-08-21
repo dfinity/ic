@@ -435,7 +435,6 @@ impl Subnet {
             state_machine.query_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
-            state_machine.get_subnet_type(),
             nns_delegation_rx,
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
@@ -2655,7 +2654,6 @@ fn process_mock_canister_https_response(
                 subnet.query_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
-                subnet.get_subnet_type(),
                 delegation_rx.clone(),
                 subnet.replica_logger.clone(),
             );

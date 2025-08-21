@@ -423,10 +423,18 @@ impl CanisterSnapshot {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
             size: metadata.wasm_memory_size,
         };
+        // A snapshot also contains the instruction counter as the last global
+        // (because it is *appended* during WASM instrumentation).
+        // We push a default value for that last global of type `i64`
+        // (which is merely an implementation detail)
+        // to the list of globals provided by the user
+        // (who is not expected to care about that implementation detail).
+        let mut globals_and_instruction_counter = metadata.exported_globals.clone();
+        globals_and_instruction_counter.push(Global::I64(0));
         let execution_snapshot = ExecutionStateSnapshot {
             // This is an invalid module now, but will be written to via `upload_canister_snapshot_data`.
             wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size.get() as usize]),
-            exported_globals: metadata.exported_globals.clone(),
+            exported_globals: globals_and_instruction_counter,
             stable_memory,
             wasm_memory,
             global_timer: metadata.global_timer.map(CanisterTimer::from),
@@ -614,7 +622,7 @@ impl ValidatedSnapshotMetadata {
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
             return Err(MetadataValidationError::StableMemoryTooLarge);
         }
-        if raw.exported_globals.len() > MAX_GLOBALS {
+        if raw.globals.len() > MAX_GLOBALS {
             return Err(MetadataValidationError::ExportedGlobalsTooLarge);
         }
         // a 32 byte hash
@@ -626,7 +634,7 @@ impl ValidatedSnapshotMetadata {
             canister_id: raw.canister_id,
             replace_snapshot: raw.replace_snapshot,
             wasm_module_size: NumBytes::new(raw.wasm_module_size),
-            exported_globals: raw.exported_globals,
+            exported_globals: raw.globals,
             wasm_memory_size: NumWasmPages::new(
                 raw.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
             ),
