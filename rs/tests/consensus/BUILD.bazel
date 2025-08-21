@@ -358,13 +358,14 @@ system_test_nns(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
+    env = {"ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)"},
     tags = [
         "colocate",
         "manual",
     ],
     test_timeout = "eternal",
-    uses_branch_version = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+        "//bazel:version.txt",
         "//rs/tests:jaeger_uvm_config_image",
     ],
     deps = [
