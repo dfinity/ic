@@ -295,8 +295,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
-            // Suppose there is a socks proxy passed. It should not be tried.
-            socks_proxy_addrs: vec![format!("socks5://{}", unreachable_url)],
+            // If there is no socks proxy passed, it means we are an app subnet, we should try the config.
+            socks_proxy_addrs: vec![],
         });
         // The requests succeeds.
         let response = client.https_outcall(request).await;

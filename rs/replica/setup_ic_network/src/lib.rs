@@ -41,6 +41,7 @@ use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::create_udp_socket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
@@ -335,6 +336,7 @@ pub fn setup_consensus_and_p2p(
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
@@ -438,6 +440,7 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
         node_id,
         subnet_id,
+        subnet_type,
         artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -469,6 +472,7 @@ fn start_consensus(
     metrics_registry: &MetricsRegistry,
     node_id: NodeId,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -657,6 +661,7 @@ fn start_consensus(
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
             ReplicaConfig { subnet_id, node_id },
+            subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),
             log.clone(),

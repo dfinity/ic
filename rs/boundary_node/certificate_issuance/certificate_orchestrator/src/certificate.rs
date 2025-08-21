@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use certificate_orchestrator_interface::{
     EncryptedPair, ExportPackage, IcCertificate, Id, Registration, LEFT_GUARD, RIGHT_GUARD,
 };
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller;
 use prometheus::labels;
 
 use crate::{
@@ -46,7 +46,7 @@ impl GetCert for CertGetter {
 
 impl<T: GetCert, A: Authorize> GetCert for WithAuthorize<T, A> {
     fn get_cert(&self, id: &Id) -> Result<EncryptedPair, GetCertError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => GetCertError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => GetCertError::UnexpectedError(err),
@@ -134,7 +134,7 @@ impl<T: Upload> Upload for UploadWithIcCertification<T> {
 
 impl<T: Upload, A: Authorize> Upload for WithAuthorize<T, A> {
     fn upload(&self, id: &Id, pair: EncryptedPair) -> Result<(), UploadError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => UploadError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => UploadError::UnexpectedError(err),
@@ -299,7 +299,7 @@ impl Export for Exporter {
 
 impl<T: Export, A: Authorize> Export for WithAuthorize<T, A> {
     fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<ExportPackage>, ExportError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => ExportError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => ExportError::UnexpectedError(err),
@@ -314,7 +314,7 @@ impl<T: Export, A: Authorize> Export for WithAuthorize<T, A> {
         key: Option<String>,
         limit: u64,
     ) -> Result<(Vec<ExportPackage>, IcCertificate), ExportError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => ExportError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => ExportError::UnexpectedError(err),

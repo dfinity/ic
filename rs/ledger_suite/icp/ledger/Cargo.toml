@@ -11,7 +11,7 @@ name = "ledger-canister"
 path = "src/main.rs"
 
 [dependencies]
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 ciborium = { workspace = true }

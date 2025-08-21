@@ -2054,6 +2054,7 @@ impl CanisterManager {
                 snapshot
             }
         };
+        let execution_snapshot = snapshot.execution_snapshot();
 
         // Check the precondition:
         // Unable to start executing a `load_canister_snapshot`
@@ -2098,7 +2099,6 @@ impl CanisterManager {
         let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
 
         let (instructions_used, new_execution_state) = {
-            let execution_snapshot = snapshot.execution_snapshot();
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
             let compilation_cost_handling = if state
                 .metadata
@@ -2151,6 +2151,25 @@ impl CanisterManager {
         system_state
             .certified_data
             .clone_from(snapshot.certified_data());
+
+        // We don't restore the state of global timer and on low wasm memory hook
+        // for snapshots created via `take_canister_snapshot`
+        // since that would be a breaking change.
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
+            if let Some(global_timer) = execution_snapshot.global_timer {
+                system_state.global_timer = global_timer;
+            }
+            if let Some(on_low_wasm_memory_hook_status) =
+                execution_snapshot.on_low_wasm_memory_hook_status
+            {
+                system_state
+                    .task_queue
+                    .set_on_low_wasm_memory_hook_status_from_snapshot(
+                        on_low_wasm_memory_hook_status,
+                    );
+            }
+        }
+
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {
@@ -2328,12 +2347,19 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+        // A snapshot also contains the instruction counter as the last global
+        // (because it is *appended* during WASM instrumentation).
+        // We pop that last global (which is merely an implementation detail)
+        // from the list of globals returned to the user.
+        let mut globals = snapshot.exported_globals().clone();
+        let maybe_instruction_counter = globals.pop();
+        debug_assert!(maybe_instruction_counter.is_some());
 
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-            exported_globals: snapshot.exported_globals().clone(),
+            globals,
             wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
                 * WASM_PAGE_SIZE_IN_BYTES as u64,
             stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
