@@ -31,7 +31,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url},
 };
 use ic_types::Cycles;
-use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{Operation, Tokens};
 use num_traits::ToPrimitive;
 use on_wire::IntoWire;
 use slog::info;
