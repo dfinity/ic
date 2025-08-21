@@ -483,11 +483,13 @@ impl HasPrometheus for TestEnv {
         let create_tarball_script = &format!(
             r#"
 set -e
+# Stop p8s so we can create a clean tarball of its data directory without concurrent writes going on:
 sudo systemctl stop prometheus.service
 sudo tar -cf "{tarball_full_path:?}" \
     --sparse \
     --use-compress-program="zstd --threads=0 -10" \
     -C /var/lib/prometheus .
+# Start p8s again because users might still want to use it if they started their test with --keepalive:
 sudo systemctl start prometheus.service
     "#,
         );
