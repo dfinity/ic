@@ -7249,7 +7249,7 @@ fn create_canister_memory_allocation_capacity_makes_subnet_oversubscribed() {
 
     let result = test.ingress(uc, "update", create_canister).unwrap();
 
-    result.assert_contains_reject(format!("Canister requested 4.00 GiB of memory").as_str());
+    result.assert_contains_reject("Canister requested 4.00 GiB of memory");
     result.assert_contains_reject("are available in the subnet");
 }
 
