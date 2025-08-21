@@ -6883,7 +6883,6 @@ fn only_controllers_can_rename() {
     assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("Only the controllers of the canister"));
 }
 
-
 #[test]
 fn can_create_canister() {
     let mut test = ExecutionTestBuilder::new().build();
@@ -6927,6 +6926,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
     match result {
         WasmResult::Reply(_) => panic!("expected reject"),
         WasmResult::Reject(msg) => {
+            assert!(msg.contains("Creating a canister requires a fee"));
             assert!(
                 msg.contains("but only 0 cycles were received with the create_canister request")
             );
@@ -6963,7 +6963,6 @@ fn can_create_canister_with_extra_cycles() {
     let _ = get_reply(result);
     assert_eq!(test.state().canister_states.len(), 2);
 }
-
 
 #[test]
 fn create_canister_sets_correct_allocations() {
@@ -7252,7 +7251,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
 }
 
 #[test]
-fn create_canister_makes_subnet_oversubscribed() {
+fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
         .build();
@@ -7325,96 +7324,56 @@ fn create_canister_makes_subnet_oversubscribed() {
             test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
-    let result = test.ingress(uc, "update", create_canister).unwrap();
-    match result {
-        WasmResult::Reject(msg) => {
-            assert!(msg.contains("compute allocation"))
-        }
-        _ => panic!("Expected WasmResult::Reject"),
-    }
-}
 
-
-#[test]
-fn create_canister_when_compute_capacity_is_oversubscribed() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(0)
-        .build();
-    let uc = test.universal_canister().unwrap();
-
-    // Manually set the compute allocation higher to emulate the state after
-    // replica upgrade that decreased compute capacity.
-    test.canister_state_mut(uc)
-        .scheduler_state
-        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
-    test.canister_state_mut(uc)
-        .system_state
-        .set_balance(Cycles::new(2_000_000_000_000_000));
-
-    // Create a canister with default settings.
-    let args = CreateCanisterArgs::default();
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args().other_side(args.encode()),
-            test.canister_creation_fee(),
-        )
-        .build();
-
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with zero compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_compute_allocation(0)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_compute_allocation(10)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
-        )
-        .build();
     test.ingress(uc, "update", create_canister)
         .unwrap()
         .assert_contains_reject(
-            "Canister requested a compute allocation of 10% which \
-            cannot be satisfied because the Subnet's remaining \
-            compute capacity is 0%.",
+            "Canister requested a compute allocation of 30% which \
+        cannot be satisfied because the Subnet's remaining \
+        compute capacity is 24%.",
         );
 }
 
+#[test]
+fn create_canister_memory_allocation_capacity_makes_subnet_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(1024 * 1024 * 1024) // 1 GiB
+        .with_subnet_memory_reservation(0)
+        .build();
+
+    let uc = test.universal_canister().unwrap();
+
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(u128::MAX));
+
+    // Create a canister with memory allocation.
+    let excessive_memory = 1024 * 1024 * 1024; // 1 GiB
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
+        .with_memory_allocation(excessive_memory)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+        )
+        .build();
+
+    test.ingress(uc, "update", create_canister)
+        .unwrap()
+        .assert_contains_reject(
+            "Canister requested 1024.00 MiB of memory but only 1020.65 MiB are available in the subnet.",
+        );
+}
 
 #[test]
 fn create_canister_checks_freezing_threshold_for_memory_allocation() {
@@ -7452,6 +7411,44 @@ fn create_canister_checks_freezing_threshold_for_compute_allocation() {
         err.description(),
     );
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInComputeAllocation);
+}
+
+#[test]
+fn create_canister_insufficient_cycles_for_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_memory_threshold(0)
+        .build();
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let excessive_memory = 1024 * 1024 * 1024; // 1 GiB
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(0) // No freezing threshold.
+        .with_memory_allocation(excessive_memory)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee(),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+
+    result.unwrap().assert_contains_reject(
+        "Cannot increase memory allocation to 1024.00 MiB due to insufficient cycles.",
+    );
 }
 
 #[test]
