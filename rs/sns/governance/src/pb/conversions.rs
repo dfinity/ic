@@ -4448,10 +4448,10 @@ impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
     fn from(value: crate::extensions::OperationType) -> Self {
         match value {
             crate::extensions::OperationType::TreasuryManagerDeposit => {
-                pb_api::ExtensionOperationType::TreasuryManagerDeposit(candid::Reserved)
+                pb_api::ExtensionOperationType::TreasuryManagerDeposit
             }
             crate::extensions::OperationType::TreasuryManagerWithdraw => {
-                pb_api::ExtensionOperationType::TreasuryManagerWithdraw(candid::Reserved)
+                pb_api::ExtensionOperationType::TreasuryManagerWithdraw
             }
         }
     }
@@ -4462,7 +4462,7 @@ impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
     fn from(value: crate::extensions::ExtensionType) -> Self {
         match value {
             crate::extensions::ExtensionType::TreasuryManager => {
-                pb_api::ExtensionType::TreasuryManager(candid::Reserved)
+                pb_api::ExtensionType::TreasuryManager
             }
         }
     }

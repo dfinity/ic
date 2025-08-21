@@ -5,8 +5,9 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::api::stable::stable_read;
-use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{
+    api::stable::stable_read, caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update,
+};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
@@ -26,19 +27,19 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
-use ic_sns_governance::storage::with_upgrades_memory;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
     pb::v1::{self as sns_gov_pb},
+    storage::with_upgrades_memory,
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
-use ic_sns_governance_api::pb::v1::GovernanceError;
-use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
+    get_metrics_response,
     get_running_sns_version_response::UpgradeInProgress,
     governance::Version,
+    governance_error::ErrorType,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
@@ -47,9 +48,9 @@ use ic_sns_governance_api::pb::v1::{
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-    RewardEvent, SetMode, SetModeResponse,
+    GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
+    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
 };
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{

@@ -5,14 +5,14 @@ use std::collections::BTreeMap;
 pub mod topics;
 
 /// Types of extension operations
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub enum ExtensionOperationType {
-    TreasuryManagerDeposit(candid::Reserved),
-    TreasuryManagerWithdraw(candid::Reserved),
+    TreasuryManagerDeposit,
+    TreasuryManagerWithdraw,
 }
 
 /// Specification for an extension operation
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub struct ExtensionOperationSpec {
     pub operation_type: Option<ExtensionOperationType>,
     pub description: Option<String>,
@@ -21,13 +21,13 @@ pub struct ExtensionOperationSpec {
 }
 
 /// Types of extensions that can be registered
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub enum ExtensionType {
-    TreasuryManager(candid::Reserved),
+    TreasuryManager,
 }
 
 /// A principal with a particular set of permissions over a neuron.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
 pub struct NeuronPermission {
     /// The principal that has the permissions.
     pub principal: Option<PrincipalId>,
