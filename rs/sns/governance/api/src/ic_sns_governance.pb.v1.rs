@@ -7,8 +7,8 @@ pub mod topics;
 /// Types of extension operations
 #[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub enum ExtensionOperationType {
-    TreasuryManagerDeposit,
-    TreasuryManagerWithdraw,
+    TreasuryManagerDeposit(candid::Reserved),
+    TreasuryManagerWithdraw(candid::Reserved),
     Custom(String),
 }
 
@@ -24,7 +24,7 @@ pub struct ExtensionOperationSpec {
 /// Types of extensions that can be registered
 #[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub enum ExtensionType {
-    TreasuryManager,
+    TreasuryManager(candid::Reserved),
 }
 
 /// A principal with a particular set of permissions over a neuron.

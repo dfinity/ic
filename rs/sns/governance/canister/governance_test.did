@@ -781,13 +781,13 @@ type ExtensionOperationSpec = record {
 };
 
 type ExtensionOperationType = variant {
-  TreasuryManagerDeposit;
-  TreasuryManagerWithdraw;
+  TreasuryManagerDeposit : reserved;
+  TreasuryManagerWithdraw : reserved;
   Custom : text;
 };
 
 type ExtensionType = variant {
-  TreasuryManager;
+  TreasuryManager : reserved;
 };
 
 type RegisteredExtensionOperationSpec = record {

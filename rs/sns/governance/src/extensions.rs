@@ -383,13 +383,10 @@ impl ExtensionSpec {
     /// Get a specific operation by name
     /// Standard operations take precedence to ensure deterministic behavior
     pub fn get_operation(&self, name: &str) -> Option<ExtensionOperationSpec> {
-        for op in self.extension_type.standard_operations() {
-            if op.name() == name {
-                return Some(op);
-            }
-        }
-
-        None
+        self.extension_type
+            .standard_operations()
+            .into_iter()
+            .find(|op| op.name() == name)
     }
 
     pub fn supports_extension_type(&self, extension_type: ExtensionType) -> bool {
@@ -1411,7 +1408,7 @@ impl From<ExtensionSpec> for pb::ExtensionSpec {
         Self {
             name: Some(item.name),
             version: Some(item.version.0),
-            topic: Some(pb::Topic::from(item.topic) as i32),
+            topic: Some(item.topic as i32),
             extension_type: Some(pb::ExtensionType::from(item.extension_type) as i32),
         }
     }
@@ -1427,7 +1424,6 @@ impl TryFrom<pb::ExtensionSpec> for ExtensionSpec {
             topic: item
                 .topic
                 .and_then(|t| pb::Topic::try_from(t).ok())
-                .and_then(|t| Topic::try_from(t).ok())
                 .ok_or("No valid topic")?,
             extension_type: pb::ExtensionType::try_from(
                 item.extension_type.ok_or("Missing extension_type")?,
