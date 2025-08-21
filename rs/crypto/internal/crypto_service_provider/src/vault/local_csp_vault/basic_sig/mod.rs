@@ -25,10 +25,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let start_time = self.metrics.now();
-        let result = self.sign_internal(algorithm_id, &message[..], key_id);
+        let result = self.sign_internal(algorithm_id, &message[..]);
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
             MetricsScope::Local,
@@ -126,8 +125,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         algorithm_id: AlgorithmId,
         message: &[u8],
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
+        let node_signing_pubkey = self
+            .public_key_store_read_lock()
+            .node_signing_pubkey()
+            .ok_or(CspBasicSignatureError::PublicKeyNotFound)?;
+        let key_id = KeyId::from((AlgorithmId::Ed25519, &node_signing_pubkey.key_value));
+
         let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
             maybe_secret_key.ok_or(CspBasicSignatureError::SecretKeyNotFound {
