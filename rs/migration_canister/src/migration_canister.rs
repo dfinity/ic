@@ -3,10 +3,20 @@
 //!
 
 use candid::{CandidType, Principal};
-use ic_cdk::update;
+use ic_cdk::{init, post_upgrade, update};
 use serde::Deserialize;
 
-use crate::ValidatonError;
+use crate::{start_timers, ValidatonError};
+
+#[init]
+fn init() {
+    start_timers();
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    start_timers();
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanisterArgs {
