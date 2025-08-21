@@ -38,7 +38,7 @@ pub enum Topic {
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub struct TopicInfo {
     pub topic: Option<Topic>,
     pub name: Option<String>,
@@ -52,7 +52,7 @@ pub struct TopicInfo {
 #[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub struct ListTopicsRequest {}
 
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
 pub struct ListTopicsResponse {
     pub topics: Option<Vec<TopicInfo>>,
     pub uncategorized_functions: Option<Vec<NervousSystemFunction>>,
