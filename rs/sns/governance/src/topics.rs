@@ -1,19 +1,21 @@
-use crate::extensions;
-use crate::extensions::{
-    get_extension_operation_spec_from_cache, ExtensionOperationSpec, ExtensionSpec,
+use crate::{
+    extensions,
+    extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec},
+    governance::Governance,
+    logs::ERROR,
+    pb::v1::{self as pb, nervous_system_function::FunctionType, NervousSystemFunction},
+    storage::list_registered_extensions_from_cache,
+    types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
 };
-use crate::logs::ERROR;
-use crate::pb::v1::{self as pb, NervousSystemFunction};
-use crate::storage::list_registered_extensions_from_cache;
-use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
-use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fmt;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt,
+};
 
 #[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub struct RegisteredExtensionOperationSpec {
