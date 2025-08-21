@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
@@ -48,7 +49,7 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic(true), &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
 }
 
@@ -111,10 +112,15 @@ fn check_anonymous_caller() {
 
 #[export_name = "canister_global_timer"]
 fn timer() {
-    #[cfg(feature = "self_check")]
-    ok_or_die(check_invariants());
+    // ic_ckbtc_minter::timer invokes ic_cdk::spawn
+    // which must be wrapped in in_executor_context
+    // as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        #[cfg(feature = "self_check")]
+        ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
+        ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[post_upgrade]
@@ -204,6 +210,36 @@ async fn upload_events(events: Vec<Event>) {
     for event in events {
         storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
     }
+}
+
+#[cfg(feature = "self_check")]
+#[update]
+async fn reimburse_pending_withdrawal(ledger_burn_index: u64) {
+    use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
+    let pending_withdrawal_request = ic_ckbtc_minter::state::read_state(|s| {
+        let requests: Vec<_> = s
+            .pending_retrieve_btc_requests
+            .iter()
+            .filter(|req| req.block_index == ledger_burn_index)
+            .collect();
+        assert_eq!(requests.len(), 1);
+        requests[0].clone()
+    });
+    ic_ckbtc_minter::state::mutate_state(|s| {
+        ic_ckbtc_minter::state::audit::reimburse_withdrawal(
+            s,
+            ledger_burn_index,
+            pending_withdrawal_request.amount,
+            pending_withdrawal_request.reimbursement_account.unwrap(),
+            WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: 2 * ic_ckbtc_minter::MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: ic_ckbtc_minter::MAX_NUM_INPUTS_IN_TRANSACTION,
+                },
+            ),
+            &IC_CANISTER_RUNTIME,
+        )
+    })
 }
 
 #[query]

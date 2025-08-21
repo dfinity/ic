@@ -1,3 +1,4 @@
+use ic_sys::fs::{write_atomically, Clobber};
 use regex::Regex;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -127,9 +128,12 @@ impl GrubEnv {
         }
     }
 
+    /// Writes the GRUB environment to a file atomically.
+    /// If the function fails, the file will not be modified.
     pub fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
-        // We write to a buffer first so that the file is not changed if there is a problem.
-        std::fs::write(path, self.write_to_vec()?)
+        write_atomically(path, Clobber::Yes, |file| {
+            file.write_all(&self.write_to_vec()?)
+        })
     }
 }
 

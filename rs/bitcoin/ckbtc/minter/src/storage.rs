@@ -102,7 +102,10 @@ pub fn decode_event(buf: &[u8]) -> Event {
         Event(Event),
     }
     match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
-        SerializedEvent::Legacy(payload) => Event::from(payload),
+        SerializedEvent::Legacy(payload) => Event {
+            payload,
+            timestamp: None,
+        },
         SerializedEvent::Event(event) => event,
     }
 }

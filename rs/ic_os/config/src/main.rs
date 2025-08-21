@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos::bootstrap_ic_node::bootstrap_ic_node;
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::setupos::deployment_json::get_deployment_settings;
@@ -33,6 +34,11 @@ pub enum Commands {
         setupos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
+    },
+    /// Bootstrap IC Node from a bootstrap package
+    BootstrapICNode {
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
+        bootstrap_tar_path: PathBuf,
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
@@ -75,10 +81,6 @@ pub struct GenerateTestnetConfigClapArgs {
     pub mgmt_mac: Option<MacAddr6>,
     #[arg(long)]
     pub deployment_environment: Option<DeploymentEnvironment>,
-    #[arg(long)]
-    pub elasticsearch_hosts: Option<String>,
-    #[arg(long)]
-    pub elasticsearch_tags: Option<String>,
     #[arg(long)]
     pub enable_trusted_execution_environment: Option<bool>,
     #[arg(long)]
@@ -193,10 +195,7 @@ pub fn main() -> Result<()> {
                 node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.deployment_environment,
-                logging: Logging {
-                    elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
-                    elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
-                },
+                logging: Logging {},
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
@@ -265,6 +264,10 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
+        Some(Commands::BootstrapICNode { bootstrap_tar_path }) => {
+            println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
+            bootstrap_ic_node(&bootstrap_tar_path)
+        }
         Some(Commands::GenerateTestnetConfig(clap_args)) => {
             // Convert `clap_args` into `GenerateTestnetConfigArgs`
             let args = GenerateTestnetConfigArgs {
@@ -281,8 +284,6 @@ pub fn main() -> Result<()> {
                 node_reward_type: clap_args.node_reward_type,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
-                elasticsearch_hosts: clap_args.elasticsearch_hosts,
-                elasticsearch_tags: clap_args.elasticsearch_tags,
                 use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
                 enable_trusted_execution_environment: clap_args

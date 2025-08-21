@@ -1,9 +1,11 @@
 // TODO: Jira ticket NNS1-3556
+#![allow(deprecated)]
 #![allow(static_mut_refs)]
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
+use ic_cdk::api::stable::stable_read;
 use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -12,8 +14,12 @@ use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
 };
 use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics,
+    // TODO(NNS1-4037) Remove dfn_core_stable_mem_utils (and cargo/bazel deps) after release
+    dfn_core_stable_mem_utils::BufferedStableMemReader,
+    memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
+    serve_logs,
+    serve_logs_v2,
+    serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
@@ -21,9 +27,7 @@ use ic_nervous_system_proto::pb::v1::{
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::{
-    governance::{
-        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
-    },
+    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
     pb::v1::{self as sns_gov_pb},
     types::{Environment, HeapGrowthPotential},
@@ -52,6 +56,10 @@ use ic_sns_governance_api::pb::v1::{
     AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    DefaultMemoryImpl,
+};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -59,8 +67,22 @@ use std::{
     boxed::Box,
     cell::RefCell,
     convert::TryFrom,
+    ops::Deref,
     time::{Duration, SystemTime},
 };
+
+/// Constants to define memory segments.  Must not change.
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the governance reads and writes its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+}
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -266,14 +288,13 @@ fn canister_init_(init_payload: sns_gov_pb::Governance) {
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
-    let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
+    UPGRADES_MEMORY.with(|um| {
+        let memory = um.borrow();
 
-    governance()
-        .proto
-        .encode(&mut writer)
-        .expect("Error. Couldn't serialize canister pre-upgrade.");
+        store_protobuf(memory.deref(), &governance().proto)
+            .expect("Failed to encode protobuf pre_upgrade");
+    });
 
-    writer.flush(); // or `drop(writer)`
     log!(INFO, "Completed pre upgrade");
 }
 
@@ -283,44 +304,49 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     log!(INFO, "Executing post upgrade");
 
-    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+    // Look for MemoryManager magic bytes
+    let mut magic_bytes = [0u8; 3];
+    stable_read(0, &mut magic_bytes);
+    let mut mgr_version_byte = [0u8; 1];
+    stable_read(3, &mut mgr_version_byte);
 
-    match sns_gov_pb::Governance::decode(reader) {
-        Err(err) => {
-            log!(
-                ERROR,
-                "Error deserializing canister state post-upgrade. \
+    // For the version of MemoryManager we are using, the version byte will be 1
+    // We use the magic bytes, along with this, to identify if we are before or after the migration
+    // to MemoryManager.  Previously, the first 4 bytes contained a size.  b"MGR\1" evaluates to
+    // 22169421 bytes (which is ~22MB, and is much smaller than governance in mainnet (about 500MB))
+    // Meaning there is no real possibility of these bytes being misinterpreted
+    // TODO(NNS1-4037) Remove conditional after deploying the updated version to production
+    let governance_proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
+        UPGRADES_MEMORY
+            .with(|um| {
+                let result: Result<sns_gov_pb::Governance, _> =
+                    load_protobuf(um.borrow().deref());
+                result
+            })
+            .expect(
+                "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
+            )
+    } else {
+        let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+        sns_gov_pb::Governance::decode(reader)
+            .map_err(|err| {
+                log!(
+                    ERROR,
+                    "Error deserializing canister state post-upgrade. \
                  CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
+                    err
+                );
                 err
-            );
-            Err(err)
-        }
-        Ok(mut governance_proto) => {
-            // Post-process GovernanceProto
+            })
+            .expect("Could not upgrade canister")
+    };
 
-            // TODO: Delete this once it's been released.
-            populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
-
-            canister_init_(governance_proto);
-            Ok(())
-        }
-    }
-    .expect("Couldn't upgrade canister.");
+    canister_init_(governance_proto);
 
     init_timers();
 
     log!(INFO, "Completed post upgrade");
-}
-
-fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut sns_gov_pb::Governance) {
-    for neuron in governance_proto.neurons.values_mut() {
-        for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
-            disbursement.finalize_disbursement_timestamp_seconds = Some(
-                disbursement.timestamp_of_disbursement_seconds
-                    + MATURITY_DISBURSEMENT_DELAY_SECONDS,
-            );
-        }
-    }
 }
 
 /// Test only feature. Internal method for calling set_time_warp.
@@ -696,7 +722,10 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {

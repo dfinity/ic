@@ -3,8 +3,9 @@ use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProvidersRewardsRequest {
-    pub from: u64,
-    pub to: u64,
+    /// These timestamps cover the entire correspondent UTC day and are inclusive.
+    pub from_timestamp_nanoseconds: u64,
+    pub to_timestamp_nanoseconds: u64,
 }
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]

@@ -11,9 +11,8 @@ use http::StatusCode;
 
 use crate::{
     errors::{ApiError, ErrorCause},
-    persist::RouteSubnet,
     routes::RequestContext,
-    snapshot::Node,
+    snapshot::{Node, Subnet},
 };
 
 #[derive(Clone)]
@@ -56,7 +55,7 @@ fn request_needs_retrying(response: &Response) -> bool {
 pub async fn retry_request(
     State(params): State<RetryParams>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(subnet): Extension<Arc<Subnet>>,
     mut request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -139,7 +138,10 @@ mod test {
     use ic_types::CanisterId;
     use tower::Service;
 
-    use crate::routes::{test::test_route_subnet, RequestType};
+    use crate::{
+        persist::test::{generate_test_subnets, node},
+        routes::RequestType,
+    };
 
     struct TestState {
         failures: u8,
@@ -160,11 +162,17 @@ mod test {
 
         let ctx = Arc::new(ctx);
 
+        let mut subnet = generate_test_subnets(0)[0].clone();
+        subnet.nodes = vec![];
+        for i in 0..10 {
+            subnet.nodes.push(node(i, subnet.id))
+        }
+
         let mut req = Request::post("/").body(Body::from("foobar")).unwrap();
         req.extensions_mut().insert(ctx);
         req.extensions_mut()
             .insert(CanisterId::from_str("f7crg-kabae").unwrap());
-        req.extensions_mut().insert(Arc::new(test_route_subnet(10)));
+        req.extensions_mut().insert(Arc::new(subnet));
 
         req
     }
@@ -196,7 +204,7 @@ mod test {
         }));
 
         let mut app = Router::new()
-            .route("/", post(handler).with_state(Arc::clone(&state)))
+            .route("/", post(handler).with_state(state.clone()))
             .layer(middleware::from_fn_with_state(
                 RetryParams {
                     retry_count: 3,
@@ -262,7 +270,7 @@ mod test {
 
         // Check update call retried
         let mut app = Router::new()
-            .route("/", post(handler).with_state(Arc::clone(&state)))
+            .route("/", post(handler).with_state(state.clone()))
             .layer(middleware::from_fn_with_state(
                 RetryParams {
                     retry_count: 3,

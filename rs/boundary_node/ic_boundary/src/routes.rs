@@ -22,8 +22,8 @@ use crate::{
     core::ANONYMOUS_PRINCIPAL,
     errors::{ApiError, ErrorCause},
     http::error_infer,
-    persist::{RouteSubnet, Routes},
-    snapshot::RegistrySnapshot,
+    persist::Routes,
+    snapshot::{RegistrySnapshot, Subnet},
 };
 
 #[derive(Debug, Clone, PartialEq, Hash, CandidType, Deserialize)]
@@ -102,9 +102,8 @@ pub trait Proxy: Sync + Send {
 }
 
 pub trait Lookup: Sync + Send {
-    fn lookup_subnet_by_canister_id(&self, id: &CanisterId)
-        -> Result<Arc<RouteSubnet>, ErrorCause>;
-    fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause>;
+    fn lookup_subnet_by_canister_id(&self, id: &CanisterId) -> Result<Arc<Subnet>, ErrorCause>;
+    fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<Subnet>, ErrorCause>;
 }
 
 pub trait Health: Sync + Send {
@@ -143,7 +142,7 @@ impl Lookup for ProxyRouter {
     fn lookup_subnet_by_canister_id(
         &self,
         canister_id: &CanisterId,
-    ) -> Result<Arc<RouteSubnet>, ErrorCause> {
+    ) -> Result<Arc<Subnet>, ErrorCause> {
         let subnet = self
             .routing_table
             .load_full()
@@ -154,7 +153,7 @@ impl Lookup for ProxyRouter {
         Ok(subnet)
     }
 
-    fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause> {
+    fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<Subnet>, ErrorCause> {
         let subnet = self
             .routing_table
             .load_full()
@@ -240,7 +239,7 @@ pub async fn lookup_subnet(
     };
 
     // Inject subnet into request
-    request.extensions_mut().insert(Arc::clone(&subnet));
+    request.extensions_mut().insert(subnet.clone());
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
@@ -259,7 +258,6 @@ pub(crate) mod test {
 
     use anyhow::Error;
     use axum::{body::Body, http::Request, routing::method_routing::get, Router};
-    use ethnum::u256;
     use http::{
         header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
         StatusCode,
@@ -285,46 +283,17 @@ pub(crate) mod test {
             handlers::{health, status},
             PATH_HEALTH, PATH_STATUS,
         },
-        persist::{test::node, Persist, Persister},
-        snapshot::{test::test_registry_snapshot, Node},
+        persist::{Persist, Persister},
+        snapshot::test::test_registry_snapshot,
         test_utils::{setup_test_router, TestHttpClient},
     };
 
-    pub fn test_node(id: u64) -> Arc<Node> {
-        node(id, principal!("f7crg-kabae"))
-    }
-
-    pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
-        let mut nodes = Vec::new();
-
-        for i in 0..n {
-            nodes.push(test_node(i as u64));
-        }
-
-        // "casting integer literal to `u32` is unnecessary"
-        // fck clippy
-        let zero = 0u32;
-
-        RouteSubnet {
-            id: Principal::from_text(id).unwrap(),
-            range_start: u256::from(zero),
-            range_end: u256::from(zero),
-            nodes,
-        }
-    }
-
-    pub fn test_route_subnet(n: usize) -> RouteSubnet {
-        test_route_subnet_with_id("f7crg-kabae".into(), n)
-    }
-
     fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &str) {
-        assert!(headers.contains_key(&name), "Header {} is missing", name);
+        assert!(headers.contains_key(&name), "Header {name} is missing");
         assert_eq!(
             headers.get(&name).unwrap(),
             &HeaderValue::from_str(expected_value).unwrap(),
-            "Header {} does not match expected value: {}",
-            name,
-            expected_value,
+            "Header {name} does not match expected value: {expected_value}"
         );
     }
 
