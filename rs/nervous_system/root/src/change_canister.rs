@@ -366,10 +366,12 @@ where
     res
 }
 
-/// Stops the given canister, and polls until the `Stopped` state is reached.
-///
-/// Warning: there's no guarantee that this ever finishes!
-/// TODO(IC-1099)
+/// Stops the given canister.  If 'stop_canister' times out, this returns an Err.  Otherwise,
+/// the canister has reached the "Stopped" state.  If 'stop_canister' times out, the canister
+/// may later reach a "Stopped" state.  Therefore, if this method returns an Err,
+/// the caller should usually call "start_canister" to avoid leaving the canister in a Stopped state.
+/// Alternately, the caller can retry "stop_canister", which will again return Ok when the canister
+/// stops, and an error if it times out.
 pub async fn stop_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
