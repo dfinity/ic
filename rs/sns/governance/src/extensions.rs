@@ -6,7 +6,7 @@ use crate::{
             register_extension_response, CanisterCallError, ListSnsCanistersRequest,
             ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
         },
-        v1 as pb,
+        v1 as pb, v1,
         v1::{
             governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
             ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
@@ -16,7 +16,7 @@ use crate::{
     storage::{cache_registered_extension, get_registered_extension_from_cache},
     types::{Environment, Wasm},
 };
-use candid::{Decode, Encode, Nat};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat};
 use candid_utils::printing;
 use futures::future::BoxFuture;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
@@ -26,10 +26,11 @@ use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
-use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, REGISTRY_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use serde::Serialize;
 use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
@@ -977,15 +978,13 @@ pub async fn validate_register_extension(
 }
 
 // Copied from Registry canister, to avoid import for just one type.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub struct GetSubnetForCanisterRequest {
-    #[prost(message, optional, tag = "1")]
     pub principal: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub struct SubnetForCanister {
-    #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 
@@ -1020,6 +1019,39 @@ async fn get_subnet_for_canister(
         .ok_or("Registry response missing subnet_id".to_string())?;
 
     Ok(SubnetId::from(subnet_id))
+}
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct SubnetTypesToSubnetsResponse {
+    pub data: Vec<(String, Vec<SubnetId>)>,
+}
+
+async fn get_subnet_types_to_subnets(
+    env: &dyn Environment,
+) -> Result<SubnetTypesToSubnetsResponse, String> {
+    let payload = Encode!(&()).map_err(|e| format!("Failed to encode empty request: {}", e))?;
+
+    let response_blob = env
+        .call_canister(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            payload,
+        )
+        .await
+        .map_err(|(code, err)| {
+            format!(
+                "CMC.get_subnet_types_to_subnets failed with code {:?}: {}",
+                code, err
+            )
+        })?;
+
+    let response = Decode!(&response_blob, SubnetTypesToSubnetsResponse).map_err(|e| {
+        format!(
+            "Failed to decode get_subnet_types_to_subnets response: {}",
+            e
+        )
+    })?;
+
+    Ok(response)
 }
 
 async fn get_extension_spec_and_update_cache(
