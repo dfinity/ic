@@ -9,9 +9,14 @@ set -euo pipefail
 function usage() {
     cat <<EOF
 Usage:
-  run-p8s.sh OPTIONS prometheus-data-dir.tar.zst
+  run-p8s.sh [--prometheus-port PROMETHEUS_PORT] [--grafana-port GRAFANA_PORT] [--grafana-dashboards-dir GRAFANA_DASHBOARDS_DIR] prometheus-data-dir.tar.zst
 
   Run a local prometheus and grafana on the data directory packaged in the specified tarball.
+
+  Tip: you're most likely running this script on your devenv. So to make the Grafana Web UI accessible on your laptop
+  use the following to forward its port to your devenv:
+
+      ssh devenv -L 3000:localhost:3000 -N
 
   OPTIONS:
 
@@ -28,6 +33,10 @@ Usage:
   --grafana-dashboards-dir GRAFANA_DASHBOARDS_DIR
 
     Provision Grafana dashboards from the specified GRAFANA_DASHBOARDS_DIR directory.
+
+    Tip: point it to your local clone of the k8s repo. I.e.:
+
+        --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards/
 
   --help
 
