@@ -1,0 +1,12 @@
+[package]
+name = "ic-nns-delegation-manager-test-utils"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+ic-certification-test-utils = { path = "../../../certification/test-utils" }
+ic-types = { path = "../../../types/types" }
+rand = { workspace = true }
