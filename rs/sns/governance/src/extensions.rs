@@ -1755,6 +1755,34 @@ mod tests {
             .contains("does not have an operation named invalid_operation"));
     }
 
+    /// Helper function to create a valid RegisterExtension payload for tests
+    fn valid_register_extension_payload(store_canister_id: CanisterId) -> RegisterExtension {
+        RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![
+                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0,
+                ], // Use whitelisted hash from other tests
+                store_canister_id: Some(store_canister_id.get()),
+                chunk_hashes_list: vec![], // Can be empty for tests
+            }),
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
+                        },
+                    })),
+                }),
+            }),
+        }
+    }
+
     #[tokio::test]
     async fn test_validate_register_extension_fiduciary_subnet_success() {
         // Set up mock environment for successful fiduciary subnet validation
@@ -1784,7 +1812,7 @@ mod tests {
             Ok(Encode!(&SubnetTypesToSubnetsResponse {
                 data: vec![
                     (
-                        "application".to_string(),
+                        "european".to_string(),
                         vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
                     ),
                     ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
@@ -1800,30 +1828,7 @@ mod tests {
         governance.env = Box::new(env);
 
         // Create a valid RegisterExtension request for TreasuryManager
-        let register_extension = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ], // Use whitelisted hash from other tests
-                store_canister_id: Some(store_canister_id.get()),
-                chunk_hashes_list: vec![], // Can be empty for tests
-            }),
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(1000000))
-                            },
-                            "treasury_allocation_icp_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(2000000))
-                            },
-                        },
-                    })),
-                }),
-            }),
-        };
+        let register_extension = valid_register_extension_payload(store_canister_id);
 
         // Should succeed because extension canister is on fiduciary subnet
         let result = validate_register_extension(&governance, register_extension).await;
@@ -1862,7 +1867,7 @@ mod tests {
             Encode!(&()).unwrap(),
             Ok(Encode!(&SubnetTypesToSubnetsResponse {
                 data: vec![
-                    ("application".to_string(), vec![subnet_id]), // Our subnet is application, not fiduciary
+                    ("european".to_string(), vec![subnet_id]), // Our subnet is application, not fiduciary
                     (
                         "fiduciary".to_string(),
                         vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
@@ -1879,30 +1884,7 @@ mod tests {
         governance.env = Box::new(env);
 
         // Create a valid RegisterExtension request for TreasuryManager
-        let register_extension = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ], // Use whitelisted hash from other tests
-                store_canister_id: Some(store_canister_id.get()),
-                chunk_hashes_list: vec![], // Can be empty for tests
-            }),
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(1000000))
-                            },
-                            "treasury_allocation_icp_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(2000000))
-                            },
-                        },
-                    })),
-                }),
-            }),
-        };
+        let register_extension = valid_register_extension_payload(store_canister_id);
 
         // Should fail because extension canister is NOT on fiduciary subnet
         let result = validate_register_extension(&governance, register_extension).await;
@@ -1936,30 +1918,7 @@ mod tests {
         governance.env = Box::new(env);
 
         // Create a valid RegisterExtension request for TreasuryManager
-        let register_extension = RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ], // Use whitelisted hash from other tests
-                store_canister_id: Some(store_canister_id.get()),
-                chunk_hashes_list: vec![], // Can be empty for tests
-            }),
-            extension_init: Some(ExtensionInit {
-                value: Some(Precise {
-                    value: Some(precise::Value::Map(PreciseMap {
-                        map: btreemap! {
-                            "treasury_allocation_sns_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(1000000))
-                            },
-                            "treasury_allocation_icp_e8s".to_string() => Precise {
-                                value: Some(precise::Value::Nat(2000000))
-                            },
-                        },
-                    })),
-                }),
-            }),
-        };
+        let register_extension = valid_register_extension_payload(store_canister_id);
 
         // Should fail because subnet lookup failed
         let result = validate_register_extension(&governance, register_extension).await;
@@ -2084,26 +2043,7 @@ mod tests {
         let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
 
         fn valid_register_extension() -> RegisterExtension {
-            RegisterExtension {
-                chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                    wasm_module_hash: vec![
-                        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, 0, 0, 0, 0,
-                    ],
-                    store_canister_id: Some(CanisterId::from_u64(10000).get()),
-                    chunk_hashes_list: vec![],
-                }),
-                extension_init: Some(ExtensionInit {
-                    value: Some(Precise {
-                        value: Some(precise::Value::Map(PreciseMap {
-                            map: btreemap! {
-                                "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
-                                "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
-                            },
-                        })),
-                    }),
-                }),
-            }
+            valid_register_extension_payload(CanisterId::from_u64(10000))
         }
 
         // Test missing chunked_canister_wasm
@@ -2213,7 +2153,7 @@ mod tests {
             Ok(Encode!(&SubnetTypesToSubnetsResponse {
                 data: vec![
                     (
-                        "application".to_string(),
+                        "european".to_string(),
                         vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
                     ),
                     ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
@@ -2229,16 +2169,10 @@ mod tests {
         governance.env = Box::new(env);
 
         // Build a helper to invoke validate_register_extension with a given precise value
-        let mk_register_extension = |value: Option<Precise>| RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ],
-                store_canister_id: Some(CanisterId::from_u64(2000).get()),
-                chunk_hashes_list: vec![],
-            }),
-            extension_init: Some(ExtensionInit { value }),
+        let mk_register_extension = |value: Option<Precise>| {
+            let mut extension = valid_register_extension_payload(CanisterId::from_u64(2000));
+            extension.extension_init = Some(ExtensionInit { value });
+            extension
         };
 
         // Success case: valid arguments should succeed
