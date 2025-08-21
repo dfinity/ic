@@ -119,7 +119,7 @@ impl<'a> AdapterProxy<'a> {
         headers: Vec<Vec<u8>>,
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request = GetSuccessorsRequest::Initial(GetSuccessorsRequestInitial {
-            network: Network::Regtest,
+            network: Network::Mainnet,
             anchor,
             processed_block_hashes: headers,
         });
