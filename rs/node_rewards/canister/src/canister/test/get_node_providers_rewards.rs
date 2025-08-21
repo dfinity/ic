@@ -31,7 +31,7 @@ use rewards_calculation::rewards_calculator::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
 use rewards_calculation::rewards_calculator_results::{
-    DayUtc, NodeStatus, RewardsCalculatorResults,
+    DayUtc, NodeProviderRewards, NodeStatus, RewardsCalculatorResults,
 };
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -206,7 +206,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p1_node3_t31),
         6,
-        day1.get(),
+        day2.get(),
         None,
     );
 
@@ -232,7 +232,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p1_node5_perf),
         6,
-        day1.get(),
+        day2.get(),
         None,
     );
 
@@ -249,7 +249,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p2_node1),
         6,
-        day1.get(),
+        day2.get(),
         None,
     );
 
@@ -319,14 +319,273 @@ fn setup_data_for_test_rewards_calculation(
     );
 }
 
+const EXPECTED_TEST_1: &str = r#"{
+  "6fyp7-3ibaa-aaaaa-aaaap-4ai": {
+    "rewards_total_xdr_permyriad": 137200,
+    "base_rewards": [
+      {
+        "node_reward_type": "Type1",
+        "region": "Europe,Switzerland",
+        "monthly": "304375",
+        "daily": "10000"
+      },
+      {
+        "node_reward_type": "Type3",
+        "region": "North America,USA,California",
+        "monthly": "913125",
+        "daily": "30000"
+      },
+      {
+        "node_reward_type": "Type3dot1",
+        "region": "North America,USA,Nevada",
+        "monthly": "1217500",
+        "daily": "40000"
+      }
+    ],
+    "base_rewards_type3": [
+      {
+        "day": "01-01-2024",
+        "region": "North America:USA",
+        "nodes_count": 2,
+        "avg_rewards": "35000",
+        "avg_coefficient": "0.80",
+        "value": "31500.00"
+      },
+      {
+        "day": "02-01-2024",
+        "region": "North America:USA",
+        "nodes_count": 1,
+        "avg_rewards": "30000",
+        "avg_coefficient": "0.90",
+        "value": "30000"
+      }
+    ],
+    "nodes_results": [
+      {
+        "node_id": "zv7tz-zylaa-aaaaa-aaaap-2ai",
+        "node_reward_type": "Type1",
+        "region": "Europe,Switzerland",
+        "dc_id": "dc1",
+        "daily_results": [
+          {
+            "day": "01-01-2024",
+            "node_status": {
+              "Assigned": {
+                "node_metrics": {
+                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
+                  "subnet_assigned_fr": "0.25",
+                  "num_blocks_proposed": 95,
+                  "num_blocks_failed": 5,
+                  "original_fr": "0.05",
+                  "relative_fr": "0"
+                }
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "10000",
+            "adjusted_rewards": "10000"
+          },
+          {
+            "day": "02-01-2024",
+            "node_status": {
+              "Assigned": {
+                "node_metrics": {
+                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
+                  "subnet_assigned_fr": "0.02",
+                  "num_blocks_proposed": 98,
+                  "num_blocks_failed": 2,
+                  "original_fr": "0.02",
+                  "relative_fr": "0.00"
+                }
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "10000",
+            "adjusted_rewards": "10000"
+          }
+        ]
+      },
+      {
+        "node_id": "f6rsp-hqmaa-aaaaa-aaaap-2ai",
+        "node_reward_type": "Type3",
+        "region": "North America,USA,California",
+        "dc_id": "dc2",
+        "daily_results": [
+          {
+            "day": "01-01-2024",
+            "node_status": {
+              "Assigned": {
+                "node_metrics": {
+                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
+                  "subnet_assigned_fr": "0.25",
+                  "num_blocks_proposed": 90,
+                  "num_blocks_failed": 10,
+                  "original_fr": "0.10",
+                  "relative_fr": "0"
+                }
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "31500.00",
+            "adjusted_rewards": "31500.00"
+          },
+          {
+            "day": "02-01-2024",
+            "node_status": {
+              "Unassigned": {
+                "extrapolated_fr": "0"
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "30000",
+            "adjusted_rewards": "30000"
+          }
+        ]
+      },
+      {
+        "node_id": "ybquz-ianaa-aaaaa-aaaap-2ai",
+        "node_reward_type": "Type3dot1",
+        "region": "North America,USA,Nevada",
+        "dc_id": "dc3",
+        "daily_results": [
+          {
+            "day": "01-01-2024",
+            "node_status": {
+              "Assigned": {
+                "node_metrics": {
+                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
+                  "subnet_assigned_fr": "0.25",
+                  "num_blocks_proposed": 75,
+                  "num_blocks_failed": 25,
+                  "original_fr": "0.25",
+                  "relative_fr": "0.00"
+                }
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "31500.00",
+            "adjusted_rewards": "31500.00"
+          }
+        ]
+      },
+      {
+        "node_id": "fnlpp-iyoaa-aaaaa-aaaap-2ai",
+        "node_reward_type": "Type1",
+        "region": "Europe,Switzerland",
+        "dc_id": "dc1",
+        "daily_results": [
+          {
+            "day": "01-01-2024",
+            "node_status": {
+              "Unassigned": {
+                "extrapolated_fr": "0.1125"
+              }
+            },
+            "performance_multiplier": "0.9800",
+            "rewards_reduction": "0.0200",
+            "base_rewards": "10000",
+            "adjusted_rewards": "9800.0000"
+          },
+          {
+            "day": "02-01-2024",
+            "node_status": {
+              "Unassigned": {
+                "extrapolated_fr": "0"
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "10000",
+            "adjusted_rewards": "10000"
+          }
+        ]
+      },
+      {
+        "node_id": "yskjz-hipaa-aaaaa-aaaap-2ai",
+        "node_reward_type": "Type1",
+        "region": "Europe,Switzerland",
+        "dc_id": "dc1",
+        "daily_results": [
+          {
+            "day": "01-01-2024",
+            "node_status": {
+              "Assigned": {
+                "node_metrics": {
+                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
+                  "subnet_assigned_fr": "0.25",
+                  "num_blocks_proposed": 30,
+                  "num_blocks_failed": 70,
+                  "original_fr": "0.70",
+                  "relative_fr": "0.45"
+                }
+              }
+            },
+            "performance_multiplier": "0.44",
+            "rewards_reduction": "0.56",
+            "base_rewards": "10000",
+            "adjusted_rewards": "4400.00"
+          }
+        ]
+      }
+    ]
+  },
+  "djduj-3qcaa-aaaaa-aaaap-4ai": {
+    "rewards_total_xdr_permyriad": 10000,
+    "base_rewards": [
+      {
+        "node_reward_type": "Type1",
+        "region": "Europe,Switzerland",
+        "monthly": "304375",
+        "daily": "10000"
+      }
+    ],
+    "base_rewards_type3": [],
+    "nodes_results": [
+      {
+        "node_id": "6qmi3-pavaa-aaaaa-aaaap-2ai",
+        "node_reward_type": "Type1",
+        "region": "Europe,Switzerland",
+        "dc_id": "dc1",
+        "daily_results": [
+          {
+            "day": "01-01-2024",
+            "node_status": {
+              "Assigned": {
+                "node_metrics": {
+                  "subnet_assigned": "fbysm-3acaa-aaaaa-aaaap-yai",
+                  "subnet_assigned_fr": "0.20",
+                  "num_blocks_proposed": 80,
+                  "num_blocks_failed": 20,
+                  "original_fr": "0.20",
+                  "relative_fr": "0.00"
+                }
+              }
+            },
+            "performance_multiplier": "1",
+            "rewards_reduction": "0",
+            "base_rewards": "10000",
+            "adjusted_rewards": "10000"
+          }
+        ]
+      }
+    ]
+  }
+}"#;
 #[test]
 fn test_get_node_providers_rewards() {
+    use pretty_assertions::assert_eq;
+
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
 
     let request = GetNodeProvidersRewardsRequest {
-        from: DayUtc::from("2024-01-01").get(),
-        to: DayUtc::from("2024-01-02").get(),
+        from_timestamp_nanoseconds: DayUtc::from("2024-01-01").get(),
+        to_timestamp_nanoseconds: DayUtc::from("2024-01-02").get(),
     };
     let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
         &CANISTER_TEST,
@@ -335,78 +594,17 @@ fn test_get_node_providers_rewards() {
     .now_or_never()
     .unwrap();
 
-    // Rewards Calculator Results
-    //
-    // +-Overall Performance for Provider: 6fyp7-3ibaa-aaaaa-aaaap-
-    // | Day UTC    | Underperforming Nodes | Total Daily Rewards |
-    // +------------+-----------------------+---------------------+
-    // | 01-01-2024 | fnlpp                 | 87200.0000          |
-    // |            | yskjz                 |                     |
-    // +------------+-----------------------+---------------------+
-    // | 02-01-2024 |                       | 50000               |
-    // +------------+-----------------------+---------------------+
-    //
-    // Base Rewards Log:
-    // Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
-    // Region: North America,USA,California, Type: type3, Base Rewards Daily: 30000, Coefficient: 0.90
-    // Region: North America,USA,Nevada, Type: type3.1, Base Rewards Daily: 40000, Coefficient: 0.70
-    // Type3* - Day: 01-01-2024 Region: North America:USA, Nodes Count: 2, Base Rewards Daily Avg: 35000, Coefficient Avg: 0.80, Base Rewards Daily: 31500.00
-    // Type3* - Day: 02-01-2024 Region: North America:USA, Nodes Count: 1, Base Rewards Daily Avg: 30000, Coefficient Avg: 0.90, Base Rewards Daily: 30000
-    //
-    // +-NodeId: zv7tz-zylaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 95/5                   | 0.05        | 0                        | 1                      | 10000        | 10000            |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 02-01-2024 | Assigned - yndj2 | 0.02      | 98/2                   | 0.02        | 0.00                     | 1                      | 10000        | 10000            |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    //
-    // +-NodeId: f6rsp-hqmaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 90/10                  | 0.10        | 0                        | 1                      | 31500.00     | 31500.00         |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 02-01-2024 | Unassigned       | N/A       | N/A                    | N/A         | 0                        | 1                      | 30000        | 30000            |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    //
-    // +-NodeId: ybquz-ianaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 75/25                  | 0.25        | 0.00                     | 1                      | 31500.00     | 31500.00         |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    //
-    // +-NodeId: fnlpp-iyoaa-aaaaa-aaaap-2ai-+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | Day UTC    | Status     | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-    // +------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 01-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0.1125                   | 0.9800                 | 10000        | 9800.0000        |
-    // +------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 02-01-2024 | Unassigned | N/A       | N/A                    | N/A         | 0                        | 1                      | 10000        | 10000            |
-    // +------------+------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    //
-    // +-NodeId: yskjz-hipaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 01-01-2024 | Assigned - yndj2 | 0.25      | 30/70                  | 0.70        | 0.45                     | 0.44                   | 10000        | 4400.00          |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    //
-    // +-Overall Performance for Provider: djduj-3qcaa-aaaaa-aaaap-
-    // | Day UTC    | Underperforming Nodes | Total Daily Rewards |
-    // +------------+-----------------------+---------------------+
-    // | 01-01-2024 |                       | 10000               |
-    // +------------+-----------------------+---------------------+
-    //
-    // Base Rewards Log:
-    // Region: Europe,Switzerland, Type: type1, Base Rewards Daily: 10000, Coefficient: 0.80
-    //
-    // +-NodeId: 6qmi3-pavaa-aaaaa-aaaap-2ai-------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | Day UTC    | Status           | Subnet FR | Blocks Proposed/Failed | Original FR | FR relative/extrapolated | Performance Multiplier | Base Rewards | Adjusted Rewards |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
-    // | 01-01-2024 | Assigned - fbysm | 0.20      | 80/20                  | 0.20        | 0.00                     | 1                      | 10000        | 10000            |
-    // +------------+------------------+-----------+------------------------+-------------+--------------------------+------------------------+--------------+------------------+
+    let inner_results = CANISTER_TEST
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .unwrap();
+
+    let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
+        serde_json::from_str(EXPECTED_TEST_1).unwrap();
+    assert_eq!(inner_results.provider_results, expected);
 
     let expected = NodeProvidersRewards {
         rewards_xdr_permyriad: btreemap! {
-            test_provider_id(1).0 => 87200 + 50000,
+            test_provider_id(1).0 => 137200,
             test_provider_id(2).0 => 10000,
         },
     };

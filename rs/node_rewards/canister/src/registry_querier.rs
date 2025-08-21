@@ -201,9 +201,16 @@ impl RegistryQuerier {
                             // A deletion
                             if let Some(start_of_interval) = last_present_ts.take() {
                                 // The node was present and is now gone. Finalize the interval.
-                                let days_between =
-                                    DayUtc::from(start_of_interval).days_until(&DayUtc::from(ts));
-                                days.extend(days_between.unwrap_or_default());
+                                let mut days_between = DayUtc::from(start_of_interval)
+                                    .days_until(&DayUtc::from(ts))
+                                    .unwrap_or_default();
+
+                                // If a node is deleted it will be rewarded until the day before deletion.
+                                if !days_between.is_empty() {
+                                    days_between.truncate(days_between.len() - 1);
+                                }
+
+                                days.extend(days_between);
                             }
                         }
                     }
