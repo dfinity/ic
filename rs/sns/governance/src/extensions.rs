@@ -1793,33 +1793,35 @@ mod tests {
             .unwrap()),
         );
 
-        let governance_proto = create_test_governance_proto();
-        let governance = Governance::new(
-            ValidGovernanceProto::try_from(governance_proto)
-                .expect("Failed validating governance proto"),
-            Box::new(env),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockCMC::default()),
-        );
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
 
         // Create a valid RegisterExtension request for TreasuryManager
         let register_extension = RegisterExtension {
             chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![
+                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0,
+                ], // Use whitelisted hash from other tests
                 store_canister_id: Some(store_canister_id.get()),
-                wasm_module_hash: vec![0u8; 32], // Valid 32-byte hash
+                chunk_hashes_list: vec![], // Can be empty for tests
             }),
-            extension_init: Some(Precise {
-                value: Some(precise::Value::Map(PreciseMap {
-                    map: btreemap! {
-                        "treasury_allocation_sns_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(1000000))
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
                         },
-                        "treasury_allocation_icp_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(2000000))
-                        },
-                    },
-                })),
+                    })),
+                }),
             }),
         };
 
@@ -1870,33 +1872,35 @@ mod tests {
             .unwrap()),
         );
 
-        let governance_proto = create_test_governance_proto();
-        let governance = Governance::new(
-            ValidGovernanceProto::try_from(governance_proto)
-                .expect("Failed validating governance proto"),
-            Box::new(env),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockCMC::default()),
-        );
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
 
         // Create a valid RegisterExtension request for TreasuryManager
         let register_extension = RegisterExtension {
             chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![
+                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0,
+                ], // Use whitelisted hash from other tests
                 store_canister_id: Some(store_canister_id.get()),
-                wasm_module_hash: vec![0u8; 32], // Valid 32-byte hash
+                chunk_hashes_list: vec![], // Can be empty for tests
             }),
-            extension_init: Some(Precise {
-                value: Some(precise::Value::Map(PreciseMap {
-                    map: btreemap! {
-                        "treasury_allocation_sns_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(1000000))
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
                         },
-                        "treasury_allocation_icp_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(2000000))
-                        },
-                    },
-                })),
+                    })),
+                }),
             }),
         };
 
@@ -1925,33 +1929,35 @@ mod tests {
             Err((Some(999), "Registry lookup failed".to_string())),
         );
 
-        let governance_proto = create_test_governance_proto();
-        let governance = Governance::new(
-            ValidGovernanceProto::try_from(governance_proto)
-                .expect("Failed validating governance proto"),
-            Box::new(env),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockICRC1Ledger::default()),
-            Box::new(MockCMC::default()),
-        );
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
 
         // Create a valid RegisterExtension request for TreasuryManager
         let register_extension = RegisterExtension {
             chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![
+                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0,
+                ], // Use whitelisted hash from other tests
                 store_canister_id: Some(store_canister_id.get()),
-                wasm_module_hash: vec![0u8; 32], // Valid 32-byte hash
+                chunk_hashes_list: vec![], // Can be empty for tests
             }),
-            extension_init: Some(Precise {
-                value: Some(precise::Value::Map(PreciseMap {
-                    map: btreemap! {
-                        "treasury_allocation_sns_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(1000000))
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
                         },
-                        "treasury_allocation_icp_e8s".to_string() => Precise {
-                            value: Some(precise::Value::Nat(2000000))
-                        },
-                    },
-                })),
+                    })),
+                }),
             }),
         };
 
@@ -2179,7 +2185,48 @@ mod tests {
     async fn test_validate_register_extension_treasury_manager_init() {
         // Test that validate_register_extension (init path) validates treasury manager init
         // the same way as validate_deposit_operation validates deposits
-        let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Set up environment mocks for fiduciary subnet validation (required for treasury manager)
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(2000); // Same as used in mk_register_extension below
+
+        // Mock get_subnet_for_canister response (registry call)
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(100));
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Ok(Encode!(&Ok::<SubnetForCanister, String>(SubnetForCanister {
+                subnet_id: Some(subnet_id.get()),
+            }))
+            .unwrap()),
+        );
+
+        // Mock get_subnet_types_to_subnets response (CMC call) - mark as fiduciary
+        env.set_call_canister_response(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            Encode!(&()).unwrap(),
+            Ok(Encode!(&SubnetTypesToSubnetsResponse {
+                data: vec![
+                    (
+                        "application".to_string(),
+                        vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
+                    ),
+                    ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
+                ],
+            })
+            .unwrap()),
+        );
+
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
 
         // Build a helper to invoke validate_register_extension with a given precise value
         let mk_register_extension = |value: Option<Precise>| RegisterExtension {
