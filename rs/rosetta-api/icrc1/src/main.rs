@@ -9,7 +9,7 @@ use axum::{
 };
 use clap::Parser;
 use ic_agent::{identity::AnonymousIdentity, Agent};
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_icrc_rosetta::common::storage::storage_client::TokenInfo;
 use ic_icrc_rosetta::{
     common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
@@ -40,9 +40,19 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
-use url::Url;
 
+/// Domains that are considered mainnet
+const MAINNET_DOMAINS: &[&str] = &["ic0.app", "icp0.io"];
 const MAXIMUM_BLOCKS_PER_REQUEST: u64 = 2000;
+
+/// Return the port to which Rosetta should bind to.
+fn get_port(port: Option<u16>, port_file: &Option<PathBuf>) -> u16 {
+    match (port, port_file) {
+        (None, None) => 8080,
+        (None, Some(_)) => 0,
+        (Some(port), _) => port,
+    }
+}
 
 fn init_logs(log_level: Level, log_file_path: &PathBuf) -> anyhow::Result<WorkerGuard> {
     let stdout_layer = tracing_subscriber::fmt::Layer::default()
@@ -209,7 +219,7 @@ async fn main() -> Result<()> {
             .build()?;
 
         // Only fetch root key if the network is not the mainnet
-        if !config.is_mainnet() {
+        if !MAINNET_DOMAINS.contains(&config.network_url.domain().unwrap_or("")) {
             debug!("Network type is not mainnet --> Trying to fetch root key");
             ic_agent.fetch_root_key().await?;
         }
@@ -227,7 +237,7 @@ async fn main() -> Result<()> {
         });
 
         let mut storage = match &config.store {
-            Store::Memory => StorageClient::new_in_memory()?,
+            Store::InMemory => StorageClient::new_in_memory()?,
             Store::File { dir_path } => {
                 let mut path = dir_path.clone();
                 path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
@@ -372,7 +382,7 @@ async fn main() -> Result<()> {
         .layer(RequestIdLayer)
         .with_state(token_app_states.clone());
 
-    let rosetta_url = format!("0.0.0.0:{}", config.get_port());
+    let rosetta_url = format!("0.0.0.0:{}", get_port(config.port, &config.port_file));
     let tcp_listener = TcpListener::bind(rosetta_url.clone()).await?;
 
     if let Some(port_file) = config.port_file {

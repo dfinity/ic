@@ -10,21 +10,23 @@ const MAINNET_DEFAULT_URL: &str = "https://ic0.app";
 const TESTNET_DEFAULT_URL: &str = "https://exchanges.testnet.dfinity.network";
 
 #[derive(Clone, Debug, ValueEnum)]
+pub enum NetworkType {
+    Mainnet,
+    Testnet,
+}
+
+/// Used in args.
+#[derive(Clone, Debug, ValueEnum)]
 pub enum StoreType {
     InMemory,
     File,
 }
 
+/// Used in config.
 #[derive(Clone, Debug)]
 pub enum Store {
-    Memory,
+    InMemory,
     File { dir_path: PathBuf },
-}
-
-#[derive(Clone, Debug, ValueEnum)]
-pub enum NetworkType {
-    Mainnet,
-    Testnet,
 }
 
 // This struct is used to parse the token definitions from the command line arguments.
@@ -185,7 +187,7 @@ impl ParsedConfig {
 
         // Construct the appropriate store type
         let store = match args.store_type {
-            StoreType::InMemory => Store::Memory,
+            StoreType::InMemory => Store::InMemory,
             StoreType::File => Store::File {
                 dir_path: args.multi_tokens_store_dir,
             },
@@ -203,21 +205,6 @@ impl ParsedConfig {
             log_file: args.log_file,
             watchdog_timeout_seconds: args.watchdog_timeout_seconds,
         })
-    }
-
-    /// Return the port to which Rosetta should bind to.
-    pub fn get_port(&self) -> u16 {
-        match (&self.port, &self.port_file) {
-            (None, None) => 8080,
-            (None, Some(_)) => 0,
-            (Some(port), _) => *port,
-        }
-    }
-
-    pub fn is_mainnet(&self) -> bool {
-        // Handle both with and without trailing slash since URL parsing normalizes
-        self.network_url.as_str() == MAINNET_DEFAULT_URL
-            || self.network_url.as_str() == "https://ic0.app/"
     }
 
     /// Parses TokenDefs from the command line arguments.
@@ -517,9 +504,7 @@ mod tests {
         args.network_type = NetworkType::Mainnet;
 
         let config = ParsedConfig::from_args(args).unwrap();
-
-        assert_eq!(config.network_url.as_str(), "https://ic0.app/"); // URL parsing adds trailing slash
-        assert!(config.is_mainnet());
+        assert!(config.network_url.domain() == Some("ic0.app"));
     }
 
     #[test]
@@ -533,8 +518,7 @@ mod tests {
         assert_eq!(
             config.network_url.as_str(),
             "https://exchanges.testnet.dfinity.network/"
-        ); // URL parsing adds trailing slash
-        assert!(!config.is_mainnet());
+        );
     }
 
     #[test]
@@ -545,8 +529,7 @@ mod tests {
 
         let config = ParsedConfig::from_args(args).unwrap();
 
-        assert_eq!(config.network_url.as_str(), "https://custom.network.com/"); // URL parsing adds trailing slash
-        assert!(!config.is_mainnet()); // Custom URL is not considered mainnet
+        assert_eq!(config.network_url.as_str(), "https://custom.network.com/");
     }
 
     #[test]
@@ -572,8 +555,8 @@ mod tests {
         let config = ParsedConfig::from_args(args).unwrap();
 
         match config.store {
-            Store::Memory => {}
-            Store::File { .. } => panic!("Expected Memory store type"),
+            Store::InMemory => {}
+            Store::File { .. } => panic!("Expected InMemory store type"),
         }
     }
 
@@ -590,39 +573,7 @@ mod tests {
             Store::File { dir_path } => {
                 assert_eq!(dir_path, PathBuf::from("/custom/path"));
             }
-            Store::Memory => panic!("Expected File store type"),
+            Store::InMemory => panic!("Expected File store type"),
         }
-    }
-
-    #[test]
-    fn test_parsed_config_get_port_default() {
-        let mut args = create_test_args();
-        args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
-
-        let config = ParsedConfig::from_args(args).unwrap();
-
-        assert_eq!(config.get_port(), 8080);
-    }
-
-    #[test]
-    fn test_parsed_config_get_port_explicit() {
-        let mut args = create_test_args();
-        args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
-        args.port = Some(9090);
-
-        let config = ParsedConfig::from_args(args).unwrap();
-
-        assert_eq!(config.get_port(), 9090);
-    }
-
-    #[test]
-    fn test_parsed_config_get_port_with_port_file() {
-        let mut args = create_test_args();
-        args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
-        args.port_file = Some(PathBuf::from("/tmp/port"));
-
-        let config = ParsedConfig::from_args(args).unwrap();
-
-        assert_eq!(config.get_port(), 0);
     }
 }
