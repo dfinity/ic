@@ -916,47 +916,42 @@ pub async fn validate_register_extension(
     } = register_extension;
 
     // Phase I. Validate all local properties.
-    let (spec, wasm, extension_canister_id, init) = (async {
-        let Some(ChunkedCanisterWasm {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        }) = chunked_canister_wasm
-        else {
-            return Err("chunked_canister_wasm is required".to_string());
-        };
+    let Some(ChunkedCanisterWasm {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    }) = chunked_canister_wasm
+    else {
+        return Err("chunked_canister_wasm is required".to_string());
+    };
 
-        let Some(store_canister_id) = store_canister_id else {
-            return Err("chunked_canister_wasm.store_canister_id is required".to_string());
-        };
+    let Some(store_canister_id) = store_canister_id else {
+        return Err("chunked_canister_wasm.store_canister_id is required".to_string());
+    };
 
-        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
-            .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
+    let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+        .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
 
-        // Use the store canister to install the extension itself.
-        let extension_canister_id = store_canister_id;
+    // Use the store canister to install the extension itself.
+    let extension_canister_id = store_canister_id;
 
-        let spec = validate_extension_wasm(&wasm_module_hash)
-            .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+    let spec = validate_extension_wasm(&wasm_module_hash)
+        .map_err(|err| format!("Invalid extension wasm: {}", err))?;
 
-        let wasm = Wasm::Chunked {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        };
+    let wasm = Wasm::Chunked {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    };
 
-        let Some(init) = extension_init else {
-            return Err("RegisterExtension.extension_init is required".to_string());
-        };
+    let Some(init) = extension_init else {
+        return Err("RegisterExtension.extension_init is required".to_string());
+    };
 
-        let init = spec
-            .validate_init_arg(governance, init)
-            .await
-            .map_err(|err| format!("Invalid init argument: {}", err))?;
-
-        Ok::<_, String>((spec, wasm, extension_canister_id, init))
-    })
-    .await?;
+    let init = spec
+        .validate_init_arg(governance, init)
+        .await
+        .map_err(|err| format!("Invalid init argument: {}", err))?;
 
     Ok(ValidatedRegisterExtension {
         wasm,
