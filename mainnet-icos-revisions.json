@@ -3,22 +3,26 @@
     "subnets": {
       "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
         "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
-        "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b"
+        "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b",
+        "dev_hash": "cfa210030339ae10f34fb85ff5bbe58ea41beac87cb38af8bcc9c7a7f11169ff"
       },
       "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
-        "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
-        "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b"
+        "version": "f7b2fdb7deb1758622f9c8e282d09ab8813aac62",
+        "update_img_hash": "1b6a2400a2719cbfa8e4b972ed70c75cfb50e37784d2602dbc6477fc7296b1b0",
+        "dev_hash": "9ed60bcfae0105d2c18b6c30a29eac345dd9df62c7d2b48433158ef5bc51d82f"
       }
     },
     "latest_release": {
-      "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
-      "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b"
+      "version": "f7b2fdb7deb1758622f9c8e282d09ab8813aac62",
+      "update_img_hash": "1b6a2400a2719cbfa8e4b972ed70c75cfb50e37784d2602dbc6477fc7296b1b0",
+      "dev_hash": "9ed60bcfae0105d2c18b6c30a29eac345dd9df62c7d2b48433158ef5bc51d82f"
     }
   },
   "hostos": {
     "latest_release": {
       "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
-      "update_img_hash": "877edaf35a3366bdf3870b2587dd301197ed3912d0edc3f10948602d03b51d8e"
+      "update_img_hash": "877edaf35a3366bdf3870b2587dd301197ed3912d0edc3f10948602d03b51d8e",
+      "dev_hash": "132f28a30bb97775734e64b09f6a0d04dca41b713229b95bd527d8ea90b2bed5"
     }
   }
 }
