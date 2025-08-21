@@ -9589,6 +9589,7 @@ name = "ic-http-endpoints-test-agent"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
+ "ic-http-endpoints-public",
  "ic-types",
  "ic-validator",
  "reqwest 0.12.15",

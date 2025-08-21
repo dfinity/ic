@@ -11,7 +11,7 @@ mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
 mod pprof;
-pub mod query;
+mod query;
 pub mod read_state;
 mod status;
 mod tracing_flamegraph;

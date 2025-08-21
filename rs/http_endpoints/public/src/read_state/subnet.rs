@@ -34,7 +34,7 @@ use tower::util::BoxCloneService;
 pub enum Version {
     // Endpoint with the NNS delegation using the flat format of the canister ranges.
     V2,
-    // Endpoint with the NNS delegation without canister ranges pruned out.
+    // Endpoint with the NNS delegation will all canister ranges pruned out.
     V3,
 }
 
