@@ -15537,7 +15537,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "candid",
