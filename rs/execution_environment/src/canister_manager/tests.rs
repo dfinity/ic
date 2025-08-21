@@ -7258,86 +7258,6 @@ fn create_canister_memory_allocation_capacity_makes_subnet_oversubscribed() {
 }
 
 #[test]
-fn create_canister_when_compute_capacity_is_oversubscribed() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(0)
-        .build();
-    let uc = test.universal_canister().unwrap();
-
-    // Manually set the compute allocation higher to emulate the state after
-    // replica upgrade that decreased compute capacity.
-    test.canister_state_mut(uc)
-        .scheduler_state
-        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
-    test.canister_state_mut(uc)
-        .system_state
-        .set_balance(Cycles::new(2_000_000_000_000_000));
-
-    // Create a canister with default settings.
-    let args = CreateCanisterArgs::default();
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args().other_side(args.encode()),
-            test.canister_creation_fee(),
-        )
-        .build();
-
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with zero compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_compute_allocation(0)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
-        )
-        .build();
-    let result = test.ingress(uc, "update", create_canister);
-    let reply = get_reply(result);
-    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
-
-    // Create a canister with compute allocation.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_compute_allocation(10)
-        .build();
-    let args = CreateCanisterArgs {
-        settings: Some(settings),
-        sender_canister_version: None,
-    };
-    let create_canister = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::CreateCanister,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
-        )
-        .build();
-    test.ingress(uc, "update", create_canister)
-        .unwrap()
-        .assert_contains_reject(
-            "Canister requested a compute allocation of 10% which \
-            cannot be satisfied because the Subnet's remaining \
-            compute capacity is 0%.",
-        );
-}
-
-#[test]
 fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
@@ -7420,6 +7340,87 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
         compute capacity is 24%.",
         );
 }
+
+#[test]
+fn create_canister_when_compute_capacity_is_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(0)
+        .build();
+    let uc = test.universal_canister().unwrap();
+
+    // Manually set the compute allocation higher to emulate the state after
+    // replica upgrade that decreased compute capacity.
+    test.canister_state_mut(uc)
+        .scheduler_state
+        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(2_000_000_000_000_000));
+
+    // Create a canister with default settings.
+    let args = CreateCanisterArgs::default();
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args().other_side(args.encode()),
+            test.canister_creation_fee(),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with zero compute allocation.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(0)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee(),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with compute allocation.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(10)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee(),
+        )
+        .build();
+    test.ingress(uc, "update", create_canister)
+        .unwrap()
+        .assert_contains_reject(
+            "Canister requested a compute allocation of 10% which \
+            cannot be satisfied because the Subnet's remaining \
+            compute capacity is 0%.",
+        );
+}
+
 
 #[test]
 fn create_canister_checks_freezing_threshold_for_memory_allocation() {
