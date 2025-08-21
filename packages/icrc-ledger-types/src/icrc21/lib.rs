@@ -380,9 +380,7 @@ pub fn build_icrc21_consent_info(
                     description: format!("Failed to decode TransferArg: {}", e),
                 })
             })?;
-            if let Some(fee) = fee {
-                assert_eq!(fee, ledger_fee);
-            }
+            icrc21_check_fee(&fee, &ledger_fee)?;
             let sender = Account {
                 owner: caller_principal,
                 subaccount: from_subaccount,
@@ -412,9 +410,7 @@ pub fn build_icrc21_consent_info(
                     description: format!("Failed to decode TransferFromArgs: {}", e),
                 })
             })?;
-            if let Some(fee) = fee {
-                assert_eq!(fee, ledger_fee);
-            }
+            icrc21_check_fee(&fee, &ledger_fee)?;
             let spender = Account {
                 owner: caller_principal,
                 subaccount: spender_subaccount,
@@ -446,9 +442,7 @@ pub fn build_icrc21_consent_info(
                     description: format!("Failed to decode ApproveArgs: {}", e),
                 })
             })?;
-            if let Some(fee) = fee {
-                assert_eq!(fee, ledger_fee);
-            }
+            icrc21_check_fee(&fee, &ledger_fee)?;
             let approver = Account {
                 owner: caller_principal,
                 subaccount: from_subaccount,
@@ -499,4 +493,18 @@ pub fn build_icrc21_consent_info(
         metadata,
         consent_message,
     })
+}
+
+pub fn icrc21_check_fee(fee: &Option<Nat>, ledger_fee: &Nat) -> Result<(), Icrc21Error> {
+    if let Some(fee) = fee {
+        if fee != ledger_fee {
+            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: format!(
+                    "The fee specified in the arguments ({}) is different than the ledger fee ({})",
+                    fee, ledger_fee
+                ),
+            }));
+        }
+    }
+    Ok(())
 }
