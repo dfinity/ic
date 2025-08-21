@@ -26,6 +26,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
+use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
     call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
     CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
@@ -3347,6 +3348,7 @@ impl Operation for QueryRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
+                    query::Version::V2,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
