@@ -7247,14 +7247,10 @@ fn create_canister_memory_allocation_capacity_makes_subnet_oversubscribed() {
         )
         .build();
 
-    let result = test.ingress(uc, "update", create_canister)
-    .unwrap();
+    let result = test.ingress(uc, "update", create_canister).unwrap();
 
-    result.assert_contains_reject(
-        format!("Canister requested 4.00 GiB of memory").as_str(),
-    );
+    result.assert_contains_reject(format!("Canister requested 4.00 GiB of memory").as_str());
     result.assert_contains_reject("are available in the subnet");
-
 }
 
 #[test]
@@ -7420,7 +7416,6 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             compute capacity is 0%.",
         );
 }
-
 
 #[test]
 fn create_canister_checks_freezing_threshold_for_memory_allocation() {
