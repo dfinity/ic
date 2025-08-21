@@ -1,14 +1,18 @@
-use crate::extensions::ExtensionType::TreasuryManager;
-use crate::extensions::{ExtensionSpec, ExtensionVersion, ValidatedExtensionInit};
-use crate::governance::test_helpers::basic_governance_proto;
-use crate::governance::ValidGovernanceProto;
-use crate::governance::{test_helpers::DoNothingLedger, Governance};
-use crate::pb::v1::Topic::TreasuryAssetManagement;
-use crate::pb::v1::{
-    self as pb, nervous_system_function, ExecuteExtensionOperation, ExtensionInit,
+use crate::{
+    extensions::{
+        ExtensionSpec, ExtensionType::TreasuryManager, ExtensionVersion, ValidatedExtensionInit,
+    },
+    governance::{
+        test_helpers::{basic_governance_proto, DoNothingLedger},
+        Governance, ValidGovernanceProto,
+    },
+    pb::v1::{
+        self as pb, nervous_system_function, ExecuteExtensionOperation, ExtensionInit,
+        Topic::TreasuryAssetManagement,
+    },
+    storage::cache_registered_extension,
+    types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment},
 };
-use crate::storage::cache_registered_extension;
-use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
@@ -202,12 +206,6 @@ fn test_all_topics() {
 
     // Extension Test Cases
     let extension_canister_id = CanisterId::from_u64(100_000);
-    fn unimplemented_validator(
-        _gov: &Governance,
-        _init: ExtensionInit,
-    ) -> futures::future::BoxFuture<Result<ValidatedExtensionInit, String>> {
-        Box::pin(async move { Err("Not implemented".to_string()) })
-    }
     let extension_spec = ExtensionSpec {
         name: "foo".to_string(),
         version: ExtensionVersion(1),
