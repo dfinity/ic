@@ -1,11 +1,12 @@
+use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use bitcoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
-use candid::CandidType;
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
-    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinGetSuccessorsResponsePartial,
+    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
+    BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
     Method as Ic00Method, Payload,
 };
 use ic_system_test_driver::{
@@ -14,53 +15,8 @@ use ic_system_test_driver::{
 };
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
-use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use std::{str::FromStr, time::Duration};
-
-use ic_btc_interface::BlockHash;
-
-use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
-
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
-pub enum Network {
-    /// Mainnet.
-    #[serde(rename = "mainnet")]
-    Mainnet,
-    /// Testnet.
-    #[serde(rename = "testnet")]
-    Testnet,
-    /// Regtest.
-    ///
-    /// This is only available when developing with local replica.
-    #[serde(rename = "regtest")]
-    Regtest,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub enum GetSuccessorsRequest {
-    /// A request containing the hashes of blocks we'd like to retrieve succeessors for.
-    #[serde(rename = "initial")]
-    Initial(GetSuccessorsRequestInitial),
-
-    /// A follow-up request to retrieve the `FollowUp` response associated with the given page.
-    #[serde(rename = "follow_up")]
-    FollowUp(u8),
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct SendTransactionRequest {
-    pub network: Network,
-    #[serde(with = "serde_bytes")]
-    pub transaction: Vec<u8>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct GetSuccessorsRequestInitial {
-    pub network: Network,
-    pub anchor: BlockHash,
-    pub processed_block_hashes: Vec<BlockHash>,
-}
 
 /// A proxy to make requests to the bitcoin adapter
 ///
@@ -118,11 +74,12 @@ impl<'a> AdapterProxy<'a> {
         anchor: Vec<u8>,
         headers: Vec<Vec<u8>>,
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
-        let get_successors_request = GetSuccessorsRequest::Initial(GetSuccessorsRequestInitial {
-            network: Network::Mainnet,
-            anchor,
-            processed_block_hashes: headers,
-        });
+        let get_successors_request =
+            BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
+                network: BitcoinNetwork::BitcoinMainnet,
+                anchor,
+                processed_block_hashes: headers,
+            });
 
         let result = self
             .msg_can
@@ -163,8 +120,8 @@ impl<'a> AdapterProxy<'a> {
 
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
-        let send_tx_request = SendTransactionRequest {
-            network: Network::Mainnet,
+        let send_tx_request = BitcoinSendTransactionInternalArgs {
+            network: BitcoinNetwork::BitcoinMainnet,
             transaction,
         };
 
