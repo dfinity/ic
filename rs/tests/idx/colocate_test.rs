@@ -275,7 +275,7 @@ docker run \
   --name {COLOCATE_CONTAINER_NAME} \
   --network host \
   -v /home/admin/test:/home/root/test \
-  -v /home/admin/runfiles:/home/root/runfiles:ro \
+  -v /home/admin/runfiles:/home/root/runfiles \
   -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
   --env-file /home/admin/env_vars \
   --env RUNFILES=/home/root/runfiles \
