@@ -958,15 +958,20 @@ pub async fn validate_register_extension(
     if spec.supports_extension_type(ExtensionType::TreasuryManager) {
         // Validate that the subnet for the extension_canister_id is okay!
         // NOTE: https://dfinity.slack.com/archives/C01D7R95YJE/p1747290739449439?thread_ts=1747249089.612059&cid=C01D7R95YJE
-        let _subnet_id = get_subnet_for_canister(&*governance.env, extension_canister_id)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Failed to get subnet for extension canister {}: {}",
-                    extension_canister_id, e
-                )
-            })?;
-        // TODO: Add actual subnet validation logic here
+        let subnet_type =
+            get_subnet_type_canister_is_running_on(&governance.env, extension_canister_id).await;
+
+        let Some(subnet_type) = subnet_type else {
+            return Err(
+                "TreasuryManager extensions must be installed on a fiduciary subnet.".to_string(),
+            );
+        };
+
+        if subnet_type != "fiduciary" {
+            return Err(
+                "TreasuryManager extensions must be installed on a fiduciary subnet.".to_string(),
+            );
+        }
     }
 
     Ok(ValidatedRegisterExtension {
@@ -1052,6 +1057,32 @@ async fn get_subnet_types_to_subnets(
     })?;
 
     Ok(response)
+}
+
+async fn get_subnet_type_canister_is_running_on(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Option<String> {
+    // Get the subnet ID for the current canister
+    let subnet_id = match get_subnet_for_canister(env, canister_id).await {
+        Ok(id) => id,
+        Err(_) => return None,
+    };
+
+    // Get the mapping of subnet types to subnets
+    let subnet_types_response = match get_subnet_types_to_subnets(env).await {
+        Ok(response) => response,
+        Err(_) => return None,
+    };
+
+    // Look through the mapping to find which subnet type contains our subnet ID
+    for (subnet_type, subnet_ids) in subnet_types_response.data {
+        if subnet_ids.contains(&subnet_id) {
+            return Some(subnet_type);
+        }
+    }
+
+    None
 }
 
 async fn get_extension_spec_and_update_cache(
