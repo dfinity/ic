@@ -18,12 +18,12 @@ use std::mem::size_of_val;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, CandidType)]
 pub enum Network {
-    #[serde(rename = "mainnet")]
-    Mainnet,
-    #[serde(rename = "testnet")]
-    Testnet,
-    #[serde(rename = "regtest")]
-    Regtest,
+    #[serde(rename = "mainnet", alias = "bitcoin_mainnet")]
+    BitcoinMainnet,
+    #[serde(rename = "testnet", alias = "bitcoin_testnet")]
+    BitcoinTestnet,
+    #[serde(rename = "regtest", alias = "bitcoin_regtest")]
+    BitcoinRegtest,
     #[serde(rename = "dogecoin_mainnet")]
     DogecoinMainnet,
     #[serde(rename = "dogecoin_testnet")]
@@ -35,9 +35,9 @@ pub enum Network {
 impl From<Network> for v1::Network {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => v1::Network::Mainnet,
-            Network::Testnet => v1::Network::Testnet,
-            Network::Regtest => v1::Network::Regtest,
+            Network::BitcoinMainnet => v1::Network::BitcoinMainnet,
+            Network::BitcoinTestnet => v1::Network::BitcoinTestnet,
+            Network::BitcoinRegtest => v1::Network::BitcoinRegtest,
             Network::DogecoinMainnet => v1::Network::DogecoinMainnet,
             Network::DogecoinTestnet => v1::Network::DogecoinTestnet,
             Network::DogecoinRegtest => v1::Network::DogecoinRegtest,
@@ -56,9 +56,9 @@ impl TryFrom<v1::Network> for Network {
 
     fn try_from(network: v1::Network) -> Result<Self, Self::Error> {
         match network {
-            v1::Network::Testnet => Ok(Network::Testnet),
-            v1::Network::Mainnet => Ok(Network::Mainnet),
-            v1::Network::Regtest => Ok(Network::Regtest),
+            v1::Network::BitcoinTestnet => Ok(Network::BitcoinTestnet),
+            v1::Network::BitcoinMainnet => Ok(Network::BitcoinMainnet),
+            v1::Network::BitcoinRegtest => Ok(Network::BitcoinRegtest),
             v1::Network::DogecoinMainnet => Ok(Network::DogecoinMainnet),
             v1::Network::DogecoinTestnet => Ok(Network::DogecoinTestnet),
             v1::Network::DogecoinRegtest => Ok(Network::DogecoinRegtest),
