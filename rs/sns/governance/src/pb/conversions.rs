@@ -1,7 +1,8 @@
-use crate::pb::v1::{self as pb};
-use crate::topics;
-use core::convert::Into;
-use core::option::Option::Some;
+use crate::{
+    pb::v1::{self as pb},
+    topics,
+};
+use core::{convert::Into, option::Option::Some};
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -4447,10 +4448,10 @@ impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
     fn from(value: crate::extensions::OperationType) -> Self {
         match value {
             crate::extensions::OperationType::TreasuryManagerDeposit => {
-                pb_api::ExtensionOperationType::TreasuryManagerDeposit
+                pb_api::ExtensionOperationType::TreasuryManagerDeposit(candid::Reserved::default())
             }
             crate::extensions::OperationType::TreasuryManagerWithdraw => {
-                pb_api::ExtensionOperationType::TreasuryManagerWithdraw
+                pb_api::ExtensionOperationType::TreasuryManagerWithdraw(candid::Reserved::default())
             }
             crate::extensions::OperationType::Custom(name) => {
                 pb_api::ExtensionOperationType::Custom(name)
@@ -4464,7 +4465,7 @@ impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
     fn from(value: crate::extensions::ExtensionType) -> Self {
         match value {
             crate::extensions::ExtensionType::TreasuryManager => {
-                pb_api::ExtensionType::TreasuryManager
+                pb_api::ExtensionType::TreasuryManager(candid::Reserved::default())
             }
         }
     }
