@@ -21,6 +21,7 @@ use ic_canister_log::log;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -428,6 +429,12 @@ impl ValidatedRegisterExtension {
             .register_extension_with_root(extension_canister_id)
             .await?;
 
+        // Before granting any SNS capabilities to the extension, we must ensure that old code
+        // could not have snuck in between proposal (re-)validation and the SNS assuming control.
+        governance
+            .ensure_no_code_is_installed(extension_canister_id)
+            .await?;
+
         // This needs to happen before the canister code is installed.
         let init_blob = match init {
             ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
@@ -634,6 +641,34 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!("Error making ICP treasury transfer: {}", e),
+                )
+            })?;
+
+        Ok(())
+    }
+
+    async fn ensure_no_code_is_installed(
+        &self,
+        extension_canister_id: CanisterId,
+    ) -> Result<(), GovernanceError> {
+        let uninstall_code_arg =
+            Encode!(&CanisterIdRecord::from(extension_canister_id)).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Error encoding uninstall_code request.\n{}", err),
+                )
+            })?;
+
+        self.env
+            .call_canister(CanisterId::ic_00(), "uninstall_code", uninstall_code_arg)
+            .await
+            .map_err(|(err_code, err)| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "Error uninstalling old code from extension canister (code {:?}): {}",
+                        err_code, err
+                    ),
                 )
             })?;
 
@@ -965,7 +1000,9 @@ pub async fn validate_register_extension(
         )
     })?;
 
-    // Ensure that the extension canister does not have any code installed yet.
+    // Check that the extension canister does not have any code installed yet.
+    //
+    // This will need to be checked again after the SNS assumes control over the extension.
     if let Some(module_hash) = canister_module_hash(&*governance.env, extension_canister_id).await?
     {
         return Err(GovernanceError::new_with_message(
