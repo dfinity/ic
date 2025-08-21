@@ -234,13 +234,16 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_delegation_test",
+    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",
     ],
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/certification",
         "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
@@ -248,8 +251,11 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
+        "@crate_index//:time",
         "@crate_index//:tokio",
     ],
 )
