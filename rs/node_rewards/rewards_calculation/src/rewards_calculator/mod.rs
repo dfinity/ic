@@ -531,7 +531,7 @@ fn step_5_adjust_node_rewards(
             let provider_nodes_count_day =
                 nodes_count.get(&day).expect("Daily nodes count expected");
             let provider_assigned_nodes_count_day = assigned_count
-                .get(&day)
+                .get(day)
                 .expect("Assigned nodes count expected");
             let base_rewards_for_day = base_rewards
                 .get(&(*day, node.node_id))
