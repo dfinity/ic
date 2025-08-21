@@ -32,6 +32,7 @@ use regex::Regex;
 use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
@@ -603,22 +604,28 @@ impl SystemTestGroup {
                                 .to_path_buf()
                         };
                         let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
+                        let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
                         debug!(logger, ">>> {UVMS_LOGS_STREAM_TASK_NAME}");
                         loop {
                             match discover_uvms(root_search_dir.clone()) {
                                 Ok(discovered_uvms) => {
                                     for (key, value) in discovered_uvms {
+                                        if skipped_uvms.contains(&key) {
+                                            continue;
+                                        }
+
+                                        let key_match = group_ctx
+                                            .exclude_logs
+                                            .iter()
+                                            .any(|pattern| pattern.is_match(&key));
+
+                                        if key_match {
+                                            debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
+                                            skipped_uvms.insert(key);
+                                            continue;
+                                        }
+
                                         streamed_uvms.entry(key.clone()).or_insert_with(|| {
-                                                let key_match = group_ctx
-                                                    .exclude_logs
-                                                    .iter()
-                                                    .any(|pattern| pattern.is_match(&key));
-
-                                                if key_match {
-                                                    debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
-                                                    return value;
-                                                }
-
                                                 let logger = logger.clone();
                                                 info!(
                                                     logger,
