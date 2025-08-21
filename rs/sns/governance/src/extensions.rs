@@ -6,7 +6,7 @@ use crate::{
             register_extension_response, CanisterCallError, ListSnsCanistersRequest,
             ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
         },
-        v1 as pb, v1,
+        v1 as pb,
         v1::{
             governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
             ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
@@ -959,7 +959,7 @@ pub async fn validate_register_extension(
         // Validate that the subnet for the extension_canister_id is okay!
         // NOTE: https://dfinity.slack.com/archives/C01D7R95YJE/p1747290739449439?thread_ts=1747249089.612059&cid=C01D7R95YJE
         let subnet_type =
-            get_subnet_type_canister_is_running_on(&governance.env, extension_canister_id).await;
+            get_subnet_type_canister_is_running_on(&*governance.env, extension_canister_id).await;
 
         let Some(subnet_type) = subnet_type else {
             return Err(
@@ -1753,6 +1753,214 @@ mod tests {
         assert!(error
             .error_message
             .contains("does not have an operation named invalid_operation"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_fiduciary_subnet_success() {
+        // Set up mock environment for successful fiduciary subnet validation
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(3000); // This becomes extension_canister_id
+
+        // Mock get_subnet_for_canister response (registry call)
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(100));
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Ok(Encode!(&Ok::<SubnetForCanister, String>(SubnetForCanister {
+                subnet_id: Some(subnet_id.get()),
+            }))
+            .unwrap()),
+        );
+
+        // Mock get_subnet_types_to_subnets response (CMC call)
+        env.set_call_canister_response(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            Encode!(&()).unwrap(),
+            Ok(Encode!(&SubnetTypesToSubnetsResponse {
+                data: vec![
+                    (
+                        "application".to_string(),
+                        vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
+                    ),
+                    ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
+                ],
+            })
+            .unwrap()),
+        );
+
+        let governance_proto = create_test_governance_proto();
+        let governance = Governance::new(
+            ValidGovernanceProto::try_from(governance_proto)
+                .expect("Failed validating governance proto"),
+            Box::new(env),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockCMC::default()),
+        );
+
+        // Create a valid RegisterExtension request for TreasuryManager
+        let register_extension = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                store_canister_id: Some(store_canister_id.get()),
+                wasm_module_hash: vec![0u8; 32], // Valid 32-byte hash
+            }),
+            extension_init: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000))
+                        },
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000))
+                        },
+                    },
+                })),
+            }),
+        };
+
+        // Should succeed because extension canister is on fiduciary subnet
+        let result = validate_register_extension(&governance, register_extension).await;
+        assert!(
+            result.is_ok(),
+            "Expected success but got error: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_non_fiduciary_subnet_failure() {
+        // Set up mock environment for non-fiduciary subnet (should fail)
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(3000); // This becomes extension_canister_id
+
+        // Mock get_subnet_for_canister response (registry call)
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(100));
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Ok(Encode!(&Ok::<SubnetForCanister, String>(SubnetForCanister {
+                subnet_id: Some(subnet_id.get()),
+            }))
+            .unwrap()),
+        );
+
+        // Mock get_subnet_types_to_subnets response (CMC call) - subnet is NOT fiduciary
+        env.set_call_canister_response(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            Encode!(&()).unwrap(),
+            Ok(Encode!(&SubnetTypesToSubnetsResponse {
+                data: vec![
+                    ("application".to_string(), vec![subnet_id]), // Our subnet is application, not fiduciary
+                    (
+                        "fiduciary".to_string(),
+                        vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
+                    ),
+                ],
+            })
+            .unwrap()),
+        );
+
+        let governance_proto = create_test_governance_proto();
+        let governance = Governance::new(
+            ValidGovernanceProto::try_from(governance_proto)
+                .expect("Failed validating governance proto"),
+            Box::new(env),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockCMC::default()),
+        );
+
+        // Create a valid RegisterExtension request for TreasuryManager
+        let register_extension = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                store_canister_id: Some(store_canister_id.get()),
+                wasm_module_hash: vec![0u8; 32], // Valid 32-byte hash
+            }),
+            extension_init: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000))
+                        },
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000))
+                        },
+                    },
+                })),
+            }),
+        };
+
+        // Should fail because extension canister is NOT on fiduciary subnet
+        let result = validate_register_extension(&governance, register_extension).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("TreasuryManager extensions must be installed on a fiduciary subnet"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_subnet_lookup_failure() {
+        // Set up mock environment where subnet lookup fails
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(3000); // This becomes extension_canister_id
+
+        // Mock get_subnet_for_canister response (registry call) - return error
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Err((Some(999), "Registry lookup failed".to_string())),
+        );
+
+        let governance_proto = create_test_governance_proto();
+        let governance = Governance::new(
+            ValidGovernanceProto::try_from(governance_proto)
+                .expect("Failed validating governance proto"),
+            Box::new(env),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockCMC::default()),
+        );
+
+        // Create a valid RegisterExtension request for TreasuryManager
+        let register_extension = RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                store_canister_id: Some(store_canister_id.get()),
+                wasm_module_hash: vec![0u8; 32], // Valid 32-byte hash
+            }),
+            extension_init: Some(Precise {
+                value: Some(precise::Value::Map(PreciseMap {
+                    map: btreemap! {
+                        "treasury_allocation_sns_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(1000000))
+                        },
+                        "treasury_allocation_icp_e8s".to_string() => Precise {
+                            value: Some(precise::Value::Nat(2000000))
+                        },
+                    },
+                })),
+            }),
+        };
+
+        // Should fail because subnet lookup failed
+        let result = validate_register_extension(&governance, register_extension).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("TreasuryManager extensions must be installed on a fiduciary subnet"));
     }
 
     #[tokio::test]
