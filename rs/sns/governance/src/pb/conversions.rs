@@ -4453,9 +4453,6 @@ impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
             crate::extensions::OperationType::TreasuryManagerWithdraw => {
                 pb_api::ExtensionOperationType::TreasuryManagerWithdraw(candid::Reserved::default())
             }
-            crate::extensions::OperationType::Custom(name) => {
-                pb_api::ExtensionOperationType::Custom(name)
-            }
         }
     }
 }

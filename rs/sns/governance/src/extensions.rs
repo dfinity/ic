@@ -128,7 +128,6 @@ impl RenderablePayload for Precise {
 pub enum OperationType {
     TreasuryManagerDeposit,
     TreasuryManagerWithdraw,
-    Custom(String),
 }
 
 impl Display for OperationType {
@@ -136,7 +135,6 @@ impl Display for OperationType {
         match self {
             OperationType::TreasuryManagerDeposit => write!(f, "deposit"),
             OperationType::TreasuryManagerWithdraw => write!(f, "withdraw"),
-            OperationType::Custom(name) => write!(f, "{}", name),
         }
     }
 }
@@ -171,10 +169,6 @@ impl ExtensionOperationSpec {
             OperationType::TreasuryManagerWithdraw => {
                 validate_withdraw_operation(governance, arg).await
             }
-            OperationType::Custom(operation_name) => Err(format!(
-                "Custom operation '{}' validation not yet implemented",
-                operation_name
-            )),
         }
     }
 }

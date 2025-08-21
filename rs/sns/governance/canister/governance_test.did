@@ -783,7 +783,6 @@ type ExtensionOperationSpec = record {
 type ExtensionOperationType = variant {
   TreasuryManagerDeposit : reserved;
   TreasuryManagerWithdraw : reserved;
-  Custom : text;
 };
 
 type ExtensionType = variant {

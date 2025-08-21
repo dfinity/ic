@@ -5,15 +5,14 @@ use std::collections::BTreeMap;
 pub mod topics;
 
 /// Types of extension operations
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub enum ExtensionOperationType {
     TreasuryManagerDeposit(candid::Reserved),
     TreasuryManagerWithdraw(candid::Reserved),
-    Custom(String),
 }
 
 /// Specification for an extension operation
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub struct ExtensionOperationSpec {
     pub operation_type: Option<ExtensionOperationType>,
     pub description: Option<String>,
@@ -22,7 +21,7 @@ pub struct ExtensionOperationSpec {
 }
 
 /// Types of extensions that can be registered
-#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
 pub enum ExtensionType {
     TreasuryManager(candid::Reserved),
 }
