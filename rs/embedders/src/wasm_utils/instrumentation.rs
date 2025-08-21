@@ -744,7 +744,7 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     (module.types.len() - 1) as u32
 }
 
-fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
+fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32 + Sync) {
     fn mutate_instruction(f: &impl Fn(u32) -> u32, op: &mut Operator) {
         match op {
             Operator::Call { function_index }
@@ -756,11 +756,12 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
         }
     }
 
-    for func_body in &mut module.code_sections {
+    use rayon::prelude::*;
+    module.code_sections.par_iter_mut().for_each(|func_body| {
         for op in &mut func_body.instructions {
             mutate_instruction(&f, op);
         }
-    }
+    });
 
     for exp in &mut module.exports {
         if let ExternalKind::Func = exp.kind {
@@ -1681,14 +1682,15 @@ pub(super) fn instrument(
     }
 
     // inject instructions counter decrementation
-    for func_body in &mut module.code_sections {
+    use rayon::prelude::*;
+    module.code_sections.par_iter_mut().for_each(|func_body| {
         inject_metering(
             &mut func_body.instructions,
             &special_indices,
             metering_type,
             main_memory_type,
         );
-    }
+    });
 
     // Collect all the function types of the locally defined functions inside the
     // module.
@@ -1702,7 +1704,10 @@ pub(super) fn instrument(
             .composite_type
             .inner
         {
-            func_types.push((i, t.clone()));
+            if func_types.len() <= i {
+                func_types.resize(i + 1, FuncType::new(vec![], vec![]));
+            }
+            func_types[i] = t.clone();
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
                 "Function has type which is not a function type. Found type: {:?}",
@@ -1713,10 +1718,13 @@ pub(super) fn instrument(
 
     // Inject `try_grow_wasm_memory` after `memory.grow` instructions.
     if !func_types.is_empty() {
-        let func_bodies = &mut module.code_sections;
-        for (func_ix, func_type) in func_types.into_iter() {
-            inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type, main_memory_type);
-        }
+        module
+            .code_sections
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, func_body)| {
+                inject_try_grow_wasm_memory(func_body, &func_types[i], main_memory_type);
+            });
     }
 
     module = export_additional_symbols(module, &special_indices);
