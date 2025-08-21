@@ -151,6 +151,7 @@ fn query_calls(env: TestEnv) {
 fn read_state_v2(env: TestEnv) {
     read_state(env, read_state::canister::Version::V2)
 }
+
 fn read_state_v3(env: TestEnv) {
     read_state(env, read_state::canister::Version::V3)
 }
