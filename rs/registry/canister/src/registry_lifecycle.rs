@@ -26,7 +26,8 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = add_missing_node_types_to_nodes(registry);
+        // let mutations = add_missing_node_types_to_nodes(registry);
+        let mutations = migrate_node_reward_type1_type0_to_type1dot1(registry);
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -93,6 +94,34 @@ fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation>
     mutations
 }
 
+#[allow(dead_code)]
+fn migrate_node_reward_type1_type0_to_type1dot1(registry: &Registry) -> Vec<RegistryMutation> {
+    let mut mutations = Vec::new();
+
+    for (id, mut record) in
+        get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter()
+    {
+        let Some(some_reward_type) = record.node_reward_type else {
+            // If the node does not have a node_reward_type, we skip it.
+            continue;
+        };
+
+        let node_reward_type =
+            NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
+
+        if node_reward_type == NodeRewardType::Type1 || node_reward_type == NodeRewardType::Type0 {
+            record.node_reward_type = Some(NodeRewardType::Type1dot1 as i32);
+            let node_id = NodeId::from(PrincipalId::from_str(&id).unwrap());
+            mutations.push(update(
+                make_node_record_key(node_id),
+                record.encode_to_vec(),
+            ));
+        }
+    }
+
+    mutations
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -104,6 +133,7 @@ mod test {
     use ic_base_types::{NodeId, PrincipalId};
     use ic_registry_keys::make_node_record_key;
     use ic_registry_transport::insert;
+    use itertools::enumerate;
 
     fn stable_storage_from_registry(
         registry: &Registry,
@@ -272,6 +302,48 @@ mod test {
                 Some(expected_reward_type as i32),
                 "Assertion for Node {} failed",
                 id
+            );
+        }
+    }
+
+    #[test]
+    fn test_migrate_node_reward_type1_type0_to_type1dot1_works_correctly() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let mut node_additions = Vec::new();
+        for (idx, test_id) in enumerate(0..10) {
+            let node_reward_type = if idx < 5 {
+                NodeRewardType::Type0
+            } else {
+                NodeRewardType::Type1
+            };
+            let record = NodeRecord {
+                node_operator_id: PrincipalId::new_anonymous().to_vec(),
+                node_reward_type: Some(node_reward_type as i32),
+                ..NodeRecord::default()
+            };
+
+            node_additions.push(insert(
+                make_node_record_key(NodeId::new(PrincipalId::new_node_test_id(test_id))),
+                record.encode_to_vec(),
+            ));
+        }
+
+        registry.apply_mutations_for_test(node_additions);
+        let mutations = migrate_node_reward_type1_type0_to_type1dot1(&registry);
+        assert_eq!(mutations.len(), 10);
+
+        registry.apply_mutations_for_test(mutations);
+
+        for test_id in (0..10) {
+            let record =
+                registry.get_node_or_panic(NodeId::from(PrincipalId::new_node_test_id(test_id)));
+
+            assert_eq!(
+                record.node_reward_type,
+                Some(NodeRewardType::Type1dot1 as i32),
+                "Assertion for Node {} failed",
+                test_id
             );
         }
     }
