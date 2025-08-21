@@ -148,6 +148,15 @@ pub struct Response {
     pub deadline: u32,
 }
 
+/// Canonical representation of `ic_types::messages::StreamBlocker`.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamBlocker {
+    #[serde(with = "serde_bytes")]
+    pub subnet_id: Bytes,
+    index: u64,
+}
+
 /// Canonical representation of `ic_types::funds::Cycles`.
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

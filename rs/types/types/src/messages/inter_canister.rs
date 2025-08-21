@@ -914,8 +914,8 @@ impl TryFrom<pb_queues::StreamBlocker> for StreamBlocker {
 }
 
 impl From<&StreamMessage> for pb_queues::StreamMessage {
-    fn from(rrb: &StreamMessage) -> Self {
-        match rrb {
+    fn from(msg: &StreamMessage) -> Self {
+        match msg {
             StreamMessage::Request(req) => pb_queues::StreamMessage {
                 r: Some(pb_queues::stream_message::R::Request(req.as_ref().into())),
             },
