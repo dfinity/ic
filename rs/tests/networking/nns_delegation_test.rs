@@ -395,7 +395,7 @@ fn validate_delegation(
         &[b"subnet", subnet_id.get_ref().as_ref(), b"canister_ranges"],
     )
     .map(|tree| match tree {
-        LabeledTree::Leaf(_value) => (),
+        LabeledTree::Leaf(value) => value,
         LabeledTree::SubTree(_) => panic!("Not a leaf"),
     });
 
