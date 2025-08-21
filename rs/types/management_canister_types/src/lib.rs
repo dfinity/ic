@@ -3977,7 +3977,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 ///     };
 ///     taken_at_timestamp : nat64;
 ///     wasm_module_size : nat64;
-///     exported_globals : vec variant {
+///     globals : vec variant {
 ///         i32 : int32;
 ///         i64 : int64;
 ///         f32 : float32;
@@ -4007,7 +4007,7 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
     pub wasm_module_size: u64,
-    pub exported_globals: Vec<Global>,
+    pub globals: Vec<Global>,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
     pub wasm_chunk_store: Vec<ChunkHash>,
@@ -4206,7 +4206,7 @@ impl ReadCanisterSnapshotDataResponse {
 ///     canister_id : principal;
 ///     replace_snapshot : opt blob;
 ///     wasm_module_size : nat64;
-///     exported_globals : vec variant {
+///     globals : vec variant {
 ///         i32 : int32;
 ///         i64 : int64;
 ///         f32 : float32;
@@ -4232,7 +4232,7 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
     pub wasm_module_size: u64,
-    pub exported_globals: Vec<Global>,
+    pub globals: Vec<Global>,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
     #[serde(with = "serde_bytes")]
@@ -4248,7 +4248,7 @@ impl UploadCanisterSnapshotMetadataArgs {
         canister_id: CanisterId,
         replace_snapshot: Option<SnapshotId>,
         wasm_module_size: u64,
-        exported_globals: Vec<Global>,
+        globals: Vec<Global>,
         wasm_memory_size: u64,
         stable_memory_size: u64,
         certified_data: Vec<u8>,
@@ -4259,7 +4259,7 @@ impl UploadCanisterSnapshotMetadataArgs {
             canister_id: canister_id.get(),
             replace_snapshot,
             wasm_module_size,
-            exported_globals,
+            globals,
             wasm_memory_size,
             stable_memory_size,
             certified_data,
@@ -4282,7 +4282,7 @@ impl UploadCanisterSnapshotMetadataArgs {
             + self.wasm_memory_size
             + self.stable_memory_size
             + self.certified_data.len() as u64
-            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+            + self.globals.len() as u64 * size_of::<Global>() as u64;
 
         NumBytes::new(num_bytes)
     }
