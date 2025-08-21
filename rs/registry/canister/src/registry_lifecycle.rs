@@ -335,7 +335,7 @@ mod test {
 
         registry.apply_mutations_for_test(mutations);
 
-        for test_id in ..10 {
+        for test_id in 0..10 {
             let record =
                 registry.get_node_or_panic(NodeId::from(PrincipalId::new_node_test_id(test_id)));
 
