@@ -909,7 +909,7 @@ fn construct_treasury_manager_withdraw_payload(_value: Precise) -> Result<Vec<u8
 pub async fn validate_register_extension(
     governance: &Governance,
     register_extension: RegisterExtension,
-) -> Result<ValidatedRegisterExtension, GovernanceError> {
+) -> Result<ValidatedRegisterExtension, String> {
     let RegisterExtension {
         chunked_canister_wasm,
         extension_init,
@@ -956,13 +956,7 @@ pub async fn validate_register_extension(
 
         Ok::<_, String>((spec, wasm, extension_canister_id, init))
     })
-    .await
-    .map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!("Invalid RegisterExtension: {:?}", err),
-        )
-    })?;
+    .await?;
 
     Ok(ValidatedRegisterExtension {
         wasm,
