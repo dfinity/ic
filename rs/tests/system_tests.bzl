@@ -274,6 +274,7 @@ def system_test(
       the external environment when the test is executed by bazel test.
       additional_colocate_tags: additional tags to pass to the colocated test.
       logs: Specifies if vector vm for scraping logs should not be spawned.
+      exclude_logs: Specifies uvm name patterns to exclude from streaming.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
