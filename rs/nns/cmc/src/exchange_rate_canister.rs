@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
     ONE_MINUTE_SECONDS,

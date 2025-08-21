@@ -35,12 +35,13 @@ use ic_nns_handler_root_interface::{
 };
 use std::cell::RefCell;
 
+use ic_cdk::futures::spawn_017_compat;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
-use ic_cdk::{post_upgrade, query, spawn, update};
+use ic_cdk::{post_upgrade, query, update};
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(ic_cdk::api::msg_caller())
 }
 
 thread_local! {
@@ -163,7 +164,7 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
 
     // Starts the proposal execution, which will continue after this function has
     // returned.
-    spawn(future);
+    spawn_017_compat(future);
 }
 
 #[update]
@@ -200,7 +201,7 @@ fn call_canister(proposal: CallCanisterProposal) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.
     let future = canister_management::call_canister(proposal);
-    spawn(future);
+    spawn_017_compat(future);
 }
 
 /// Change the controllers of a canister controlled by NNS Root. Only callable
@@ -233,7 +234,10 @@ async fn update_canister_settings(
 
 /// Resources to serve for a given http_request
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

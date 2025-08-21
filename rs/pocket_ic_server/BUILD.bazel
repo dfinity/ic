@@ -15,6 +15,7 @@ LIB_DEPENDENCIES = [
     "//rs/crypto/iccsa",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/adapter:adapter_with_http",
     "//rs/https_outcalls/client",

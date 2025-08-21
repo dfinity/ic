@@ -292,7 +292,7 @@ tecdsa_performance_test_template = system_test_nns(
         "//conditions:default": [],
     }),
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "manual",
     ],
     test_timeout = "eternal",
@@ -336,7 +336,7 @@ system_test_nns(
         "BENCHMARK_NAME": "tecdsa_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],
@@ -364,7 +364,7 @@ system_test_nns(
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],
@@ -392,7 +392,7 @@ system_test_nns(
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],
@@ -420,7 +420,7 @@ system_test_nns(
         "BENCHMARK_NAME": "vetkd_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],

@@ -1,10 +1,11 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
-    self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
+    self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
+    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
+    ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
     OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
@@ -2235,72 +2236,57 @@ fn message_to_canister_with_enough_balance_is_accepted() {
 #[test]
 fn management_message_to_canister_with_enough_balance_is_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
     let canister = test.universal_canister().unwrap();
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let payload = CanisterIdRecord::from(canister).encode();
-        let result = test.should_accept_ingress_message(*receiver, Method::StartCanister, payload);
-        assert_eq!(Ok(()), result);
-    }
+    let payload = CanisterIdRecord::from(canister).encode();
+    let result = test.should_accept_ingress_message(IC_00, Method::StartCanister, payload);
+    assert_eq!(Ok(()), result);
 }
 
 #[test]
 fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
     let canister = test.universal_canister().unwrap();
     test.canister_state_mut(canister)
         .system_state
         .set_balance(Cycles::new(1_000));
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let payload = CanisterIdRecord::from(canister).encode();
-        let err = test
-            .should_accept_ingress_message(*receiver, Method::StartCanister, payload)
-            .unwrap_err();
-        assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
-    }
+    let payload = CanisterIdRecord::from(canister).encode();
+    let err = test
+        .should_accept_ingress_message(IC_00, Method::StartCanister, payload)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
 }
 
 #[test]
 fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let payload = CanisterIdRecord::from(canister_test_id(0)).encode();
-        let err = test
-            .should_accept_ingress_message(*receiver, Method::StartCanister, payload)
-            .unwrap_err();
-        assert_eq!(ErrorCode::CanisterNotFound, err.code());
-    }
+    let payload = CanisterIdRecord::from(canister_test_id(0)).encode();
+    let err = test
+        .should_accept_ingress_message(IC_00, Method::StartCanister, payload)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
 #[test]
 fn management_message_with_invalid_payload_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let err = test
-            .should_accept_ingress_message(*receiver, Method::StartCanister, vec![])
-            .unwrap_err();
-        assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
-    }
+    let err = test
+        .should_accept_ingress_message(IC_00, Method::StartCanister, vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
 }
 
 #[test]
 fn management_message_with_invalid_method_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
 
-    for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
-        let err = test
-            .should_accept_ingress_message(*receiver, "invalid_method", vec![])
-            .unwrap_err();
-        assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
-    }
+    let err = test
+        .should_accept_ingress_message(IC_00, "invalid_method", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm
@@ -2629,7 +2615,7 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
 fn send_messages_to_bitcoin_canister_until_capacity(
     test: &mut ExecutionTest,
     bitcoin_canister: CanisterId,
-    network: BitcoinNetwork,
+    network: NetworkInRequest,
 ) {
     let uc = test.universal_canister().unwrap();
 
@@ -2640,7 +2626,7 @@ fn send_messages_to_bitcoin_canister_until_capacity(
             ic00::IC_00.get()
         };
         let args = Encode!(&BitcoinGetUtxosArgs {
-            network: network.into(),
+            network,
             address: String::from(""),
             filter: None,
         })
@@ -2692,7 +2678,7 @@ fn canister_output_queue_does_not_overflow_when_calling_bitcoin_mainnet_canister
     send_messages_to_bitcoin_canister_until_capacity(
         &mut test,
         bitcoin_mainnet_canister,
-        BitcoinNetwork::Mainnet,
+        NetworkInRequest::Mainnet,
     );
 }
 
@@ -2711,7 +2697,7 @@ fn canister_output_queue_does_not_overflow_when_calling_bitcoin_testnet_canister
     send_messages_to_bitcoin_canister_until_capacity(
         &mut test,
         bitcoin_testnet_canister,
-        BitcoinNetwork::Testnet,
+        NetworkInRequest::Testnet,
     );
 }
 
@@ -3573,7 +3559,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
     // Act.
     test.set_user_id(not_a_controller);
     let result = test.should_accept_ingress_message(
-        test.state().metadata.own_subnet_id.into(),
+        IC_00,
         Method::FetchCanisterLogs,
         FetchCanisterLogsRequest::new(canister_id).encode(),
     );
