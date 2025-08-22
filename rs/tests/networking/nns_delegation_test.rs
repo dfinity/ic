@@ -6,6 +6,13 @@ Goal:: Test the behavior NNS Delegations.
 Runbook::
 . Set up two subnets with one fast node each, send some request to them, and inspect the
   returned delegations.
+. Depending on the values of `ENV_DEPS__GUESTOS_DISK_IMG_VERSION` and `ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION`
+  environment variables we might upgrade the the application subnet to a different version than the NNS subnet.
+  Currently we run two scenarios (this is defined in the BUILD.bazel file):
+  . Both subnets are running the branch version and no subnet is upgraded
+  . Both subnets are initiated with the NNS mainnet version and then the Application subnet is upgraded to the
+    branch version. This ensures that we can still fetch the delegations from the NNS subnet when it runs a
+    different replica version when our replica's.
 
 Success::
 . NNS subnet doesn't attach any delegations to the responses.
