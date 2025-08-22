@@ -909,60 +909,49 @@ fn construct_treasury_manager_withdraw_payload(_value: Precise) -> Result<Vec<u8
 pub async fn validate_register_extension(
     governance: &Governance,
     register_extension: RegisterExtension,
-) -> Result<ValidatedRegisterExtension, GovernanceError> {
+) -> Result<ValidatedRegisterExtension, String> {
     let RegisterExtension {
         chunked_canister_wasm,
         extension_init,
     } = register_extension;
 
     // Phase I. Validate all local properties.
-    let (spec, wasm, extension_canister_id, init) = (async {
-        let Some(ChunkedCanisterWasm {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        }) = chunked_canister_wasm
-        else {
-            return Err("chunked_canister_wasm is required".to_string());
-        };
+    let Some(ChunkedCanisterWasm {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    }) = chunked_canister_wasm
+    else {
+        return Err("chunked_canister_wasm is required".to_string());
+    };
 
-        let Some(store_canister_id) = store_canister_id else {
-            return Err("chunked_canister_wasm.store_canister_id is required".to_string());
-        };
+    let Some(store_canister_id) = store_canister_id else {
+        return Err("chunked_canister_wasm.store_canister_id is required".to_string());
+    };
 
-        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
-            .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
+    let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+        .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
 
-        // Use the store canister to install the extension itself.
-        let extension_canister_id = store_canister_id;
+    // Use the store canister to install the extension itself.
+    let extension_canister_id = store_canister_id;
 
-        let spec = validate_extension_wasm(&wasm_module_hash)
-            .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+    let spec = validate_extension_wasm(&wasm_module_hash)
+        .map_err(|err| format!("Invalid extension wasm: {}", err))?;
 
-        let wasm = Wasm::Chunked {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        };
+    let wasm = Wasm::Chunked {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    };
 
-        let Some(init) = extension_init else {
-            return Err("RegisterExtension.extension_init is required".to_string());
-        };
+    let Some(init) = extension_init else {
+        return Err("RegisterExtension.extension_init is required".to_string());
+    };
 
-        let init = spec
-            .validate_init_arg(governance, init)
-            .await
-            .map_err(|err| format!("Invalid init argument: {}", err))?;
-
-        Ok::<_, String>((spec, wasm, extension_canister_id, init))
-    })
-    .await
-    .map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!("Invalid RegisterExtension: {:?}", err),
-        )
-    })?;
+    let init = spec
+        .validate_init_arg(governance, init)
+        .await
+        .map_err(|err| format!("Invalid init argument: {}", err))?;
 
     Ok(ValidatedRegisterExtension {
         wasm,
@@ -1788,13 +1777,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_wasm)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"chunked_canister_wasm is required\""
-            )
-        );
+        assert_eq!(err, "chunked_canister_wasm is required");
 
         // Test missing store_canister_id
         let missing_store_id = {
@@ -1809,13 +1792,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_store_id)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"chunked_canister_wasm.store_canister_id is required\""
-            )
-        );
+        assert_eq!(err, "chunked_canister_wasm.store_canister_id is required");
 
         // Test invalid store_canister_id (not a valid principal)
         let invalid_store_id = {
@@ -1830,7 +1807,7 @@ mod tests {
         let err = validate_register_extension(&governance, invalid_store_id)
             .await
             .unwrap_err();
-        assert!(err.error_message.contains("invalid principal id"));
+        assert!(err.contains("invalid principal id"));
 
         // Test invalid wasm module hash length
         let invalid_hash_length = {
@@ -1847,10 +1824,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"Invalid extension wasm: Invalid wasm module hash length: expected 32 bytes, got 16\""
-            )
+            "Invalid extension wasm: Invalid wasm module hash length: expected 32 bytes, got 16"
         );
 
         // Test missing extension_init
@@ -1862,9 +1836,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("RegisterExtension.extension_init is required"));
+        assert!(err.contains("RegisterExtension.extension_init is required"));
 
         // Test wasm not in whitelist (in non-test mode this would fail)
         // Since we're in test mode, this will succeed, so we can't test the whitelist rejection here
@@ -1917,9 +1889,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_sns_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+        assert!(err.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Structural validation failure: missing ICP allocation
         let missing_icp_init = mk_register_extension(Some(Precise {
@@ -1932,9 +1902,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_icp_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("treasury_allocation_icp_e8s must be a Nat value"));
+        assert!(err.contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Structural validation failure: wrong type
         let wrong_type_init = mk_register_extension(Some(Precise {
@@ -1948,18 +1916,14 @@ mod tests {
         let err = validate_register_extension(&governance, wrong_type_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+        assert!(err.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Structural validation failure: no arguments
         let no_args_init = mk_register_extension(None);
         let err = validate_register_extension(&governance, no_args_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("Deposit operation arguments must be provided"));
+        assert!(err.contains("Deposit operation arguments must be provided"));
 
         // Structural validation failure: not a map
         let not_map_init = mk_register_extension(Some(Precise {
@@ -1968,9 +1932,7 @@ mod tests {
         let err = validate_register_extension(&governance, not_map_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("Deposit operation arguments must be a PreciseMap"));
+        assert!(err.contains("Deposit operation arguments must be a PreciseMap"));
     }
 
     #[tokio::test]
