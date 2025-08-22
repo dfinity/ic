@@ -215,27 +215,6 @@ impl<'a> AdapterProxy<'a> {
     }
 }
 
-pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (RpcClient, RpcClient) {
-    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let bitcoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
-
-    let client = RpcClient::new(
-        Network::Regtest,
-        format!("http://[{}]:{}", bitcoind_addr, BITCOIND_RPC_PORT).as_str(),
-        Auth::UserPass(
-            crate::BITCOIND_RPC_USER.to_string(),
-            crate::BITCOIND_RPC_PASSWORD.to_string(),
-        ),
-    )
-    .unwrap()
-    .ensure_wallet()
-    .unwrap();
-
-    let alice_client = client.with_account("alice").unwrap();
-    let bob_client = client.with_account("bob").unwrap();
-    (alice_client, bob_client)
-}
-
 pub fn fund_with_btc(
     to_fund_client: &RpcClient,
     to_fund_address: &Address,
