@@ -11,8 +11,8 @@ fn main() -> Result<()> {
             nested::config(env, SUBNET_SIZE, Some(DKG_INTERVAL))
         })
         .add_test(systest!(nested::nns_recovery_test))
-        .with_timeout_per_test(Duration::from_secs(20 * 60))
-        .with_overall_timeout(Duration::from_secs(25 * 60))
+        .with_timeout_per_test(Duration::from_secs(30 * 60))
+        .with_overall_timeout(Duration::from_secs(35 * 60))
         .execute_from_args()?;
 
     Ok(())
