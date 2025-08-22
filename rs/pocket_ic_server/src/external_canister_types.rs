@@ -103,12 +103,13 @@ mod tests {
             .unwrap()
             .1
             .data(&IdsToIndices::default());
+
         let (init_args, (env, _)) = instantiate_candid(CandidSource::Text(
             core::str::from_utf8(&canister_did).unwrap(),
         ))
         .unwrap();
-
         assert_eq!(init_args.len(), 1);
+
         let mut gamma = std::collections::HashSet::new();
         equal(&mut gamma, &env, &init_args[0], &T::ty()).unwrap();
     }
