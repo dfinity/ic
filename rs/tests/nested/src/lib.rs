@@ -38,6 +38,7 @@ use ic_types::{hostos_version::HostosVersion, Height};
 use reqwest::Client;
 
 use slog::info;
+use sha2::{Digest, Sha256};
 
 mod util;
 use util::{
@@ -204,6 +205,18 @@ pub const DKG_INTERVAL: u64 = 9;
 
 pub fn nns_recovery_test(env: TestEnv) {
     let logger = env.logger();
+
+    let recovery_img = std::fs::read(&get_dependency_path(
+        std::env::var("RECOVERY_GUESTOS_IMG_PATH")
+            .expect("RECOVERY_GUESTOS_IMG_PATH environment variable not found"),
+    ))
+    .expect("Failed to read recovery GuestOS image");
+    let recovery_img_version = std::env::var("RECOVERY_GUESTOS_IMG_VERSION")
+        .expect("RECOVERY_GUESTOS_IMG_VERSION environment variable not found");
+    let recovery_img_hash = Sha256::digest(&recovery_img)
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
 
     let initial_topology = block_on(
         env.topology_snapshot()
@@ -532,6 +545,18 @@ pub fn nns_recovery_test(env: TestEnv) {
     //          * recovery-engine to complete
     //          * node to resume as healthy
     //      * TODO: see NNS healthy (maybe this must wait for the nodes to re-upgrade (as nodes should upgrade to guestos-dev version contained in the registry local store)
+    info!(logger, "Setup UVM to serve recovery artifacts");
+    let artifacts = std::fs::read(output_dir.join("recovery.tar.zst")).unwrap();
+    let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
+        .unwrap()
+        .trim()
+        .to_string();
+    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, artifacts, &artifacts_hash)
+        .expect("Failed to serve recovery artifacts from UVM");
+
+    info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
+    impersonate_upstreams::uvm_serve_guestos_image(&env, recovery_img, &recovery_img_version)
+        .unwrap();
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is

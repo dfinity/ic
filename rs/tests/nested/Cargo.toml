@@ -24,6 +24,7 @@ ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 registry-canister = { path = "../../registry/canister" }
+sha2 = { workspace = true }
 slog = { workspace = true }
 url = { workspace = true }
 prost = { workspace = true }

@@ -17591,6 +17591,7 @@ dependencies = [
  "regex",
  "registry-canister",
  "reqwest 0.12.15",
+ "sha2 0.10.9",
  "slog",
  "url",
 ]
