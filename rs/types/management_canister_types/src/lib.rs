@@ -3194,31 +3194,22 @@ pub use ic_btc_interface::{
     GetUtxosRequest as BitcoinGetUtxosArgs, SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 pub use ic_btc_replica_types::{
-    GetDogeSuccessorsRequestInitial as DogecoinGetSuccessorsRequestInitial,
+    GetSuccessorsRequest as BitcoinGetSuccessorsArgs,
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
-    GetSuccessorsResponse as DogecoinGetSuccessorsResponse,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
-    GetSuccessorsResponseComplete as DogecoinGetSuccessorsResponseComplete,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
     GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
-
-pub type BitcoinGetSuccessorsArgs =
-    ic_btc_replica_types::GetSuccessorsRequest<BitcoinGetSuccessorsRequestInitial>;
-pub type DogecoinGetSuccessorsArgs =
-    ic_btc_replica_types::GetSuccessorsRequest<DogecoinGetSuccessorsRequestInitial>;
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
 impl Payload<'_> for BitcoinGetUtxosArgs {}
 impl Payload<'_> for BitcoinGetBlockHeadersArgs {}
 impl Payload<'_> for BitcoinSendTransactionArgs {}
 impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
-impl Payload<'_> for DogecoinGetSuccessorsArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsResponse {}
 impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
-impl Payload<'_> for DogecoinSendTransactionInternalArgs {}
 
 /// Query methods exported by the management canister.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display, EnumIter, EnumString)]

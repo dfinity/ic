@@ -8,11 +8,14 @@ use bitcoin::{
 use candid::{Encode, Principal};
 use dogecoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
-    DogecoinGetSuccessorsArgs, DogecoinGetSuccessorsRequestInitial, DogecoinGetSuccessorsResponse,
-    DogecoinGetSuccessorsResponsePartial, DogecoinSendTransactionInternalArgs,
+    BitcoinGetSuccessorsArgs as DogecoinGetSuccessorsArgs,
+    BitcoinGetSuccessorsRequestInitial as DogecoinGetSuccessorsRequestInitial,
+    BitcoinGetSuccessorsResponse as DogecoinGetSuccessorsResponse,
+    BitcoinGetSuccessorsResponsePartial as DogecoinGetSuccessorsResponsePartial,
+    BitcoinNetwork as Network,
+    BitcoinSendTransactionInternalArgs as DogecoinSendTransactionInternalArgs,
     Method as Ic00Method, Payload,
 };
 use ic_system_test_driver::{
