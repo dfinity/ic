@@ -9,12 +9,7 @@ use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
     IC_00,
 };
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{
-        canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
-    },
-};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
@@ -372,10 +367,12 @@ where
     res
 }
 
-/// Stops the given canister, and polls until the `Stopped` state is reached.
-///
-/// Warning: there's no guarantee that this ever finishes!
-/// TODO(IC-1099)
+/// Stops the given canister.  If 'stop_canister' times out, this returns an Err.  Otherwise,
+/// the canister has reached the "Stopped" state.  If 'stop_canister' times out, the canister
+/// may later reach a "Stopped" state.  Therefore, if this method returns an Err,
+/// the caller should usually call "start_canister" to avoid leaving the canister in a Stopped state.
+/// Alternately, the caller can retry "stop_canister", which will again return Ok when the canister
+/// stops, and an error if it times out.
 pub async fn stop_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
@@ -389,21 +386,10 @@ where
     )
     .await?;
 
-    loop {
-        let status: CanisterStatusResultFromManagementCanister =
-            canister_status::<Rt>(CanisterIdRecord::from(canister_id))
-                .await
-                .unwrap();
-
-        if status.status == CanisterStatusType::Stopped {
-            return Ok(());
-        }
-
-        println!(
-            "{}Waiting for {:?} to stop. Current status: {}",
-            LOG_PREFIX, canister_id, status.status
-        );
-    }
+    // If we successfully get here, we know the canister is stopped.  While a canister could be in
+    // "Stopping" state, "stop_canister" does not successfully return until it is "Stopped".
+    // Therefore, we do not check canister status.
+    Ok(())
 }
 
 // Use a serde field attribute to custom serialize the Nat candid type.

@@ -2,15 +2,18 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-use super::test_helpers::{
-    basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
-    A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
-    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
-};
-use super::*;
 use crate::{
+    extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
+    governance::{
+        test_helpers::{
+            basic_governance_proto, canister_status_for_test,
+            canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
+            A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
+            TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
+            TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+        },
+        *,
+    },
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
@@ -26,7 +29,10 @@ use crate::{
         GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         SnsCanisterType, SnsVersion, SnsWasm,
     },
-    topics::{ListTopicsResponse, NervousSystemFunctions, TopicInfo},
+    storage::cache_registered_extension,
+    topics::{
+        ListTopicsResponse, NervousSystemFunctions, RegisteredExtensionOperationSpec, TopicInfo,
+    },
     types::test_helpers::NativeEnvironment,
 };
 use assert_matches::assert_matches;
@@ -50,8 +56,7 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
-use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
@@ -4712,6 +4717,19 @@ fn test_list_topics() {
         Box::new(FakeCmc::new()),
     );
 
+    let registered_spec = ExtensionSpec {
+        name: "KongSwap".to_string(),
+        version: ExtensionVersion(1),
+        topic: Topic::TreasuryAssetManagement.into(),
+        extension_type: ExtensionType::TreasuryManager,
+    };
+
+    let deposit_operation_spec = registered_spec.get_operation("deposit").unwrap();
+    let withdraw_operation_spec = registered_spec.get_operation("withdraw").unwrap();
+
+    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec.clone());
+    cache_registered_extension(CanisterId::from_u64(100_002), registered_spec);
+
     // Call the API under test
     let ListTopicsResponse {
         topics: topic_infos,
@@ -4768,6 +4786,7 @@ fn test_list_topics() {
                     function_1,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo {
@@ -4805,6 +4824,7 @@ fn test_list_topics() {
                     function_2
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4852,6 +4872,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4862,12 +4883,13 @@ fn test_list_topics() {
                 native_functions: vec![],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
             topic: Topic::Governance,
             name: "Governance".to_string(),
-            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NervousSystemFunctions {
                 native_functions: vec![
                     NervousSystemFunction {
@@ -4885,6 +4907,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4920,6 +4943,12 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  deposit_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  withdraw_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  deposit_operation_spec },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  withdraw_operation_spec },
+            ],
             is_critical: true,
         },
         TopicInfo {
@@ -4991,6 +5020,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
     ];
