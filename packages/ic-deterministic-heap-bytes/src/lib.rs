@@ -29,6 +29,9 @@ pub trait DeterministicHeapBytes {
     }
 }
 
+////////////////////////////////////////////////////////////////////////
+// Scalar types.
+
 impl DeterministicHeapBytes for u8 {}
 impl DeterministicHeapBytes for u16 {}
 impl DeterministicHeapBytes for u32 {}
@@ -45,6 +48,11 @@ impl DeterministicHeapBytes for f32 {}
 impl DeterministicHeapBytes for f64 {}
 impl DeterministicHeapBytes for bool {}
 impl DeterministicHeapBytes for char {}
+
+////////////////////////////////////////////////////////////////////////
+// Standard library types.
+
+impl DeterministicHeapBytes for std::sync::atomic::AtomicU64 {}
 
 impl DeterministicHeapBytes for std::time::Duration {}
 
@@ -139,7 +147,16 @@ impl<T: DeterministicHeapBytes, E: DeterministicHeapBytes> DeterministicHeapByte
     }
 }
 
+////////////////////////////////////////////////////////////////////////
+// External types.
+
 impl DeterministicHeapBytes for candid::Principal {}
+impl DeterministicHeapBytes for tempfile::TempDir {
+    fn deterministic_heap_bytes(&self) -> usize {
+        // TempDir allocates a string for the path.
+        self.path().as_os_str().len()
+    }
+}
 
 #[cfg(test)]
 mod tests;
