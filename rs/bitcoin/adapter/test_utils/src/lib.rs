@@ -12,6 +12,11 @@ use rand::{prelude::StdRng, Rng, SeedableRng};
 pub mod bitcoind;
 pub mod bitcoind_rpc_client;
 
+pub use bitcoind_rpc_client::*;
+
+// Re-export bitcoin
+pub use bitcoin;
+
 type BlockHeight = u32;
 
 /// This is a hex dump of the first block on the BTC network: 00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048

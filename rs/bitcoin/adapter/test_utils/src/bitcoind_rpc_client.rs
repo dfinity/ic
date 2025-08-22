@@ -4,13 +4,11 @@ use bitcoin::{
     consensus::encode,
     Address, Amount, BlockHash, Network, Transaction, Txid,
 };
-use bitcoincore_rpc::{
-    bitcoincore_rpc_json as json, Client as BtcClient, Error as BtcRpcError, RpcApi as BtcRpcApi,
-};
+use bitcoincore_rpc::{bitcoincore_rpc_json as json, Client as BtcClient, RpcApi as BtcRpcApi};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub use bitcoincore_rpc::{Auth, RawTx};
+pub use bitcoincore_rpc::{Auth, Error as ClientError, RawTx};
 pub use json::{
     CreateRawTransactionInput, EstimateMode, GetBalancesResult, GetBlockchainInfoResult,
     ListUnspentResultEntry, SignRawTransactionInput,
@@ -20,7 +18,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    RpcError(BtcRpcError),
+    ClientError(ClientError),
     InvalidAddress(AddressParseError),
 }
 
@@ -32,25 +30,25 @@ impl From<AddressParseError> for Error {
 
 impl From<ParseAmountError> for Error {
     fn from(e: ParseAmountError) -> Error {
-        Error::RpcError(e.into())
+        Error::ClientError(e.into())
     }
 }
 
 impl From<serde_json::error::Error> for Error {
     fn from(e: serde_json::error::Error) -> Error {
-        Error::RpcError(e.into())
+        Error::ClientError(e.into())
     }
 }
 
 impl From<encode::FromHexError> for Error {
     fn from(e: encode::FromHexError) -> Error {
-        Error::RpcError(e.into())
+        Error::ClientError(e.into())
     }
 }
 
-impl From<BtcRpcError> for Error {
-    fn from(e: BtcRpcError) -> Error {
-        Error::RpcError(e)
+impl From<ClientError> for Error {
+    fn from(e: ClientError) -> Error {
+        Error::ClientError(e)
     }
 }
 
