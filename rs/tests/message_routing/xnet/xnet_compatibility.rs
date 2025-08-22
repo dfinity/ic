@@ -168,7 +168,7 @@ pub async fn test_async(env: TestEnv) {
     // NOTE: For these tests, it is intended they run _from_ the mainnet
     // version, _to_ the branch version, and back.
     //
-    // The test definition should specify `uses_guestos_mainnet_img` to choose
+    // The test definition should specify `uses_guestos_nns_mainnet_img` to choose
     // the mainnet image as the initial image, and `uses_guestos_update` to
     // choose the branch image as the upgrade target.
     let mainnet_version = get_guestos_img_version();
