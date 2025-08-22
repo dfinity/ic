@@ -1,6 +1,6 @@
 //! This module contains types and internal methods.  
 //!
-//! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant. 
+//! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant.
 
 use candid::{CandidType, Principal};
 use ic_stable_structures::{storable::Bound, Storable};
@@ -160,7 +160,7 @@ pub fn rate_limited() -> bool {
     num_active_requests() > max_active_requests()
 }
 
-pub fn validate_request(
+pub async fn validate_request(
     source: Principal,
     target: Principal,
     caller: Principal,

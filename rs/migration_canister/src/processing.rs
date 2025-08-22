@@ -11,7 +11,7 @@ use ic_cdk::println;
 
 pub fn process_all_accepted() {
     // only one of this method must run at the same time.
-    // lock
+    // TODO: lock
     list_by(|r| matches!(r, RequestState::Accepted { .. }));
 
     // list_accepted()
@@ -21,16 +21,13 @@ pub fn process_all_accepted() {
     //     .collect::<_>();
 }
 
-pub fn process_accepted() {
-    //TODO
-}
-
-fn process_accepted_2(request: RequestState) -> ProcessingResult {
+async fn process_accepted(request: RequestState) -> ProcessingResult {
     let RequestState::Accepted { request } = request else {
         println!("Error: list_accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
-    // TODO
+    // try to change controllers of source
+    set_exclusive_controller(request.source).await;
     todo!()
 }
 

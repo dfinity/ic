@@ -28,7 +28,7 @@ struct MigrateCanisterArgs {
 }
 
 #[update]
-fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonError> {
+async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonError> {
     if migrations_disabled() {
         return Err(ValidatonError::MigrationsDisabled);
     }
@@ -36,7 +36,7 @@ fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonError> {
         return Err(ValidatonError::RateLimited);
     }
     let caller = caller();
-    match validate_request(args.source, args.target, caller) {
+    match validate_request(args.source, args.target, caller).await {
         Err(e) => {
             println!("Failed to validate request {:?}: {:?}", args, e);
             return Err(e);
