@@ -521,7 +521,7 @@ fn test_receives_blocks() {
 
     let address = client.get_address();
 
-    client.generate_to_address(150, &address).unwrap();
+    client.generate_to_address(150, address).unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -819,13 +819,13 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client2, 2);
 
     let address1 = client1.get_address();
-    client1.generate_to_address(10, &address1).unwrap();
+    client1.generate_to_address(10, address1).unwrap();
 
     wait_for_blocks(&client1, 10);
     wait_for_blocks(&client2, 10);
 
     let address2 = client2.get_address();
-    client2.generate_to_address(10, &address2).unwrap();
+    client2.generate_to_address(10, address2).unwrap();
 
     wait_for_blocks(&client1, 20);
     wait_for_blocks(&client2, 20);
@@ -838,8 +838,8 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    client1.generate_to_address(3, &address1).unwrap();
-    client2.generate_to_address(6, &address2).unwrap();
+    client1.generate_to_address(3, address1).unwrap();
+    client2.generate_to_address(6, address2).unwrap();
 
     wait_for_blocks(&client1, 23);
     wait_for_blocks(&client2, 26);
@@ -896,7 +896,7 @@ fn test_bfs_order() {
     let shared_blocks_count = 2;
     let branch_length = 6;
     let shared_blocks = client1
-        .generate_to_address(shared_blocks_count, &address1)
+        .generate_to_address(shared_blocks_count, address1)
         .unwrap();
 
     wait_for_blocks(&client1, 2);
@@ -911,12 +911,12 @@ fn test_bfs_order() {
     wait_for_connection(&client2, 1);
 
     let fork1 = client1
-        .generate_to_address(branch_length, &address1)
+        .generate_to_address(branch_length, address1)
         .unwrap();
 
     let address2 = client2.get_address();
     let fork2 = client2
-        .generate_to_address(branch_length, &address2)
+        .generate_to_address(branch_length, address2)
         .unwrap();
 
     wait_for_blocks(&client1, shared_blocks_count + branch_length);
