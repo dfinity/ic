@@ -1,13 +1,11 @@
 use crate::{
-    extensions::{
-        ExtensionSpec, ExtensionType::TreasuryManager, ExtensionVersion, ValidatedExtensionInit,
-    },
+    extensions::{ExtensionSpec, ExtensionType::TreasuryManager, ExtensionVersion},
     governance::{
         test_helpers::{basic_governance_proto, DoNothingLedger},
         Governance, ValidGovernanceProto,
     },
     pb::v1::{
-        self as pb, nervous_system_function, ExecuteExtensionOperation, ExtensionInit,
+        self as pb, nervous_system_function, ExecuteExtensionOperation,
         Topic::TreasuryAssetManagement,
     },
     storage::cache_registered_extension,

@@ -58,10 +58,6 @@ use ic_sns_governance_api::pb::v1::{
     AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
-use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl,
-};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -69,7 +65,6 @@ use std::{
     boxed::Box,
     cell::RefCell,
     convert::TryFrom,
-    ops::Deref,
     time::{Duration, SystemTime},
 };
 
