@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::CandidType;
 use futures::future::join_all;
 use ic_cdk::api::call::CallResult;

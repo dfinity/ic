@@ -1,8 +1,9 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::EventType, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    eventlog::{EventType, ReplacedReason},
+    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
+    SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
@@ -56,6 +57,7 @@ pub fn add_utxos<R: CanisterRuntime>(
 pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     request: RetrieveBtcRequest,
+    status: FinalizedStatus,
     runtime: &R,
 ) {
     record_event(
@@ -67,7 +69,7 @@ pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
 
     state.push_finalized_request(FinalizedBtcRetrieval {
         request,
-        state: FinalizedStatus::AmountTooLow,
+        state: status,
     });
 }
 
@@ -84,6 +86,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
             change_output: tx.change_output.clone(),
             submitted_at: tx.submitted_at,
             fee_per_vbyte: tx.fee_per_vbyte,
+            withdrawal_fee: tx.withdrawal_fee,
         },
         runtime,
     );
@@ -95,9 +98,9 @@ pub fn confirm_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     txid: &Txid,
     runtime: &R,
-) {
+) -> Option<WithdrawalCancellation> {
     record_event(EventType::ConfirmedBtcTransaction { txid: *txid }, runtime);
-    state.finalize_transaction(txid);
+    state.finalize_transaction(txid)
 }
 
 pub fn mark_utxo_checked<R: CanisterRuntime>(
@@ -192,8 +195,15 @@ pub fn replace_transaction<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     old_txid: Txid,
     new_tx: SubmittedBtcTransaction,
+    reason: ReplacedReason,
     runtime: &R,
 ) {
+    // when reason is ToCancel, the utxos of new_tx has to be persisted,
+    // because it is different than that of old_tx.
+    let new_utxos = match reason {
+        ReplacedReason::ToCancel { .. } => Some(new_tx.used_utxos.clone()),
+        ReplacedReason::ToRetry => None,
+    };
     record_event(
         EventType::ReplacedBtcTransaction {
             old_txid,
@@ -206,6 +216,9 @@ pub fn replace_transaction<R: CanisterRuntime>(
             fee_per_vbyte: new_tx
                 .fee_per_vbyte
                 .expect("bug: all replacement transactions must have the fee"),
+            withdrawal_fee: new_tx.withdrawal_fee,
+            reason: Some(reason),
+            new_utxos,
         },
         runtime,
     );

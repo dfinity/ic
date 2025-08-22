@@ -393,7 +393,7 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                     .unwrap();
 
                     write!(buf, "<td rowspan='{}'>", rowspan).unwrap();
-                    for req in &tx.requests {
+                    for req in tx.requests.iter() {
                         write!(
                             buf,
                             "<table>

@@ -2836,7 +2836,7 @@ fn canister_snapshot_roundtrip_succeeds() {
         canister_id,
         None,
         metadata.wasm_module_size,
-        metadata.exported_globals,
+        metadata.globals,
         metadata.wasm_memory_size,
         metadata.stable_memory_size,
         metadata.certified_data,
@@ -2952,7 +2952,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     assert_eq!(md_orig.wasm_module_size, md_2.wasm_module_size);
     assert_eq!(md_orig.wasm_memory_size, md_2.wasm_memory_size);
     assert_eq!(md_orig.stable_memory_size, md_2.stable_memory_size);
-    assert_eq!(md_orig.exported_globals, md_2.exported_globals);
+    assert_eq!(md_orig.globals, md_2.globals);
     assert_eq!(md_orig.wasm_chunk_store, md_2.wasm_chunk_store);
     assert_eq!(md_orig.global_timer, md_2.global_timer);
     assert_eq!(
@@ -3057,7 +3057,7 @@ fn canister_snapshot_invalid_metadata_fails() {
     assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
 
     let mut faulty_md = md_upload_args_original.clone();
-    faulty_md.exported_globals = vec![Global::I32(42); 1001];
+    faulty_md.globals = vec![Global::I32(42); 1001];
     let e = test
         .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
         .expect_err("Expected error");

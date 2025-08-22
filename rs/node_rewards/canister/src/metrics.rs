@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use crate::KeyRange;
 use async_trait::async_trait;

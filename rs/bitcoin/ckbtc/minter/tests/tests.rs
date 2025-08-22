@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
@@ -1186,6 +1187,18 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn reimburse_pending_withdrawal(&self, ledger_burn_index: u64) {
+        assert_reply(
+            self.env
+                .execute_ingress(
+                    self.minter_id,
+                    "reimburse_pending_withdrawal",
+                    Encode!(&ledger_burn_index).unwrap(),
+                )
+                .expect("failed to call reimburse_pending_withdrawal"),
+        );
+    }
+
     pub fn tick_until<R>(
         &self,
         description: &str,
@@ -2309,5 +2322,127 @@ fn test_retrieve_btc_with_approval_fail() {
     assert_eq!(
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
+    );
+}
+
+#[test]
+fn should_reimburse_withdrawal() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Step 1: deposit ckBTC
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: range_to_txid(1..=32),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+    let subaccount: Option<[u8; 32]> = Some([1; 32]);
+    let user_account = Account {
+        owner: user,
+        subaccount,
+    };
+
+    ckbtc.deposit_utxo(user_account, utxo);
+    let balance_after_deposit = ckbtc.balance_of(user_account);
+    assert_eq!(balance_after_deposit, Nat::from(deposit_value - CHECK_FEE));
+
+    // Step 2: request a withdrawal
+
+    let withdrawal_amount = 50_000_000;
+    ckbtc.approve_minter(user, withdrawal_amount, subaccount);
+    let balance_before_withdrawal = ckbtc.balance_of(user_account);
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc_with_approval(
+            WITHDRAWAL_ADDRESS.to_string(),
+            withdrawal_amount,
+            subaccount,
+        )
+        .expect("retrieve_btc failed");
+
+    let balance_after_withdrawal = ckbtc.balance_of(user_account);
+    assert_eq!(
+        balance_after_withdrawal,
+        balance_before_withdrawal.clone() - Nat::from(withdrawal_amount)
+    );
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: block_index.into(),
+        length: 1_u8.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
+    use ic_ckbtc_minter::memo::BurnMemo;
+
+    let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(
+        decoded_data,
+        BurnMemo::Convert {
+            address: Some(WITHDRAWAL_ADDRESS),
+            kyt_fee: None,
+            status: None,
+        },
+        "memo not found in burn"
+    );
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
+        vec![BtcRetrievalStatusV2 {
+            block_index,
+            status_v2: Some(ckbtc.retrieve_btc_status_v2(block_index))
+        }]
+    );
+
+    ckbtc.reimburse_pending_withdrawal(block_index);
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::WillReimburse(reimbursement) if
+        reimbursement.account == user_account &&
+        reimbursement.amount == withdrawal_amount
+    );
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        0,
+        "no transaction should appear when being reimbursed"
+    );
+
+    let reimbursement_block_index = block_index + 1;
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Reimbursed(reimbursement) if
+        reimbursement.account == user_account &&
+        reimbursement.amount == withdrawal_amount &&
+        reimbursement.mint_block_index == reimbursement_block_index
+    );
+
+    assert_eq!(ckbtc.balance_of(user_account), balance_before_withdrawal);
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: reimbursement_block_index.into(),
+        length: 1_u8.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
+    use ic_ckbtc_minter::memo::MintMemo;
+
+    let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(
+        decoded_data,
+        MintMemo::ReimburseWithdrawal {
+            withdrawal_id: block_index,
+        },
+        "memo not found in mint"
     );
 }

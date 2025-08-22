@@ -53,6 +53,7 @@ ic-nervous-system-collections-union-multi-map = { path = "../../nervous_system/c
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-stable-structures = { workspace = true }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-lock = { path = "../../nervous_system/lock" }
@@ -85,7 +86,7 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

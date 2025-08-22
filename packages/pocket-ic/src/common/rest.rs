@@ -74,7 +74,7 @@ pub enum CreateInstanceResponse {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy, JsonSchema)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -548,6 +548,7 @@ pub struct IcpFeatures {
     pub icp_token: bool,
     pub cycles_token: bool,
     pub nns_governance: bool,
+    pub sns: bool,
 }
 
 impl IcpFeatures {
@@ -558,8 +559,21 @@ impl IcpFeatures {
             icp_token: true,
             cycles_token: true,
             nns_governance: true,
+            sns: true,
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum InitialTime {
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    Timestamp(RawTime),
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    AutoProgress(AutoProgressConfig),
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -571,6 +585,7 @@ pub struct InstanceConfig {
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
     pub allow_incomplete_state: Option<bool>,
+    pub initial_time: Option<InitialTime>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -720,6 +735,7 @@ impl ExtendedSubnetConfigSet {
             icp_token,
             cycles_token,
             nns_governance,
+            sns,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -727,6 +743,7 @@ impl ExtendedSubnetConfigSet {
             (*cycles_minting, "cycles_minting"),
             (*icp_token, "icp_token"),
             (*nns_governance, "nns_governance"),
+            (*sns, "sns"),
         ] {
             if flag {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
@@ -738,6 +755,13 @@ impl ExtendedSubnetConfigSet {
             if flag {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
+            }
+        }
+        // canisters on the SNS subnet
+        for (flag, icp_feature_str) in [(*sns, "sns")] {
+            if flag {
+                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
+                self.sns = Some(self.sns.unwrap_or_default());
             }
         }
         Ok(self)
