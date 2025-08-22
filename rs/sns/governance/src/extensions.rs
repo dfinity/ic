@@ -1792,10 +1792,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_store_id)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            "Invalid RegisterExtension: \"chunked_canister_wasm.store_canister_id is required\""
-        );
+        assert_eq!(err, "chunked_canister_wasm.store_canister_id is required");
 
         // Test invalid store_canister_id (not a valid principal)
         let invalid_store_id = {
@@ -1827,7 +1824,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             err,
-            "Invalid RegisterExtension: \"Invalid extension wasm: Invalid wasm module hash length: expected 32 bytes, got 16\""
+            "Invalid extension wasm: Invalid wasm module hash length: expected 32 bytes, got 16"
         );
 
         // Test missing extension_init
