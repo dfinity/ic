@@ -3,12 +3,12 @@
 //!
 
 use candid::{CandidType, Principal};
-use ic_cdk::{init, post_upgrade, println, update};
+use ic_cdk::{caller, init, post_upgrade, println, update};
 use serde::Deserialize;
 
 use crate::{
-    canister_state::migrations_disabled, rate_limited, start_timers, validate_request,
-    ValidatonError,
+    canister_state::{migrations_disabled, requests::insert_request},
+    rate_limited, start_timers, validate_request, RequestState, ValidatonError,
 };
 
 #[init]
@@ -35,7 +35,7 @@ fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonError> {
     if rate_limited() {
         return Err(ValidatonError::RateLimited);
     }
-    let caller = ic_cdk::caller();
+    let caller = caller();
     match validate_request(args.source, args.target, caller) {
         Err(e) => {
             println!("Failed to validate request {:?}: {:?}", args, e);
@@ -43,8 +43,24 @@ fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonError> {
         }
         Ok(request) => {
             println!("Accepted request {:?}", request);
-            // TODO: insert into REQUESTS
+            insert_request(RequestState::Accepted { request });
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+enum MigrationStatus {
+    Unknown,
+    InProgress { status: String },
+    Failed { reason: String },
+    Succeeded,
+}
+
+// TODO: if a request is repeated, we don't know which one is meant... because the MigrateCanisterArgs
+// will be identical even though the actual `Request` will be different. So should we use IDs after all?
+#[update]
+fn migration_status(args: MigrateCanisterArgs) -> MigrationStatus {
+    // TODO
+    MigrationStatus::Unknown
 }

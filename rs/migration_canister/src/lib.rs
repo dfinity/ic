@@ -14,6 +14,7 @@ mod canister_state;
 mod external_interfaces;
 mod migration_canister;
 mod privileged;
+mod processing;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
