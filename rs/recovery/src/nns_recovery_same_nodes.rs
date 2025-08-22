@@ -277,11 +277,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadCUPAndRegistry => {
                 if let Some(method) = self.params.upload_method {
-                    let node_ip = match method {
-                        DataLocation::Remote(ip) => ip,
-                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
-                    };
-                    Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(node_ip)))
+                    Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(method)))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

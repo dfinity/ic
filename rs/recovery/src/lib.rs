@@ -871,11 +871,11 @@ impl Recovery {
     }
 
     /// Return an [UploadCUPAndTar] uploading CUP and registry tar to the given node IP
-    pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step {
+    pub fn get_upload_cup_and_tar_step(&self, upload_method: DataLocation) -> impl Step {
         UploadCUPAndTar {
             logger: self.logger.clone(),
             registry_helper: self.registry_helper.clone(),
-            node_ip,
+            upload_method,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),

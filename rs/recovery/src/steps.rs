@@ -950,7 +950,7 @@ impl Step for CopyIcStateStep {
 pub struct UploadCUPAndTar {
     pub logger: Logger,
     pub registry_helper: RegistryHelper,
-    pub node_ip: IpAddr,
+    pub upload_method: DataLocation,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
     pub work_dir: PathBuf,
@@ -987,62 +987,103 @@ sudo systemctl status ic-replica;
 
 impl Step for UploadCUPAndTar {
     fn descr(&self) -> String {
+        let replica = match self.upload_method {
+            DataLocation::Remote(ip) => &format!("replica {ip}"),
+            DataLocation::Local => "local replica",
+        };
         format!(
-            "Uploading CUP and registry to [{}]:{} and execute:\n{}",
-            self.node_ip,
+            "Uploading CUP and registry to {replica} at {} and execute:\n{}",
             UploadCUPAndTar::get_upload_dir_name(),
             self.get_restart_commands()
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            SshUser::Admin.to_string(),
-            self.node_ip,
-            self.require_confirmation,
-            self.key_file.clone(),
-        );
+        let upload_dir = UploadCUPAndTar::get_upload_dir_name();
 
-        if !ssh_helper.can_connect() {
+        if let DataLocation::Remote(node_ip) = self.upload_method {
+            let ssh_helper = SshHelper::new(
+                self.logger.clone(),
+                SshUser::Admin.to_string(),
+                node_ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            );
+
+            if !ssh_helper.can_connect() {
+                info!(
+                    self.logger,
+                    "No admin access to: {}, skipping upload...", node_ip
+                );
+                return Err(RecoveryError::invalid_output_error("SSH access denied"));
+            }
+
+            info!(self.logger, "Uploading to {}", node_ip);
+            ssh_helper.ssh(format!(
+                "sudo rm -rf {} && mkdir {}",
+                upload_dir, upload_dir
+            ))?;
+
+            let target = format!("{}@[{}]:{}/", SshUser::Admin, node_ip, upload_dir);
+
+            rsync(
+                &self.logger,
+                Vec::<String>::default(),
+                &format!("{}/cup.proto", self.work_dir.display()),
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
+            )?;
+
+            rsync(
+                &self.logger,
+                Vec::<String>::default(),
+                &format!(
+                    "{}/ic_registry_local_store.tar.zst",
+                    self.work_dir.display()
+                ),
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
+            )?;
+
+            ssh_helper.ssh(self.get_restart_commands())?;
+        } else {
+            let log = self.require_confirmation.then_some(&self.logger);
+
+            confirm_exec_cmd(
+                Command::new("bash").arg("-c").arg(format!(
+                    "sudo rm -rf {} && mkdir {}",
+                    upload_dir, upload_dir
+                )),
+                log,
+            )?;
+
+            info!(self.logger, "Copying CUP and local store to {}", upload_dir);
+            confirm_exec_cmd(
+                Command::new("sudo")
+                    .arg("cp")
+                    .arg("-a")
+                    .arg(format!("{}/cup.proto", self.work_dir.display()))
+                    .arg(format!(
+                        "{}/ic_registry_local_store.tar.zst",
+                        self.work_dir.display()
+                    ))
+                    .arg(upload_dir),
+                log,
+            )?;
+
             info!(
                 self.logger,
-                "No admin access to: {}, skipping upload...", self.node_ip
+                "Overwriting CUP and local store and restarting replica"
             );
-            return Err(RecoveryError::invalid_output_error("SSH access denied"));
+            confirm_exec_cmd(
+                Command::new("bash")
+                    .arg("-c")
+                    .arg(self.get_restart_commands()),
+                log,
+            )?;
         }
-
-        info!(self.logger, "Uploading to {}", self.node_ip);
-        let upload_dir = UploadCUPAndTar::get_upload_dir_name();
-        ssh_helper.ssh(format!(
-            "sudo rm -rf {} && mkdir {}",
-            upload_dir, upload_dir
-        ))?;
-
-        let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
-
-        rsync(
-            &self.logger,
-            Vec::<String>::default(),
-            &format!("{}/cup.proto", self.work_dir.display()),
-            &target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
-
-        rsync(
-            &self.logger,
-            Vec::<String>::default(),
-            &format!(
-                "{}/ic_registry_local_store.tar.zst",
-                self.work_dir.display()
-            ),
-            &target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
-
-        ssh_helper.ssh(self.get_restart_commands())?;
 
         Ok(())
     }
