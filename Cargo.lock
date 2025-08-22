@@ -2668,6 +2668,7 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
+ "walkdir",
 ]
 
 [[package]]
