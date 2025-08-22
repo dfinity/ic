@@ -1,8 +1,10 @@
 use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
-use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
-use ic_btc_adapter_test_utils::{Auth, CreateRawTransactionInput, RpcApi, RpcClient as Client};
+use ic_btc_adapter_test_utils::{
+    bitcoind::{BitcoinD, Conf},
+    CreateRawTransactionInput, RpcApi, RpcClient as Client,
+};
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     Network, SendTransactionRequest,
@@ -14,7 +16,7 @@ use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::{
     collections::{HashMap, HashSet},
-    net::{SocketAddr, SocketAddrV4},
+    net::SocketAddr,
     path::Path,
     str::FromStr,
 };
@@ -108,14 +110,15 @@ fn start_adapter(
     start_server(logger, metrics_registry, rt_handle, config);
 }
 
-fn get_default_bitcoind() -> BitcoinD {
+fn start_bitcoind() -> BitcoinD {
+    let network = bitcoin::Network::Regtest;
     let mut conf = Conf::default();
-    conf.p2p = P2P::Yes;
+    conf.p2p = true;
 
     let path =
-        std::env::var("BITCOIN_CORE_PATH").expect("Failed to get bitcoin core path env variable");
+        std::env::var("BITCOIN_CORE_PATH").expect("Failed to get BITCOIND_CORE_PATH env variable");
 
-    bitcoind::BitcoinD::with_conf(path, &conf).unwrap()
+    BitcoinD::new(&path, network, conf).unwrap()
 }
 
 fn start_client(
@@ -144,14 +147,6 @@ fn check_received_blocks(client: &Client, blocks: &[Vec<u8>], start_index: usize
             *block,
             client.get_block_hash((start_index + h + 1) as u64).unwrap()[..].to_vec()
         );
-    }
-}
-
-fn get_bitcoind_url(bitcoind: &BitcoinD) -> Option<SocketAddrV4> {
-    if let P2P::Connect(url, _) = bitcoind.p2p_connect(true).unwrap() {
-        Some(url)
-    } else {
-        None
     }
 }
 
@@ -380,16 +375,8 @@ fn get_blackhole_address() -> Address {
         .assume_checked()
 }
 
-fn create_alice_and_bob_wallets(
-    bitcoind: &BitcoinD,
-    network: bitcoin::Network,
-) -> (Client, Client) {
-    let client = Client::new(
-        network,
-        bitcoind.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
+fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client) {
+    let client = &bitcoind.rpc_client;
     let alice_client = client.with_account("alice").unwrap();
     let bob_client = client.with_account("bob").unwrap();
     (alice_client, bob_client)
@@ -506,14 +493,8 @@ fn sync_headers_until_checkpoint(adapter_client: &BitcoinAdapterClient, anchor: 
 #[test]
 fn test_receives_blocks() {
     let logger = no_op_logger();
-    let bitcoind = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
-    let client = Client::new(
-        network,
-        bitcoind.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind = start_bitcoind();
+    let client = &bitcoind.rpc_client;
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
@@ -525,7 +506,7 @@ fn test_receives_blocks() {
 
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
-        vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
+        vec![SocketAddr::V4(bitcoind.p2p_socket().unwrap())],
         logger,
         bitcoin::Network::Regtest,
     );
@@ -539,17 +520,10 @@ fn test_receives_blocks() {
 #[test]
 fn test_adapter_disconnects_when_idle() {
     let logger = no_op_logger();
+    let bitcoind = start_bitcoind();
+    let client = &bitcoind.rpc_client;
 
-    let bitcoind = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
-    let client = Client::new(
-        network,
-        bitcoind.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let url = SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap());
+    let url = SocketAddr::V4(bitcoind.p2p_socket().unwrap());
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
@@ -570,17 +544,10 @@ fn test_adapter_disconnects_when_idle() {
 #[test]
 fn idle_adapter_does_not_connect_to_peers() {
     let logger = no_op_logger();
+    let bitcoind = start_bitcoind();
+    let client = &bitcoind.rpc_client;
 
-    let bitcoind = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
-    let client = Client::new(
-        network,
-        bitcoind.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let url = SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap());
+    let url = SocketAddr::V4(bitcoind.p2p_socket().unwrap());
 
     // The client does not have any connections
     wait_for_connection(&client, 0);
@@ -598,34 +565,18 @@ fn idle_adapter_does_not_connect_to_peers() {
 fn test_connection_to_multiple_peers() {
     let logger = no_op_logger();
 
-    let bitcoind1 = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
-    let client1 = Client::new(
-        network,
-        bitcoind1.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind1 = start_bitcoind();
+    let client1 = &bitcoind1.rpc_client;
 
-    let bitcoind2 = get_default_bitcoind();
-    let client2 = Client::new(
-        network,
-        bitcoind2.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind2 = start_bitcoind();
+    let client2 = &bitcoind2.rpc_client;
 
-    let bitcoind3 = get_default_bitcoind();
-    let client3 = Client::new(
-        network,
-        bitcoind3.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind3 = start_bitcoind();
+    let client3 = &bitcoind3.rpc_client;
 
-    let url1 = SocketAddr::V4(get_bitcoind_url(&bitcoind1).unwrap());
-    let url2 = SocketAddr::V4(get_bitcoind_url(&bitcoind2).unwrap());
-    let url3 = SocketAddr::V4(get_bitcoind_url(&bitcoind3).unwrap());
+    let url1 = SocketAddr::V4(bitcoind1.p2p_socket().unwrap());
+    let url2 = SocketAddr::V4(bitcoind2.p2p_socket().unwrap());
+    let url3 = SocketAddr::V4(bitcoind3.p2p_socket().unwrap());
 
     client1
         .add_node(&url2.to_string())
@@ -659,18 +610,17 @@ fn test_connection_to_multiple_peers() {
 #[test]
 fn test_receives_new_3rd_party_txs() {
     let logger = no_op_logger();
-    let bitcoind = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
+    let bitcoind = start_bitcoind();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
-        vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
+        vec![SocketAddr::V4(bitcoind.p2p_socket().unwrap())],
         logger,
         bitcoin::Network::Regtest,
     );
 
-    let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind, network);
+    let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
 
     fund_with_btc(&alice_client);
 
@@ -707,18 +657,17 @@ fn test_receives_new_3rd_party_txs() {
 #[test]
 fn test_send_tx() {
     let logger = no_op_logger();
-    let bitcoind = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
+    let bitcoind = start_bitcoind();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
-        vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
+        vec![SocketAddr::V4(bitcoind.p2p_socket().unwrap())],
         logger,
         bitcoin::Network::Regtest,
     );
 
-    let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind, network);
+    let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
 
     fund_with_btc(&alice_client);
 
@@ -773,25 +722,14 @@ fn test_send_tx() {
 #[test]
 fn test_receives_blocks_from_forks() {
     let logger = no_op_logger();
-    let bitcoind1 = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
-    let client1 = Client::new(
-        network,
-        bitcoind1.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind1 = start_bitcoind();
+    let client1 = &bitcoind1.rpc_client;
 
-    let bitcoind2 = get_default_bitcoind();
-    let client2 = Client::new(
-        network,
-        bitcoind2.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind2 = start_bitcoind();
+    let client2 = &bitcoind2.rpc_client;
 
-    let url1 = get_bitcoind_url(&bitcoind1).unwrap();
-    let url2 = get_bitcoind_url(&bitcoind2).unwrap();
+    let url1 = bitcoind1.p2p_socket().unwrap();
+    let url2 = bitcoind2.p2p_socket().unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
@@ -844,25 +782,14 @@ fn test_receives_blocks_from_forks() {
 #[test]
 fn test_bfs_order() {
     let logger = no_op_logger();
-    let bitcoind1 = get_default_bitcoind();
-    let network = bitcoin::Network::Regtest;
-    let client1 = Client::new(
-        network,
-        bitcoind1.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind1 = start_bitcoind();
+    let client1 = &bitcoind1.rpc_client;
 
-    let bitcoind2 = get_default_bitcoind();
-    let client2 = Client::new(
-        network,
-        bitcoind2.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let bitcoind2 = start_bitcoind();
+    let client2 = &bitcoind2.rpc_client;
 
-    let url1 = get_bitcoind_url(&bitcoind1).unwrap();
-    let url2 = get_bitcoind_url(&bitcoind2).unwrap();
+    let url1 = bitcoind1.p2p_socket().unwrap();
+    let url2 = bitcoind2.p2p_socket().unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(

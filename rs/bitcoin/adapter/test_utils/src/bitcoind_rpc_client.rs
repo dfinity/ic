@@ -15,46 +15,53 @@ pub use json::{
     SignRawTransactionResult,
 };
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, RpcError>;
 
 #[derive(Debug)]
-pub enum Error {
+pub enum RpcError {
     ClientError(ClientError),
     InvalidAddress(AddressParseError),
     AddressNotAvailable,
 }
 
-impl From<AddressParseError> for Error {
-    fn from(e: AddressParseError) -> Error {
-        Error::InvalidAddress(e)
+impl From<AddressParseError> for RpcError {
+    fn from(e: AddressParseError) -> Self {
+        Self::InvalidAddress(e)
     }
 }
 
-impl From<ParseAmountError> for Error {
-    fn from(e: ParseAmountError) -> Error {
-        Error::ClientError(e.into())
+impl From<ParseAmountError> for RpcError {
+    fn from(e: ParseAmountError) -> Self {
+        Self::ClientError(e.into())
     }
 }
 
-impl From<serde_json::error::Error> for Error {
-    fn from(e: serde_json::error::Error) -> Error {
-        Error::ClientError(e.into())
+impl From<serde_json::error::Error> for RpcError {
+    fn from(e: serde_json::error::Error) -> Self {
+        Self::ClientError(e.into())
     }
 }
 
-impl From<encode::FromHexError> for Error {
-    fn from(e: encode::FromHexError) -> Error {
-        Error::ClientError(e.into())
+impl From<encode::FromHexError> for RpcError {
+    fn from(e: encode::FromHexError) -> Self {
+        Self::ClientError(e.into())
     }
 }
 
-impl From<ClientError> for Error {
-    fn from(e: ClientError) -> Error {
-        Error::ClientError(e)
+impl From<std::io::Error> for RpcError {
+    fn from(e: std::io::Error) -> Self {
+        Self::ClientError(e.into())
+    }
+}
+
+impl From<ClientError> for RpcError {
+    fn from(e: ClientError) -> Self {
+        Self::ClientError(e)
     }
 }
 
 pub trait RpcApi {
+    fn stop(&self) -> Result<String>;
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult>;
     fn get_connection_count(&self) -> Result<usize>;
     fn get_block_hash(&self, height: u64) -> Result<BlockHash>;
@@ -145,8 +152,12 @@ impl RpcClient {
 }
 
 impl RpcApi for RpcClient {
+    fn stop(&self) -> Result<String> {
+        Ok(self.client.call("stop", &[])?)
+    }
+
     fn get_address(&self) -> Result<&Address> {
-        self.address.as_ref().ok_or(Error::AddressNotAvailable)
+        self.address.as_ref().ok_or(RpcError::AddressNotAvailable)
     }
 
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {

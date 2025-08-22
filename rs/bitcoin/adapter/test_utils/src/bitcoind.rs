@@ -1,8 +1,11 @@
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
+    fs,
     io::{self, Read},
-    net::SocketAddr,
+    net,
+    path::PathBuf,
+    process,
     sync::Arc,
 };
 
@@ -22,10 +25,14 @@ use ic_btc_adapter::BlockLike;
 
 use bitcoin::io as bitcoin_io;
 
+use tempfile::{tempdir, TempDir};
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
+
+use crate::{RpcApi, RpcClient};
 
 const MINIMUM_PROTOCOL_VERSION: u32 = 70001;
 
@@ -248,7 +255,7 @@ pub fn mock_bitcoin<Block>(
     rt: &tokio::runtime::Handle,
     test_data_path: String,
     block_data_path: String,
-) -> SocketAddr
+) -> net::SocketAddr
 where
     Block: BlockLike + for<'de> serde::Deserialize<'de> + Clone + Debug + Send + Sync + 'static,
 {
@@ -259,4 +266,165 @@ where
         p2p_mock.start_mock(listener).await;
     });
     addr
+}
+
+const LOCAL_IP: net::Ipv4Addr = net::Ipv4Addr::new(127, 0, 0, 1);
+
+pub struct BitcoinD {
+    pub rpc_client: RpcClient,
+    _work_dir: WorkDir,
+    p2p_socket: Option<net::SocketAddrV4>,
+    process: process::Child,
+}
+
+impl Drop for BitcoinD {
+    fn drop(&mut self) {
+        let _ = self.process.kill();
+        let _ = self.process.wait();
+    }
+}
+
+pub enum WorkDir {
+    Persisted(PathBuf),
+    Temporary(TempDir),
+}
+
+impl WorkDir {
+    fn path(&self) -> PathBuf {
+        match self {
+            Self::Persisted(path) => path.to_owned(),
+            Self::Temporary(tmp_dir) => tmp_dir.path().into(),
+        }
+    }
+}
+
+pub struct Conf<'a> {
+    // auth setting of the daemon. it will an auto-generated cookie file if not specified.
+    pub auth: Option<crate::Auth>,
+    pub p2p: bool,
+    pub view_stdout: bool,
+    pub work_dir: Option<PathBuf>,
+    pub args: Vec<&'a str>,
+}
+
+impl<'a> Default for Conf<'a> {
+    fn default() -> Self {
+        Self {
+            auth: None,
+            p2p: false,
+            view_stdout: false,
+            work_dir: None,
+            args: vec!["-regtest", "-fallbackfee=0.0001"],
+        }
+    }
+}
+
+impl BitcoinD {
+    pub fn new(
+        bitcoind_path: &str,
+        network: bitcoin::Network,
+        conf: Conf,
+    ) -> Result<BitcoinD, crate::RpcError> {
+        // let bitcoind_path = std::env::var_os("BITCOIND_BIN")
+        //    .expect("Missing BITCOIND_BIN (path to bitcoind executable) in env.");
+        let work_dir = match conf.work_dir {
+            Some(dir) => {
+                fs::create_dir_all(dir.clone())?;
+                WorkDir::Persisted(dir)
+            }
+            None => WorkDir::Temporary(tempdir()?),
+        };
+
+        let conf_path = work_dir.path().join("bitcoin.conf");
+        let mut rpc_user = String::new();
+        let mut rpc_pass = String::new();
+        let mut rpc_auth = String::new();
+        let auth = match conf.auth {
+            None => {
+                let cookie_file = work_dir.path().join(network.to_string()).join(".cookie");
+                crate::Auth::CookieFile(cookie_file)
+            }
+            Some(auth) => {
+                if let crate::Auth::UserPass(user, password) = &auth {
+                    rpc_user = format!("rpc_user:{user}");
+                    rpc_pass = format!("rpc_password:{password}");
+                    rpc_auth = format!("rpcauth=$");
+                }
+                auth
+            }
+        };
+        fs::write(
+            conf_path.clone(),
+            format!("{rpc_user}\n{rpc_pass}\n{rpc_auth}\n"),
+        )?;
+
+        let rpc_port = get_available_port()?;
+        let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
+        let rpc_url = format!("http://{}", rpc_socket);
+        let (p2p_args, p2p_socket) = if conf.p2p {
+            let p2p_port = get_available_port()?;
+            let p2p_socket = net::SocketAddrV4::new(LOCAL_IP, p2p_port);
+            let p2p_arg = format!("-port={}", p2p_port);
+            let args = vec![p2p_arg];
+            (args, Some(p2p_socket))
+        } else {
+            (vec!["-listen=0".to_string()], None)
+        };
+
+        let stdout = if conf.view_stdout {
+            process::Stdio::inherit()
+        } else {
+            process::Stdio::null()
+        };
+
+        let mut process = process::Command::new(bitcoind_path)
+            .arg(format!("-conf={}", conf_path.display()))
+            .arg(format!("-datadir={}", work_dir.path().display()))
+            .arg(format!("-rpcport={}", rpc_port))
+            .args(&p2p_args)
+            .args(&conf.args)
+            .stdout(stdout)
+            .spawn()?;
+
+        if let Some(status) = process.try_wait()? {
+            eprintln!("early exit with: {:?}", status);
+        }
+        assert!(process.stderr.is_none());
+
+        eprintln!("here!");
+        eprintln!("rpc_url = {rpc_url} auth = {auth:?}");
+        let mut i = 0;
+        let rpc_client = loop {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            match RpcClient::new(network, &rpc_url, auth.clone()) {
+                Ok(client) => break client.ensure_wallet()?,
+                Err(err) if i > 50 => return Err(err),
+                Err(_) => {
+                    i += 1;
+                }
+            }
+        };
+
+        Ok(Self {
+            _work_dir: work_dir,
+            p2p_socket,
+            rpc_client,
+            process,
+        })
+    }
+
+    pub fn stop(&mut self) -> Result<process::ExitStatus, crate::RpcError> {
+        self.rpc_client.stop()?;
+        Ok(self.process.wait()?)
+    }
+
+    pub fn p2p_socket(&self) -> Option<net::SocketAddrV4> {
+        self.p2p_socket
+    }
+}
+
+pub fn get_available_port() -> Result<u16, std::io::Error> {
+    // using 0 as port let the system assign a port available
+    let t = net::TcpListener::bind(("127.0.0.1", 0))?; // 0 means the OS choose a free port
+    Ok(t.local_addr().map(|s| s.port())?)
 }
