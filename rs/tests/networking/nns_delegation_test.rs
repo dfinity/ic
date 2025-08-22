@@ -23,6 +23,8 @@ Success::
 . Responses to `api/v3/canister/{canister_id}/read_state` have valid delegations with canister ranges in the tree format.
 . Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
 . Responses to `api/v4/canister/{canister_id}/call` have valid delegations with canister ranges in the tree format.
+. For `api/v2/canister/{canister_id}/query` we pass valid delegations with canister ranges in the flat format to the canister.
+. For `api/v3/canister/{canister_id}/query` we pass valid delegations with canister ranges in the tree format to the canister.
  */
 use std::{
     borrow::Cow,
@@ -59,9 +61,13 @@ use ic_system_test_driver::{
     util::{block_on, get_identity, get_nns_node, UniversalCanister},
 };
 use ic_types::{
-    messages::{Blob, Certificate, CertificateDelegation, HttpReadStateResponse},
+    messages::{
+        Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
+        HttpReadStateResponse, HttpSignedQueryResponse, NodeSignature,
+    },
     Height, PrincipalId, SubnetId,
 };
+use ic_universal_canister::wasm;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -344,6 +350,58 @@ fn call_v4_returns_correct_delegation(env: TestEnv) {
     );
 }
 
+#[derive(Deserialize)]
+struct QueryResponse {
+    reply: HttpQueryResponseReply,
+    signatures: Vec<NodeSignature>,
+}
+
+/// For `api/v2/canister/{canister_id}/query` we pass valid delegations with
+/// canister ranges in the flat format to the canister.
+fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
+    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+    let arg = wasm().data_certificate().append_and_reply().build();
+
+    let response: QueryResponse = block_on(send(
+        &node,
+        format!("api/v2/canister/{}/query", node.effective_canister_id()),
+        sign_envelope(&query_content(node.effective_canister_id(), arg)),
+    ));
+    let certificate: Certificate = serde_cbor::from_slice(&response.reply.arg).unwrap();
+
+    validate_delegation(
+        &env,
+        &certificate
+            .delegation
+            .expect("Should have an NNS delegation attached"),
+        subnet.subnet_id,
+        Some(CanisterRangesFormat::Flat),
+    );
+}
+
+/// For `api/v3/canister/{canister_id}/query` we pass valid delegations with
+/// canister ranges in the tree format to the canister.
+fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
+    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+    let arg = wasm().data_certificate().append_and_reply().build();
+
+    let response: QueryResponse = block_on(send(
+        &node,
+        format!("api/v3/canister/{}/query", node.effective_canister_id()),
+        sign_envelope(&query_content(node.effective_canister_id(), arg)),
+    ));
+    let certificate: Certificate = serde_cbor::from_slice(&response.reply.arg).unwrap();
+
+    validate_delegation(
+        &env,
+        &certificate
+            .delegation
+            .expect("Should have an NNS delegation attached"),
+        subnet.subnet_id,
+        Some(CanisterRangesFormat::Tree),
+    );
+}
+
 fn read_state_content() -> EnvelopeContent {
     let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
     EnvelopeContent::ReadState {
@@ -361,6 +419,18 @@ fn call_content(canister_id: PrincipalId) -> EnvelopeContent {
         canister_id: canister_id.into(),
         method_name: String::from("update"),
         arg: vec![],
+        nonce: None,
+    }
+}
+
+fn query_content(canister_id: PrincipalId, arg: Vec<u8>) -> EnvelopeContent {
+    let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
+    EnvelopeContent::Query {
+        ingress_expiry: expiration.unix_timestamp_nanos() as u64,
+        sender: get_identity().sender().unwrap(),
+        canister_id: canister_id.into(),
+        method_name: String::from("query"),
+        arg,
         nonce: None,
     }
 }
@@ -499,18 +569,16 @@ where
     let response = response
         .bytes()
         .await
-        .map_err(|err| format!("Request failed: {err}"))?
-        .to_vec();
+        .map_err(|err| format!("Request failed: {err}"))?;
 
     if status != StatusCode::OK {
         return Err(format!(
-            "Request failed. Status: {status}. Response: {}",
-            String::from_utf8_lossy(&response)
+            "Request failed. Status: {status}. Response: {response:?}",
         ));
     }
 
     serde_cbor::from_slice(&response)
-        .map_err(|err| format!("Failed to deserialize response: {err}"))
+        .map_err(|err| format!("Failed to deserialize response: {err:?}. Response: {response:?}",))
 }
 
 fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
@@ -564,8 +632,10 @@ fn main() -> Result<()> {
         .add_test(systest!(canister_read_state_v3_returns_correct_delegation))
         .add_test(systest!(subnet_read_state_v2_returns_correct_delegation))
         .add_test(systest!(subnet_read_state_v3_returns_correct_delegation))
-        // note: the v2 call endpoint doesn't return the delegation, so there is nothing to test
+        // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
         .add_test(systest!(call_v3_returns_correct_delegation))
         .add_test(systest!(call_v4_returns_correct_delegation))
+        .add_test(systest!(query_v2_passes_correct_delegation_to_canister))
+        .add_test(systest!(query_v3_passes_correct_delegation_to_canister))
         .execute_from_args()
 }
