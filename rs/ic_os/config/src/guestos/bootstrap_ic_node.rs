@@ -20,9 +20,7 @@ fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
             .metadata()
             .with_context(|| format!("Failed to get metadata for {}", entry.path().display()))?;
 
-        if metadata.is_file() {
-            continue;
-        } else if metadata.is_dir() {
+        if metadata.is_file() || metadata.is_dir() {
             continue;
         } else {
             anyhow::bail!(
