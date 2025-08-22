@@ -14,7 +14,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/generate-ic-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
+ExecStart=/opt/ic/bin/config generate-ic-config
 Restart=on-failure
 RestartSec=10
 

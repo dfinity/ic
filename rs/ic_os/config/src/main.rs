@@ -286,11 +286,10 @@ pub fn main() -> Result<()> {
                 "Generating IC configuration from template: {}",
                 template_path.display()
             );
-            generate_ic_config::generate_ic_config(
-                &guestos_config_json_path,
-                &template_path,
-                &output_path,
-            )
+            let guestos_config: GuestOSConfig =
+                config::deserialize_config(&guestos_config_json_path)?;
+
+            generate_ic_config::generate_ic_config(&guestos_config, &template_path, &output_path)
         }
         Some(Commands::GenerateTestnetConfig(clap_args)) => {
             // Convert `clap_args` into `GenerateTestnetConfigArgs`
