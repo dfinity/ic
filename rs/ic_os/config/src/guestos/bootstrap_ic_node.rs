@@ -9,6 +9,42 @@ use tempfile::TempDir;
 const CONFIG_ROOT_PATH: &str = "/boot/config";
 const STATE_ROOT_PATH: &str = "/var/lib/ic";
 
+/// Validate that the bootstrap tar contains only regular files and directories
+fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
+    use std::collections::VecDeque;
+
+    let mut queue = VecDeque::new();
+    queue.push_back(extracted_dir.to_path_buf());
+
+    while let Some(current_path) = queue.pop_front() {
+        let metadata = fs::symlink_metadata(&current_path)
+            .with_context(|| format!("Failed to get metadata for {}", current_path.display()))?;
+
+        if metadata.is_dir() {
+            for entry in fs::read_dir(&current_path)
+                .with_context(|| format!("Failed to read directory {}", current_path.display()))?
+            {
+                let entry = entry.with_context(|| {
+                    format!("Failed to read entry in {}", current_path.display())
+                })?;
+                queue.push_back(entry.path());
+            }
+        } else if metadata.is_file() {
+            // Regular files are allowed
+            continue;
+        } else {
+            // Non-regular files (symlinks, sockets, etc.) are not allowed
+            anyhow::bail!(
+                "Bootstrap contains non-regular file: {} (file type: {:?})",
+                current_path.display(),
+                metadata.file_type()
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// Process the bootstrap package to populate SSH keys and injected data
 pub fn process_bootstrap(
     bootstrap_tar: &Path,
@@ -28,6 +64,8 @@ pub fn process_bootstrap(
         "tar extraction failed with status: {}",
         status
     );
+
+    validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
     let ic_crypto_src = tmpdir.path().join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
@@ -304,5 +342,37 @@ mod tests {
 
         let result = process_bootstrap(&invalid_tar, &config_root, &state_root);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_bootstrap_contents_accepts_regular_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_dir = temp_dir.path().join("test");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        fs::write(test_dir.join("file1.txt"), "content1").unwrap();
+        fs::create_dir(test_dir.join("subdir")).unwrap();
+        fs::write(test_dir.join("subdir").join("file2.txt"), "content2").unwrap();
+
+        let result = validate_bootstrap_contents(&test_dir);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_bootstrap_contents_rejects_symlinks() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_dir = temp_dir.path().join("test");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        // Create a regular file
+        fs::write(test_dir.join("regular_file.txt"), "content").unwrap();
+
+        // Create a symlink (non-regular file)
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("regular_file.txt", test_dir.join("symlink.txt")).unwrap();
+
+        let result = validate_bootstrap_contents(&test_dir);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-regular file"));
     }
 }
