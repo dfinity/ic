@@ -245,35 +245,15 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     info!(logger, "Adding all nodes to the NNS subnet...");
     let nns_subnet = new_topology.root_subnet();
-    let nns_node = nns_subnet.nodes().next().unwrap();
-
-    // Store the original node ID before adding new nodes
-    let original_node_id = nns_node.node_id;
+    let original_node = nns_subnet.nodes().next().unwrap();
 
     let node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
-
-    let proposal_payload = AddNodesToSubnetPayload {
-        subnet_id: nns_subnet.subnet_id.get(),
-        node_ids,
-    };
-
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-
-    let proposal_id = block_on(submit_external_proposal_with_test_id(
-        &governance,
-        NnsFunction::AddNodeToSubnet,
-        proposal_payload,
-    ));
-
-    info!(
-        logger,
-        "Executing the proposal to add all four nodes to the NNS subnet"
-    );
-    block_on(vote_execute_proposal_assert_executed(
-        &governance,
-        proposal_id,
-    ));
+    block_on(add_nodes_to_subnet(
+        original_node.get_public_url(),
+        nns_subnet.subnet_id,
+        &node_ids,
+    ))
+    .expect("Failed to add nodes to the NNS subnet");
 
     info!(logger, "Waiting for nodes to be assigned to the subnet...");
     let new_topology = block_on(
@@ -295,20 +275,30 @@ pub fn nns_recovery_test(env: TestEnv) {
         num_nns_nodes
     );
 
+    // Need to wait for 3 * DKG_INTERVAL for the new nodes to be fully integrated before removing
+    // the original one
+    assert_node_is_making_progress(
+        &nns_subnet
+            .nodes()
+            .find(|n| n.node_id != original_node.node_id)
+            .unwrap(),
+        &logger,
+        Height::from(3 * (DKG_INTERVAL + 1)),
+    );
+
     info!(
         logger,
         "Success: All nodes have been added to the NNS subnet"
     );
 
-    // QUESTION FOR PIERUGO: Do we need/want to remove the non-nested NNS node? If we keep it, can we then just have three nested nodes?
     info!(
         logger,
-        "Removing original node {:?} from the NNS subnet", original_node_id
+        "Removing original node {:?} from the NNS subnet", original_node.node_id
     );
 
     block_on(remove_nodes_via_endpoint(
-        nns_node.get_public_url(),
-        &[original_node_id],
+        original_node.get_public_url(),
+        &[original_node.node_id],
     ))
     .unwrap();
 
