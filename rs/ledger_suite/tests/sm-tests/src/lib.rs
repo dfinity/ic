@@ -280,7 +280,7 @@ pub fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo>
     .expect("failed to decode archives response")
 }
 
-fn icrc21_consent_message(
+pub fn icrc21_consent_message(
     env: &StateMachine,
     ledger: CanisterId,
     caller: Principal,
@@ -4619,13 +4619,13 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
     }
 }
 
-fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest {
+pub fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest {
     let mut fields_args = args.clone();
     fields_args.user_preferences.device_spec = Some(DisplayMessageType::FieldsDisplay);
     fields_args
 }
 
-fn modify_field(
+pub fn modify_field(
     fields_message: &FieldsDisplay,
     field_name: String,
     new_value: Option<Icrc21Value>,
@@ -4859,7 +4859,7 @@ fn test_icrc21_approve_message(
     .unwrap_err();
     match message {
         Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
-            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\", \"transfer\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
         }
         _ => panic!("Unexpected error: {:?}", message),
     }
@@ -5283,14 +5283,14 @@ Charged for processing the transfer.
     );
 }
 
-fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
+pub fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(message) => message.to_string(),
         ConsentMessage::FieldsDisplayMessage(_) => panic!("cannot convert to string"),
     }
 }
 
-fn extract_icrc21_fields_message(consent_message: &ConsentMessage) -> FieldsDisplay {
+pub fn extract_icrc21_fields_message(consent_message: &ConsentMessage) -> FieldsDisplay {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(_) => panic!("should not be a string"),
         ConsentMessage::FieldsDisplayMessage(message) => message.clone(),
@@ -5324,6 +5324,85 @@ where
         spender_account,
         receiver_account,
     );
+}
+
+pub fn test_icrc21_fee_error<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let account = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: Some([2; 32]),
+    };
+
+    let transfer_args = TransferArg {
+        from_subaccount: None,
+        to: account,
+        fee: Some(Nat::from(1u64)),
+        amount: Nat::from(1_000_000u32),
+        created_at_time: None,
+        memo: None,
+    };
+
+    let mut args = ConsentMessageRequest {
+        method: "icrc1_transfer".to_owned(),
+        arg: Encode!(&transfer_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: Some(60),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let mut errors = vec![];
+    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+        .unwrap_err();
+    errors.push(error);
+
+    let approve_args = ApproveArgs {
+        spender: account,
+        amount: Nat::from(1_000_000u32),
+        from_subaccount: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+        fee: Some(Nat::from(1u64)),
+        memo: None,
+    };
+    args.arg = Encode!(&approve_args).unwrap();
+    args.method = "icrc2_approve".to_owned();
+    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+        .unwrap_err();
+    errors.push(error);
+
+    let transfer_from_args = TransferFromArgs {
+        from: account,
+        spender_subaccount: None,
+        to: account,
+        amount: Nat::from(1_000_000u32),
+        fee: Some(Nat::from(1u64)),
+        created_at_time: None,
+        memo: None,
+    };
+    args.arg = Encode!(&transfer_from_args).unwrap();
+    args.method = "icrc2_transfer_from".to_owned();
+    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+        .unwrap_err();
+    errors.push(error);
+
+    for error in errors {
+        assert_eq!(
+        error,
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description:
+                "The fee specified in the arguments (1) is different than the ledger fee (10_000)"
+                    .to_string()
+        })
+    )
+    }
 }
 
 pub struct TransactionGenerationParameters {

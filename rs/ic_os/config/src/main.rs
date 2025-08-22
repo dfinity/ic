@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos::bootstrap_ic_node::bootstrap_ic_node;
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::setupos::deployment_json::get_deployment_settings;
@@ -33,6 +34,11 @@ pub enum Commands {
         setupos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
+    },
+    /// Bootstrap IC Node from a bootstrap package
+    BootstrapICNode {
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
+        bootstrap_tar_path: PathBuf,
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
@@ -257,6 +263,10 @@ pub fn main() -> Result<()> {
             );
 
             Ok(())
+        }
+        Some(Commands::BootstrapICNode { bootstrap_tar_path }) => {
+            println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
+            bootstrap_ic_node(&bootstrap_tar_path)
         }
         Some(Commands::GenerateTestnetConfig(clap_args)) => {
             // Convert `clap_args` into `GenerateTestnetConfigArgs`

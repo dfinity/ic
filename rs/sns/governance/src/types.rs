@@ -2088,7 +2088,7 @@ impl Drop for LedgerUpdateLock {
         // may be inconsistent with the internal state of governance.  In that case,
         // we want to prevent further operations with that neuron until the issue can be
         // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
+        if ic_cdk::futures::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock

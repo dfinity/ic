@@ -2,7 +2,7 @@
 
 set -e
 
-readonly EXPECTED_RECOVERY_HASH=""
+readonly EXPECTED_RECOVERY_HASH_FILE="/opt/ic/share/expected_recovery_hash"
 readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
@@ -49,6 +49,20 @@ perform_recovery() {
             return 1
         fi
     }
+
+    if [ ! -f "$EXPECTED_RECOVERY_HASH_FILE" ]; then
+        echo "ERROR: Expected recovery hash file not found: $EXPECTED_RECOVERY_HASH_FILE"
+        return 1
+    fi
+
+    EXPECTED_RECOVERY_HASH="$(cat "$EXPECTED_RECOVERY_HASH_FILE" | tr -d '\n\r')"
+
+    if [ -z "$EXPECTED_RECOVERY_HASH" ]; then
+        echo "ERROR: Expected recovery hash file is empty"
+        return 1
+    fi
+
+    echo "Using expected recovery hash: $EXPECTED_RECOVERY_HASH"
 
     echo "Downloading recovery artifact..."
     base_urls=(

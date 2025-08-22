@@ -23,6 +23,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
@@ -460,27 +461,31 @@ impl HttpEndpointBuilder {
 
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
+        let log = no_op_logger();
+
+        // Run test on "nns" to avoid fetching root delegation
+        let subnet_id = subnet_test_id(1);
+        let nns_subnet_id = subnet_test_id(1);
 
         let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
-        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
-            watch::channel(self.delegation_from_nns);
+        let builder = self.delegation_from_nns.map(|delegation| {
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
+        });
+        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
+        let nns_delegation_reader =
+            NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
-        // Run test on "nns" to avoid fetching root delegation
-        let subnet_id = subnet_test_id(1);
-        let nns_subnet_id = subnet_test_id(1);
         let node_id = node_test_id(1);
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
         let (ingress_tx, ingress_rx) = channel(self.ingress_channel_capacity);
-
-        let log = no_op_logger();
 
         start_server(
             self.rt_handle,
@@ -502,7 +507,7 @@ impl HttpEndpointBuilder {
             self.consensus_cache,
             SubnetType::Application,
             MaliciousFlags::default(),
-            nns_delegation_watcher_rx,
+            nns_delegation_reader,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,

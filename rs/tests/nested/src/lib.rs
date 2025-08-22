@@ -100,9 +100,29 @@ fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
     }
 }
 
+/// Asserts that SetupOS and initial NNS GuestOS image versions match.
+/// Only checks if both functions return ReplicaVersion successfully.
+/// NOTE: If you want to create a new test with conflicting versions, add a
+/// field to override this check and, in your test, account for the fact that
+/// after registration, the deployed node will upgrade to the NNS GuestOS version.
+fn assert_version_compatibility() {
+    if let (Ok(setupos_version), Ok(guestos_version)) =
+        (get_setupos_img_version(), get_guestos_img_version())
+    {
+        if setupos_version != guestos_version {
+            panic!(
+                "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
+            );
+        }
+    }
+    // If either function returns an error, don't fail
+}
+
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS (x num_hosts)
 pub fn config(env: TestEnv, num_hosts: usize) {
+    assert_version_compatibility();
+
     setup_ic_infrastructure(&env);
     let host_vm_names = get_host_vm_names(num_hosts);
     let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
@@ -161,6 +181,8 @@ pub fn registration(env: TestEnv) {
         ),
     )
     .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
+
     let num_unassigned_nodes = new_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 1);
 }
@@ -458,6 +480,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         ),
     )
     .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -672,7 +695,6 @@ pub fn recovery_upgrader_test(env: TestEnv) {
 pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
-    // start the nested VM and wait for it to join the network
     let initial_topology = env.topology_snapshot();
     start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");

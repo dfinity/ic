@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
