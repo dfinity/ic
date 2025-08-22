@@ -95,6 +95,7 @@ use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
+use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
@@ -5476,8 +5477,6 @@ impl Governance {
 
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn run_periodic_tasks(&mut self) {
-        use ic_cdk::println;
-
         self.process_proposals();
 
         // None of the upgrade-related tasks should interleave with one another or themselves, so we acquire a global
