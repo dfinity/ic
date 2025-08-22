@@ -439,7 +439,7 @@ where
 }
 
 fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+    let (subnet, node) = get_subnet_and_node(env, SubnetType::Application);
     let nns_node = get_nns_node(&env.topology_snapshot());
 
     let initial_version = get_guestos_img_version().expect("initial version");
