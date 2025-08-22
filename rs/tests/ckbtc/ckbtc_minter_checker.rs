@@ -47,9 +47,6 @@ pub fn test_btc_checker(env: TestEnv) {
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
 
-    // Create wallet if required.
-    // ensure_wallet(&btc_rpc, &logger);
-
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(

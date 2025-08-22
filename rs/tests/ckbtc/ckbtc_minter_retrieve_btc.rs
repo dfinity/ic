@@ -44,7 +44,6 @@ pub fn test_retrieve_btc(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
     let btc_rpc = get_btc_client(&env);
-    // ensure_wallet(&btc_rpc, &logger);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 10 first block to reach the min confirmations of the minter canister.

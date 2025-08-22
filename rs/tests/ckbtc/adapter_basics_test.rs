@@ -25,7 +25,6 @@ fn test_received_blocks(env: TestEnv) {
 
     // Setup client
     let client = get_btc_client(&env);
-    // ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
@@ -60,7 +59,6 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     let client = get_btc_client(&env);
-    // ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
@@ -121,10 +119,7 @@ fn test_send_tx(env: TestEnv) {
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
-    // let client = get_btc_client(&env);
-    // ensure_wallet(&client, &log);
     info!(log, "Set up bitcoind wallet");
-
     let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
     info!(log, "Set up alice and bob");
 
