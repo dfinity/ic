@@ -280,7 +280,7 @@ system_test_nns(
     uses_guestos_img = True,
     uses_guestos_nns_mainnet_img = False,
     uses_guestos_update = True,
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
