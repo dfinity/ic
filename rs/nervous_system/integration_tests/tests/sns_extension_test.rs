@@ -583,7 +583,6 @@ async fn add_fiduciary_subnet_type(pocket_ic: &PocketIc) {
     #[derive(candid::CandidType)]
     enum UpdateSubnetTypeArgs {
         Add(String),
-        Remove(String),
     }
 
     let args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
@@ -615,7 +614,6 @@ async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: 
     #[derive(candid::CandidType)]
     enum ChangeSubnetTypeAssignmentArgs {
         Add(SubnetListWithType),
-        Remove(SubnetListWithType),
     }
 
     let args = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
