@@ -33,7 +33,7 @@ use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
-use ic_http_endpoints_public::cors_layer;
+use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
@@ -124,7 +124,7 @@ where
         )
         .directory_route(
             "/canister/{ecid}/query",
-            post(handler_query)
+            post(handler_query_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -132,7 +132,7 @@ where
         )
         .directory_route(
             "/canister/{ecid}/read_state",
-            post(handler_canister_read_state)
+            post(handler_canister_read_state_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -140,7 +140,7 @@ where
         )
         .directory_route(
             "/subnet/{sid}/read_state",
-            post(handler_subnet_read_state)
+            post(handler_subnet_read_state_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -153,9 +153,49 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
+    ApiRouter::new()
+        .directory_route(
+            "/canister/{ecid}/call",
+            post(handler_call_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/canister/{ecid}/query",
+            post(handler_query_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/canister/{ecid}/read_state",
+            post(handler_canister_read_state_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/subnet/{sid}/read_state",
+            post(handler_subnet_read_state_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+}
+
+pub fn instance_api_v4_routes<S>() -> ApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: extract::FromRef<S>,
+{
     ApiRouter::new().directory_route(
         "/canister/{ecid}/call",
-        post(handler_call_v3)
+        post(handler_call_v4)
             .layer(RequestBodyLimitLayer::new(
                 4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
             ))
@@ -191,6 +231,9 @@ where
         //
         // All the api v3 endpoints
         .nest("/{id}/api/v3", instance_api_v3_routes())
+        //
+        // All the api v4 endpoints
+        .nest("/{id}/api/v4", instance_api_v4_routes())
         //
         // The instance dashboard
         .api_route("/{id}/_/dashboard", get(handler_dashboard))
@@ -736,6 +779,19 @@ pub async fn handler_call_v3(
     handle_raw(api_state, instance_id, op).await
 }
 
+pub async fn handler_call_v4(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CallRequest {
+        effective_canister_id,
+        bytes,
+        version: CallRequestVersion::V4,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
 pub async fn handler_call_v2(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
@@ -749,7 +805,7 @@ pub async fn handler_call_v2(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_query(
+pub async fn handler_query_v2(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
@@ -757,11 +813,25 @@ pub async fn handler_query(
     let op = QueryRequest {
         effective_canister_id,
         bytes,
+        version: query::Version::V2,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_canister_read_state(
+pub async fn handler_query_v3(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = QueryRequest {
+        effective_canister_id,
+        bytes,
+        version: query::Version::V3,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_canister_read_state_v2(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
@@ -769,16 +839,47 @@ pub async fn handler_canister_read_state(
     let op = CanisterReadStateRequest {
         effective_canister_id,
         bytes,
+        version: read_state::canister::Version::V2,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_subnet_read_state(
+pub async fn handler_canister_read_state_v3(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CanisterReadStateRequest {
+        effective_canister_id,
+        bytes,
+        version: read_state::canister::Version::V3,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_subnet_read_state_v2(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = SubnetReadStateRequest { subnet_id, bytes };
+    let op = SubnetReadStateRequest {
+        subnet_id,
+        bytes,
+        version: read_state::subnet::Version::V2,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_subnet_read_state_v3(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = SubnetReadStateRequest {
+        subnet_id,
+        bytes,
+        version: read_state::subnet::Version::V3,
+    };
     handle_raw(api_state, instance_id, op).await
 }
 

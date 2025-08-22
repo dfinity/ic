@@ -30,7 +30,7 @@ use std::{
 };
 use tower::util::BoxCloneService;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Version {
     // Endpoint with the NNS delegation using the flat format of the canister ranges.
     V2,
