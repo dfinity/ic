@@ -3,7 +3,7 @@ use bitcoin::Amount;
 use ic_btc_adapter_test_utils::{CreateRawTransactionInput, RpcApi};
 use ic_system_test_driver::{
     driver::{
-        group::{SystemTestGroup, SystemTestSubGroup},
+        group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
@@ -175,11 +175,9 @@ fn test_send_tx(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(adapter_test_setup)
-        .add_sequential(SystemTestSubGroup::new().add_test(systest!(test_received_blocks)))
-        .add_sequential(
-            SystemTestSubGroup::new().add_test(systest!(test_receives_new_3rd_party_txs)),
-        )
-        .add_sequential(SystemTestSubGroup::new().add_test(systest!(test_send_tx)))
+        .add_test(systest!(test_received_blocks))
+        .add_test(systest!(test_receives_new_3rd_party_txs))
+        .add_test(systest!(test_send_tx))
         .execute_from_args()?;
     Ok(())
 }
