@@ -9233,6 +9233,7 @@ dependencies = [
 name = "ic-error-types"
 version = "0.2.0"
 dependencies = [
+ "ic-deterministic-heap-bytes",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9244,7 +9245,6 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbeeb3d91aa179d6496d7293becdacedfc413c825cac79fd54ea1906f003ee55"
 dependencies = [
- "ic-deterministic-heap-bytes",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
