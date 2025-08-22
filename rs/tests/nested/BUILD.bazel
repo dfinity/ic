@@ -2,6 +2,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 load(
     "//rs/tests:common.bzl",
     "IC_GATEWAY_RUNTIME_DEPS",
+    "IMPERSONATE_UPSTREAMS_ENV",
+    "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
     "MESSAGE_CANISTER_ENV",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
@@ -192,11 +194,14 @@ system_test_nns(
 # - guestos-recovery-engine is used to recover the NNS subnet
 system_test_nns(
     name = "nns_recovery_test",
-    env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
+    env = MAINNET_ENV | IMPERSONATE_UPSTREAMS_ENV | MESSAGE_CANISTER_ENV,
     flaky = True,
     tags = ["long_test"],
     test_timeout = "eternal",
     uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/tests/consensus/utils",
+    ],
 )
