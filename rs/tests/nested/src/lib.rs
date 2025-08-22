@@ -210,12 +210,12 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     start_nested_vm_group(env.clone());
 
-    info!(logger, "Waiting for all four nodes to join ...");
+    info!(logger, "Waiting for all nodes to join ...");
 
-    // Wait for all four nodes to register by repeatedly waiting for registry updates
-    // and checking if we have 4 unassigned nodes
+    // Wait for all nodes to register by repeatedly waiting for registry updates
+    // and checking if we have the expected number of unassigned nodes
     let new_topology = retry_with_msg!(
-        "Waiting for all four nodes to register and appear as unassigned nodes",
+        "Waiting for all nodes to register and appear as unassigned nodes",
         logger.clone(),
         NODE_REGISTRATION_TIMEOUT,
         NODE_REGISTRATION_BACKOFF,
@@ -229,12 +229,13 @@ pub fn nns_recovery_test(env: TestEnv) {
             )?;
 
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == 4 {
-                info!(logger, "Success: All four nodes have registered");
+            if num_unassigned_nodes == SUBNET_SIZE {
+                info!(logger, "Success: All nodes have registered");
                 Ok(new_topology)
             } else {
                 bail!(
-                    "Expected 4 unassigned nodes, but found {}",
+                    "Expected {} unassigned nodes, but found {}",
+                    SUBNET_SIZE,
                     num_unassigned_nodes
                 )
             }
@@ -242,7 +243,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     )
     .unwrap();
 
-    info!(logger, "Adding all four nodes to the NNS subnet...");
+    info!(logger, "Adding all nodes to the NNS subnet...");
     let nns_subnet = new_topology.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
 
@@ -286,14 +287,17 @@ pub fn nns_recovery_test(env: TestEnv) {
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
-        num_nns_nodes, 5,
-        "NNS subnet should have 5 nodes (1 original + 4 new), but found {} nodes",
+        num_nns_nodes,
+        SUBNET_SIZE + 1,
+        "NNS subnet should have {} nodes (1 original + {} new), but found {} nodes",
+        SUBNET_SIZE + 1,
+        SUBNET_SIZE,
         num_nns_nodes
     );
 
     info!(
         logger,
-        "Success: All four nodes have been added to the NNS subnet"
+        "Success: All nodes have been added to the NNS subnet"
     );
 
     // QUESTION FOR PIERUGO: Do we need/want to remove the non-nested NNS node? If we keep it, can we then just have three nested nodes?
@@ -323,9 +327,9 @@ pub fn nns_recovery_test(env: TestEnv) {
     let nns_subnet = topology_after_removal.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
-        num_nns_nodes, 4,
-        "NNS subnet should have 4 nodes after removing the original node, but found {} nodes",
-        num_nns_nodes
+        num_nns_nodes, SUBNET_SIZE,
+        "NNS subnet should have {} nodes after removing the original node, but found {} nodes",
+        SUBNET_SIZE, num_nns_nodes
     );
 
     info!(
