@@ -23,7 +23,7 @@ on:
       - PocketIC Windows
       - Sync IC private from IC public
       - Update IC versions file
-      - Bazel Test All
+      - CI Main
 
 jobs:
   slack-workflow-run:
@@ -67,8 +67,10 @@ jobs:
             CHANNEL="eng-crypto-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update IC versions file" ]]; then
             CHANNEL="eng-consensus-alerts"
-          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Bazel Test All" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "CI Main" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
             CHANNEL="eng-consensus-alerts"
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "CI Main" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-nervous-system-wasms" ]]; then
+            CHANNEL="eng-nns"
           fi
 
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
