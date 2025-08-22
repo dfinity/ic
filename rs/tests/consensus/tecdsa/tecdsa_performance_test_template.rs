@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
