@@ -676,6 +676,51 @@ pub fn nns_recovery_test(env: TestEnv) {
                 )
             }),
     ));
+
+    info!(logger, "Wait for state sync to complete");
+    cert_state_makes_progress_with_retries(
+        &dfinity_owned_node.get_public_url(),
+        dfinity_owned_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
+
+    info!(logger, "Ensure the old message is still readable");
+    assert!(can_read_msg(
+        &logger,
+        &dfinity_owned_node.get_public_url(),
+        app_can_id,
+        msg
+    ));
+
+    info!(logger, "Ensure the subnet uses the new replica version");
+    let final_topology = block_on(topology_after_removal.block_for_newer_registry_version())
+        .expect("Could not obtain updated registry.");
+    let dfinity_owned_node = final_topology
+        .subnets()
+        .flat_map(|s| s.nodes())
+        .find(|n| n.node_id == dfinity_owned_node.node_id)
+        .expect("Could not find upload_node in updated registry.");
+    assert_assigned_replica_version(&dfinity_owned_node, &working_version, env.logger());
+
+    info!(
+        logger,
+        "Ensure that the subnet is accepting updates after the recovery"
+    );
+    let new_msg = "subnet recovery still works!";
+    let new_app_can_id = store_message(
+        &dfinity_owned_node.get_public_url(),
+        dfinity_owned_node.effective_canister_id(),
+        new_msg,
+        &logger,
+    );
+    assert!(can_read_msg(
+        &logger,
+        &dfinity_owned_node.get_public_url(),
+        new_app_can_id,
+        new_msg
+    ));
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
