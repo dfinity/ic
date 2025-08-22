@@ -1,6 +1,6 @@
 use std::{io::Write, net::Ipv6Addr, path::Path};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{get_dependency_path, SshSession},
@@ -111,10 +111,7 @@ fn uvm_serve_file(env: &TestEnv, file: Vec<u8>, uri: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn spoof_node_dns<T>(node: &T, server_ipv6: &Ipv6Addr)
-where
-    T: SshSession,
-{
+fn get_spoof_commands(server_ipv6: &Ipv6Addr) -> String {
     // File-system is read-only, so we modify /etc/hosts in a temporary file and replace the
     // original with a bind mount.
     let mut command = String::from(
@@ -140,7 +137,20 @@ where
         "#,
     );
 
-    node.block_on_bash_script(&command)
-        .map_err(|e| anyhow!("Failed to spoof DNS: {}", e))
-        .unwrap();
+    command
+}
+
+pub fn spoof_node_dns<T>(node: &T, server_ipv6: &Ipv6Addr) -> Result<String>
+where
+    T: SshSession,
+{
+    node.block_on_bash_script(&get_spoof_commands(server_ipv6))
+}
+
+pub async fn spoof_node_dns_async<T>(node: &T, server_ipv6: &Ipv6Addr) -> Result<String>
+where
+    T: SshSession + Sync,
+{
+    node.block_on_bash_script_async(&get_spoof_commands(server_ipv6))
+        .await
 }
