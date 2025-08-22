@@ -338,7 +338,6 @@ impl BitcoinD {
         let conf_path = work_dir.path().join("bitcoin.conf");
         let mut rpc_user = String::new();
         let mut rpc_pass = String::new();
-        let mut rpc_auth = String::new();
         let auth = match conf.auth {
             None => {
                 let cookie_file = work_dir.path().join(network.to_string()).join(".cookie");
@@ -348,15 +347,11 @@ impl BitcoinD {
                 if let crate::Auth::UserPass(user, password) = &auth {
                     rpc_user = format!("rpc_user:{user}");
                     rpc_pass = format!("rpc_password:{password}");
-                    rpc_auth = format!("rpcauth=$");
                 }
                 auth
             }
         };
-        fs::write(
-            conf_path.clone(),
-            format!("{rpc_user}\n{rpc_pass}\n{rpc_auth}\n"),
-        )?;
+        fs::write(conf_path.clone(), format!("{rpc_user}\n{rpc_pass}\n"))?;
 
         let rpc_port = get_available_port()?;
         let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
@@ -426,5 +421,5 @@ impl BitcoinD {
 pub fn get_available_port() -> Result<u16, std::io::Error> {
     // using 0 as port let the system assign a port available
     let t = net::TcpListener::bind(("127.0.0.1", 0))?; // 0 means the OS choose a free port
-    Ok(t.local_addr().map(|s| s.port())?)
+    t.local_addr().map(|s| s.port())
 }

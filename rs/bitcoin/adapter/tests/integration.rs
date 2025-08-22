@@ -112,8 +112,10 @@ fn start_adapter(
 
 fn start_bitcoind() -> BitcoinD {
     let network = bitcoin::Network::Regtest;
-    let mut conf = Conf::default();
-    conf.p2p = true;
+    let conf = Conf {
+        p2p: true,
+        ..Conf::default()
+    };
 
     let path =
         std::env::var("BITCOIN_CORE_PATH").expect("Failed to get BITCOIND_CORE_PATH env variable");
@@ -511,7 +513,7 @@ fn test_receives_blocks() {
         bitcoin::Network::Regtest,
     );
 
-    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 15);
+    let blocks = sync_until_end_block(&adapter_client, client, 0, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 150);
 }
@@ -530,14 +532,14 @@ fn test_adapter_disconnects_when_idle() {
     let _r = start_active_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
 
     // The client should be connected to the adapter
-    wait_for_connection(&client, 1);
+    wait_for_connection(client, 1);
 
     // it takes 6 seconds for the adapter to become idle (in the test config).
     std::thread::sleep(std::time::Duration::from_secs(7)); // wait for the adapter to become idle.
 
     // As the adapter is now idle, the connection with the client should be dropped.
     // Hence the client should not have any connections.
-    exact_connections(&client, 0);
+    exact_connections(client, 0);
 }
 
 /// Checks that an idle adapter does not connect to any peers.
@@ -550,14 +552,14 @@ fn idle_adapter_does_not_connect_to_peers() {
     let url = SocketAddr::V4(bitcoind.p2p_socket().unwrap());
 
     // The client does not have any connections
-    wait_for_connection(&client, 0);
+    wait_for_connection(client, 0);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let _r = start_idle_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
 
     // The client still does not have any connections
-    exact_connections(&client, 0);
+    exact_connections(client, 0);
 }
 
 /// Checks that the adapter can connect to multiple BitcoinD peers.
@@ -588,9 +590,9 @@ fn test_connection_to_multiple_peers() {
         .add_node(&url1.to_string())
         .expect("Failed to connect to peer");
 
-    wait_for_connection(&client1, 2);
-    wait_for_connection(&client2, 2);
-    wait_for_connection(&client3, 2);
+    wait_for_connection(client1, 2);
+    wait_for_connection(client2, 2);
+    wait_for_connection(client3, 2);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -601,9 +603,9 @@ fn test_connection_to_multiple_peers() {
         bitcoin::Network::Regtest,
     );
 
-    wait_for_connection(&client1, 3);
-    wait_for_connection(&client2, 3);
-    wait_for_connection(&client3, 3);
+    wait_for_connection(client1, 3);
+    wait_for_connection(client2, 3);
+    wait_for_connection(client3, 3);
 }
 
 /// The client (replica) receives newly created transactions by 3rd parties using the gRPC service.
@@ -744,34 +746,34 @@ fn test_receives_blocks_from_forks() {
         .onetry_node(&url2.to_string())
         .expect("Failed to connect to the other peer");
 
-    wait_for_connection(&client1, 2);
-    wait_for_connection(&client2, 2);
+    wait_for_connection(client1, 2);
+    wait_for_connection(client2, 2);
 
     let address1 = client1.get_address().unwrap();
     client1.generate_to_address(10, address1).unwrap();
 
-    wait_for_blocks(&client1, 10);
-    wait_for_blocks(&client2, 10);
+    wait_for_blocks(client1, 10);
+    wait_for_blocks(client2, 10);
 
     let address2 = client2.get_address().unwrap();
     client2.generate_to_address(10, address2).unwrap();
 
-    wait_for_blocks(&client1, 20);
-    wait_for_blocks(&client2, 20);
+    wait_for_blocks(client1, 20);
+    wait_for_blocks(client2, 20);
 
     // Disconnect the nodes to create a fork
     client1
         .disconnect_node(&url2.to_string())
         .expect("Failed to disconnect peers");
 
-    wait_for_connection(&client1, 1);
-    wait_for_connection(&client2, 1);
+    wait_for_connection(client1, 1);
+    wait_for_connection(client2, 1);
 
     client1.generate_to_address(3, address1).unwrap();
     client2.generate_to_address(6, address2).unwrap();
 
-    wait_for_blocks(&client1, 23);
-    wait_for_blocks(&client2, 26);
+    wait_for_blocks(client1, 23);
+    wait_for_blocks(client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
     let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 29, 201);
@@ -804,8 +806,8 @@ fn test_bfs_order() {
         .onetry_node(&url2.to_string())
         .expect("Failed to connect to the other peer");
 
-    wait_for_connection(&client1, 2);
-    wait_for_connection(&client2, 2);
+    wait_for_connection(client1, 2);
+    wait_for_connection(client2, 2);
 
     let address1 = client1.get_address().unwrap();
     // IMPORTANT:
@@ -817,16 +819,16 @@ fn test_bfs_order() {
         .generate_to_address(shared_blocks_count, address1)
         .unwrap();
 
-    wait_for_blocks(&client1, 2);
-    wait_for_blocks(&client2, 2);
+    wait_for_blocks(client1, 2);
+    wait_for_blocks(client2, 2);
 
     // Disconnect the nodes to create a fork
     client1
         .disconnect_node(&url2.to_string())
         .expect("Failed to disconnect peers");
 
-    wait_for_connection(&client1, 1);
-    wait_for_connection(&client2, 1);
+    wait_for_connection(client1, 1);
+    wait_for_connection(client2, 1);
 
     let fork1 = client1
         .generate_to_address(branch_length, address1)
@@ -837,8 +839,8 @@ fn test_bfs_order() {
         .generate_to_address(branch_length, address2)
         .unwrap();
 
-    wait_for_blocks(&client1, shared_blocks_count + branch_length);
-    wait_for_blocks(&client2, shared_blocks_count + branch_length);
+    wait_for_blocks(client1, shared_blocks_count + branch_length);
+    wait_for_blocks(client2, shared_blocks_count + branch_length);
 
     assert_eq!(fork1.len() + fork2.len(), (branch_length * 2) as usize);
 
@@ -846,8 +848,8 @@ fn test_bfs_order() {
         .onetry_node(&url2.to_string())
         .expect("Failed to connect to the other peer");
 
-    wait_for_connection(&client1, 2);
-    wait_for_connection(&client2, 2);
+    wait_for_connection(client1, 2);
+    wait_for_connection(client2, 2);
     std::thread::sleep(std::time::Duration::from_secs(1));
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
