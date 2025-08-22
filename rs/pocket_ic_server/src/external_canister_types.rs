@@ -84,23 +84,12 @@ pub struct InternetIdentityInit {
 #[cfg(test)]
 mod tests {
     use crate::external_canister_types::InternetIdentityInit;
-    use candid::types::internal::TypeContainer;
     use candid::types::subtype::equal;
-    use candid::types::Type;
-    use candid::{CandidType, TypeEnv};
+    use candid::CandidType;
     use candid_parser::utils::{instantiate_candid, CandidSource};
     use flate2::read::GzDecoder;
     use std::io::Read;
     use walrus::{IdsToIndices, Module};
-
-    fn assert_type_equal<T: CandidType>(arg: &Type) {
-        let mut env = TypeEnv::new();
-        let mut rust_env = TypeContainer::new();
-        let ty = rust_env.add::<T>();
-        let ty = env.merge_type(rust_env.env, ty);
-        let mut gamma = std::collections::HashSet::new();
-        equal(&mut gamma, &env, arg, &ty).unwrap();
-    }
 
     fn check_init_arg<T: CandidType>(gzipped_canister_wasm: &[u8]) {
         let mut decoder = GzDecoder::new(gzipped_canister_wasm);
@@ -114,13 +103,14 @@ mod tests {
             .unwrap()
             .1
             .data(&IdsToIndices::default());
-        let (init_args, _) = instantiate_candid(CandidSource::Text(
+        let (init_args, (env, _)) = instantiate_candid(CandidSource::Text(
             core::str::from_utf8(&canister_did).unwrap(),
         ))
         .unwrap();
 
         assert_eq!(init_args.len(), 1);
-        assert_type_equal::<T>(&init_args[0]);
+        let mut gamma = std::collections::HashSet::new();
+        equal(&mut gamma, &env, &init_args[0], &T::ty()).unwrap();
     }
 
     #[test]
