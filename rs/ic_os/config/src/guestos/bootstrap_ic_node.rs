@@ -1,13 +1,54 @@
 use anyhow::{Context, Result};
 use fs_extra;
 use std::fs::{self, File};
+use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
+use tar::Archive;
 use tempfile::TempDir;
 
 const CONFIG_ROOT_PATH: &str = "/boot/config";
 const STATE_ROOT_PATH: &str = "/var/lib/ic";
+
+fn validate_tar_entry(entry: &tar::Entry<impl Read>) -> Result<()> {
+    let header = entry.header();
+    let entry_type = header.entry_type();
+
+    match entry_type {
+        tar::EntryType::Regular => Ok(()),
+        tar::EntryType::Directory => Ok(()),
+        _ => {
+            // Reject symlinks, block devices, sockets, etc.
+            let path = entry.path().unwrap_or_else(|_| Path::new("unknown").into());
+            anyhow::bail!(
+                "Unsupported file type {:?} for entry: {}",
+                entry_type,
+                path.display()
+            );
+        }
+    }
+}
+
+/// Extract tar file with validation to only allow regular files and directories
+fn extract_tar_with_validation(tar_path: &Path, extract_to: &Path) -> Result<()> {
+    let tar_file = File::open(tar_path).context("Failed to open bootstrap tar file")?;
+
+    let mut archive = Archive::new(tar_file);
+
+    for entry_result in archive.entries().context("Failed to read tar entries")? {
+        let mut entry = entry_result.context("Failed to read tar entry")?;
+
+        validate_tar_entry(&entry)?;
+
+        entry.unpack_in(extract_to).with_context(|| {
+            let path = entry.path().unwrap_or_else(|_| Path::new("unknown").into());
+            format!("Failed to extract entry: {}", path.display())
+        })?;
+    }
+
+    Ok(())
+}
 
 /// Process the bootstrap package to populate SSH keys and injected data
 pub fn process_bootstrap(
@@ -17,17 +58,7 @@ pub fn process_bootstrap(
 ) -> Result<()> {
     let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
 
-    let status = Command::new("tar")
-        .args(["xf", bootstrap_tar.to_str().unwrap()])
-        .current_dir(tmpdir.path())
-        .status()
-        .context("Failed to extract bootstrap tar file")?;
-
-    anyhow::ensure!(
-        status.success(),
-        "tar extraction failed with status: {}",
-        status
-    );
+    extract_tar_with_validation(bootstrap_tar, tmpdir.path())?;
 
     let ic_crypto_src = tmpdir.path().join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
@@ -304,5 +335,50 @@ mod tests {
 
         let result = process_bootstrap(&invalid_tar, &config_root, &state_root);
         assert!(result.is_err());
+    }
+
+    fn create_test_bootstrap_tar_with_symlink(temp_dir: &TempDir) -> std::path::PathBuf {
+        let bootstrap_dir = temp_dir.path().join("bootstrap");
+        fs::create_dir_all(&bootstrap_dir).unwrap();
+
+        fs::write(bootstrap_dir.join("regular_file.txt"), "test content").unwrap();
+
+        // Create a symlink that should be rejected
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            bootstrap_dir.join("regular_file.txt"),
+            bootstrap_dir.join("symlink.txt"),
+        )
+        .unwrap();
+
+        let tar_path = temp_dir.path().join("bootstrap_with_symlink.tar");
+        let status = Command::new("tar")
+            .args(["cf", tar_path.to_str().unwrap()])
+            .current_dir(&bootstrap_dir)
+            .args(["./regular_file.txt", "./symlink.txt"])
+            .status()
+            .unwrap();
+
+        assert!(status.success());
+        tar_path
+    }
+
+    #[test]
+    fn test_process_bootstrap_rejects_symlinks() {
+        let temp_dir = TempDir::new().unwrap();
+        let bootstrap_tar = create_test_bootstrap_tar_with_symlink(&temp_dir);
+
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        let result = process_bootstrap(&bootstrap_tar, &config_root, &state_root);
+        assert!(result.is_err());
+
+        // Verify the error message mentions the unsupported file type
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Unsupported file type"));
+        assert!(error_msg.contains("symlink"));
     }
 }
