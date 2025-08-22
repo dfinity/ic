@@ -215,14 +215,7 @@ impl<'a> AdapterProxy<'a> {
     }
 }
 
-pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (RpcClient, RpcClient, Address, Address) {
-    let (alice_client, alice_address) = get_test_wallet(env, "alice");
-    let (bob_client, bob_address) = get_test_wallet(env, "bob");
-
-    (alice_client, bob_client, alice_address, bob_address)
-}
-
-fn get_test_wallet(env: &TestEnv, name: &str) -> (RpcClient, Address) {
+pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (RpcClient, RpcClient) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let bitcoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
 
@@ -236,12 +229,11 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (RpcClient, Address) {
     )
     .unwrap()
     .ensure_wallet()
-    .unwrap()
-    .with_account(name)
     .unwrap();
 
-    let address = client.get_address().unwrap().clone();
-    (client, address)
+    let alice_client = client.with_account("alice").unwrap();
+    let bob_client = client.with_account("bob").unwrap();
+    (alice_client, bob_client)
 }
 
 pub fn fund_with_btc(

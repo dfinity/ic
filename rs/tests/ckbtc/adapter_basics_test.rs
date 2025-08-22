@@ -63,10 +63,12 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
-    let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
+    let (alice_client, bob_client) = get_alice_and_bob_wallets(&env);
+    let alice_address = alice_client.get_address().unwrap();
+    let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&alice_client, alice_address);
 
     let alice_balance_initial = alice_client.get_balance(None).unwrap();
     let bob_balance_initial = bob_client.get_balance(None).unwrap();
@@ -74,7 +76,7 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let txid = alice_client
         .send_to(
-            &bob_address,
+            bob_address,
             Amount::from_btc(1.0).unwrap(),
             Amount::from_btc(0.0001).unwrap(),
         )
@@ -120,10 +122,12 @@ fn test_send_tx(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     info!(log, "Set up bitcoind wallet");
-    let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
+    let (alice_client, bob_client) = get_alice_and_bob_wallets(&env);
+    let alice_address = alice_client.get_address().unwrap();
+    let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
 
-    let utxo = fund_with_btc(&alice_client, &alice_address);
+    let utxo = fund_with_btc(&alice_client, alice_address);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();
