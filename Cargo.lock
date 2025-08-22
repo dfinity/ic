@@ -2668,6 +2668,7 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
+ "walkdir",
 ]
 
 [[package]]
@@ -15390,6 +15391,7 @@ dependencies = [
  "hkdf",
  "mockall",
  "pem 1.1.1",
+ "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
  "sev",
@@ -15537,7 +15539,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "candid",
@@ -20311,9 +20313,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "11.3.0"
+version = "11.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6928fa44c097620b706542d428957635951bade7143269085389d42c8a4927e"
+checksum = "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
 dependencies = [
  "bitflags 2.9.0",
 ]

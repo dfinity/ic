@@ -546,6 +546,11 @@ fn test_icrc21_standard() {
 }
 
 #[test]
+fn test_icrc21_fee_error() {
+    ic_ledger_suite_state_machine_tests::test_icrc21_fee_error(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_archiving_lots_of_blocks_after_enabling_archiving() {
     ic_ledger_suite_state_machine_tests::archiving::test_archiving_lots_of_blocks_after_enabling_archiving(
         ledger_wasm(), encode_init_args,

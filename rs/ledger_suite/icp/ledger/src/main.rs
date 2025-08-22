@@ -54,10 +54,14 @@ use icp_ledger::{
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     MEMO_SIZE_BYTES,
 };
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc21::lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    icrc21::lib::{
+        build_icrc21_consent_info, build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+        icrc21_check_fee,
+    },
     icrc3::archive::QueryArchiveFn,
 };
 use icrc_ledger_types::{
@@ -74,10 +78,6 @@ use icrc_ledger_types::{
         errors::ErrorInfo,
         lib::{AccountOrId, GenericMemo, GenericTransferArgs},
     },
-};
-use icrc_ledger_types::{
-    icrc2::allowance::{Allowance, AllowanceArgs},
-    icrc21::lib::build_icrc21_consent_info,
 };
 use ledger_canister::{
     balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
@@ -1697,7 +1697,7 @@ fn icrc21_canister_call_consent_message(
         let TransferArgs {
             memo,
             amount,
-            fee: _,
+            fee,
             from_subaccount,
             to,
             created_at_time: _,
@@ -1706,6 +1706,7 @@ fn icrc21_canister_call_consent_message(
                 description: format!("Failed to decode TransferArgs: {}", e),
             })
         })?;
+        icrc21_check_fee(&Some(Nat::from(fee)), &ledger_fee)?;
         let from = if caller() == Principal::anonymous() {
             AccountOrId::AccountIdAddress(None)
         } else {

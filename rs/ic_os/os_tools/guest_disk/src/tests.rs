@@ -93,6 +93,9 @@ impl<'a> TestFixture<'a> {
         run(
             args,
             &self.guestos_config,
+            self.guestos_config
+                .icos_settings
+                .enable_trusted_execution_environment,
             || Ok(self.get_mock_sev_key_deriver()),
             &self.previous_key_path,
             &self.generated_key_path,

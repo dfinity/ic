@@ -6,6 +6,13 @@ Goal:: Test the behavior NNS Delegations.
 Runbook::
 . Set up two subnets with one fast node each, send some request to them, and inspect the
   returned delegations.
+. Depending on the values of `ENV_DEPS__GUESTOS_DISK_IMG_VERSION` and `ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION`
+  environment variables we might upgrade the application subnet to a different version than the NNS subnet.
+  Currently we run two scenarios (this is defined in the BUILD.bazel file):
+  . Both subnets are running the branch version and no subnet is upgraded
+  . Both subnets are initiated with the NNS mainnet version and then the Application subnet is upgraded to the
+    branch version. This ensures that we can still fetch the delegations from the NNS subnet when it runs a
+    different replica version when our replica's.
 
 Success::
 . NNS subnet doesn't attach any delegations to the responses.
@@ -25,7 +32,12 @@ use ic_agent::{
     Agent, Identity,
 };
 use ic_certification::validate_subnet_delegation_certificate;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::{
+    rw_message::install_nns_and_check_progress,
+    upgrade::{
+        assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    },
+};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_subnet_type::SubnetType;
@@ -35,15 +47,17 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+            get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
+            get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, SubnetSnapshot,
         },
     },
     systest,
-    util::{block_on, get_identity, UniversalCanister},
+    util::{block_on, get_identity, get_nns_node, UniversalCanister},
 };
 use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation, HttpReadStateResponse},
-    PrincipalId, SubnetId,
+    Height, PrincipalId, SubnetId,
 };
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -53,10 +67,16 @@ use time::OffsetDateTime;
 /// How long to wait between subsequent nns delegation fetch requests.
 const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
+const DKG_LENGTH: Height = Height::new(9);
+
 fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(Subnet::fast_single_node(SubnetType::System))
-        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System).with_dkg_interval_length(DKG_LENGTH),
+        )
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::Application).with_dkg_interval_length(DKG_LENGTH),
+        )
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
 
@@ -79,6 +99,8 @@ fn setup(env: TestEnv) {
         )
         .await;
     });
+
+    upgrade_application_subnet_if_necessary(&env);
 }
 
 fn nns_delegation_on_nns_test(env: TestEnv) {
@@ -423,9 +445,50 @@ where
         .map_err(|err| format!("Failed to deserialize response: {err}"))
 }
 
+fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
+    let (subnet, node) = get_subnet_and_node(env, SubnetType::Application);
+    let nns_node = get_nns_node(&env.topology_snapshot());
+
+    let initial_version = get_guestos_img_version().expect("initial version");
+    let target_version = get_guestos_update_img_version().expect("target IC version");
+
+    if initial_version == target_version {
+        info!(env.logger(), "No need to upgrade the application subnet");
+        return;
+    }
+
+    info!(
+        env.logger(),
+        "Upgrade the application subnet from {initial_version:?} to {target_version:?} to test the protocol \
+        compatibility between subnets running different replica versions."
+    );
+
+    let sha256 = get_guestos_update_img_sha256().unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
+
+    block_on(bless_replica_version(
+        &nns_node,
+        &target_version,
+        &env.logger(),
+        sha256,
+        /*guest_launch_measurements=*/ None,
+        vec![upgrade_url.to_string()],
+    ));
+
+    block_on(deploy_guestos_to_all_subnet_nodes(
+        &nns_node,
+        &target_version,
+        subnet.subnet_id,
+    ));
+
+    assert_assigned_replica_version(&node, &target_version, env.logger());
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        // We potentially upgrade the app subnet in the setup which could take several minutes
+        .with_overall_timeout(std::time::Duration::from_secs(25 * 60))
         .with_timeout_per_test(std::time::Duration::from_secs(15 * 60))
         .add_test(systest!(nns_delegation_on_nns_test))
         .add_test(systest!(nns_delegation_on_app_subnet_test))
