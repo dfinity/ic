@@ -216,11 +216,6 @@ impl MmapMemory {
         let wasm_memory =
             unsafe { (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void };
 
-        println!(
-            "Created memory region at {:?} with size {}",
-            start, size_in_bytes
-        );
-
         Self {
             start,
             size_in_bytes,
@@ -303,10 +298,10 @@ unsafe impl LinearMemory for WasmtimeMemory {
                 }
             }) {
             Ok(_) => {
-                println!(
-                    "Protecting wasm memory at {:?} with size {} during memory grow",
-                    self.mem.wasm_memory, new_size
-                );
+                // println!(
+                //     "Protecting wasm memory at {:?} with size {} during memory grow",
+                //     self.mem.wasm_memory, new_size
+                // );
                 let result =
                     unsafe { mprotect(self.mem.wasm_memory, new_size, PROT_READ | PROT_WRITE) };
                 assert_eq!(
@@ -317,10 +312,10 @@ unsafe impl LinearMemory for WasmtimeMemory {
                     Error::last_os_error()
                 );
 
-                println!(
-                    "Registering new pages with userfaultfd at mem {:?}, size {} during memory grow",
-                    self.mem.wasm_memory, new_size
-                );
+                // println!(
+                //     "Registering new pages with userfaultfd at mem {:?}, size {} during memory grow",
+                //     self.mem.wasm_memory, new_size
+                // );
                 self.uffd
                     .register_with_mode(
                         self.mem.wasm_memory,
