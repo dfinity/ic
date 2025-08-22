@@ -1024,6 +1024,8 @@ async fn get_subnet_for_canister(
 
     Ok(SubnetId::from(subnet_id))
 }
+
+// Type from CMC (copied to avoid unnecessary import)
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct SubnetTypesToSubnetsResponse {
     pub data: Vec<(String, Vec<SubnetId>)>,
