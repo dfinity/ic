@@ -732,6 +732,7 @@ fn sigsegv_memory_tracker<S>(
     {
         let base = instance_memory.data_ptr(&store);
         let size = instance_memory.data_size(&store);
+        println!("memory tracker size: {}", size);
 
         // For both SIGSEGV and in the future UFFD memory tracking we need
         // the base address of the heap and its size
@@ -754,6 +755,7 @@ fn sigsegv_memory_tracker<S>(
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
+                    Arc::clone(&uffd),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
@@ -791,7 +793,7 @@ fn sigsegv_memory_tracker<S>(
         //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
         // );
 
-        let base = base as usize;
+        // let base = base as usize;
         let handle = stoppable_thread::spawn(move |stopped| {
             while !stopped.get() {
                 let event = uffd.read_event().expect("Failed to read uffd event");
@@ -885,9 +887,12 @@ fn sigsegv_memory_tracker<S>(
                     }
                 }
             }
-            let base = base as *mut libc::c_void;
-            uffd.unregister(base, max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES)
-                .expect("Failed to unregister uffd region");
+            // let base = base as *mut libc::c_void;
+            // uffd.unregister(
+            //     base,
+            //     current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES,
+            // )
+            // .expect("Failed to unregister uffd region");
             // println!(
             //     "Unregistered uffd region at {:?} for mem_type: {} size {}",
             //     base,

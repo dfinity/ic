@@ -17,9 +17,12 @@ use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
     ops::Range,
-    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc,
+    },
 };
-use userfaultfd::{ReadWrite, Uffd};
+use userfaultfd::{ReadWrite, RegisterMode, Uffd};
 
 // The upper bound on the number of pages that are memory mapped from the
 // checkpoint file per signal handler call. Higher value gives higher
@@ -288,6 +291,7 @@ impl SigsegvMemoryTracker {
         log: ReplicaLogger,
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
+        uffd: Arc<Uffd>,
     ) -> nix::Result<Self> {
         assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
         let num_pages = NumOsPages::new(size.get() / PAGE_SIZE as u64);
@@ -325,6 +329,22 @@ impl SigsegvMemoryTracker {
             },
             metrics: MemoryTrackerMetrics::default(),
         };
+
+        if size.get() > 0 {
+            unsafe {
+                mprotect(
+                    addr,
+                    size.get() as usize,
+                    ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                )?
+            }
+            uffd.register_with_mode(
+                addr,
+                size.get() as usize,
+                RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
+            )
+            .expect("Failed to register region for userfaultfd");
+        }
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
         // if tracker.use_new_signal_handler {
