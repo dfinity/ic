@@ -88,7 +88,6 @@ fn bitcoin_integration_test() {
     let conf_path = tmp_dir.path().join("bitcoin.conf");
     let mut conf = File::create(conf_path.clone()).unwrap();
     conf.write_all(r#"regtest=1
-fallbackfee=0.0001
 # Dummy credentials for bitcoin RPC.
 rpcuser=ic-btc-integration
 rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=
