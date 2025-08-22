@@ -1808,10 +1808,13 @@ impl PocketIcSubnets {
             //     time_per_token_ns = 1_000_000_000 : nat64;
             //   };
             // },
+
+            // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
+            // and thus we should only provide one if auto progress is enabled
+            // (and canister http outcalls are handled by PocketIC automically).
             let openid_google = if self.auto_progress_enabled {
-                // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
-                // and thus we should only provide one if auto progress is enabled
-                // (and canister http outcalls are handled by PocketIC automically).
+                // We use a different id than in production:
+                // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
                 Some(Some(OpenIdConfig {
                     client_id:
                         "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"

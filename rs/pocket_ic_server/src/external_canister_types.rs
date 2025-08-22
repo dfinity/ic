@@ -110,6 +110,8 @@ mod tests {
         .unwrap();
         assert_eq!(init_args.len(), 1);
 
+        // `gamma` is a helper parameter used to resolve type synonyms
+        // during traversal (hence, it is initialized to an empty value).
         let mut gamma = std::collections::HashSet::new();
         equal(&mut gamma, &env, &init_args[0], &T::ty()).unwrap();
     }
