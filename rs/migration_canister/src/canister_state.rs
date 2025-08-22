@@ -66,72 +66,10 @@ pub mod requests {
         let _ = REQUESTS.with_borrow_mut(|r| r.remove(request));
     }
 
-    // The following methods retrieve all requests of a given type.
-    // We return vectors rather than iterators because we have to
-    // borrow REQUESTS mutably while iterating over the result of
-    // these methods.
-
-    pub fn list_accepted() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::Accepted { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_controllers_changed() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::ControllersChanged { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_stopped() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::StoppedAndReady { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_renamed_target() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::RenamedTarget { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_updated_routing() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::UpdatedRoutingTable { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_routing_accepted() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_source_deleted() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::SourceDeleted { .. }))
-                .collect()
-        })
-    }
-
-    pub fn list_failed() -> Vec<RequestState> {
-        REQUESTS.with_borrow(|req| {
-            req.keys()
-                .filter(|r| matches!(r, RequestState::Failed { .. }))
-                .collect()
-        })
+    /// Retrieves all requests of a given variant.
+    /// We return vectors rather than iterators because we have to
+    /// borrow REQUESTS mutably while iterating over the result.
+    pub fn list_by(predicate: impl FnMut(&RequestState) -> bool) -> Vec<RequestState> {
+        REQUESTS.with_borrow(|req| req.keys().filter(predicate).collect())
     }
 }

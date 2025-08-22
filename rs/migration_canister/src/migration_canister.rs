@@ -64,3 +64,5 @@ fn migration_status(args: MigrateCanisterArgs) -> MigrationStatus {
     // TODO
     MigrationStatus::Unknown
 }
+
+// TODO: history endpoint

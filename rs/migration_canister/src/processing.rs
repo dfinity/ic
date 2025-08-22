@@ -4,20 +4,21 @@
 //! process several requests in sequence before terminating.
 
 use crate::{
-    canister_state::requests::{
-        insert_request, list_accepted, list_controllers_changed, list_renamed_target, list_stopped,
-        remove_request,
-    },
-    Request, RequestState,
+    canister_state::requests::{insert_request, list_by, remove_request},
+    RequestState,
 };
 use ic_cdk::println;
 
 pub fn process_accepted() {
+    // only one of this method must run at the same time.
+    // lock
+    list_by(|r| matches!(r, RequestState::Accepted { .. }))
+
     list_accepted()
         .into_iter()
         .map(|r| process_accepted_2(r))
         .map(ProcessingResult::transition)
-        .collect();
+        .collect::<_>();
 }
 
 fn process_accepted_2(request: RequestState) -> ProcessingResult {
@@ -29,6 +30,9 @@ fn process_accepted_2(request: RequestState) -> ProcessingResult {
     todo!()
 }
 
+// TODO: dispatch all requests in parallel and join_all -> waiting times are bounded.
+// bounded wait helps
+
 pub fn process_controllers_changed() {
     for request in list_controllers_changed().into_iter() {
         let RequestState::ControllersChanged { request } = request else {
@@ -39,42 +43,6 @@ pub fn process_controllers_changed() {
     }
 }
 
-pub fn process_stopped() {
-    for request in list_stopped().into_iter() {
-        let RequestState::StoppedAndReady {
-            request,
-            stopped_since,
-            canister_version,
-            canister_history_total_num,
-        } = request
-        else {
-            println!("Error: list_stopped returned bad variant");
-            continue;
-        };
-        // TODO
-    }
-}
-
-pub fn process_renamed() {
-    for request in list_renamed_target().into_iter() {
-        let RequestState::RenamedTarget {
-            request,
-            stopped_since,
-        } = request
-        else {
-            println!("Error: list_renamed_target returned bad variant");
-            continue;
-        };
-        // TODO
-    }
-}
-
-// - fails with Failstate
-// - fails but can be repeated: nothing to do
-// - succeed with successor state
-/// None: Failed but can be retried. Nothing to do.
-/// Some(Ok(successor)): Succeeded, need to write successor to REQUESTS.
-/// Some(Err(failstate)): Failed fatally, need to write failstate to HISTORY.
 
 #[must_use]
 enum ProcessingResult {

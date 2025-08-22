@@ -1,6 +1,6 @@
 //! This module contains types and internal methods.  
 //!
-//!
+//! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant. 
 
 use candid::{CandidType, Principal};
 use ic_stable_structures::{storable::Bound, Storable};
