@@ -8,9 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
 use std::borrow::Cow;
 
+use crate::canister_state::{max_active_requests, num_active_requests};
+
 mod canister_state;
 mod external_interfaces;
 mod migration_canister;
+mod privileged;
+
+const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 enum ValidatonError {
@@ -156,8 +161,7 @@ pub fn migrations_disabled() -> bool {
 }
 
 pub fn rate_limited() -> bool {
-    // check length of REQUESTS
-    false
+    num_active_requests() > max_active_requests()
 }
 
 pub fn validate_request(
