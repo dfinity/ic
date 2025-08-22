@@ -3,18 +3,25 @@ use std::time::Duration;
 
 use anyhow::Result;
 use canister_test::PrincipalId;
-use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
-    install_nns_and_check_progress, store_message_with_retries,
 use futures::future::join_all;
+use ic_consensus_system_test_utils::{
+    assert_node_is_making_progress, impersonate_upstreams,
+    rw_message::{
+        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress, store_message,
+    },
+    set_sandbox_env_vars,
+    ssh_access::{
+        get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted, AuthMean,
+    },
+    upgrade::assert_assigned_replica_version,
 };
 use ic_recovery::{
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     util::DataLocation,
     RecoveryArgs,
 };
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::NnsFunction;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -28,14 +35,10 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::HasVectorTargets,
     },
-    nns::{
-        remove_nodes_via_endpoint, submit_external_proposal_with_test_id,
-        vote_execute_proposal_assert_executed,
-    },
-    retry_with_msg,
-    util::{block_on, runtime_from_url},
+    nns::{add_nodes_to_subnet, remove_nodes_via_endpoint},
+    retry_with_msg, retry_with_msg_async,
+    util::block_on,
 };
-use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use ic_types::{hostos_version::HostosVersion, Height};
 use reqwest::Client;
 
@@ -623,30 +626,6 @@ pub fn nns_recovery_test(env: TestEnv) {
     }
     info!(logger, "NNS recovery has finished");
 
-    // Recovery preparation:
-    //      * TODO: Generate recovery artifacts (and get EXPECTED_RECOVERY_HASH)
-    //        * note: the local registry version should contain the URL/HASH of the branch guestOS update image (from uses_guestos_update)
-    //      * TODO: Get (dummy) recovery-dev image and accompanying version/hash
-    //        * implementation detail: instead of having to build a recovery-dev image with the EXPECTED_RECOVERY_HASH written into it, we can use a ‘dummy’ recovery-dev image that doesn’t include the hard-coded EXPECTED_RECOVERY_HASH, and later, once we upgrade nodes to the dummy recovery-dev image, ssh in and update the EXPECTED_RECOVERY_HASH value. That way, we don’t have to build the recovery-dev image *after* obtaining the recovery artifacts.
-    //      * TODO: Create a VM to host the recovery artifacts and (dummy) recovery-dev image
-    //        * note: it may be tricky to have the VM host the recovery-dev image? If so, we can always fall back to SSHing into the nodes and hard-coding the system-test-generated recovery-dev image URL in recovery-upgrader.sh, but this is not ideal)
-
-    // Recovery execution:
-    //      * TODO: for all nodes: SSH into the HostOS node and
-    //         * Update /etc/hosts of the node to point at our hosting VM
-    //         * Update BOOT_ARGS_A with version/hash of the (dummy) recovery-dev image and reboot node
-    //      * TODO: for all nodes: wait for node to:
-    //          * reboot (new boot ID)
-    //          * recovery-upgrader to upgrade GuestOS (new GuestOS version)
-    //      * TODO: for all nodes: SSH into the GuestOS node and
-    //         * Update /etc/hosts of the node to point at our hosting VM
-    //         * Update EXPECTED_RECOVERY_HASH in guestos-recovery-engine.sh
-
-    // Recovery verification:
-    //      * TODO: for all nodes: wait for:
-    //          * recovery-engine to complete
-    //          * node to resume as healthy
-    //      * TODO: see NNS healthy (maybe this must wait for the nodes to re-upgrade (as nodes should upgrade to guestos-dev version contained in the registry local store)
     info!(logger, "Setup UVM to serve recovery artifacts");
     let artifacts = std::fs::read(output_dir.join("recovery.tar.zst")).unwrap();
     let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
