@@ -459,7 +459,7 @@ fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
 
     info!(
         env.logger(),
-        "Upgrade the application subnet to test the protocol \
+        "Upgrade the application subnet from {initial_version:?} to {target_version:?} to test the protocol \
         compatibility between subnets running different replica versions."
     );
 
