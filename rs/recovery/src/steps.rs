@@ -1050,20 +1050,69 @@ impl Step for UploadCUPAndTar {
 
 pub struct CreateNNSRecoveryTarStep {
     pub logger: Logger,
-    pub commands_create: String,
-    pub commands_next_steps: String,
+    pub work_dir: PathBuf,
+    pub output_dir: Option<PathBuf>,
+}
+
+impl CreateNNSRecoveryTarStep {
+    fn get_create_commands(&self) -> String {
+        let mut commands = match &self.output_dir {
+            Some(dir) => {
+                format!("output_dir=\"{dir}\"\n", dir = dir.display())
+            }
+            None => {
+                // If no output directory is not specified, save the files in a directory that will
+                // not be deleted by the cleanup step (i.e., not `self.work_dir`).
+                String::from("output_dir=\"$(mktemp -d)\"\n")
+            }
+        };
+
+        commands.push_str(&format!(
+            r#"
+
+mkdir -p "$output_dir"
+tar --zstd -cvf "$output_dir"/recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst > /dev/null 2>&1
+
+artifacts_hash="$(sha256sum "$output_dir"/recovery.tar.zst | cut -d ' ' -f1)"
+echo "$artifacts_hash" > "$output_dir"/recovery.tar.zst.sha256
+            "#,
+            work_dir = self.work_dir.display(),
+        ));
+
+        commands
+    }
+
+    fn get_next_steps_commands() -> String {
+        format!(
+            r#"
+echo "Recovery artifacts with checksum $artifacts_hash were successfully created in $output_dir."
+echo "Now please:"
+echo "  - Upload $output_dir/recovery.tar.zst to:"
+echo "    - https://download.dfinity.systems/ic/$artifacts_hash/recovery.tar.zst"
+echo "    - https://download.dfinity.network/ic/$artifacts_hash/recovery.tar.zst"
+echo "  - Run the following command and commit + push to a branch of dfinity/ic:"
+echo "    echo $artifacts_hash > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash"
+echo "  - Build a recovery image from that branch."
+echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
+        "#,
+        )
+    }
 }
 
 impl Step for CreateNNSRecoveryTarStep {
     fn descr(&self) -> String {
         format!(
             "Creating recovery artifacts by executing:\n{}",
-            self.commands_create
+            self.get_create_commands()
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let script = format!("{}\n{}\n", self.commands_create, self.commands_next_steps);
+        let script = format!(
+            "{}\n{}\n",
+            self.get_create_commands(),
+            Self::get_next_steps_commands()
+        );
         let mut bash = Command::new("bash");
         bash.arg("-c").arg(&script);
         if let Some(res) = exec_cmd(&mut bash)? {

@@ -884,49 +884,10 @@ impl Recovery {
 
     /// Return a [CreateFullTarStep] a tar file that contains a tar of the current registry local store and a recovery CUP
     pub fn get_create_nns_recovery_tar_step(&self, output_dir: Option<PathBuf>) -> impl Step {
-        let mut commands_create = format!(
-            r#"
-            tar --zstd -cvf {work_dir}/recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst
-
-            artifacts_hash=$(sha256sum {work_dir}/recovery.tar.zst | cut -d ' ' -f1)
-            echo $artifacts_hash > {work_dir}/recovery.tar.zst.sha256
-
-            "#,
-            work_dir = self.work_dir.display(),
-        );
-        match output_dir {
-            Some(dir) => {
-                commands_create.push_str(&format!("$output_dir={dir}\n", dir = dir.display()));
-            }
-            None => {
-                // If no output directory is not specified, save the files in a directory that will
-                // not be deleted by the cleanup step (i.e., not `self.work_dir`).
-                commands_create.push_str("$output_dir=$(mktemp -d)\n");
-            }
-        }
-        commands_create.push_str(&format!(
-            "mv {work_dir}/recovery.tar.zst {work_dir}/recovery.tar.zst.sha256 $output_dir\n",
-            work_dir = self.work_dir.display(),
-        ));
-
-        let commands_next_steps = format!(
-            r#"
-            echo "Recovery artifacts with checksum $artifacts_hash were successfully created in $dest_dir."
-            echo "Now please:"
-            echo "  - Upload $dest_dir/recovery.tar.zst to:"
-            echo "    - https://download.dfinity.systems/ic/$artifacts_hash/recovery.tar.zst"
-            echo "    - https://download.dfinity.network/ic/$artifacts_hash/recovery.tar.zst"
-            echo "  - Run the following command and commit + push to a branch of dfinity/ic:"
-            echo "    sed -i \"s/readonly EXPECTED_RECOVERY_HASH=\\\"\\\"/readonly EXPECTED_RECOVERY_HASH=\\\"$artifacts_hash\\\"/\" ic-os/components/misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"
-            echo "  - Build a recovery image from that branch."
-            echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
-        "#,
-        );
-
         CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
-            commands_create,
-            commands_next_steps,
+            work_dir: self.work_dir.clone(),
+            output_dir,
         }
     }
 
