@@ -364,10 +364,8 @@ mod tests {
         let test_dir = temp_dir.path().join("test");
         fs::create_dir_all(&test_dir).unwrap();
 
-        // Create a regular file
         fs::write(test_dir.join("regular_file.txt"), "content").unwrap();
 
-        // Create a symlink (non-regular file)
         #[cfg(unix)]
         std::os::unix::fs::symlink("regular_file.txt", test_dir.join("symlink.txt")).unwrap();
 
