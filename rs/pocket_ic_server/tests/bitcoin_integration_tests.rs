@@ -2,7 +2,7 @@ use candid::{CandidType, Encode, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Network as BtcNetwork},
     bitcoind::{BitcoinD, Conf},
-    Auth, ClientError, RpcApi, RpcClient, RpcError,
+    ClientError, RpcApi, RpcError,
 };
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
@@ -110,17 +110,7 @@ fn bitcoin_integration_test() {
     .unwrap()
     .0;
 
-    let btc_rpc = RpcClient::new(
-        BtcNetwork::Regtest,
-        "http://127.0.0.1:18443",
-        Auth::UserPass(
-            "ic-btc-integration".to_string(),
-            "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),
-        ),
-    )
-    .unwrap()
-    .ensure_wallet()
-    .unwrap();
+    let btc_rpc = &bitcoind.rpc_client;
 
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
     let mut n = 101;
