@@ -1124,8 +1124,7 @@ echo "$artifacts_hash" > "$output_dir"/recovery.tar.zst.sha256
     }
 
     fn get_next_steps_commands() -> String {
-        format!(
-            r#"
+        r#"
 echo "Recovery artifacts with checksum $artifacts_hash were successfully created in $output_dir."
 echo "Now please:"
 echo "  - Upload $output_dir/recovery.tar.zst to:"
@@ -1135,8 +1134,7 @@ echo "  - Run the following command and commit + push to a branch of dfinity/ic:
 echo "    echo $artifacts_hash > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash"
 echo "  - Build a recovery image from that branch."
 echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
-        "#,
-        )
+        "#.to_string()
     }
 }
 
