@@ -18,6 +18,7 @@ rust_library(
         "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],
 )
