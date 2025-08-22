@@ -95,8 +95,8 @@ fn setup(env: TestEnv) {
 
     info!(
         env.logger(),
-        "Upgrade the application subnet to test protocol \
-        compatibility between subnets running replica different versions."
+        "Upgrade the application subnet to test the protocol \
+        compatibility between subnets running different replica versions."
     );
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
     upgrade_subnet_if_necessary(&env, &subnet, &node);
