@@ -33,6 +33,18 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     "execute_with_wasm_executor_system_api",
     "execute_with_wasm_executor_ic_wasm",
     "execute_subnet_message_update_settings",
+
+    // Patch for canister fuzzing, 
+    "trap_after_await",
+    "trap_after_await_test_input",
+    "decode_candid_by_instructions",
+    "decode_candid_by_instructions_test_input",
+    "stable_memory_ops",
+    "stable_memory_ops_test_input",
+    "motoko_shim",
+    "motoko_shim_test_input",
+    "motoko_diff",
+    "motoko_diff_test_input",
 ];
 
 enum SandboxCrate {
