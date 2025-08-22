@@ -21,6 +21,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     ClientError(ClientError),
     InvalidAddress(AddressParseError),
+    AddressNotAvailable,
 }
 
 impl From<AddressParseError> for Error {
@@ -81,7 +82,7 @@ pub trait RpcApi {
     ) -> Result<Vec<ListUnspentResultEntry>>;
     fn get_raw_mempool(&self) -> Result<Vec<Txid>>;
     fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult>;
-    fn get_address(&self) -> &Address;
+    fn get_address(&self) -> Result<&Address>;
     fn add_node(&self, addr: &str) -> Result<()>;
     fn onetry_node(&self, addr: &str) -> Result<()>;
     fn disconnect_node(&self, addr: &str) -> Result<()>;
@@ -90,7 +91,7 @@ pub trait RpcApi {
 pub struct RpcClient {
     network: Network,
     client: Arc<BtcClient>,
-    address: Address,
+    address: Option<Address>,
 }
 
 fn get_new_address(client: &BtcClient, network: Network, label: Option<&str>) -> Result<Address> {
@@ -103,11 +104,10 @@ fn get_new_address(client: &BtcClient, network: Network, label: Option<&str>) ->
 impl RpcClient {
     pub fn new(network: Network, url: &str, auth: Auth) -> Result<Self> {
         let client = Arc::new(BtcClient::new(url, auth)?);
-        let address = get_new_address(&client, network, None)?;
         Ok(RpcClient {
             network,
             client,
-            address,
+            address: None,
         })
     }
 
@@ -116,14 +116,37 @@ impl RpcClient {
         Ok(RpcClient {
             network: self.network,
             client: self.client.clone(),
-            address,
+            address: Some(address),
         })
+    }
+
+    pub fn ensure_wallet(mut self) -> Result<Self> {
+        loop {
+            if self
+                .client
+                .call::<serde_json::Value>("getblockchaininfo", &[])
+                .is_ok()
+            {
+                // Try creating new wallet, if fails due to already existing wallet file
+                // try loading the same. Return if still errors.
+                if self
+                    .client
+                    .create_wallet("default", None, None, None, None)
+                    .is_err()
+                {
+                    self.client.load_wallet("default")?;
+                }
+                break;
+            }
+        }
+        self.address = Some(get_new_address(&self.client, self.network, None)?);
+        Ok(self)
     }
 }
 
 impl RpcApi for RpcClient {
-    fn get_address(&self) -> &Address {
-        &self.address
+    fn get_address(&self) -> Result<&Address> {
+        self.address.as_ref().ok_or(Error::AddressNotAvailable)
     }
 
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {
@@ -150,7 +173,8 @@ impl RpcApi for RpcClient {
     }
 
     fn send_to(&self, address: &Address, amount: Amount, fee: Amount) -> Result<Txid> {
-        let unspent = self.list_unspent(Some(0), Some(&[self.get_address()]))?;
+        let my_address = self.get_address()?;
+        let unspent = self.list_unspent(Some(0), Some(&[my_address]))?;
         let total: Amount = unspent.iter().map(|x| x.amount).sum();
         let inputs = unspent
             .iter()
@@ -163,7 +187,7 @@ impl RpcApi for RpcClient {
         let mut outputs = HashMap::new();
         outputs.insert(address.to_string(), amount);
         if total > amount + fee {
-            outputs.insert(self.get_address().to_string(), total - amount - fee);
+            outputs.insert(my_address.to_string(), total - amount - fee);
         }
         let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
         let tx = self.sign_raw_transaction(&raw_tx, None)?;
@@ -171,7 +195,7 @@ impl RpcApi for RpcClient {
     }
 
     fn get_balance(&self, minconf: Option<usize>) -> Result<Amount> {
-        self.get_balance_of(minconf, &self.address)
+        self.get_balance_of(minconf, self.get_address()?)
     }
 
     fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount> {

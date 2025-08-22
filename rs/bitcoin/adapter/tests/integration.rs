@@ -396,7 +396,7 @@ fn create_alice_and_bob_wallets(
 }
 
 fn fund_with_btc(to_fund_client: &Client) {
-    let to_fund_address = to_fund_client.get_address();
+    let to_fund_address = to_fund_client.get_address().unwrap();
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap()
@@ -517,7 +517,7 @@ fn test_receives_blocks() {
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    let address = client.get_address();
+    let address = client.get_address().unwrap();
 
     client.generate_to_address(150, address).unwrap();
 
@@ -677,7 +677,7 @@ fn test_receives_new_3rd_party_txs() {
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
     let txid = alice_client
         .send_to(
-            bob_client.get_address(),
+            bob_client.get_address().unwrap(),
             Amount::from_btc(1.0).unwrap(),
             Amount::from_btc(0.001).unwrap(),
         )
@@ -739,9 +739,9 @@ fn test_send_tx() {
 
     let mut outs = HashMap::new();
     let change = utxo.amount - to_send - tx_fee;
-    outs.insert(bob_client.get_address().to_string(), to_send);
+    outs.insert(bob_client.get_address().unwrap().to_string(), to_send);
     if change > Amount::from_btc(0.0).unwrap() {
-        outs.insert(alice_client.get_address().to_string(), change);
+        outs.insert(alice_client.get_address().unwrap().to_string(), change);
     }
 
     let raw_tx = alice_client
@@ -809,13 +809,13 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1.get_address();
+    let address1 = client1.get_address().unwrap();
     client1.generate_to_address(10, address1).unwrap();
 
     wait_for_blocks(&client1, 10);
     wait_for_blocks(&client2, 10);
 
-    let address2 = client2.get_address();
+    let address2 = client2.get_address().unwrap();
     client2.generate_to_address(10, address2).unwrap();
 
     wait_for_blocks(&client1, 20);
@@ -880,7 +880,7 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1.get_address();
+    let address1 = client1.get_address().unwrap();
     // IMPORTANT:
     // Increasing the number of blocks in this test could lead to flakiness due to the number of "request rounds"
     // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
@@ -905,7 +905,7 @@ fn test_bfs_order() {
         .generate_to_address(branch_length, address1)
         .unwrap();
 
-    let address2 = client2.get_address();
+    let address2 = client2.get_address().unwrap();
     let fork2 = client2
         .generate_to_address(branch_length, address2)
         .unwrap();
