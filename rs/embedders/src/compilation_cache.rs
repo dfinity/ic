@@ -9,6 +9,7 @@ use std::{
 use tempfile::TempDir;
 
 use crate::{OnDiskSerializedModule, SerializedModule};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_types::{MemoryDiskBytes, NumBytes};
 use ic_utils_lru_cache::LruCache;
@@ -29,11 +30,14 @@ const DEFAULT_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.
+#[derive(DeterministicHeapBytes)]
 pub struct CompilationCache {
     /// Directory holding all the temporary files. It will be deleted on
     /// drop.
     dir: TempDir,
     /// Map from wasm hash to an open fd with the serialized Module result.
+    #[deterministic_heap_bytes(with = |c: &Mutex<LruCache<WasmHash, HypervisorResult<Arc<OnDiskSerializedModule>>>>|
+        c.lock().unwrap().memory_bytes())]
     cache: Mutex<LruCache<WasmHash, HypervisorResult<Arc<OnDiskSerializedModule>>>>,
     /// Atomic counter to deduplicate files in the case of concurrent compilations of the same module.
     counter: AtomicU64,
@@ -43,7 +47,7 @@ pub struct CompilationCache {
 
 impl MemoryDiskBytes for CompilationCache {
     fn memory_bytes(&self) -> usize {
-        self.cache.lock().unwrap().memory_bytes()
+        unreachable!("To be removed in favor of DeterministicHeapBytes")
     }
 
     fn disk_bytes(&self) -> usize {

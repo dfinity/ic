@@ -9080,6 +9080,7 @@ dependencies = [
  "candid",
  "ic-deterministic-heap-bytes-derive",
  "paste",
+ "tempfile",
 ]
 
 [[package]]
@@ -9173,6 +9174,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-config",
  "ic-cycles-account-manager",
+ "ic-deterministic-heap-bytes",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-limits",

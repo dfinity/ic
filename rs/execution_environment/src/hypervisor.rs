@@ -2,6 +2,7 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
@@ -166,7 +167,7 @@ impl Hypervisor {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
-                        self.compilation_cache.memory_bytes(),
+                        self.compilation_cache.deterministic_heap_bytes(),
                         self.compilation_cache.disk_bytes(),
                     );
                 }
@@ -409,7 +410,7 @@ impl Hypervisor {
         if let Some(compilation_result) = compilation_result {
             self.metrics.observe_compilation_metrics(
                 &compilation_result,
-                self.compilation_cache.memory_bytes(),
+                self.compilation_cache.deterministic_heap_bytes(),
                 self.compilation_cache.disk_bytes(),
             );
         }

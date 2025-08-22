@@ -13,6 +13,7 @@ clap = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-deterministic-heap-bytes = { path = "../../packages/ic-deterministic-heap-bytes" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
