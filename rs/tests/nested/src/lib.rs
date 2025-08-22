@@ -2,7 +2,12 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use canister_test::PrincipalId;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message_with_retries,
+};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -14,10 +19,15 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::HasVectorTargets,
     },
+    nns::{
+        remove_nodes_via_endpoint, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
     retry_with_msg,
-    util::block_on,
+    util::{block_on, runtime_from_url},
 };
 use ic_types::hostos_version::HostosVersion;
+use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use reqwest::Client;
 
 use slog::info;
@@ -90,9 +100,29 @@ fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
     }
 }
 
+/// Asserts that SetupOS and initial NNS GuestOS image versions match.
+/// Only checks if both functions return ReplicaVersion successfully.
+/// NOTE: If you want to create a new test with conflicting versions, add a
+/// field to override this check and, in your test, account for the fact that
+/// after registration, the deployed node will upgrade to the NNS GuestOS version.
+fn assert_version_compatibility() {
+    if let (Ok(setupos_version), Ok(guestos_version)) =
+        (get_setupos_img_version(), get_guestos_img_version())
+    {
+        if setupos_version != guestos_version {
+            panic!(
+                "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
+            );
+        }
+    }
+    // If either function returns an error, don't fail
+}
+
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS (x num_hosts)
 pub fn config(env: TestEnv, num_hosts: usize) {
+    assert_version_compatibility();
+
     setup_ic_infrastructure(&env);
     let host_vm_names = get_host_vm_names(num_hosts);
     let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
@@ -151,6 +181,8 @@ pub fn registration(env: TestEnv) {
         ),
     )
     .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
+
     let num_unassigned_nodes = new_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 1);
 }
@@ -176,7 +208,7 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     // Wait for all four nodes to register by repeatedly waiting for registry updates
     // and checking if we have 4 unassigned nodes
-    retry_with_msg!(
+    let new_topology = retry_with_msg!(
         "Waiting for all four nodes to register and appear as unassigned nodes",
         logger.clone(),
         NODE_REGISTRATION_TIMEOUT,
@@ -192,8 +224,8 @@ pub fn nns_recovery_test(env: TestEnv) {
 
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
             if num_unassigned_nodes == 4 {
-                info!(logger, "SUCCESS: All four nodes have registered");
-                Ok(())
+                info!(logger, "Success: All four nodes have registered");
+                Ok(new_topology)
             } else {
                 bail!(
                     "Expected 4 unassigned nodes, but found {}",
@@ -203,6 +235,225 @@ pub fn nns_recovery_test(env: TestEnv) {
         }
     )
     .unwrap();
+
+    info!(logger, "Adding all four nodes to the NNS subnet...");
+    let nns_subnet = new_topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+
+    // Store the original node ID before adding new nodes
+    let original_node_id = nns_node.node_id;
+
+    let node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
+
+    let proposal_payload = AddNodesToSubnetPayload {
+        subnet_id: nns_subnet.subnet_id.get(),
+        node_ids,
+    };
+
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+
+    let proposal_id = block_on(submit_external_proposal_with_test_id(
+        &governance,
+        NnsFunction::AddNodeToSubnet,
+        proposal_payload,
+    ));
+
+    info!(
+        logger,
+        "Executing the proposal to add all four nodes to the NNS subnet"
+    );
+    block_on(vote_execute_proposal_assert_executed(
+        &governance,
+        proposal_id,
+    ));
+
+    info!(logger, "Waiting for nodes to be assigned to the subnet...");
+    let new_topology = block_on(
+        new_topology.block_for_newer_registry_version_within_duration(
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+        ),
+    )
+    .unwrap();
+
+    let nns_subnet = new_topology.root_subnet();
+    let num_nns_nodes = nns_subnet.nodes().count();
+    assert_eq!(
+        num_nns_nodes, 5,
+        "NNS subnet should have 5 nodes (1 original + 4 new), but found {} nodes",
+        num_nns_nodes
+    );
+
+    info!(
+        logger,
+        "Success: All four nodes have been added to the NNS subnet"
+    );
+
+    // QUESTION FOR PIERUGO: Do we need/want to remove the non-nested NNS node? If we keep it, can we then just have three nested nodes?
+    info!(
+        logger,
+        "Removing original node {:?} from the NNS subnet", original_node_id
+    );
+
+    block_on(remove_nodes_via_endpoint(
+        nns_node.get_public_url(),
+        &[original_node_id],
+    ))
+    .unwrap();
+
+    info!(
+        logger,
+        "Waiting for the original node to be removed from the subnet..."
+    );
+    let topology_after_removal = block_on(
+        new_topology.block_for_newer_registry_version_within_duration(
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+        ),
+    )
+    .unwrap();
+
+    let nns_subnet = topology_after_removal.root_subnet();
+    let num_nns_nodes = nns_subnet.nodes().count();
+    assert_eq!(
+        num_nns_nodes, 4,
+        "NNS subnet should have 4 nodes after removing the original node, but found {} nodes",
+        num_nns_nodes
+    );
+
+    info!(
+        logger,
+        "Success: Original single node has been removed from the NNS subnet"
+    );
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
+    info!(
+        logger,
+        "Waiting for NNS subnet to become healthy after membership changes..."
+    );
+    let nns_nodes: Vec<_> = topology_after_removal.root_subnet().nodes().collect();
+    for node in &nns_nodes {
+        node.await_status_is_healthy().unwrap();
+    }
+
+    info!(logger, "Waiting for NNS subnet to make progress...");
+    let progress_node = nns_nodes.first().unwrap();
+    cert_state_makes_progress_with_retries(
+        &progress_node.get_public_url(),
+        progress_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(300),
+        Duration::from_secs(10),
+    );
+
+    info!(logger, "Storing a message to verify the subnet is working");
+    let nns_node = nns_nodes.first().unwrap();
+    let test_msg = "subnet breaking test message";
+    let test_can_id = store_message_with_retries(
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
+        test_msg,
+        &logger,
+    );
+
+    // Verify the message can be read
+    assert!(can_read_msg(
+        &logger,
+        &nns_node.get_public_url(),
+        test_can_id,
+        test_msg
+    ));
+    info!(
+        logger,
+        "Subnet is healthy - message stored and read successfully"
+    );
+
+    info!(
+        logger,
+        "Breaking the NNS subnet by breaking the replica on all 4 nested nodes..."
+    );
+
+    // SSH into all guestOS nodes and break the replica
+    let ssh_command =
+        "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
+
+    for (i, node) in nns_nodes.iter().enumerate() {
+        info!(
+            logger,
+            "Breaking the replica on node {} ({:?})...",
+            i + 1,
+            node.get_ip_addr()
+        );
+
+        node.block_on_bash_script(ssh_command).unwrap_or_else(|_| {
+            panic!(
+                "SSH command failed on node {} ({:?})",
+                i + 1,
+                node.get_ip_addr()
+            )
+        });
+    }
+
+    // Test if the subnet is broken by trying to store a new message
+    info!(
+        logger,
+        "Testing if the subnet is broken by attempting to store a new message..."
+    );
+    assert!(
+        cannot_store_msg(
+            logger.clone(),
+            &nns_node.get_public_url(),
+            test_can_id,
+            "subnet broken test message"
+        ),
+        "Subnet is still functional after breaking attempt - storing messages still succeeds",
+    );
+    info!(
+        logger,
+        "Success: Subnet is broken - cannot store new messages"
+    );
+
+    info!(logger, "Verifying that read operations still work...");
+    let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
+
+    if can_read {
+        info!(
+            logger,
+            "Success: Read operations still work as expected in broken subnet"
+        );
+    } else {
+        // QUESTION FOR PIERUGO: should this be a warning or an error? In the consensus recovery tests I looked at, we expect the read to succeed after breaking the subnet, but when I run this test, the read fails.
+        info!(
+            logger,
+            "WARNING: Read operations also failed - this might indicate a different issue"
+        );
+    }
+
+    // Recovery preparation:
+    //      * TODO: Generate recovery artifacts (and get EXPECTED_RECOVERY_HASH)
+    //        * note: the local registry version should contain the URL/HASH of the branch guestOS update image (from uses_guestos_update)
+    //      * TODO: Get (dummy) recovery-dev image and accompanying version/hash
+    //        * implementation detail: instead of having to build a recovery-dev image with the EXPECTED_RECOVERY_HASH written into it, we can use a ‘dummy’ recovery-dev image that doesn’t include the hard-coded EXPECTED_RECOVERY_HASH, and later, once we upgrade nodes to the dummy recovery-dev image, ssh in and update the EXPECTED_RECOVERY_HASH value. That way, we don’t have to build the recovery-dev image *after* obtaining the recovery artifacts.
+    //      * TODO: Create a VM to host the recovery artifacts and (dummy) recovery-dev image
+    //        * note: it may be tricky to have the VM host the recovery-dev image? If so, we can always fall back to SSHing into the nodes and hard-coding the system-test-generated recovery-dev image URL in recovery-upgrader.sh, but this is not ideal)
+
+    // Recovery execution:
+    //      * TODO: for all nodes: SSH into the HostOS node and
+    //         * Update /etc/hosts of the node to point at our hosting VM
+    //         * Update BOOT_ARGS_A with version/hash of the (dummy) recovery-dev image and reboot node
+    //      * TODO: for all nodes: wait for node to:
+    //          * reboot (new boot ID)
+    //          * recovery-upgrader to upgrade GuestOS (new GuestOS version)
+    //      * TODO: for all nodes: SSH into the GuestOS node and
+    //         * Update /etc/hosts of the node to point at our hosting VM
+    //         * Update EXPECTED_RECOVERY_HASH in guestos-recovery-engine.sh
+
+    // Recovery verification:
+    //      * TODO: for all nodes: wait for:
+    //          * recovery-engine to complete
+    //          * node to resume as healthy
+    //      * TODO: see NNS healthy (maybe this must wait for the nodes to re-upgrade (as nodes should upgrade to guestos-dev version contained in the registry local store)
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
@@ -229,6 +480,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         ),
     )
     .unwrap();
+    info!(logger, "The node successfully came up and registered ...");
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -443,7 +695,6 @@ pub fn recovery_upgrader_test(env: TestEnv) {
 pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
-    // start the nested VM and wait for it to join the network
     let initial_topology = env.topology_snapshot();
     start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");

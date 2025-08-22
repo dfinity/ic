@@ -262,6 +262,8 @@ pub fn construct_ic_stack(
     let BitcoinAdapterClients {
         btc_testnet_client,
         btc_mainnet_client,
+        doge_testnet_client,
+        doge_mainnet_client,
     } = setup_bitcoin_adapter_clients(
         log.clone(),
         metrics_registry,
@@ -273,6 +275,8 @@ pub fn construct_ic_stack(
         metrics_registry,
         btc_mainnet_client,
         btc_testnet_client,
+        doge_mainnet_client,
+        doge_testnet_client,
         subnet_id,
         registry.clone(),
         config.bitcoin_payload_builder_config,
@@ -302,7 +306,6 @@ pub fn construct_ic_stack(
         execution_services.https_outcalls_service,
         max_canister_http_requests_in_flight,
         log.clone(),
-        subnet_type,
         nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
@@ -318,6 +321,7 @@ pub fn construct_ic_stack(
         config.malicious_behavior.malicious_flags.clone(),
         node_id,
         subnet_id,
+        subnet_type,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,

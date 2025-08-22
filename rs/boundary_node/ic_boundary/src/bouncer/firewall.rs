@@ -1,6 +1,6 @@
 use std::{collections::HashSet, net::IpAddr, str::FromStr, sync::Arc};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{bail, Context, Error};
 use async_trait::async_trait;
 use nftables::{
     batch::Batch,
@@ -80,7 +80,7 @@ impl Set {
             .context("failed to deserialize stdout as Nftables struct")?;
 
         if nft.objects.len() != 2 {
-            return Err(anyhow!("Unexpected nft object len"));
+            bail!("Unexpected nft object len");
         }
 
         if let schema::NfObject::ListObject(NfListObject::Set(v)) = &nft.objects[1] {
@@ -97,7 +97,7 @@ impl Set {
             return Ok(set);
         }
 
-        Err(anyhow!("Unexpected output from nft"))
+        bail!("Unexpected output from nft")
     }
 
     // Converts a list of ips into an NFTables object

@@ -280,7 +280,7 @@ pub fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo>
     .expect("failed to decode archives response")
 }
 
-fn icrc21_consent_message(
+pub fn icrc21_consent_message(
     env: &StateMachine,
     ledger: CanisterId,
     caller: Principal,
@@ -4619,13 +4619,13 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
     }
 }
 
-fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest {
+pub fn convert_to_fields_args(args: &ConsentMessageRequest) -> ConsentMessageRequest {
     let mut fields_args = args.clone();
     fields_args.user_preferences.device_spec = Some(DisplayMessageType::FieldsDisplay);
     fields_args
 }
 
-fn modify_field(
+pub fn modify_field(
     fields_message: &FieldsDisplay,
     field_name: String,
     new_value: Option<Icrc21Value>,
@@ -4859,7 +4859,7 @@ fn test_icrc21_approve_message(
     .unwrap_err();
     match message {
         Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
-            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\", \"transfer\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
         }
         _ => panic!("Unexpected error: {:?}", message),
     }
@@ -5283,14 +5283,14 @@ Charged for processing the transfer.
     );
 }
 
-fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
+pub fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(message) => message.to_string(),
         ConsentMessage::FieldsDisplayMessage(_) => panic!("cannot convert to string"),
     }
 }
 
-fn extract_icrc21_fields_message(consent_message: &ConsentMessage) -> FieldsDisplay {
+pub fn extract_icrc21_fields_message(consent_message: &ConsentMessage) -> FieldsDisplay {
     match consent_message {
         ConsentMessage::GenericDisplayMessage(_) => panic!("should not be a string"),
         ConsentMessage::FieldsDisplayMessage(message) => message.clone(),
