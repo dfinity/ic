@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_test_colocate --keepalive -- --test_tmpdir=./performance
+//   $ ict test consensus_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -218,7 +218,9 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    tecdsa_performance_test(env, false, false);
+    let download_p8s_data =
+        std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
+    tecdsa_performance_test(env, false, download_p8s_data);
 }
 
 pub fn tecdsa_performance_test(
