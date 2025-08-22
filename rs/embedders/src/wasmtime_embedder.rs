@@ -732,7 +732,7 @@ fn sigsegv_memory_tracker<S>(
     {
         let base = instance_memory.data_ptr(&store);
         let size = instance_memory.data_size(&store);
-        println!("memory tracker size: {}", size);
+        // println!("memory tracker size: {}", size);
 
         // For both SIGSEGV and in the future UFFD memory tracking we need
         // the base address of the heap and its size
@@ -767,10 +767,10 @@ fn sigsegv_memory_tracker<S>(
                 let event = uffd.read_event().expect("Failed to read uffd event");
 
                 if let Some(Event::Pagefault { addr, rw, kind }) = event {
-                    println!(
-                        "Page fault for mem_type {}, at address: {:p}",
-                        mem_type, addr
-                    );
+                    // println!(
+                    //     "Page fault for mem_type {}, at address: {:p}",
+                    //     mem_type, addr
+                    // );
 
                     let memory_tracker = sigsegv_memory_tracker.lock().unwrap();
 

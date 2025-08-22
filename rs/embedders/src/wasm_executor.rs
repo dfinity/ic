@@ -261,7 +261,7 @@ impl WasmExecutor for WasmExecutorImpl {
             }),
             None => None,
         };
-        println!("Completed execution for func_ref: {:?}", func_ref);
+        // println!("Completed execution for func_ref: {:?}", func_ref);
         let mut system_api = match store_or_system_api {
             Ok(store) => store.system_api.unwrap(),
             Err(system_api) => system_api,
@@ -627,7 +627,7 @@ pub fn process(
     let first_slice_instruction_limit = system_api.slice_instruction_limit();
     let message_instruction_limit = system_api.message_instruction_limit();
 
-    println!("Executing func ref {:?}", func_ref);
+    // println!("Executing func ref {:?}", func_ref);
     let mut instance = match embedder.new_instance(
         canister_id,
         embedder_cache,
@@ -795,7 +795,7 @@ pub fn process(
         ),
     };
 
-    println!("Finished execution for func_ref: {:?}", func_ref);
+    // println!("Finished execution for func_ref: {:?}", func_ref);
 
     (
         output_slice,
