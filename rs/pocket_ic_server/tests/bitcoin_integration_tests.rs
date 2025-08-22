@@ -1,19 +1,15 @@
 use candid::{CandidType, Encode, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Network as BtcNetwork},
-    Auth, ClientError, Error, RpcApi, RpcClient,
+    bitcoind::{BitcoinD, Conf},
+    Auth, ClientError, RpcApi, RpcClient, RpcError,
 };
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
-use std::fs::{create_dir, File};
-use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::process::Command;
 use std::str::FromStr;
 use std::time::SystemTime;
-use tempfile::tempdir;
 
 #[derive(CandidType, serde::Deserialize)]
 pub struct SendRequest {
@@ -80,37 +76,19 @@ fn get_balance(
 
 #[test]
 fn bitcoin_integration_test() {
-    let tmp_dir = tempdir().unwrap();
-
-    let bitcoind_path = std::env::var_os("BITCOIND_BIN")
+    let bitcoind_path = std::env::var("BITCOIND_BIN")
         .expect("Missing BITCOIND_BIN (path to bitcoind executable) in env.");
-
-    let conf_path = tmp_dir.path().join("bitcoin.conf");
-    let mut conf = File::create(conf_path.clone()).unwrap();
-    conf.write_all(r#"regtest=1
-# Dummy credentials for bitcoin RPC.
-rpcuser=ic-btc-integration
-rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=
-rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dce2b30671123fa561932992ce377585e8e08bb0c11dfa"#.as_bytes()).unwrap();
-    drop(conf);
-
-    let data_dir_path = tmp_dir.path().join("data");
-    create_dir(data_dir_path.clone()).unwrap();
-
-    let mut bitcoin_d_process = Command::new(bitcoind_path)
-        .arg(format!("-conf={}", conf_path.display()))
-        .arg(format!("-datadir={}", data_dir_path.display()))
-        .spawn()
-        .unwrap();
+    let conf = Conf {
+        p2p: true,
+        ..Conf::default()
+    };
+    let bitcoind = BitcoinD::new(&bitcoind_path, BtcNetwork::Regtest, conf).unwrap();
 
     let pic = PocketIcBuilder::new()
         .with_bitcoin_subnet()
         .with_ii_subnet()
         .with_application_subnet()
-        .with_bitcoind_addr(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            18444,
-        ))
+        .with_bitcoind_addr(bitcoind.p2p_socket().unwrap().into())
         .build();
     pic.set_time(SystemTime::now().into());
 
@@ -156,7 +134,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
                 .assume_checked(),
         ) {
             Ok(_) => break,
-            Err(Error::ClientError(ClientError::JsonRpc(err))) => {
+            Err(RpcError::ClientError(ClientError::JsonRpc(err))) => {
                 if start.elapsed() > std::time::Duration::from_secs(30) {
                     panic!("Timed out when waiting for bitcoind; last error: {}", err);
                 }
@@ -207,8 +185,4 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             n += 1;
         }
     }
-
-    // Kill the task to avoid zombie process.
-    bitcoin_d_process.kill().unwrap();
-    bitcoin_d_process.wait().unwrap();
 }
