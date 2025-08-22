@@ -74,6 +74,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     // it is a new directory used for storing the files backing up the
     // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
+    "node_operator_private_key.pem",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";
