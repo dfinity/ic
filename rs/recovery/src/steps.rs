@@ -1112,7 +1112,7 @@ impl CreateNNSRecoveryTarStep {
             r#"
 
 mkdir -p "$output_dir"
-tar --zstd -cvf "$output_dir"/recovery.tar.zst {work_dir}/cup.proto {work_dir}/{IC_REGISTRY_LOCAL_STORE}.tar.zst > /dev/null 2>&1
+tar --zstd -cvf "$output_dir"/recovery.tar.zst -C {work_dir} cup.proto {IC_REGISTRY_LOCAL_STORE}.tar.zst
 
 artifacts_hash="$(sha256sum "$output_dir"/recovery.tar.zst | cut -d ' ' -f1)"
 echo "$artifacts_hash" > "$output_dir"/recovery.tar.zst.sha256
