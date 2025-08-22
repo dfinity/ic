@@ -956,8 +956,7 @@ pub async fn validate_register_extension(
         .map_err(|err| format!("Invalid init argument: {}", err))?;
 
     if spec.supports_extension_type(ExtensionType::TreasuryManager) {
-        // Validate that the subnet for the extension_canister_id is okay!
-        // NOTE: https://dfinity.slack.com/archives/C01D7R95YJE/p1747290739449439?thread_ts=1747249089.612059&cid=C01D7R95YJE
+        // We validate that the canister is running on a fiduciary subnet.
         let subnet_type =
             get_subnet_type_canister_is_running_on(&*governance.env, extension_canister_id).await;
 
