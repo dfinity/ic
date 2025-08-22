@@ -2607,7 +2607,6 @@ fn dts_global_timer_resume_after_abort() {
 
     for i in 1..10 {
         env.tick();
-        println!("Iteration: {} to get global counter", i);
         // Each timer takes three rounds to execute.
         assert_eq!(i / 3, get_global_counter(&env, canister_id));
     }
