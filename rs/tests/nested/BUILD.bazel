@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/test_utils",
     "//rs/protobuf",
+    "//rs/recovery",
     "//rs/registry/canister",
     "//rs/registry/keys",
     "//rs/registry/nns_data_provider",
@@ -199,7 +200,9 @@ system_test_nns(
     tags = ["long_test"],
     test_timeout = "eternal",
     uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+    ],
     deps = RUNNER_DEPENDENCIES + [
         # Keep sorted.
         "//rs/tests/consensus/utils",

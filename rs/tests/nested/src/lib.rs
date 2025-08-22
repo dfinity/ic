@@ -6,6 +6,11 @@ use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message_with_retries,
 };
+use ic_recovery::{
+    nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
+    util::DataLocation,
+    RecoveryArgs,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -407,66 +412,101 @@ pub fn nns_recovery_test(env: TestEnv) {
         "NNS is healthy - message stored and read successfully"
     );
 
+    let recovery_dir = get_dependency_path("rs/tests");
+    let output_dir = recovery_dir.join("output");
+    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+
+    let recovery_args = RecoveryArgs {
+        dir: recovery_dir,
+        nns_url: dfinity_owned_node.get_public_url(),
+        replica_version: Some(ic_version),
+        key_file: Some(ssh_priv_key_path.clone()),
+        test_mode: true,
+        skip_prompts: true,
+        use_local_binaries: false,
+    };
+
+    // unlike during a production recovery using the CLI, here we already know all of parameters
+    // ahead of time.
+    let subnet_args = NNSRecoverySameNodesArgs {
+        subnet_id: topology_after_removal.root_subnet_id(),
+        upgrade_version: Some(working_version.clone()),
+        replay_until_height: None,
+        upgrade_image_url: get_guestos_update_img_url().ok(),
+        upgrade_image_hash: get_guestos_update_img_sha256().ok(),
+        download_node: Some(dfinity_owned_node.get_ip_addr()),
+        upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        backup_key_file: Some(ssh_priv_key_path),
+        output_dir: Some(output_dir.clone()),
+        next_step: None,
+    };
+
+    let subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
+
+    // Break f+1 nodes by SSHing into them and breaking the replica binary.
+    let f = (SUBNET_SIZE - 1) / 3;
     info!(
         logger,
-        "Breaking the NNS subnet by breaking the replica on all 4 nested nodes..."
+        "Breaking the NNS subnet by breaking the replica binary on f+1={} nodes",
+        f + 1
     );
-
-    // SSH into all guestOS nodes and break the replica
+    let faulty_nodes = nns_nodes.take(f + 1);
     let ssh_command =
         "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
-
-    for (i, node) in nns_nodes.iter().enumerate() {
+    for node in faulty_nodes {
         info!(
             logger,
             "Breaking the replica on node {} ({:?})...",
-            i + 1,
+            node.node_id,
             node.get_ip_addr()
         );
 
         node.block_on_bash_script(ssh_command).unwrap_or_else(|_| {
             panic!(
                 "SSH command failed on node {} ({:?})",
-                i + 1,
+                node.node_id,
                 node.get_ip_addr()
             )
         });
     }
 
-    // Test if the subnet is broken by trying to store a new message
+    info!(logger, "Ensure a healthy node still works in read mode");
+    assert!(can_read_msg(
+        &logger,
+        &dfinity_owned_node.get_public_url(),
+        app_can_id,
+        msg
+    ));
     info!(
         logger,
-        "Testing if the subnet is broken by attempting to store a new message..."
+        "Ensure the subnet does not work in write mode anymore"
     );
-    assert!(
-        cannot_store_msg(
-            logger.clone(),
-            &nns_node.get_public_url(),
-            test_can_id,
-            "subnet broken test message"
-        ),
-        "Subnet is still functional after breaking attempt - storing messages still succeeds",
-    );
+    assert!(cannot_store_msg(
+        logger.clone(),
+        &dfinity_owned_node.get_public_url(),
+        app_can_id,
+        msg
+    ));
     info!(
         logger,
         "Success: Subnet is broken - cannot store new messages"
     );
 
-    info!(logger, "Verifying that read operations still work...");
-    let can_read = can_read_msg(&logger, &nns_node.get_public_url(), test_can_id, test_msg);
+    info!(
+        logger,
+        "Starting recovery of the NNS subnet {}",
+        topology_after_removal.root_subnet_id().to_string()
+    );
 
-    if can_read {
-        info!(
-            logger,
-            "Success: Read operations still work as expected in broken subnet"
-        );
-    } else {
-        // QUESTION FOR PIERUGO: should this be a warning or an error? In the consensus recovery tests I looked at, we expect the read to succeed after breaking the subnet, but when I run this test, the read fails.
-        info!(
-            logger,
-            "WARNING: Read operations also failed - this might indicate a different issue"
-        );
+    // go over all steps of the NNS recovery
+    for (step_type, step) in subnet_recovery {
+        info!(logger, "Next step: {:?}", step_type);
+
+        info!(logger, "{}", step.descr());
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
     }
+    info!(logger, "NNS recovery has finished");
 
     // Recovery preparation:
     //      * TODO: Generate recovery artifacts (and get EXPECTED_RECOVERY_HASH)

@@ -17580,6 +17580,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-recovery",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
