@@ -5,38 +5,29 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
+use walkdir::WalkDir;
 
 const CONFIG_ROOT_PATH: &str = "/boot/config";
 const STATE_ROOT_PATH: &str = "/var/lib/ic";
 
 /// Validate that the bootstrap tar contains only regular files and directories
 fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
-    use std::collections::VecDeque;
+    for entry in WalkDir::new(extracted_dir) {
+        let entry = entry
+            .with_context(|| format!("Failed to read entry in {}", extracted_dir.display()))?;
 
-    let mut queue = VecDeque::new();
-    queue.push_back(extracted_dir.to_path_buf());
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("Failed to get metadata for {}", entry.path().display()))?;
 
-    while let Some(current_path) = queue.pop_front() {
-        let metadata = fs::symlink_metadata(&current_path)
-            .with_context(|| format!("Failed to get metadata for {}", current_path.display()))?;
-
-        if metadata.is_dir() {
-            for entry in fs::read_dir(&current_path)
-                .with_context(|| format!("Failed to read directory {}", current_path.display()))?
-            {
-                let entry = entry.with_context(|| {
-                    format!("Failed to read entry in {}", current_path.display())
-                })?;
-                queue.push_back(entry.path());
-            }
-        } else if metadata.is_file() {
-            // Regular files are allowed
+        if metadata.is_file() {
+            continue;
+        } else if metadata.is_dir() {
             continue;
         } else {
-            // Non-regular files (symlinks, sockets, etc.) are not allowed
             anyhow::bail!(
                 "Bootstrap contains non-regular file: {} (file type: {:?})",
-                current_path.display(),
+                entry.path().display(),
                 metadata.file_type()
             );
         }
@@ -372,5 +363,31 @@ mod tests {
         let result = validate_bootstrap_contents(&test_dir);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("non-regular file"));
+    }
+
+    #[test]
+    fn test_validate_bootstrap_contents_rejects_symlinks_in_subdir() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_dir = temp_dir.path().join("test");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let subdir = test_dir.join("subdir");
+        let nested_subdir = subdir.join("nested");
+        fs::create_dir_all(&nested_subdir).unwrap();
+
+        fs::write(nested_subdir.join("regular_file.txt"), "content").unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            "regular_file.txt",
+            nested_subdir.join("symlink_in_subdir.txt"),
+        )
+        .unwrap();
+
+        let result = validate_bootstrap_contents(&test_dir);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("non-regular file"));
+        assert!(error_msg.contains("symlink_in_subdir.txt"));
     }
 }
