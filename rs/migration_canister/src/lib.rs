@@ -155,11 +155,6 @@ pub fn start_timers() {
     // TODO: schedule the processing method(s) every few seconds
 }
 
-pub fn migrations_disabled() -> bool {
-    // check in stable cell
-    false
-}
-
 pub fn rate_limited() -> bool {
     num_active_requests() > max_active_requests()
 }

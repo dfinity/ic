@@ -6,7 +6,10 @@ use candid::{CandidType, Principal};
 use ic_cdk::{init, post_upgrade, println, update};
 use serde::Deserialize;
 
-use crate::{migrations_disabled, rate_limited, start_timers, validate_request, ValidatonError};
+use crate::{
+    canister_state::migrations_disabled, rate_limited, start_timers, validate_request,
+    ValidatonError,
+};
 
 #[init]
 fn init() {

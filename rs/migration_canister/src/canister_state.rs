@@ -28,7 +28,7 @@ thread_local! {
 
 }
 
-pub fn disabled() -> bool {
+pub fn migrations_disabled() -> bool {
     DISABLED.with_borrow(|x| *x.get())
 }
 
