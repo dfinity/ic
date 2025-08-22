@@ -11,7 +11,7 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use ic_tests_ckbtc::{
-    adapter::{fund_with_btc, get_alice_and_bob_wallets, get_blackhole_address, AdapterProxy},
+    adapter::{fund_with_btc, get_blackhole_address, AdapterProxy},
     adapter_test_setup, subnet_sys,
     utils::get_btc_client,
 };
@@ -63,7 +63,8 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
-    let (alice_client, bob_client) = get_alice_and_bob_wallets(&env);
+    let alice_client = client.with_account("alice").unwrap();
+    let bob_client = client.with_account("bob").unwrap();
     let alice_address = alice_client.get_address().unwrap();
     let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
@@ -122,7 +123,9 @@ fn test_send_tx(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     info!(log, "Set up bitcoind wallet");
-    let (alice_client, bob_client) = get_alice_and_bob_wallets(&env);
+    let client = get_btc_client(&env);
+    let alice_client = client.with_account("alice").unwrap();
+    let bob_client = client.with_account("bob").unwrap();
     let alice_address = alice_client.get_address().unwrap();
     let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
