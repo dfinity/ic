@@ -1,5 +1,5 @@
 {
-  "checksum": "002a6f8c7727dd5f5908a0b3bf80fa07962dd87a8c53b401b980893e0c41acfc",
+  "checksum": "d29182228d4c332bf31d71f58ae5325cfc9e08578080739e0b40369ded5f92fa",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21361,6 +21361,10 @@
               "target": "dfx_core"
             },
             {
+              "id": "dogecoincore-rpc 0.19.0",
+              "target": "dogecoincore_rpc"
+            },
+            {
               "id": "dyn-clone 1.0.14",
               "target": "dyn_clone"
             },
@@ -23121,6 +23125,143 @@
       "license": "MIT",
       "license_ids": [
         "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "dogecoincore-rpc 0.19.0": {
+      "name": "dogecoincore-rpc",
+      "version": "0.19.0",
+      "package_url": "https://github.com/dfinity/rust-dogecoincore-rpc/",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/rust-bitcoincore-rpc",
+          "commitish": {
+            "Rev": "4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70"
+          },
+          "strip_prefix": "client"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dogecoincore_rpc",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "dogecoincore_rpc",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "rand"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "dogecoincore-rpc-json 0.19.0",
+              "target": "dogecoincore_rpc_json"
+            },
+            {
+              "id": "jsonrpc 0.18.0",
+              "target": "jsonrpc"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.19.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "dogecoincore-rpc-json 0.19.0": {
+      "name": "dogecoincore-rpc-json",
+      "version": "0.19.0",
+      "package_url": "https://github.com/dfinity/rust-dogecoincore-rpc/",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/rust-bitcoincore-rpc",
+          "commitish": {
+            "Rev": "4ccf4bb69d09c55fe0d9b5819c490bd70a8a8a70"
+          },
+          "strip_prefix": "json"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dogecoincore_rpc_json",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "dogecoincore_rpc_json",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "rand"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin 0.32.99",
+              "target": "bitcoin"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.19.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
       ],
       "license_file": "LICENSE"
     },
@@ -95925,6 +96066,7 @@
     "derive-new 0.7.0",
     "devicemapper 0.34.4",
     "dfx-core 0.1.4",
+    "dogecoincore-rpc 0.19.0",
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.22",
