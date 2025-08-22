@@ -51,6 +51,17 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .unwrap();
 }
 
+pub fn uvm_serve_guestos_image(env: &TestEnv, image: Vec<u8>, image_version: &str) -> Result<()> {
+    uvm_serve_file(
+        env,
+        image,
+        Path::new(&format!(
+            "ic/{}/guest-os/update-img/update-img.tar.zst",
+            image_version
+        )),
+    )
+}
+
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
     artifacts: Vec<u8>,
