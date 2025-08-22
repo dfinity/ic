@@ -8,9 +8,9 @@ license = "Apache-2.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-candid = { workspace =true }
-ic-cdk = { workspace =true }
-ic-cdk-timers = { workspace =true }
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-stable-structures = "0.7.0"
 serde_cbor = { workspace = true }
 serde = { workspace =true }

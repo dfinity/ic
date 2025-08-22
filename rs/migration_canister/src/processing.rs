@@ -9,16 +9,20 @@ use crate::{
 };
 use ic_cdk::println;
 
-pub fn process_accepted() {
+pub fn process_all_accepted() {
     // only one of this method must run at the same time.
     // lock
-    list_by(|r| matches!(r, RequestState::Accepted { .. }))
+    list_by(|r| matches!(r, RequestState::Accepted { .. }));
 
-    list_accepted()
-        .into_iter()
-        .map(|r| process_accepted_2(r))
-        .map(ProcessingResult::transition)
-        .collect::<_>();
+    // list_accepted()
+    //     .into_iter()
+    //     .map(|r| process_accepted_2(r))
+    //     .map(ProcessingResult::transition)
+    //     .collect::<_>();
+}
+
+pub fn process_accepted() {
+    //TODO
 }
 
 fn process_accepted_2(request: RequestState) -> ProcessingResult {
@@ -32,17 +36,6 @@ fn process_accepted_2(request: RequestState) -> ProcessingResult {
 
 // TODO: dispatch all requests in parallel and join_all -> waiting times are bounded.
 // bounded wait helps
-
-pub fn process_controllers_changed() {
-    for request in list_controllers_changed().into_iter() {
-        let RequestState::ControllersChanged { request } = request else {
-            println!("Error: list_controllers_changed returned bad variant");
-            continue;
-        };
-        // TODO
-    }
-}
-
 
 #[must_use]
 enum ProcessingResult {
