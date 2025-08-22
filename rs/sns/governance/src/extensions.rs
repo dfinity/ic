@@ -960,13 +960,7 @@ pub async fn validate_register_extension(
         let subnet_type =
             get_subnet_type_canister_is_running_on(&*governance.env, extension_canister_id).await;
 
-        let Some(subnet_type) = subnet_type else {
-            return Err(
-                "TreasuryManager extensions must be installed on a fiduciary subnet.".to_string(),
-            );
-        };
-
-        if subnet_type != "fiduciary" {
+        if subnet_type != Some("fiduciary".to_string()) {
             return Err(
                 "TreasuryManager extensions must be installed on a fiduciary subnet.".to_string(),
             );
@@ -992,7 +986,6 @@ pub struct SubnetForCanister {
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 
-// TODO move these functions somewhere nicer
 async fn get_subnet_for_canister(
     env: &dyn Environment,
     canister_id: CanisterId,
