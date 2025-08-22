@@ -68,7 +68,7 @@ fn env_and_writeable_canister_snapshot(
             canister_id,
             None,
             md.wasm_module_size,
-            md.exported_globals,
+            md.globals,
             md.wasm_memory_size,
             md.stable_memory_size,
             md.certified_data,

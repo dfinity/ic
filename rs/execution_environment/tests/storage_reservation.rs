@@ -346,7 +346,7 @@ fn test_storage_reservation_triggered_in_upload_and_load_canister_snapshot_with_
             canister_id: canister_id.get(),
             replace_snapshot: None,
             wasm_module_size: metadata.wasm_module_size,
-            exported_globals: metadata.exported_globals,
+            globals: metadata.globals,
             wasm_memory_size: metadata.wasm_memory_size,
             stable_memory_size: (1000 * PAGE_SIZE) as u64,
             certified_data: metadata.certified_data,

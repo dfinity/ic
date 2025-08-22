@@ -1,0 +1,15 @@
+[package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+name = "ic-deterministic-heap-bytes"
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-deterministic-heap-bytes-derive = { path = "../ic-deterministic-heap-bytes-derive" }
+paste = { workspace = true }
