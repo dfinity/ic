@@ -7,7 +7,7 @@ Runbook::
 . Set up two subnets with one fast node each, send some request to them, and inspect the
   returned delegations.
 . Depending on the values of `ENV_DEPS__GUESTOS_DISK_IMG_VERSION` and `ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION`
-  environment variables we might upgrade the the application subnet to a different version than the NNS subnet.
+  environment variables we might upgrade the application subnet to a different version than the NNS subnet.
   Currently we run two scenarios (this is defined in the BUILD.bazel file):
   . Both subnets are running the branch version and no subnet is upgraded
   . Both subnets are initiated with the NNS mainnet version and then the Application subnet is upgraded to the
