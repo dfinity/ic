@@ -62,8 +62,8 @@ use ic_system_test_driver::{
 };
 use ic_types::{
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
-        HttpReadStateResponse, HttpSignedQueryResponse, NodeSignature,
+        Blob, Certificate, CertificateDelegation, HttpQueryResponseReply, HttpReadStateResponse,
+        NodeSignature,
     },
     Height, PrincipalId, SubnetId,
 };
@@ -353,6 +353,7 @@ fn call_v4_returns_correct_delegation(env: TestEnv) {
 #[derive(Deserialize)]
 struct QueryResponse {
     reply: HttpQueryResponseReply,
+    #[allow(dead_code)]
     signatures: Vec<NodeSignature>,
 }
 
