@@ -1,7 +1,7 @@
 use candid::{CandidType, Encode, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Network as BtcNetwork},
-    Auth, ClientError, Error, RpcApi, RpcClient as Client,
+    Auth, ClientError, Error, RpcApi, RpcClient,
 };
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
@@ -133,7 +133,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     .unwrap()
     .0;
 
-    let btc_rpc = Client::new(
+    let btc_rpc = RpcClient::new(
         BtcNetwork::Regtest,
         "http://127.0.0.1:18443",
         Auth::UserPass(
@@ -141,6 +141,8 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),
         ),
     )
+    .unwrap()
+    .ensure_wallet()
     .unwrap();
 
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
