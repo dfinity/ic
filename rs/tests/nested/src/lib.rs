@@ -330,43 +330,45 @@ pub fn nns_recovery_test(env: TestEnv) {
     // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
     info!(
         logger,
-        "Waiting for NNS subnet to become healthy after membership changes..."
+        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
     );
-    let nns_nodes: Vec<_> = topology_after_removal.root_subnet().nodes().collect();
-    for node in &nns_nodes {
+    let mut nns_nodes = nns_subnet.nodes();
+    let dfinity_owned_node = nns_nodes.next().unwrap();
+    info!(
+        logger,
+        "Selected DFINITY-owned NNS node: {} ({:?})",
+        dfinity_owned_node.node_id,
+        dfinity_owned_node.get_ip_addr()
+    );
+    for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
-
-    info!(logger, "Waiting for NNS subnet to make progress...");
-    let progress_node = nns_nodes.first().unwrap();
     cert_state_makes_progress_with_retries(
-        &progress_node.get_public_url(),
-        progress_node.effective_canister_id(),
+        &dfinity_owned_node.get_public_url(),
+        dfinity_owned_node.effective_canister_id(),
         &logger,
         Duration::from_secs(300),
         Duration::from_secs(10),
     );
 
-    info!(logger, "Storing a message to verify the subnet is working");
-    let nns_node = nns_nodes.first().unwrap();
-    let test_msg = "subnet breaking test message";
-    let test_can_id = store_message_with_retries(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
-        test_msg,
+
+    info!(logger, "Ensure NNS subnet is functional");
+    let msg = "subnet recovery works!";
+    let app_can_id = store_message(
+        &dfinity_owned_node.get_public_url(),
+        dfinity_owned_node.effective_canister_id(),
+        msg,
         &logger,
     );
-
-    // Verify the message can be read
     assert!(can_read_msg(
         &logger,
-        &nns_node.get_public_url(),
-        test_can_id,
-        test_msg
+        &dfinity_owned_node.get_public_url(),
+        app_can_id,
+        msg
     ));
     info!(
         logger,
-        "Subnet is healthy - message stored and read successfully"
+        "NNS is healthy - message stored and read successfully"
     );
 
     info!(
