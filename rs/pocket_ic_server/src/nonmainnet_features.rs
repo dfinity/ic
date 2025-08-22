@@ -17,7 +17,6 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
                 wasm64: FlagStatus::Enabled,
                 canister_backtrace: FlagStatus::Enabled,
                 environment_variables: FlagStatus::Enabled,
-                ..FeatureFlags::default()
             },
             ..EmbeddersConfig::default()
         },

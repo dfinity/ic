@@ -39,7 +39,9 @@ HTTP_ENDPOINTS_DEPS = [
     # Keep sorted.
     "//rs/crypto/tree_hash",
     "//rs/http_endpoints/test_agent",
+    "//rs/tests/consensus/utils",
     "//rs/types/types",
+    "@crate_index//:url",
 ]
 
 system_test_nns(
@@ -47,7 +49,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -85,7 +86,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "dynamic_testnet",
         "manual",
@@ -240,7 +240,9 @@ rust_binary(
     crate_name = "ic_systest_nns_delegation_test",
     deps = [
         # Keep sorted.
+        "//rs/certification",
         "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
@@ -248,8 +250,11 @@ rust_binary(
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
+        "@crate_index//:time",
         "@crate_index//:tokio",
     ],
 )
@@ -261,9 +266,9 @@ system_test_nns(
     ],
     test_driver_target = ":nns_delegation_test",
     uses_guestos_img = False,
-    uses_guestos_mainnet_img = True,
+    uses_guestos_nns_mainnet_img = True,
     uses_guestos_update = True,
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -273,7 +278,7 @@ system_test_nns(
     ],
     test_driver_target = ":nns_delegation_test",
     uses_guestos_img = True,
-    uses_guestos_mainnet_img = False,
+    uses_guestos_nns_mainnet_img = False,
     uses_guestos_update = True,
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
 )
@@ -308,7 +313,7 @@ system_test_nns(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "http_endpoints_public_spec_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = False,
@@ -322,8 +327,8 @@ system_test(
 
 system_test_nns(
     name = "network_large_test",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
@@ -341,10 +346,10 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "system_test_large",
     ],
@@ -375,7 +380,7 @@ system_test_nns(
     name = "query_workload_long_test",
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "long_test",
     ],
@@ -390,7 +395,7 @@ system_test_nns(
     name = "update_workload_large_payload",
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",
     ],
     test_timeout = "long",

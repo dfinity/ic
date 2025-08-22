@@ -1,4 +1,5 @@
-use candid::{define_function, CandidType, Principal};
+#![allow(deprecated)]
+use candid::{define_function, CandidType, Nat, Principal};
 use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
@@ -10,6 +11,8 @@ use ic_cdk::api::management_canister::http_request::{
     TransformArgs, TransformContext, TransformFunc,
 };
 use ic_cdk::{inspect_message, query, trap, update};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
@@ -474,6 +477,39 @@ fn trap_query() {
 #[update]
 fn trap_update() {
     trap("trap in update method");
+}
+
+// deposit cycles to the cycles ledger
+#[update]
+async fn deposit_cycles_to_cycles_ledger(beneficiary: Principal, cycles: u128) {
+    #[derive(CandidType)]
+    struct DepositArg {
+        to: Account,
+        memo: Option<Memo>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct DepositResult {
+        block_index: Nat,
+        balance: Nat,
+    }
+
+    let cycles_ledger_id = Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap();
+    let deposit_arg = DepositArg {
+        to: Account {
+            owner: beneficiary,
+            subaccount: None,
+        },
+        memo: None,
+    };
+    ic_cdk::api::call::call_with_payment128::<_, (DepositResult,)>(
+        cycles_ledger_id,
+        "deposit",
+        (deposit_arg,),
+        cycles,
+    )
+    .await
+    .unwrap();
 }
 
 fn main() {}

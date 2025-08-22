@@ -13,7 +13,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
         env = {
             "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         },
-        tags = ["experimental_system_test_colocation"],
+        tags = ["colocate"],
         runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
             "//hs/spec_compliance:ic-ref-test",
@@ -30,10 +30,8 @@ package(default_visibility = ["//rs:system-tests-pkg"])
     for name in [
         "spec_compliance_application_subnet_test",
         "spec_compliance_group_01_application_subnet_test",
-        "spec_compliance_group_02_application_subnet_test",
         "spec_compliance_system_subnet_test",
         "spec_compliance_group_01_system_subnet_test",
-        "spec_compliance_group_02_system_subnet_test",
     ]
 ]
 

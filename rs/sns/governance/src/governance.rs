@@ -1,8 +1,5 @@
-use crate::extensions::{
-    validate_execute_extension_operation, ExtensionType, ValidatedRegisterExtension,
-};
+use crate::extensions::{validate_execute_extension_operation, validate_register_extension};
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::{
     valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
@@ -32,8 +29,8 @@ use crate::{
     pb::{
         sns_root_types::{
             ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-            RegisterDappCanistersRequest, RegisterDappCanistersResponse, RegisterExtensionRequest,
-            RegisterExtensionResponse, SetDappControllersRequest, SetDappControllersResponse,
+            RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+            SetDappControllersResponse,
         },
         v1::{
             claim_swap_neurons_response::SwapNeuron,
@@ -98,8 +95,6 @@ use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -698,7 +693,7 @@ pub struct Governance {
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        ic_cdk::futures::spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
@@ -2337,71 +2332,6 @@ impl Governance {
         }
     }
 
-    async fn register_extension_with_root(
-        &self,
-        extension_canister_id: CanisterId,
-    ) -> Result<(), GovernanceError> {
-        let payload = candid::Encode!(&RegisterExtensionRequest {
-            canister_id: Some(extension_canister_id.get()),
-        })
-        .map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidPrincipal,
-                format!("Could not encode RegisterExtensionRequest: {err:?}"),
-            )
-        })?;
-
-        let reply = self
-            .env
-            .call_canister(
-                self.proto.root_canister_id_or_panic(),
-                "register_extension",
-                payload,
-            )
-            .await
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Canister method call failed: {err:?}"),
-                )
-            })?;
-
-        let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Could not decode RegisterExtensionResponse: {err:?}"),
-                )
-            })?;
-
-        if let Some(register_extension_response::Result::Err(CanisterCallError {
-            code,
-            description,
-        })) = result
-        {
-            let code = if let Some(code) = code {
-                code.to_string()
-            } else {
-                "<no code>".to_string()
-            };
-            return Err(GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Root.register_extension failed with code {}: {}",
-                    code, description
-                ),
-            ));
-        }
-
-        log!(
-            INFO,
-            "Root.register_extension succeeded for canister {}",
-            extension_canister_id.get()
-        );
-
-        Ok(())
-    }
-
     async fn perform_register_extension(
         &mut self,
         register_extension: RegisterExtension,
@@ -2414,61 +2344,10 @@ impl Governance {
             ));
         }
 
-        // Step 0. Validate the RegisterExtension proposal.
-        let ValidatedRegisterExtension { wasm, init, spec } =
-            register_extension.try_into().map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Invalid RegisterExtension: {err:?}"),
-                )
-            })?;
+        let validated_register_extension =
+            validate_register_extension(self, register_extension).await?;
 
-        let Wasm::Chunked {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        } = wasm
-        else {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension proposal must contain a chunked wasm module.",
-            ));
-        };
-
-        // Use the store canister to install the extension itself.
-        let extension_canister_id = store_canister_id;
-
-        // Step 1. Register the extension with Root.
-        self.register_extension_with_root(extension_canister_id)
-            .await?;
-
-        // Step 2. Validate the init arguments.
-        if !spec.supports_extension_type(ExtensionType::TreasuryManager) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Only TreasuryManager extensions are currently supported.",
-            ));
-        }
-
-        let treasury_manager_canister_id = extension_canister_id;
-
-        let (arg, sns_amount_e8s, icp_amount_e8s) =
-            self.construct_treasury_manager_init_payload(init).await?;
-
-        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
-            .await?;
-
-        self.upgrade_non_root_canister(
-            treasury_manager_canister_id,
-            Wasm::Chunked {
-                wasm_module_hash,
-                store_canister_id,
-                chunk_hashes_list,
-            },
-            arg,
-            CanisterInstallMode::Install,
-        )
-        .await?;
+        validated_register_extension.execute(self).await?;
 
         Ok(())
     }
@@ -2667,15 +2546,13 @@ impl Governance {
             ));
         }
 
-        let validated_operation = validate_execute_extension_operation(
-            &*self.env,
-            self.proto.root_canister_id_or_panic(),
-            execute_extension_operation,
-        )
-        .await?;
+        let validated_operation =
+            validate_execute_extension_operation(self, execute_extension_operation).await?;
 
         // Execute the validated operation
-        validated_operation.execute(self).await
+        validated_operation.execute(self).await?;
+
+        Ok(())
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
@@ -2796,8 +2673,8 @@ impl Governance {
         .await
     }
 
-    async fn upgrade_non_root_canister(
-        &mut self,
+    pub(crate) async fn upgrade_non_root_canister(
+        &self,
         canister_id: CanisterId,
         wasm: Wasm,
         arg: Vec<u8>,
@@ -3548,7 +3425,7 @@ impl Governance {
         }
 
         let reserved_canisters = self.reserved_canister_targets();
-        validate_and_render_proposal(proposal, &*self.env, &self.proto, reserved_canisters)
+        validate_and_render_proposal(self, proposal, reserved_canisters)
             .await
             .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }

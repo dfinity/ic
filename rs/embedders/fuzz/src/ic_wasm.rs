@@ -284,7 +284,6 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
 
 pub fn ic_embedders_config(memory64_enabled: bool) -> EmbeddersConfig {
     let mut config = EmbeddersConfig::default();
-    config.feature_flags.write_barrier = FlagStatus::Enabled;
     if memory64_enabled {
         config.feature_flags.wasm64 = FlagStatus::Enabled;
     } else {

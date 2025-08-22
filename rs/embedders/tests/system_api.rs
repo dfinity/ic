@@ -31,7 +31,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
@@ -1516,8 +1516,13 @@ fn helper_test_on_low_wasm_memory(
     if grow_wasm_memory {
         api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
     } else {
-        api.try_grow_stable_memory(0, additional_wasm_pages, StableMemoryApi::Stable64)
-            .unwrap();
+        api.try_grow_stable_memory(
+            0,
+            additional_wasm_pages,
+            MAX_STABLE_MEMORY_IN_BYTES,
+            StableMemoryApi::Stable64,
+        )
+        .unwrap();
     }
 
     let system_state_modifications = api.take_system_state_modifications();

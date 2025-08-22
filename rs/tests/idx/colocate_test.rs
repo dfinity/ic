@@ -246,27 +246,20 @@ fn setup(env: TestEnv) {
     let prepare_docker_script = &format!(
         r#"
 set -e
-cd /home/admin
 
-tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level=runfiles
-tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level=root_env
+# Unpack uploaded tarballs under /home/admin/test which will become the test's working directory:
+mkdir -p /home/admin/test
+tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level="/home/admin/runfiles"
+tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level="/home/admin/test/root_env"
+chmod 700 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
+chmod 600 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
 if [ -e "/home/admin/{DASHBOARDS_TAR_ZST}" ]; then
-    tar -xf /home/admin/{DASHBOARDS_TAR_ZST} --one-top-level=dashboards
+    tar -xf /home/admin/{DASHBOARDS_TAR_ZST} --one-top-level=/home/admin/dashboards
 else
     mkdir -p /home/admin/dashboards
 fi
 
 docker load -i /config/ubuntu_test_runtime.tar
-
-cat <<EOF > /home/admin/Dockerfile
-FROM ubuntu_test_runtime:image
-COPY runfiles /home/root/runfiles
-COPY root_env /home/root/root_env
-COPY dashboards {dashboards_path_in_docker}
-RUN chmod 700 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
-RUN chmod 600 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
-EOF
-docker build --tag final .
 
 cat <<'EOF' > /home/admin/run
 #!/bin/sh
@@ -278,12 +271,18 @@ if [ "{forward_ssh_agent}" ] && [ -n "${{SSH_AUTH_SOCK:-}}" ] && [ -e "${{SSH_AU
 else
     echo "No ssh-agent to forward."
 fi
-docker run --name {COLOCATE_CONTAINER_NAME} --network host \
-  --env-file /home/admin/env_vars --env RUNFILES=/home/root/runfiles \
+docker run \
+  --name {COLOCATE_CONTAINER_NAME} \
+  --network host \
+  -v /home/admin/test:/home/root/test \
+  -v /home/admin/runfiles:/home/root/runfiles \
+  -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
+  --env-file /home/admin/env_vars \
+  --env RUNFILES=/home/root/runfiles \
   "${{DOCKER_RUN_ARGS[@]}}" \
-  final \
+  ubuntu_test_runtime:image \
   /home/root/runfiles/{colocated_test_bin} \
-    --working-dir /home/root \
+    --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
     --group-base-name {colocated_test} \

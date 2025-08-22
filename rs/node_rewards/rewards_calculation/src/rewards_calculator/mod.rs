@@ -1,7 +1,7 @@
 use crate::rewards_calculator_results::{
-    BaseRewards, BaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily, NodeProviderRewards,
-    NodeResults, NodeStatus, Percent, RewardCalculatorError, RewardsCalculatorResults,
-    XDRPermyriad,
+    BaseRewards, DailyBaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily,
+    NodeProviderRewards, NodeResults, NodeStatus, Percent, RewardCalculatorError,
+    RewardsCalculatorResults, XDRPermyriad,
 };
 use crate::types::{
     NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
@@ -71,8 +71,10 @@ pub fn calculate_rewards(
         } = step_1_provider_nodes_metrics_daily(&rewardable_nodes, &mut nodes_metrics_daily);
 
         // Step 2: Extrapolated failure rate for each provider
-        let Step2Results { extrapolated_fr } =
-            step_2_extrapolated_fr(&rewardable_nodes, &provider_nodes_metrics_daily);
+        let Step2Results {
+            extrapolated_fr,
+            assigned_count,
+        } = step_2_extrapolated_fr(&rewardable_nodes, &provider_nodes_metrics_daily);
 
         // Step 3: Compute performance multiplier for each node for each provider
         let relative_nodes_fr = provider_nodes_metrics_daily
@@ -96,6 +98,7 @@ pub fn calculate_rewards(
             &rewardable_nodes,
             &base_rewards_per_node,
             &performance_multiplier,
+            &assigned_count,
         );
 
         // Step 6: Construct provider results
@@ -226,6 +229,7 @@ fn step_1_provider_nodes_metrics_daily(
 #[derive(Default)]
 struct Step2Results {
     extrapolated_fr: HashMap<DayUtc, Percent>,
+    assigned_count: HashMap<DayUtc, usize>,
 }
 fn step_2_extrapolated_fr(
     rewardable_nodes: &[RewardableNode],
@@ -249,10 +253,13 @@ fn step_2_extrapolated_fr(
 
     for day in all_rewardable_days {
         let frs = grouped_fr.remove(&day).unwrap_or_default();
+        let assigned_count = frs.len();
 
-        // If there are no relative FRs for this day, the extrapolated FR is set to 0.
-        let avg_fr = avg(&frs).unwrap_or_default();
+        // If there are no relative FRs for this day, the extrapolated FR is set to 1 as
+        // we expect all Node Providers to have at least 1 node assigned every day.
+        let avg_fr = avg(&frs).unwrap_or(Decimal::ONE);
 
+        result.assigned_count.insert(day, assigned_count);
         result.extrapolated_fr.insert(day, avg_fr);
     }
     result
@@ -328,13 +335,14 @@ type RewardsCoefficientPercent = Decimal;
 
 /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
 /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-/// 30.4375 = 2629800 / 86400
+/// const SECONDS_IN_DAY: u64 = 86400;
+/// 2629800 / 86400 = 30.4375 days of rewards
 const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
 #[derive(Default)]
 struct Step4Results {
     base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_type3: Vec<DailyBaseRewardsType3>,
     base_rewards_per_node: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
 }
 fn step_4_compute_base_rewards_type_region(
@@ -428,7 +436,10 @@ fn step_4_compute_base_rewards_type_region(
             }
             let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
 
-            ((day, region), (region_rewards_avg, nodes_count))
+            (
+                (day, region),
+                (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+            )
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -437,7 +448,7 @@ fn step_4_compute_base_rewards_type_region(
             let base_rewards_for_day = if is_type3(&node.node_reward_type) {
                 let region_key = type3_region_key(&node.region);
 
-                let (base_rewards_daily, _) = base_rewards_type3
+                let (base_rewards_daily, _, _, _) = base_rewards_type3
                     .get(&(day, region_key))
                     .expect("Type3 base rewards expected for provider");
                 base_rewards_daily
@@ -455,11 +466,15 @@ fn step_4_compute_base_rewards_type_region(
     let base_rewards_type3 = base_rewards_type3
         .into_iter()
         .map(
-            |((day, region), (daily_rewards, nodes_count))| BaseRewardsType3 {
-                day: *day,
-                region,
-                nodes_count,
-                value: daily_rewards,
+            |((day, region), (daily_rewards, nodes_count, avg_rewards, avg_coefficient))| {
+                DailyBaseRewardsType3 {
+                    day: *day,
+                    region,
+                    nodes_count,
+                    avg_rewards,
+                    avg_coefficient,
+                    value: daily_rewards,
+                }
             },
         )
         .collect();
@@ -497,6 +512,7 @@ fn step_5_adjust_node_rewards(
     rewardable_nodes: &[RewardableNode],
     base_rewards: &BTreeMap<(DayUtc, NodeId), Decimal>,
     performance_multiplier: &HashMap<(DayUtc, NodeId), Decimal>,
+    assigned_count: &HashMap<DayUtc, usize>,
 ) -> Step5Results {
     let mut nodes_count = BTreeMap::new();
     let mut result = Step5Results::default();
@@ -512,15 +528,20 @@ fn step_5_adjust_node_rewards(
 
     for node in rewardable_nodes {
         for day in &node.rewardable_days {
-            let provider_nodes_count = nodes_count.get(&day).expect("Daily nodes count expected");
-
+            let provider_nodes_count_day =
+                nodes_count.get(&day).expect("Daily nodes count expected");
+            let provider_assigned_nodes_count_day = assigned_count
+                .get(day)
+                .expect("Assigned nodes count expected");
             let base_rewards_for_day = base_rewards
                 .get(&(*day, node.node_id))
                 .expect("Base rewards expected for each node");
 
-            if provider_nodes_count <= &FULL_REWARDS_MACHINES_LIMIT {
-                // Node Providers with up to FULL_REWARDS_MACHINES_LIMIT nodes are rewarded fully,
-                // independently of their performance.
+            if provider_nodes_count_day < &FULL_REWARDS_MACHINES_LIMIT
+                && *provider_assigned_nodes_count_day == 0
+            {
+                // Node Providers with less than FULL_REWARDS_MACHINES_LIMIT nodes and no nodes assigned
+                // are rewarded fully, independently of their performance.
                 result
                     .adjusted_rewards
                     .insert((*day, node.node_id), *base_rewards_for_day);
@@ -552,7 +573,7 @@ fn step_6_construct_provider_results(
     mut base_rewards_per_node: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
     mut adjusted_rewards: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
     base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_type3: Vec<DailyBaseRewardsType3>,
 ) -> NodeProviderRewards {
     let mut results_by_node = Vec::new();
     let mut rewards_total_xdr_permyriad = Decimal::ZERO;

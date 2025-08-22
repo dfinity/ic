@@ -439,7 +439,7 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
-            let expected_error = "failed to decode";
+            let expected_error = "Cannot parse header";
             match res {
                 Err(e) => assert!(
                     e.contains(expected_error),

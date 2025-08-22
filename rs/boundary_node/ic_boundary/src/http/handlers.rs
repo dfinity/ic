@@ -278,7 +278,8 @@ mod test {
     use tokio_tungstenite::tungstenite;
 
     use super::*;
-    use crate::{persist::RouteSubnet, routes::test::test_route_subnet};
+    use crate::persist::test::generate_test_subnets;
+    use crate::snapshot::Subnet;
     use std::future::IntoFuture;
     use std::net::{Ipv4Addr, SocketAddr};
 
@@ -288,14 +289,11 @@ mod test {
         fn lookup_subnet_by_canister_id(
             &self,
             _id: &CanisterId,
-        ) -> Result<Arc<RouteSubnet>, ErrorCause> {
-            Ok(Arc::new(test_route_subnet(1)))
+        ) -> Result<Arc<Subnet>, ErrorCause> {
+            Ok(Arc::new(generate_test_subnets(0)[0].clone()))
         }
 
-        fn lookup_subnet_by_id(
-            &self,
-            _id: &SubnetId,
-        ) -> Result<Arc<crate::persist::RouteSubnet>, ErrorCause> {
+        fn lookup_subnet_by_id(&self, _id: &SubnetId) -> Result<Arc<Subnet>, ErrorCause> {
             Err(ErrorCause::NoRoutingTable)
         }
     }

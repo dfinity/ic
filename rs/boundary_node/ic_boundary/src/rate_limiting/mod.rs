@@ -1,6 +1,6 @@
 use std::{net::IpAddr, sync::Arc};
 
-use anyhow::anyhow;
+use anyhow::bail;
 use axum::Router;
 use candid::Principal;
 use http::request::Request;
@@ -13,7 +13,7 @@ use tower_governor::{
     GovernorLayer,
 };
 
-use crate::persist::RouteSubnet;
+use crate::snapshot::Subnet;
 
 pub struct RateLimit {
     requests_per_second: u32, // requests per second allowed
@@ -23,7 +23,7 @@ impl TryFrom<u32> for RateLimit {
     type Error = anyhow::Error;
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value == 0 {
-            Err(anyhow!("rate limit cannot be 0"))
+            bail!("rate limit cannot be 0")
         } else {
             Ok(RateLimit {
                 requests_per_second: value,
@@ -42,7 +42,7 @@ impl KeyExtractor for SubnetKeyExtractor {
         // This should always work, because we extract the subnet id after preprocess_request puts it there.
         Ok(req
             .extensions()
-            .get::<Arc<RouteSubnet>>()
+            .get::<Arc<Subnet>>()
             .ok_or(GovernorError::UnableToExtractKey)?
             .id)
     }
@@ -127,7 +127,7 @@ mod test {
     use tower::Service;
 
     use crate::{
-        errors::ApiError, routes::test::test_route_subnet_with_id, test_utils::setup_test_router,
+        errors::ApiError, persist::test::generate_test_subnets, test_utils::setup_test_router,
     };
 
     async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
@@ -144,10 +144,11 @@ mod test {
             .unwrap()
             .to_vec();
         let subnet_id = String::from_utf8(body_vec.clone()).unwrap();
+        let mut subnet = generate_test_subnets(0)[0].clone();
+        subnet.id = principal!(subnet_id);
+
         let mut request = Request::from_parts(parts, axum::body::Body::from(body_vec));
-        request
-            .extensions_mut()
-            .insert(Arc::new(test_route_subnet_with_id(subnet_id, 0)));
+        request.extensions_mut().insert(Arc::new(subnet));
         let resp = next.run(request).await;
         Ok(resp)
     }

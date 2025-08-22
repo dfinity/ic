@@ -8,7 +8,6 @@ use rand_pcg::Pcg64Mcg;
 use std::sync::Mutex;
 
 /// Size of data vector in canister, 128 MB
-/// 256 MB ends with a timeout
 const VECTOR_LENGTH: usize = 128 * 1024 * 1024;
 
 lazy_static! {
@@ -40,8 +39,8 @@ async fn change_state(seed: u32) -> Result<u64, String> {
     Ok(*num_changed)
 }
 
-/// Expands state by access the indexed V_DATA and changes every 1,048,576th
-/// byte (1 MiB) to a random value.
+/// Expands state by access the indexed V_DATA and changes every 1024th
+/// byte (1 KiB) to a random value.
 ///
 /// Returns the number of times it has been called.
 #[update]
@@ -61,7 +60,7 @@ async fn expand_state(index: u32, seed: u32) -> Result<u64, String> {
         _ => V_DATA_8.lock().expect("Could not lock V_DATA_8 mutex"),
     };
     let offset = rng.gen::<u16>();
-    for ind in (offset as usize..VECTOR_LENGTH).step_by(1_048_576) {
+    for ind in (offset as usize..VECTOR_LENGTH).step_by(1024) {
         state[ind] = rng.gen();
     }
     *num_changed += 1;
