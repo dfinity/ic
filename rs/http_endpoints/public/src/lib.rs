@@ -587,9 +587,6 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
-    let pprof_concurrency_limiter =
-        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
-
     let base_router = Router::new()
         .route(
             "/",
@@ -603,142 +600,85 @@ fn make_router(
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
         });
 
+    let service_builder = |concurrency_limit| {
+        ServiceBuilder::new()
+            .layer(HandleErrorLayer::new(map_box_error_to_response))
+            .load_shed()
+            .layer(GlobalConcurrencyLimitLayer::new(concurrency_limit))
+    };
+
     let final_router = base_router
         .merge(
-            http_handler.status_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_status_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .status_router
+                .layer(service_builder(config.max_status_concurrent_requests)),
         )
         .merge(
-            http_handler.call_v2_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_call_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .call_v2_router
+                .layer(service_builder(config.max_call_concurrent_requests)),
         )
         .merge(http_handler.call_v3_router)
         .merge(http_handler.call_v4_router)
         .merge(
-            http_handler.query_v2_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_query_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .query_v2_router
+                .layer(service_builder(config.max_query_concurrent_requests)),
         )
         .merge(
-            http_handler.query_v3_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_query_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .query_v3_router
+                .layer(service_builder(config.max_query_concurrent_requests)),
         )
         .merge(
-            http_handler.subnet_read_state_v2_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .subnet_read_state_v2_router
+                .layer(service_builder(config.max_read_state_concurrent_requests)),
         )
         .merge(
-            http_handler.subnet_read_state_v3_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .subnet_read_state_v3_router
+                .layer(service_builder(config.max_read_state_concurrent_requests)),
         )
         .merge(
-            http_handler.canister_read_state_v2_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .canister_read_state_v2_router
+                .layer(service_builder(config.max_read_state_concurrent_requests)),
         )
         .merge(
-            http_handler.canister_read_state_v3_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .canister_read_state_v3_router
+                .layer(service_builder(config.max_read_state_concurrent_requests)),
+        )
+        .merge(http_handler.catchup_router.layer(service_builder(
+            config.max_catch_up_package_concurrent_requests,
+        )))
+        .merge(
+            http_handler
+                .dashboard_router
+                .layer(service_builder(config.max_dashboard_concurrent_requests)),
         )
         .merge(
-            http_handler.catchup_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_catch_up_package_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .pprof_home_router
+                .layer(service_builder(config.max_pprof_concurrent_requests)),
         )
         .merge(
-            http_handler.dashboard_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_dashboard_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .pprof_flamegraph_router
+                .layer(service_builder(config.max_pprof_concurrent_requests)),
         )
         .merge(
-            http_handler.pprof_home_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
+            http_handler
+                .pprof_profile_router
+                .layer(service_builder(config.max_pprof_concurrent_requests)),
         )
         .merge(
-            http_handler.pprof_flamegraph_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
-        .merge(
-            http_handler.pprof_profile_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
-        .merge(
-            http_handler.tracing_flamegraph_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_tracing_flamegraph_concurrent_requests,
-                    )),
-            ),
+            http_handler
+                .tracing_flamegraph_router
+                .layer(service_builder(
+                    config.max_tracing_flamegraph_concurrent_requests,
+                )),
         );
 
     final_router.layer(
