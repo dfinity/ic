@@ -1187,7 +1187,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.1.0",
             ),
             "rust-ini": crate.spec(
-                version = "^0.21.2",
+                version = "^0.21.1",
             ),
             "rustls": crate.spec(
                 version = "^0.23.18",

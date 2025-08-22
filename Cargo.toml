@@ -776,7 +776,7 @@ reqwest = { version = "0.12.15", default-features = false, features = [
 rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
-rust-ini = "0.21.2"
+rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
