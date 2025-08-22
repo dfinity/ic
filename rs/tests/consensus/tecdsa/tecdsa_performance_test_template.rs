@@ -27,7 +27,7 @@
 //     vCPUs: 64
 //     Memory: 512142680 KiB
 //
-// To get access to P8s and Grafana look for the following log lines:
+// To get live access to P8s and Grafana while the test is running look for the following log lines:
 //
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
 //     Prometheus Web UI at http://prometheus.performance--1681227226065.testnet.farm.dfinity.systems
@@ -35,6 +35,20 @@
 //     IC Progress Clock at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
 //     Grafana at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems
+//
+// To inspect the metrics after the test has finished, exit the dev container
+// and run a local p8s and Grafana on the downloaded p8s data directory using:
+//
+// $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
+//
+// Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
+// The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
+//
+// Then, on your laptop, forward the Grafana port 3000 to your devenv:
+//
+// $ ssh devenv -L 3000:localhost:3000 -N
+//
+// and load http://localhost:3000/ in your browser to inspect the dashboards.
 //
 // Happy testing!
 
