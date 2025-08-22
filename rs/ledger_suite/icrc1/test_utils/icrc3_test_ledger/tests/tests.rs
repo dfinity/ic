@@ -227,6 +227,32 @@ fn test_get_blocks_with_multiple_requests() {
     assert_eq!(result.blocks[1].id, Nat::from(1u64));
     assert_eq!(result.blocks[2].id, Nat::from(3u64));
     assert_eq!(result.blocks[3].id, Nat::from(4u64));
+
+    // Test multiple requests with overlapping ranges
+    let result = icrc3_get_blocks(
+        &env,
+        canister_id,
+        vec![
+            // Request blocks 1, 2, 3
+            GetBlocksRequest {
+                start: Nat::from(1u64),
+                length: Nat::from(3u64),
+            },
+            // Request blocks 2, 3
+            GetBlocksRequest {
+                start: Nat::from(2u64),
+                length: Nat::from(2u64),
+            },
+        ],
+    );
+
+    // Should return blocks 1, 2, 3, 2, 3 (two blocks twice)
+    assert_eq!(result.blocks.len(), 5);
+    assert_eq!(result.blocks[0].id, Nat::from(1u64));
+    assert_eq!(result.blocks[1].id, Nat::from(2u64));
+    assert_eq!(result.blocks[2].id, Nat::from(3u64));
+    assert_eq!(result.blocks[3].id, Nat::from(2u64));
+    assert_eq!(result.blocks[4].id, Nat::from(3u64));
 }
 
 #[test]
