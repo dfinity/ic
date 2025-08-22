@@ -60,26 +60,9 @@ pub trait RpcApi {
     fn get_block_hash(&self, height: u64) -> Result<BlockHash>;
     fn get_best_block_hash(&self) -> Result<BlockHash>;
     fn generate_to_address(&self, block_num: u64, address: &Address) -> Result<Vec<BlockHash>>;
-    fn send_to_address(
-        &self,
-        address: &Address,
-        amount: Amount,
-        subtract_fee: Option<bool>,
-        replaceable: Option<bool>,
-        estimate_mode: Option<json::EstimateMode>,
-    ) -> Result<Txid>;
-    fn get_balance(
-        &self,
-        minconf: Option<usize>,
-        include_watchonly: Option<bool>,
-    ) -> Result<Amount>;
-    fn balance_of(
-        &self,
-        account: Option<&str>,
-        minconf: Option<usize>,
-        include_watchonly: Option<bool>,
-    ) -> Result<Amount>;
-    fn get_balances(&self) -> Result<json::GetBalancesResult>;
+    fn send_to(&self, address: &Address, amount: Amount, fee: Amount) -> Result<Txid>;
+    fn get_balance(&self, minconf: Option<usize>) -> Result<Amount>;
+    fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount>;
     fn create_raw_transaction(
         &self,
         utxos: &[json::CreateRawTransactionInput],
@@ -90,6 +73,7 @@ pub trait RpcApi {
         tx: R,
         utxos: Option<&[json::SignRawTransactionInput]>,
     ) -> Result<json::SignRawTransactionResult>;
+    fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<Txid>;
     fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount>;
     fn list_unspent(
         &self,
@@ -107,7 +91,6 @@ pub struct RpcClient {
     network: Network,
     client: Arc<BtcClient>,
     address: Address,
-    account: Option<String>,
 }
 
 fn get_new_address(client: &BtcClient, network: Network, label: Option<&str>) -> Result<Address> {
@@ -125,7 +108,6 @@ impl RpcClient {
             network,
             client,
             address,
-            account: None,
         })
     }
 
@@ -135,7 +117,6 @@ impl RpcClient {
             network: self.network,
             client: self.client.clone(),
             address,
-            account: Some(account.to_string()),
         })
     }
 }
@@ -168,52 +149,34 @@ impl RpcApi for RpcClient {
         )?)
     }
 
-    fn send_to_address(
-        &self,
-        address: &Address,
-        amount: Amount,
-        subtract_fee: Option<bool>,
-        replaceable: Option<bool>,
-        estimate_mode: Option<json::EstimateMode>,
-    ) -> Result<Txid> {
-        let args = [
-            address.to_string().into(),
-            into_json(amount.to_btc())?,
-            into_json("")?,
-            into_json("")?,
-            opt_into_json(subtract_fee, false)?,
-            opt_into_json(replaceable, false)?,
-            into_json(6)?,
-            opt_into_json_with_default(estimate_mode, null())?,
-        ];
-        Ok(self.client.call("sendtoaddress", &args)?)
+    fn send_to(&self, address: &Address, amount: Amount, fee: Amount) -> Result<Txid> {
+        let unspent = self.list_unspent(Some(0), Some(&[self.get_address()]))?;
+        let total: Amount = unspent.iter().map(|x| x.amount).sum();
+        let inputs = unspent
+            .iter()
+            .map(|x| CreateRawTransactionInput {
+                txid: x.txid,
+                vout: x.vout,
+                sequence: None,
+            })
+            .collect::<Vec<_>>();
+        let mut outputs = HashMap::new();
+        outputs.insert(address.to_string(), amount);
+        if total > amount + fee {
+            outputs.insert(self.get_address().to_string(), total - amount - fee);
+        }
+        let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
+        let tx = self.sign_raw_transaction(&raw_tx, None)?;
+        self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
     }
 
-    fn get_balance(
-        &self,
-        minconf: Option<usize>,
-        include_watchonly: Option<bool>,
-    ) -> Result<Amount> {
-        let account = self.account.as_deref();
-        self.balance_of(account, minconf, include_watchonly)
+    fn get_balance(&self, minconf: Option<usize>) -> Result<Amount> {
+        self.get_balance_of(minconf, &self.address)
     }
 
-    fn balance_of(
-        &self,
-        account: Option<&str>,
-        minconf: Option<usize>,
-        include_watchonly: Option<bool>,
-    ) -> Result<Amount> {
-        let args = [
-            opt_into_json(account, "*")?,
-            opt_into_json(minconf, 0)?,
-            opt_into_json_with_default(include_watchonly, null())?,
-        ];
-        Ok(Amount::from_btc(self.client.call("getbalance", &args)?)?)
-    }
-
-    fn get_balances(&self) -> Result<json::GetBalancesResult> {
-        Ok(self.client.call("getbalances", &[])?)
+    fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount> {
+        let unspent = self.list_unspent(minconf, Some(&[address]))?;
+        Ok(unspent.iter().map(|x| x.amount).sum())
     }
 
     fn create_raw_transaction(
@@ -232,13 +195,14 @@ impl RpcApi for RpcClient {
         tx: R,
         utxos: Option<&[json::SignRawTransactionInput]>,
     ) -> Result<json::SignRawTransactionResult> {
-        let args = [
-            tx.raw_hex().into(),
-            opt_into_json(utxos, &[])?,
-            empty_arr(),
-            null(),
-        ];
-        Ok(self.client.call("signrawtransaction", &args)?)
+        let args = [tx.raw_hex().into(), opt_into_json(utxos, &[])?];
+        Ok(self.client.call("signrawtransactionwithwallet", &args)?)
+    }
+
+    fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<Txid> {
+        Ok(self
+            .client
+            .call("sendrawtransaction", &[tx.raw_hex().into()])?)
     }
 
     fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount> {

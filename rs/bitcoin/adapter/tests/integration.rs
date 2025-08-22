@@ -678,12 +678,10 @@ fn test_receives_new_3rd_party_txs() {
 
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
     let txid = alice_client
-        .send_to_address(
+        .send_to(
             bob_client.get_address(),
             Amount::from_btc(1.0).unwrap(),
-            None,
-            None,
-            None,
+            Amount::from_btc(0.001).unwrap(),
         )
         .expect("Failed to send to Bob");
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
@@ -692,15 +690,12 @@ fn test_receives_new_3rd_party_txs() {
         .unwrap();
     assert_eq!(102, alice_client.get_blockchain_info().unwrap().blocks);
 
-    let alice_balance = alice_client.get_balance(None, None).unwrap();
+    let alice_balance = alice_client.get_balance(None).unwrap();
 
     // Take the tx fee into consideration
-    assert!(
-        alice_balance < Amount::from_btc(49.0).unwrap()
-            && alice_balance > Amount::from_btc(48.999).unwrap()
-    );
+    assert_eq!(alice_balance, Amount::from_btc(48.999).unwrap());
     assert_eq!(
-        bob_client.get_balance(None, None).unwrap(),
+        bob_client.get_balance(None).unwrap(),
         Amount::from_btc(1.0).unwrap()
     );
 
@@ -759,19 +754,17 @@ fn test_send_tx() {
 
     let res = make_send_tx_request(&adapter_client, &signed_tx.hex);
 
+    let bob_balance = bob_client.get_balance(None).unwrap();
     let mut tries = 0;
-    while tries < 5
-        && bob_client.get_balances().unwrap().mine.untrusted_pending
-            == Amount::from_btc(0.0).unwrap()
-    {
+    while tries < 5 && bob_client.get_balance(None).unwrap() == bob_balance {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
     }
 
     if let BitcoinAdapterResponseWrapper::SendTransactionResponse(_) = res.unwrap() {
         assert_eq!(
-            bob_client.get_balances().unwrap().mine.untrusted_pending,
-            Amount::from_btc(1.0).unwrap()
+            bob_client.get_balance(None).unwrap(),
+            Amount::from_btc(1.0).unwrap(),
         );
     } else {
         panic!("Failed to send transaction");
