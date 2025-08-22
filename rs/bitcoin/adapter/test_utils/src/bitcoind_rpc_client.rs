@@ -11,7 +11,8 @@ use std::sync::Arc;
 pub use bitcoincore_rpc::{Auth, Error as ClientError, RawTx};
 pub use json::{
     CreateRawTransactionInput, EstimateMode, GetBalancesResult, GetBlockchainInfoResult,
-    ListUnspentResultEntry, SignRawTransactionInput,
+    GetMempoolEntryResult, ListUnspentResultEntry, SignRawTransactionInput,
+    SignRawTransactionResult,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -53,7 +54,7 @@ impl From<ClientError> for Error {
 }
 
 pub trait RpcApi {
-    fn get_blockchain_info(&self) -> Result<json::GetBlockchainInfoResult>;
+    fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult>;
     fn get_connection_count(&self) -> Result<usize>;
     fn get_block_hash(&self, height: u64) -> Result<BlockHash>;
     fn get_best_block_hash(&self) -> Result<BlockHash>;
@@ -63,22 +64,23 @@ pub trait RpcApi {
     fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount>;
     fn create_raw_transaction(
         &self,
-        utxos: &[json::CreateRawTransactionInput],
+        utxos: &[CreateRawTransactionInput],
         outs: &HashMap<String, Amount>,
     ) -> Result<Transaction>;
     fn sign_raw_transaction<R: RawTx>(
         &self,
         tx: R,
-        utxos: Option<&[json::SignRawTransactionInput]>,
-    ) -> Result<json::SignRawTransactionResult>;
+        utxos: Option<&[SignRawTransactionInput]>,
+    ) -> Result<SignRawTransactionResult>;
     fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<Txid>;
     fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount>;
     fn list_unspent(
         &self,
         minconf: Option<usize>,
         addresses: Option<&[&Address]>,
-    ) -> Result<Vec<json::ListUnspentResultEntry>>;
+    ) -> Result<Vec<ListUnspentResultEntry>>;
     fn get_raw_mempool(&self) -> Result<Vec<Txid>>;
+    fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult>;
     fn get_address(&self) -> &Address;
     fn add_node(&self, addr: &str) -> Result<()>;
     fn onetry_node(&self, addr: &str) -> Result<()>;
@@ -124,7 +126,7 @@ impl RpcApi for RpcClient {
         &self.address
     }
 
-    fn get_blockchain_info(&self) -> Result<json::GetBlockchainInfoResult> {
+    fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {
         Ok(self.client.get_blockchain_info()?)
     }
 
@@ -179,7 +181,7 @@ impl RpcApi for RpcClient {
 
     fn create_raw_transaction(
         &self,
-        utxos: &[json::CreateRawTransactionInput],
+        utxos: &[CreateRawTransactionInput],
         outs: &HashMap<String, Amount>,
     ) -> Result<Transaction> {
         let hex: String = self
@@ -191,8 +193,8 @@ impl RpcApi for RpcClient {
     fn sign_raw_transaction<R: RawTx>(
         &self,
         tx: R,
-        utxos: Option<&[json::SignRawTransactionInput]>,
-    ) -> Result<json::SignRawTransactionResult> {
+        utxos: Option<&[SignRawTransactionInput]>,
+    ) -> Result<SignRawTransactionResult> {
         let args = [tx.raw_hex().into(), opt_into_json(utxos, &[])?];
         Ok(self.client.call("signrawtransactionwithwallet", &args)?)
     }
@@ -217,7 +219,7 @@ impl RpcApi for RpcClient {
         &self,
         minconf: Option<usize>,
         addresses: Option<&[&Address]>,
-    ) -> Result<Vec<json::ListUnspentResultEntry>> {
+    ) -> Result<Vec<ListUnspentResultEntry>> {
         let args = [
             opt_into_json(minconf, 0)?,
             into_json(9999999)?,
@@ -230,6 +232,10 @@ impl RpcApi for RpcClient {
 
     fn get_raw_mempool(&self) -> Result<Vec<Txid>> {
         Ok(self.client.call("getrawmempool", &[])?)
+    }
+
+    fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult> {
+        Ok(self.client.call("getmempoolentry", &[into_json(txid)?])?)
     }
 
     fn add_node(&self, addr: &str) -> Result<()> {

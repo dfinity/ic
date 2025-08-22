@@ -1,7 +1,7 @@
 use anyhow::Result;
-use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_btc_adapter_test_utils::RpcApi;
 use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
@@ -23,9 +23,9 @@ use ic_tests_ckbtc::{
     install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-        start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
-        wait_for_mempool_change, BTC_BLOCK_REWARD,
+        generate_blocks, get_btc_address, get_btc_client, send_to_btc_address, start_canister,
+        stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
+        BTC_BLOCK_REWARD,
     },
     BTC_MIN_CONFIRMATIONS, CHECK_FEE,
 };
@@ -48,19 +48,16 @@ pub fn test_btc_checker(env: TestEnv) {
     let btc_rpc = get_btc_client(&env);
 
     // Create wallet if required.
-    ensure_wallet(&btc_rpc, &logger);
+    // ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
         "Generating 101 blocks to default address: {}", &default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {

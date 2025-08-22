@@ -1,7 +1,7 @@
-use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
-use bitcoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
+use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block, Network};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_btc_adapter_test_utils::{Auth, ListUnspentResultEntry, RpcApi, RpcClient};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
@@ -9,13 +9,13 @@ use ic_management_canister_types_private::{
     Method as Ic00Method, Payload,
 };
 use ic_system_test_driver::{
-    driver::{test_env::TestEnv, test_env_api::retry, universal_vm::UniversalVms},
+    driver::{test_env::TestEnv, universal_vm::UniversalVms},
     util::{MessageCanister, MESSAGE_CANISTER_WASM},
 };
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 
 use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 
@@ -215,18 +215,19 @@ impl<'a> AdapterProxy<'a> {
     }
 }
 
-pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (Client, Client, Address, Address) {
+pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (RpcClient, RpcClient, Address, Address) {
     let (alice_client, alice_address) = get_test_wallet(env, "alice");
     let (bob_client, bob_address) = get_test_wallet(env, "bob");
 
     (alice_client, bob_client, alice_address, bob_address)
 }
 
-fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
+fn get_test_wallet(env: &TestEnv, name: &str) -> (RpcClient, Address) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let bitcoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
 
-    let client = Client::new(
+    let client = RpcClient::new(
+        Network::Regtest,
         format!(
             "http://[{}]:{}/wallet/{}",
             bitcoind_addr, BITCOIND_RPC_PORT, name
@@ -239,32 +240,14 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
     )
     .unwrap();
 
-    let wallets = retry(
-        "client.list_wallets",
-        env.logger(),
-        Duration::from_secs(100),
-        Duration::from_secs(1),
-        || Ok(client.list_wallets()?),
-    )
-    .expect("Failed to list wallets");
-
-    // Create wallet if it doesn't exist
-    if !wallets.iter().any(|wallet| wallet == name) {
-        retry(
-            "client.create_wallet",
-            env.logger(),
-            Duration::from_secs(100),
-            Duration::from_secs(1),
-            || Ok(client.create_wallet(name, None, None, None, None)?),
-        )
-        .expect("Failed to create wallet");
-    }
-
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
+    let address = client.get_address().clone();
     (client, address)
 }
 
-pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> ListUnspentResultEntry {
+pub fn fund_with_btc(
+    to_fund_client: &RpcClient,
+    to_fund_address: &Address,
+) -> ListUnspentResultEntry {
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap();
@@ -272,9 +255,7 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
     let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
     let expected_rewards = calculate_regtest_reward(initial_height);
 
-    let initial_utxos = to_fund_client
-        .list_unspent(None, None, None, None, None)
-        .unwrap();
+    let initial_utxos = to_fund_client.list_unspent(None, None).unwrap();
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -299,7 +280,7 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
 
     // Find the coinbase UTXO
     let coinbase_utxo = to_fund_client
-        .list_unspent(None, None, None, None, None)
+        .list_unspent(None, None)
         .unwrap()
         .into_iter()
         .find(|utxo| utxo.amount == expected_rewards)

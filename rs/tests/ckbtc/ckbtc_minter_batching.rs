@@ -1,10 +1,10 @@
 use anyhow::Result;
-use bitcoincore_rpc::{
+use candid::{CandidType, Deserialize, Nat, Principal};
+use ic_base_types::PrincipalId;
+use ic_btc_adapter_test_utils::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
 };
-use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
@@ -21,15 +21,13 @@ use ic_tests_ckbtc::{
     ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
     install_minter, subnet_app, subnet_sys,
     utils::{
-        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
-        send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
-        wait_for_update_balance,
+        generate_blocks, get_btc_address, get_btc_client, retrieve_btc, send_to_btc_address,
+        wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
     },
     BTC_MIN_CONFIRMATIONS, CHECK_FEE, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
-use serde::Serialize;
 use serde_bytes::ByteBuf;
 use slog::{debug, info};
 use std::time::{Duration, Instant};
@@ -37,14 +35,6 @@ use std::time::{Duration, Instant};
 pub const SHORT_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub const RETRIEVE_REQUESTS_COUNT_TO_BATCH: usize = 20;
-
-#[derive(Clone, Debug, CandidType, Serialize)]
-struct HttpRequest {
-    method: String,
-    url: String,
-    headers: Vec<(String, String)>,
-    body: ByteBuf,
-}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct HttpResponse {
@@ -60,19 +50,16 @@ pub fn test_batching(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
     let btc_rpc = get_btc_client(&env);
-    ensure_wallet(&btc_rpc, &logger);
+    // ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
-        "Generating 101 blocks to default address: {}", &default_btc_address
+        "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
@@ -132,7 +119,7 @@ pub fn test_batching(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         wait_for_update_balance(&minter_agent, &logger, Some(subaccount0)).await;
@@ -163,10 +150,7 @@ pub fn test_batching(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc
-            .get_new_address(None, None)
-            .unwrap()
-            .assume_checked();
+        let destination_btc_address = btc_rpc.get_address();
 
         info!(&logger, "Call retrieve_btc");
 
@@ -210,11 +194,7 @@ pub fn test_batching(env: TestEnv) {
                     break;
                 }
                 Err(e) => {
-                    info!(
-                        &logger,
-                        "[btc rpc] error while calling mempool {}",
-                        e.to_string()
-                    );
+                    info!(&logger, "[btc rpc] error while calling mempool {:?}", e);
                 }
             };
         }
@@ -275,7 +255,7 @@ pub fn test_batching(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         let finalized_txid =
@@ -286,13 +266,7 @@ pub fn test_batching(env: TestEnv) {
 
         // We can now check that the destination_btc_address received some utxos
         let unspent_result = btc_rpc
-            .list_unspent(
-                Some(6),
-                None,
-                Some(&[&destination_btc_address]),
-                Some(true),
-                None,
-            )
+            .list_unspent(Some(6), Some(&[destination_btc_address]))
             .expect("failed to get tx infos");
         let destination_balance = unspent_result
             .iter()

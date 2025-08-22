@@ -1,10 +1,10 @@
 use anyhow::Result;
-use bitcoincore_rpc::{
+use candid::{Nat, Principal};
+use ic_base_types::PrincipalId;
+use ic_btc_adapter_test_utils::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
 };
-use candid::{Nat, Principal};
-use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     state::{eventlog::EventType, RetrieveBtcRequest, RetrieveBtcStatus},
@@ -23,7 +23,7 @@ use ic_tests_ckbtc::{
     ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
     install_minter, subnet_app, subnet_sys,
     utils::{
-        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
+        generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
         wait_for_update_balance,
     },
@@ -40,19 +40,16 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
     let btc_rpc = get_btc_client(&env);
-    ensure_wallet(&btc_rpc, &logger);
+    // ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
-        "Generating 101 blocks to default address: {}", &default_btc_address
+        "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
@@ -101,7 +98,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         // Waiting for the minter to see new utxos
@@ -133,10 +130,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc
-            .get_new_address(None, None)
-            .unwrap()
-            .assume_checked();
+        let destination_btc_address = btc_rpc.get_address();
 
         info!(&logger, "Call retrieve_btc");
 
@@ -221,7 +215,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         let finalized_txid = wait_for_finalization(
@@ -229,7 +223,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             &minter_agent,
             &logger,
             retrieve_response.block_index,
-            &default_btc_address,
+            default_btc_address,
         )
         .await;
         assert_eq!(txid, finalized_txid);
