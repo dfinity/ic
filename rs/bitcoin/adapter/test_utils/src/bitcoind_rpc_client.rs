@@ -108,6 +108,12 @@ fn get_new_address(client: &BtcClient, network: Network, label: Option<&str>) ->
     Ok(address)
 }
 
+impl Drop for RpcClient {
+    fn drop(&mut self) {
+        let _ = self.client.unload_wallet(Some("default"));
+    }
+}
+
 impl RpcClient {
     pub fn new(network: Network, url: &str, auth: Auth) -> Result<Self> {
         let client = Arc::new(BtcClient::new(url, auth)?);
