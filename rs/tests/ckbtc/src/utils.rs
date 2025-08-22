@@ -411,6 +411,8 @@ pub fn get_btc_client(env: &TestEnv) -> RpcClient {
         ),
     )
     .unwrap()
+    .ensure_wallet()
+    .unwrap()
 }
 
 pub async fn get_bitcoin_balance(canister: &UniversalCanister<'_>, btc_address: &Address) -> u64 {

@@ -238,9 +238,11 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (RpcClient, Address) {
             crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
     )
+    .unwrap()
+    .ensure_wallet()
     .unwrap();
 
-    let address = client.get_address().clone();
+    let address = client.get_address().unwrap().clone();
     (client, address)
 }
 

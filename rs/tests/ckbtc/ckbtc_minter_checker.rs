@@ -50,7 +50,7 @@ pub fn test_btc_checker(env: TestEnv) {
     // Create wallet if required.
     // ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_address();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,

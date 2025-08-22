@@ -42,7 +42,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let btc_rpc = get_btc_client(&env);
     // ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_address();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
@@ -130,7 +130,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc.get_address();
+        let destination_btc_address = btc_rpc.get_address().unwrap();
 
         info!(&logger, "Call retrieve_btc");
 

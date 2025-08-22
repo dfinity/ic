@@ -31,7 +31,7 @@ fn test_received_blocks(env: TestEnv) {
     info!(log, "Set up bitcoind wallet");
 
     // Mine 150 blocks
-    let address = client.get_address();
+    let address = client.get_address().unwrap();
     client.generate_to_address(150, address).unwrap();
     info!(log, "Generated 150");
 
