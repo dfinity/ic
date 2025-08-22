@@ -650,7 +650,7 @@ pub fn nns_recovery_test(env: TestEnv) {
                     &env,
                     vm_name,
                     &recovery_img_version,
-                    &recovery_img_hash,
+                    &recovery_img_hash[..6],
                     &artifacts_hash,
                 )
             }),
