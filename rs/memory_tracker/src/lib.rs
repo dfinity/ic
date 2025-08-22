@@ -991,27 +991,27 @@ fn apply_memory_instructions(
                 // );
                 match uffd {
                     Some(uffd) => {
-                        let mut file = unsafe { File::from_raw_fd(fd) };
+                        // let mut file = unsafe { File::from_raw_fd(fd) };
 
-                        // Seek and read like normal
-                        file.seek(SeekFrom::Start(offset as u64))
-                            .expect("Seek failed");
-                        let range_size_in_bytes = range_size_in_bytes(&range);
-                        let mut buffer = vec![0; range_size_in_bytes];
-                        file.read(&mut buffer).expect("Read failed");
+                        // // Seek and read like normal
+                        // file.seek(SeekFrom::Start(offset as u64))
+                        //     .expect("Seek failed");
+                        // let range_size_in_bytes = range_size_in_bytes(&range);
+                        // let mut buffer = vec![0; range_size_in_bytes];
+                        // file.read(&mut buffer).expect("Read failed");
 
-                        unsafe {
-                            uffd.copy(
-                                buffer.as_ptr() as *const libc::c_void,
-                                tracker.page_start_addr_from(range.start),
-                                range_size_in_bytes,
-                                false,
-                            )
-                            .expect("uffd copy failed");
-                        }
+                        // unsafe {
+                        //     uffd.copy(
+                        //         buffer.as_ptr() as *const libc::c_void,
+                        //         tracker.page_start_addr_from(range.start),
+                        //         range_size_in_bytes,
+                        //         false,
+                        //     )
+                        //     .expect("uffd copy failed");
+                        // }
 
-                        // Don't drop the FD after file goes out of scope!
-                        std::mem::forget(file);
+                        // // Don't drop the FD after file goes out of scope!
+                        // std::mem::forget(file);
                     }
                     None => {
                         tracker
