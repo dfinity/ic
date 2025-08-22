@@ -1,23 +1,18 @@
-use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block, Network};
+use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_btc_adapter_test_utils::{Auth, ListUnspentResultEntry, RpcApi, RpcClient};
+use ic_btc_adapter_test_utils::{ListUnspentResultEntry, RpcApi, RpcClient};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
     BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
     Method as Ic00Method, Payload,
 };
-use ic_system_test_driver::{
-    driver::{test_env::TestEnv, universal_vm::UniversalVms},
-    util::{MessageCanister, MESSAGE_CANISTER_WASM},
-};
+use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
 use std::str::FromStr;
-
-use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 
 /// A proxy to make requests to the bitcoin adapter
 ///
