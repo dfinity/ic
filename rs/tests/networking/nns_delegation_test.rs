@@ -501,6 +501,7 @@ fn main() -> Result<()> {
         .add_test(systest!(canister_read_state_v3_returns_correct_delegation))
         .add_test(systest!(subnet_read_state_v2_returns_correct_delegation))
         .add_test(systest!(subnet_read_state_v3_returns_correct_delegation))
+        // note: the v2 call endpoint doesn't return the delegation, so there is nothing to test
         .add_test(systest!(call_v3_returns_correct_delegation))
         .add_test(systest!(call_v4_returns_correct_delegation))
         .execute_from_args()
