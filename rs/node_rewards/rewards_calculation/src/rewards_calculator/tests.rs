@@ -139,8 +139,10 @@ fn test_compute_providers_extrapolated_fr() {
     let p1_nodes = generate_rewardable_nodes(vec![(p1_node1, vec![day])]);
     let p1_metrics = BTreeMap::new(); // No metrics available
     let result_p1 = step_2_extrapolated_fr(&p1_nodes, &p1_metrics);
-    // Extrapolated FR for P1 should be 0 since no nodes are assigned
-    assert_eq!(result_p1.extrapolated_fr.get(&day), Some(&Decimal::ZERO));
+    // Extrapolated FR for P1 should be 1 since no nodes are assigned
+    assert_eq!(result_p1.extrapolated_fr.get(&day), Some(&Decimal::ONE));
+    // Assigned count should be 0 since no nodes are assigned
+    assert_eq!(result_p1.assigned_count.get(&day), Some(&0));
 
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
@@ -152,6 +154,9 @@ fn test_compute_providers_extrapolated_fr() {
     // Extrapolated FR for P2 should be the average of its nodes' relative FR
     let expected_fr_p2 = (dec!(0.2) + dec!(0.4)) / dec!(2); // 0.3
     assert_eq!(result_p2.extrapolated_fr.get(&day), Some(&expected_fr_p2));
+
+    // Assigned count should be 2 since no nodes are assigned
+    assert_eq!(result_p2.assigned_count.get(&day), Some(&2));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -289,40 +294,79 @@ fn test_compute_base_rewards() {
 fn test_adjust_nodes_rewards() {
     let day1 = "2024-01-01".into();
     let day2 = "2024-01-02".into();
+    let day3 = "2024-01-03".into();
     let node1 = test_node_id(1);
     let node2 = test_node_id(2);
     let node3 = test_node_id(3);
     let node4 = test_node_id(4);
     let node5 = test_node_id(5);
 
-    // Day 1 has 5 nodes, Day 2 has 4 nodes.
+    // Day 1 has 5 nodes, Day 2 has 3 nodes.
     let rewardable_nodes = generate_rewardable_nodes(vec![
-        (node1, vec![day1, day2]),
-        (node2, vec![day1, day2]),
-        (node3, vec![day1, day2]),
-        (node4, vec![day1, day2]),
+        (node1, vec![day1, day2, day3]),
+        (node2, vec![day1, day2, day3]),
+        (node3, vec![day1, day2, day3]),
+        (node4, vec![day1]),
         (node5, vec![day1]),
     ]);
 
     let mut base_rewards = BTreeMap::new();
+    let mut assigned_count = HashMap::new();
     let mut performance_multiplier = HashMap::new();
     for node in &rewardable_nodes {
         for day in &node.rewardable_days {
             base_rewards.insert((*day, node.node_id), dec!(1000));
             performance_multiplier.insert((*day, node.node_id), dec!(0.5));
+
+            // Test all assigned on day1 and day2
+            let assigned_count_day = assigned_count.entry(*day).or_default();
+            *assigned_count_day += 1;
         }
     }
+    let assigned_count_day = assigned_count.entry(day3).or_default();
+    *assigned_count_day = 0;
 
     // --- Execution ---
-    let Step5Results { adjusted_rewards } =
-        step_5_adjust_node_rewards(&rewardable_nodes, &base_rewards, &performance_multiplier);
+    let Step5Results { adjusted_rewards } = step_5_adjust_node_rewards(
+        &rewardable_nodes,
+        &base_rewards,
+        &performance_multiplier,
+        &assigned_count,
+    );
 
     // --- Assertions ---
     // Case 1: More than 4 nodes (5 on day1), penalty applies
-    assert_eq!(
-        adjusted_rewards.get(&(day1, node1)),
-        Some(&(dec!(1000) * dec!(0.5)))
-    );
-    // Case 2: 4 or fewer nodes (4 on day2), full rewards
-    assert_eq!(adjusted_rewards.get(&(day2, node1)), Some(&(dec!(1000))));
+    let expected = dec!(1000) * dec!(0.5);
+
+    for node in &[node1, node2, node3, node4, node5] {
+        assert_eq!(
+            adjusted_rewards.get(&(day1, *node)),
+            Some(&expected),
+            "Unexpected reward for node {:?} on day {:?}",
+            node,
+            day1
+        );
+    }
+    // Case 2: fewer than 4 nodes (3 on day2), all assigned penalty applies
+    for node in &[node1, node2, node3] {
+        assert_eq!(
+            adjusted_rewards.get(&(day2, *node)),
+            Some(&expected),
+            "Unexpected reward for node {:?} on day {:?}",
+            node,
+            day2
+        );
+    }
+
+    let expected = dec!(1000);
+    // Case 3: fewer than 4 nodes (3 on day3), all unassigned full rewards
+    for node in &[node1, node2, node3] {
+        assert_eq!(
+            adjusted_rewards.get(&(day3, *node)),
+            Some(&expected),
+            "Unexpected reward for node {:?} on day {:?}",
+            node,
+            day3
+        );
+    }
 }
