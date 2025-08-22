@@ -19,13 +19,14 @@ use crate::{
 use candid::{Decode, Encode, Nat};
 use candid_utils::printing;
 use futures::future::BoxFuture;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -953,12 +954,72 @@ pub async fn validate_register_extension(
         .await
         .map_err(|err| format!("Invalid init argument: {}", err))?;
 
+    if spec.supports_extension_type(ExtensionType::TreasuryManager) {
+        // Validate that the subnet for the extension_canister_id is okay!
+        // NOTE: https://dfinity.slack.com/archives/C01D7R95YJE/p1747290739449439?thread_ts=1747249089.612059&cid=C01D7R95YJE
+        let _subnet_id = get_subnet_for_canister(&*governance.env, extension_canister_id)
+            .await
+            .map_err(|e| {
+                format!(
+                    "Failed to get subnet for extension canister {}: {}",
+                    extension_canister_id, e
+                )
+            })?;
+        // TODO: Add actual subnet validation logic here
+    }
+
     Ok(ValidatedRegisterExtension {
         wasm,
         extension_canister_id,
         spec,
         init,
     })
+}
+
+// Copied from Registry canister, to avoid import for just one type.
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct GetSubnetForCanisterRequest {
+    #[prost(message, optional, tag = "1")]
+    pub principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct SubnetForCanister {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+
+// TODO move these functions somewhere nicer
+async fn get_subnet_for_canister(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<SubnetId, String> {
+    let request = GetSubnetForCanisterRequest {
+        principal: Some(canister_id.get()),
+    };
+
+    let payload = Encode!(&request)
+        .map_err(|e| format!("Failed to encode GetSubnetForCanisterRequest: {}", e))?;
+
+    let response_blob = env
+        .call_canister(REGISTRY_CANISTER_ID, "get_subnet_for_canister", payload)
+        .await
+        .map_err(|(code, err)| {
+            format!(
+                "Registry.get_subnet_for_canister failed with code {:?}: {}",
+                code, err
+            )
+        })?;
+
+    let response = Decode!(&response_blob, Result<SubnetForCanister, String>)
+        .map_err(|e| format!("Failed to decode get_subnet_for_canister response: {}", e))?
+        .map_err(|e| format!("Registry.get_subnet_for_canister returned error: {}", e))?;
+
+    let subnet_id = response
+        .subnet_id
+        .ok_or("Registry response missing subnet_id".to_string())?;
+
+    Ok(SubnetId::from(subnet_id))
 }
 
 async fn get_extension_spec_and_update_cache(
@@ -1807,7 +1868,7 @@ mod tests {
         let err = validate_register_extension(&governance, invalid_store_id)
             .await
             .unwrap_err();
-        assert!(err.contains("invalid principal id"));
+        assert!(err.contains("Invalid store_canister_id"));
 
         // Test invalid wasm module hash length
         let invalid_hash_length = {
