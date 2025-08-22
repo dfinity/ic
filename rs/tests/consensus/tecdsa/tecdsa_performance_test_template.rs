@@ -39,14 +39,14 @@
 // To inspect the metrics after the test has finished, exit the dev container
 // and run a local p8s and Grafana on the downloaded p8s data directory using:
 //
-// $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
+//   $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
 //
 // Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
 // The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
 //
 // Then, on your laptop, forward the Grafana port 3000 to your devenv:
 //
-// $ ssh devenv -L 3000:localhost:3000 -N
+//   $ ssh devenv -L 3000:localhost:3000 -N
 //
 // and load http://localhost:3000/ in your browser to inspect the dashboards.
 //
