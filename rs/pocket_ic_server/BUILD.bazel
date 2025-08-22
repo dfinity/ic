@@ -265,7 +265,7 @@ rust_ic_test(
     name = "pocket-ic-server-lib-test",
     crate = ":pocket-ic-server-lib",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
 )
 
 [
