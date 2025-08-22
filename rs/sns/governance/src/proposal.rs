@@ -1,16 +1,10 @@
-use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::extensions::{
-    validate_execute_extension_operation, validate_register_extension, ValidatedRegisterExtension,
-};
-use crate::extensions::{validate_extension_wasm, ValidatedExecuteExtensionOperation};
-use crate::pb::v1::{
-    AdvanceSnsTargetVersion, ExecuteExtensionOperation, RegisterExtension,
-    SetTopicsForCustomProposals, Topic,
-};
-use crate::treasury::assess_treasury_balance;
-use crate::types::Wasm;
 use crate::{
+    cached_upgrade_steps::render_two_versions_as_markdown_table,
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
+    extensions::{
+        validate_execute_extension_operation, validate_register_extension,
+        ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+    },
     governance::{
         bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
         TREASURY_SUBACCOUNT_NONCE,
@@ -27,15 +21,18 @@ use crate::{
             MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
-        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
-        LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
-        MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
-        ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, SnsVersion, Tally, Topic as TopicPb, TransferSnsTreasuryFunds,
-        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
+        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
+        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
+        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
+        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
+        TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
+        Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
-    types::Environment,
+    treasury::assess_treasury_balance,
+    types::{Environment, Wasm},
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
@@ -49,8 +46,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
-use ic_sns_governance_api::format_full_hash;
-use ic_sns_governance_api::pb::v1 as pb_api;
+use ic_sns_governance_api::{format_full_hash, pb::v1 as pb_api};
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -2771,9 +2767,8 @@ mod set_topics_for_custom_proposals;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::governance::ValidGovernanceProto;
     use crate::{
-        governance::Governance,
+        governance::{Governance, ValidGovernanceProto},
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
