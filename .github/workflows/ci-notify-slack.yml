@@ -12,7 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # NEW: sanitize PR title for Slack (<, >, &)
+      # Sanitize PR title for Slack (<, >, &)
       - name: Sanitize PR title
         id: sanitize
         run: |
