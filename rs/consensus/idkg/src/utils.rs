@@ -23,9 +23,7 @@ use ic_types::{
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::{
         idkg::{
-            common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef},
-            ecdsa::ThresholdEcdsaSigInputsRef,
-            schnorr::ThresholdSchnorrSigInputsRef,
+            common::{BuildSignatureInputsError, ThresholdSigInputs},
             CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
             IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
             TranscriptLookupError, TranscriptRef,
@@ -35,7 +33,7 @@ use ic_types::{
     crypto::{
         canister_threshold_sig::{
             idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
-            MasterPublicKey,
+            MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
         vetkd::{VetKdArgs, VetKdDerivationContext},
         ExtendedDerivationPath,
@@ -104,15 +102,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
                 )
             },
         )
-    }
-
-    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
-        self.chain
-            .tip()
-            .payload
-            .as_ref()
-            .as_idkg()
-            .and_then(|idkg_payload| idkg_payload.available_pre_signatures.get(id))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
@@ -186,14 +175,12 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
 
 pub(super) fn block_chain_reader(
     pool_reader: &PoolReader<'_>,
-    summary_block: &Block,
-    parent_block: &Block,
+    start_height: Height,
+    parent_block: Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<IDkgBlockReaderImpl, InvalidChainCacheError> {
-    // Resolve the transcript refs pointing into the parent chain,
-    // copy the resolved transcripts into the summary block.
-    block_chain_cache(pool_reader, summary_block, parent_block)
+    block_chain_cache(pool_reader, start_height, parent_block)
         .map(IDkgBlockReaderImpl::new)
         .map_err(|err| {
             warn!(
@@ -210,11 +197,12 @@ pub(super) fn block_chain_reader(
 /// Wrapper to build the chain cache and perform sanity checks on the returned chain
 pub(super) fn block_chain_cache(
     pool_reader: &PoolReader<'_>,
-    start: &Block,
-    end: &Block,
+    start_height: Height,
+    end: Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
-    let chain = pool_reader.pool().build_block_chain(start, end);
-    let expected_len = (end.height().get() - start.height().get() + 1) as usize;
+    let end_height = end.height();
+    let expected_len = (end_height.get() - start_height.get() + 1) as usize;
+    let chain = pool_reader.pool().build_block_chain(start_height, end);
     let chain_len = chain.len();
     if chain_len == expected_len {
         Ok(chain)
@@ -225,8 +213,8 @@ pub(super) fn block_chain_cache(
              notarized_height = {:?}, finalized_height = {:?}, CUP height = {:?}",
             expected_len,
             chain_len,
-            start.height(),
-            end.height(),
+            start_height,
+            end_height,
             chain.tip().height(),
             pool_reader.get_notarized_height(),
             pool_reader.get_finalized_height(),
@@ -235,103 +223,69 @@ pub(super) fn block_chain_cache(
     }
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub enum BuildSignatureInputsError {
-    /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
-    ContextIncomplete,
-    /// The context was matched to a pre-signature which cannot be found in the latest block payload
-    MissingPreSignature(RequestId),
-    /// The context was matched to a pre-signature of the wrong signature scheme
-    SignatureSchemeMismatch(RequestId, SignatureScheme),
-}
-
-impl BuildSignatureInputsError {
-    /// Fatal errors indicate a problem in the construction of payloads,
-    /// request contexts, or the match between both.
-    pub(crate) fn is_fatal(&self) -> bool {
-        matches!(
-            self,
-            BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
-        )
-    }
-}
-
-/// Helper to build threshold signature inputs from the context and
-/// the pre-signature
+/// Helper to build threshold signature inputs from the context
 pub(super) fn build_signature_inputs(
     callback_id: CallbackId,
     context: &SignWithThresholdContext,
-    block_reader: &dyn IDkgBlockReader,
-) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
+) -> Result<(RequestId, ThresholdSigInputs), BuildSignatureInputsError> {
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
-            let (pre_sig_id, height) = context
-                .matched_pre_signature
+            let matched_data = args
+                .pre_signature
+                .as_ref()
                 .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let request_id = RequestId {
                 callback_id,
-                height,
-            };
-            let PreSignatureRef::Ecdsa(pre_sig) = block_reader
-                .available_pre_signature(&pre_sig_id)
-                .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
-                .clone()
-            else {
-                return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                    request_id,
-                    SignatureScheme::Schnorr,
-                ));
+                height: matched_data.height,
             };
             let nonce = Id::from(
                 context
                     .nonce
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
-            let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                ExtendedDerivationPath {
-                    caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.to_vec(),
-                },
-                args.message_hash,
-                nonce,
-                pre_sig,
-            ));
+            let inputs = ThresholdSigInputs::Ecdsa(
+                ThresholdEcdsaSigInputs::new(
+                    &ExtendedDerivationPath {
+                        caller: context.request.sender.into(),
+                        derivation_path: context.derivation_path.to_vec(),
+                    },
+                    &args.message_hash,
+                    nonce,
+                    matched_data.pre_signature.as_ref().clone(),
+                    matched_data.key_transcript.as_ref().clone(),
+                )
+                .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
+            );
             Ok((request_id, inputs))
         }
         ThresholdArguments::Schnorr(args) => {
-            let (pre_sig_id, height) = context
-                .matched_pre_signature
+            let matched_data = args
+                .pre_signature
+                .as_ref()
                 .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let request_id = RequestId {
                 callback_id,
-                height,
-            };
-            let PreSignatureRef::Schnorr(pre_sig) = block_reader
-                .available_pre_signature(&pre_sig_id)
-                .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
-                .clone()
-            else {
-                return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                    request_id,
-                    SignatureScheme::Ecdsa,
-                ));
+                height: matched_data.height,
             };
             let nonce = Id::from(
                 context
                     .nonce
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
-            let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                ExtendedDerivationPath {
-                    caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.to_vec(),
-                },
-                args.message.clone(),
-                nonce,
-                pre_sig,
-                args.taproot_tree_root.clone(),
-            ));
+            let inputs = ThresholdSigInputs::Schnorr(
+                ThresholdSchnorrSigInputs::new(
+                    &ExtendedDerivationPath {
+                        caller: context.request.sender.into(),
+                        derivation_path: context.derivation_path.to_vec(),
+                    },
+                    &args.message,
+                    args.taproot_tree_root.as_ref().map(|v| &***v),
+                    nonce,
+                    matched_data.pre_signature.as_ref().clone(),
+                    matched_data.key_transcript.as_ref().clone(),
+                )
+                .map_err(BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError)?,
+            );
             Ok((request_id, inputs))
         }
         ThresholdArguments::VetKd(args) => {
@@ -339,7 +293,7 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: args.height,
             };
-            let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
+            let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
                 context: VetKdDerivationContext {
                     caller: context.request.sender.into(),
                     context: context.derivation_path.iter().flatten().cloned().collect(),
@@ -536,7 +490,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
 
     let chain = pool
         .pool()
-        .build_block_chain(last_dkg_summary_block, current_block);
+        .build_block_chain(last_dkg_summary_block.height(), current_block.clone());
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();

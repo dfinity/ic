@@ -24,8 +24,6 @@ component_files = {
     Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
-    Label("hostos-scripts/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
-    Label("hostos-scripts/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -84,6 +82,7 @@ component_files = {
     Label("networking/nftables/hostos/setup-nftables.service"): "/etc/systemd/system/setup-nftables.service",
     Label("networking/nftables/hostos/setup-nftables.sh"): "/opt/ic/bin/setup-nftables.sh",
     Label("networking/hosts"): "/etc/hosts",
+    Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
 
     # ssh
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",

@@ -9,9 +9,10 @@ use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
-    balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    send_approval, send_transfer, send_transfer_from, setup, supported_standards, total_supply,
-    transfer, AllowanceProvider, FEE, MINTER,
+    balance_of, convert_to_fields_args, default_approve_args, default_transfer_from_args,
+    expect_icrc2_disabled, extract_icrc21_fields_message, extract_icrc21_message_string,
+    icrc21_consent_message, modify_field, send_approval, send_transfer, send_transfer_from, setup,
+    supported_standards, total_supply, transfer, AllowanceProvider, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use icp_ledger::{
@@ -20,8 +21,9 @@ use icp_ledger::{
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
     IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
     LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, UpgradeArgs,
-    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, TransferArgs,
+    UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -29,6 +31,12 @@ use icrc_ledger_types::icrc1::{
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
+use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
+use icrc_ledger_types::icrc21::requests::{
+    ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+};
+use icrc_ledger_types::icrc21::responses::{ConsentMessage, FieldsDisplay, Value as Icrc21Value};
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
@@ -226,29 +234,65 @@ fn test_minting_account() {
 }
 
 #[test]
-fn test_anonymous_transfers() {
+fn test_icp_anonymous_transfers() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const TRANSFER_AMOUNT: u64 = 1_000_000;
     let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
     let anon = PrincipalId::new_anonymous();
     let (env, canister_id) = setup(
         ledger_wasm(),
         encode_init_args,
-        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (Account::from(anon.0), INITIAL_BALANCE),
+        ],
     );
 
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(0u64, balance_of(&env, canister_id, anon.0));
+    let mut expected_total_supply = INITIAL_BALANCE * 2;
+    let mut expected_balance_p1 = INITIAL_BALANCE;
+    let mut expected_balance_p2 = 0;
+    let mut expected_balance_anon = INITIAL_BALANCE;
+
+    let check_expected_balances_and_total_supply =
+        |expected_total_supply: &u64,
+         expected_balance_p1: &u64,
+         expected_balance_p2: &u64,
+         expected_balance_anon: &u64| {
+            assert_eq!(expected_total_supply, &total_supply(&env, canister_id));
+            assert_eq!(expected_balance_p1, &balance_of(&env, canister_id, p1.0));
+            assert_eq!(expected_balance_p2, &balance_of(&env, canister_id, p2.0));
+            assert_eq!(
+                expected_balance_anon,
+                &balance_of(&env, canister_id, anon.0)
+            );
+        };
+
+    // Check initial balances and total supply
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
-    // The expected block index after the transfer is 1 (0 is the initial mint to `p1`).
-    let mut expected_block_index = 1u64;
+    // The expected block index after the transfer is 2 (0 and 1 are the initial mints to `p1` and `anon`).
+    let mut expected_block_index = 2u64;
     assert_eq!(
         transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed"),
         expected_block_index
     );
     expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
     // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
@@ -273,35 +317,40 @@ fn test_anonymous_transfers() {
     )
     .expect("failed to decode transfer response");
     assert_eq!(result, Ok(expected_block_index));
+    expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_p1 -= TRANSFER_AMOUNT + FEE;
+    expected_balance_anon += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using `icrc1_transfer` fails
-    let transfer_arg = TransferArg {
-        from_subaccount: None,
-        to: Account::from(p1.0),
-        fee: None,
-        created_at_time: None,
-        amount: Nat::from(TRANSFER_AMOUNT),
-        memo: None,
-    };
-    let transfer_error = env
-        .execute_ingress_as(
-            anon,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&transfer_arg).unwrap(),
-        )
-        .unwrap_err();
-    assert!(transfer_error
-        .description()
-        .contains("Anonymous principal cannot hold tokens on the ledger."));
+    // Transfer from the account of the anonymous principal using `icrc1_transfer` succeeds
+    assert_eq!(
+        transfer(&env, canister_id, anon.0, p2.0, TRANSFER_AMOUNT).expect("transfer failed"),
+        expected_block_index
+    );
+    expected_block_index += 1;
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
+    );
 
-    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
+    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
         memo: icp_ledger::Memo(0u64),
         amount: Tokens::from_e8s(TRANSFER_AMOUNT),
         fee: Tokens::from_e8s(FEE),
         from_subaccount: None,
-        to: AccountIdentifier::new(p1, None).to_address(),
+        to: AccountIdentifier::new(p2, None).to_address(),
         created_at_time: None,
     };
     let response = env.execute_ingress_as(
@@ -310,58 +359,23 @@ fn test_anonymous_transfers() {
         "transfer",
         Encode!(&transfer_args).unwrap(),
     );
-    assert!(response.is_err());
-    if let Err(err) = response {
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(err.description().contains("Canister called `ic0.trap` with message: 'Panicked at 'Sending from 2vxsx-fae is not allowed'"));
-    }
-
-    assert_eq!(INITIAL_BALANCE - FEE * 2, total_supply(&env, canister_id));
-    assert_eq!(
-        INITIAL_BALANCE - (TRANSFER_AMOUNT + FEE) * 2,
-        balance_of(&env, canister_id, p1.0)
+    let result = Decode!(
+        &response
+        .expect("failed to transfer funds")
+        .bytes(),
+        Result<BlockIndex, TransferError>
+    )
+    .expect("failed to decode transfer response");
+    assert_eq!(result, Ok(expected_block_index));
+    expected_total_supply -= FEE;
+    expected_balance_anon -= TRANSFER_AMOUNT + FEE;
+    expected_balance_p2 += TRANSFER_AMOUNT;
+    check_expected_balances_and_total_supply(
+        &expected_total_supply,
+        &expected_balance_p1,
+        &expected_balance_p2,
+        &expected_balance_anon,
     );
-    assert_eq!(TRANSFER_AMOUNT * 2, balance_of(&env, canister_id, anon.0));
-}
-
-#[test]
-fn test_anonymous_approval() {
-    const INITIAL_BALANCE: u64 = 10_000_000;
-    const APPROVE_AMOUNT: u64 = 1_000_000;
-    let p1 = PrincipalId::new_user_test_id(1);
-    let anon = PrincipalId::new_anonymous();
-    let (env, canister_id) = setup(
-        ledger_wasm(),
-        encode_init_args,
-        vec![(Account::from(anon.0), INITIAL_BALANCE)],
-    );
-
-    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
-    assert_eq!(0, balance_of(&env, canister_id, p1.0));
-    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
-
-    // Approve transfers for p1 from the account of the anonymous principal
-    let approve_args = ApproveArgs {
-        from_subaccount: None,
-        spender: p1.0.into(),
-        amount: Nat::from(APPROVE_AMOUNT),
-        fee: None,
-        memo: None,
-        expires_at: None,
-        expected_allowance: None,
-        created_at_time: None,
-    };
-    let approve_error = env
-        .execute_ingress_as(
-            anon,
-            canister_id,
-            "icrc2_approve",
-            Encode!(&approve_args).unwrap(),
-        )
-        .unwrap_err();
-    assert!(approve_error
-        .description()
-        .contains("Anonymous principal cannot approve token transfers on the ledger."));
 }
 
 #[test]
@@ -450,6 +464,16 @@ fn test_tx_deduplication() {
 #[test]
 fn test_mint_burn() {
     ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_transfers() {
+    ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_approval() {
+    ic_ledger_suite_state_machine_tests::test_anonymous_approval(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -1610,6 +1634,227 @@ fn test_query_archived_blocks() {
 #[test]
 fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc21_for_legacy_transfer() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    let from_account = Account {
+        owner: PrincipalId::new_user_test_id(0).0,
+        subaccount: Some([1; 32]),
+    };
+    assert_eq!(
+        AccountIdentifier::from(from_account).to_hex(),
+        "f03053b18a964e4cffa3f277e3c6089ea2297fd39d329c875c523bbd0c6b365a"
+    );
+
+    let receiver_account = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: Some([2; 32]),
+    };
+    assert_eq!(
+        AccountIdentifier::from(receiver_account).to_hex(),
+        "9bb003ab310d8af842f9dbf294d1a6870eb95d9aeb1b10db634e702e63516384"
+    );
+
+    let transfer_args = TransferArgs {
+        memo: icp_ledger::Memo(15u64),
+        amount: Tokens::from(1_000_000u64),
+        fee: Tokens::from(10000),
+        from_subaccount: from_account.subaccount.map(icp_ledger::Subaccount),
+        to: AccountIdentifier::from(receiver_account).to_address(),
+        created_at_time: None,
+    };
+
+    // We check that the GenericDisplay message is created correctly.
+    let mut args = ConsentMessageRequest {
+        method: "transfer".to_owned(),
+        arg: Encode!(&transfer_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: Some(60),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let expected_transfer_message = "# Send Internet Computer
+
+You are approving a transfer of funds from your account.
+
+**From:**
+`f03053b18a964e4cffa3f277e3c6089ea2297fd39d329c875c523bbd0c6b365a`
+
+**Amount:** `0.01 ICP`
+
+**To:**
+`9bb003ab310d8af842f9dbf294d1a6870eb95d9aeb1b10db634e702e63516384`
+
+**Fees:** `0.0001 ICP`
+Charged for processing the transfer.
+
+**Memo:**
+`15`";
+
+    let expected_fields_message = FieldsDisplay {
+        intent: "Send Internet Computer".to_string(),
+        fields: vec![
+            (
+                "From".to_string(),
+                Icrc21Value::Text {
+                    content: "f03053b18a964e4cffa3f277e3c6089ea2297fd39d329c875c523bbd0c6b365a"
+                        .to_string(),
+                },
+            ),
+            (
+                "Amount".to_string(),
+                Icrc21Value::TokenAmount {
+                    decimals: 8,
+                    amount: 1000000,
+                    symbol: "ICP".to_string(),
+                },
+            ),
+            (
+                "To".to_string(),
+                Icrc21Value::Text {
+                    content: "9bb003ab310d8af842f9dbf294d1a6870eb95d9aeb1b10db634e702e63516384"
+                        .to_string(),
+                },
+            ),
+            (
+                "Fees".to_string(),
+                Icrc21Value::TokenAmount {
+                    decimals: 8,
+                    amount: 10000,
+                    symbol: "ICP".to_string(),
+                },
+            ),
+            (
+                "Memo".to_string(),
+                Icrc21Value::Text {
+                    content: "15".to_string(),
+                },
+            ),
+        ],
+    };
+
+    let consent_info =
+        icrc21_consent_message(&env, canister_id, from_account.owner, args.clone()).unwrap();
+    assert_eq!(consent_info.metadata.language, "en");
+    assert!(matches!(
+        consent_info.consent_message,
+        ConsentMessage::GenericDisplayMessage { .. }
+    ));
+    let message = extract_icrc21_message_string(&consent_info.consent_message);
+    assert_eq!(
+        message, expected_transfer_message,
+        "Expected: {}, got: {}",
+        expected_transfer_message, message
+    );
+    let fields_consent_info = icrc21_consent_message(
+        &env,
+        canister_id,
+        from_account.owner,
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    assert_eq!(
+        fields_message, expected_fields_message,
+        "Expected: {:?}, got: {:?}",
+        expected_fields_message, fields_message
+    );
+
+    // If the caller is anonymous, the message should not include the From information.
+    args.arg = Encode!(&transfer_args.clone()).unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message = expected_transfer_message.replace(
+        "\n\n**From:**\n`f03053b18a964e4cffa3f277e3c6089ea2297fd39d329c875c523bbd0c6b365a`",
+        "",
+    );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+    let fields_consent_info = icrc21_consent_message(
+        &env,
+        canister_id,
+        Principal::anonymous(),
+        convert_to_fields_args(&args),
+    )
+    .unwrap();
+    let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
+    let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
+    assert_eq!(
+        fields_message, new_exp_fields_message,
+        "Expected: {:?}, got: {:?}",
+        new_exp_fields_message, fields_message
+    );
+}
+
+#[test]
+fn test_icrc21_fee_error() {
+    ic_ledger_suite_state_machine_tests::test_icrc21_fee_error(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc21_legacy_transfer_incorrect_fee() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    let transfer_args = TransferArgs {
+        memo: icp_ledger::Memo(15u64),
+        amount: Tokens::from(1_000_000u64),
+        fee: Tokens::from(1),
+        from_subaccount: None,
+        to: AccountIdentifier::from(Account::from(PrincipalId::new_user_test_id(1).0)).to_address(),
+        created_at_time: None,
+    };
+
+    let args = ConsentMessageRequest {
+        method: "transfer".to_owned(),
+        arg: Encode!(&transfer_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: Some(60),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+        .unwrap_err();
+    assert_eq!(
+        error,
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description:
+                "The fee specified in the arguments (1) is different than the ledger fee (10_000)"
+                    .to_string()
+        })
+    );
 }
 
 #[test]

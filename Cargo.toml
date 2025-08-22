@@ -3,6 +3,8 @@
 members = [
     "packages/canlog",
     "packages/canlog_derive",
+    "packages/ic-deterministic-heap-bytes",
+    "packages/ic-deterministic-heap-bytes-derive",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-error-types",
@@ -585,13 +587,14 @@ axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { version = "0.32.5", features = ["default", "rand", "serde"] }
+bitcoin = { version = "0.32.99", features = ["default", "rand", "serde"] }
 bitcoincore-rpc = "0.19.0"
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-candid = { version = "0.10.6" }
+canbench-rs = "0.2.1"
+candid = { version = "0.10.17" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",
@@ -627,6 +630,7 @@ ed25519-dalek = { version = "2.1.1", features = [
 ethnum = { version = "1.3.2", features = ["serde"] }
 evm_rpc_types = { version = "2.0.0" }
 flate2 = "1.0.31"
+fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
 getrandom = { version = "0.2", features = ["custom"] }
@@ -655,10 +659,10 @@ ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
-ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
+ic-canister-sig-creation = "1.3.0"
 ic-cbor = "3"
-ic-cdk = "0.17.2"
-ic-cdk-timers = "0.11.0"
+ic-cdk = "0.18.7"
+ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
@@ -671,7 +675,7 @@ ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
-ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
+ic-vetkeys = "0.4.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
@@ -773,7 +777,7 @@ reqwest = { version = "0.12.15", default-features = false, features = [
 rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
-rust-ini = "0.21.2"
+rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
@@ -875,3 +879,6 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
+
+[patch.crates-io]
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db" }

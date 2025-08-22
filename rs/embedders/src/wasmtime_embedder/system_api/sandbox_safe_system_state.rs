@@ -1456,13 +1456,26 @@ impl SandboxSafeSystemState {
     }
 
     /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
-    /// for that key and return the replication factor of the biggest one.
-    pub fn get_key_replication_factor(&self, key: MasterPublicKeyId) -> Option<usize> {
+    /// for that key and return the replication factor, cost_schedule and subnet_id of the biggest one.
+    /// These data are all returned together because their existence is contingent on the key.
+    pub fn get_key_subnet_details(
+        &self,
+        key: MasterPublicKeyId,
+    ) -> Option<(usize, CanisterCyclesCostSchedule, SubnetId)> {
         let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
         subnets_with_key
             .iter()
             .map(|subnet_id| {
-                self.network_topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
+                (
+                    // unwraps: we got the subnet_id from the same collection
+                    self.network_topology.get_subnet_size(subnet_id).unwrap(),
+                    self.network_topology
+                        .subnets
+                        .get(subnet_id)
+                        .unwrap()
+                        .cost_schedule,
+                    *subnet_id,
+                )
             })
             .max()
     }
