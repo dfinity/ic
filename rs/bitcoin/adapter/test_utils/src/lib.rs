@@ -10,6 +10,7 @@ use hex::FromHex;
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 pub mod bitcoind;
+pub mod bitcoind_rpc_client;
 
 type BlockHeight = u32;
 

@@ -1,8 +1,10 @@
 use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
-use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
+use ic_btc_adapter_test_utils::bitcoind_rpc_client::{
+    Auth, CreateRawTransactionInput, RpcApi, RpcClient as Client,
+};
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     Network, SendTransactionRequest,
@@ -380,38 +382,23 @@ fn get_blackhole_address() -> Address {
         .assume_checked()
 }
 
-fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address, Address) {
-    let alice_client = Client::new(
-        format!("{}/wallet/{}", bitcoind.rpc_url(), "alice").as_str(),
+fn create_alice_and_bob_wallets(
+    bitcoind: &BitcoinD,
+    network: bitcoin::Network,
+) -> (Client, Client) {
+    let client = Client::new(
+        network,
+        bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
     .unwrap();
-    alice_client
-        .create_wallet("alice", None, None, None, None)
-        .unwrap();
-
-    let bob_client = Client::new(
-        format!("{}/wallet/{}", bitcoind.rpc_url(), "bob").as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
-    bob_client
-        .create_wallet("bob", None, None, None, None)
-        .unwrap();
-
-    let alice_address = alice_client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
-    let bob_address = bob_client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
-
-    (alice_client, bob_client, alice_address, bob_address)
+    let alice_client = client.with_account("alice").unwrap();
+    let bob_client = client.with_account("bob").unwrap();
+    (alice_client, bob_client)
 }
 
-fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
+fn fund_with_btc(to_fund_client: &Client) {
+    let to_fund_address = to_fund_client.get_address();
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap()
@@ -522,7 +509,9 @@ fn sync_headers_until_checkpoint(adapter_client: &BitcoinAdapterClient, anchor: 
 fn test_receives_blocks() {
     let logger = no_op_logger();
     let bitcoind = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
     let client = Client::new(
+        network,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -530,7 +519,7 @@ fn test_receives_blocks() {
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
+    let address = client.get_address();
 
     client.generate_to_address(150, &address).unwrap();
 
@@ -554,7 +543,9 @@ fn test_adapter_disconnects_when_idle() {
     let logger = no_op_logger();
 
     let bitcoind = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
     let client = Client::new(
+        network,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -583,7 +574,9 @@ fn idle_adapter_does_not_connect_to_peers() {
     let logger = no_op_logger();
 
     let bitcoind = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
     let client = Client::new(
+        network,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -608,7 +601,9 @@ fn test_connection_to_multiple_peers() {
     let logger = no_op_logger();
 
     let bitcoind1 = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
     let client1 = Client::new(
+        network,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -616,6 +611,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        network,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -623,6 +619,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind3 = get_default_bitcoind();
     let client3 = Client::new(
+        network,
         bitcoind3.rpc_url().as_str(),
         Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
     )
@@ -665,6 +662,7 @@ fn test_connection_to_multiple_peers() {
 fn test_receives_new_3rd_party_txs() {
     let logger = no_op_logger();
     let bitcoind = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
@@ -674,19 +672,15 @@ fn test_receives_new_3rd_party_txs() {
         bitcoin::Network::Regtest,
     );
 
-    let (alice_client, bob_client, alice_address, bob_address) =
-        create_alice_and_bob_wallets(&bitcoind);
+    let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind, network);
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&alice_client);
 
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
     let txid = alice_client
         .send_to_address(
-            &bob_address,
+            bob_client.get_address(),
             Amount::from_btc(1.0).unwrap(),
-            None,
-            None,
-            None,
             None,
             None,
             None,
@@ -721,6 +715,7 @@ fn test_receives_new_3rd_party_txs() {
 fn test_send_tx() {
     let logger = no_op_logger();
     let bitcoind = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
@@ -730,17 +725,14 @@ fn test_send_tx() {
         bitcoin::Network::Regtest,
     );
 
-    let (alice_client, bob_client, alice_address, bob_address) =
-        create_alice_and_bob_wallets(&bitcoind);
+    let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind, network);
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&alice_client);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();
 
-    let unspent = alice_client
-        .list_unspent(None, None, None, None, None)
-        .unwrap();
+    let unspent = alice_client.list_unspent(None, None).unwrap();
     let utxo = unspent
         .iter()
         .find(|utxo| utxo.amount > to_send + tx_fee)
@@ -754,18 +746,16 @@ fn test_send_tx() {
 
     let mut outs = HashMap::new();
     let change = utxo.amount - to_send - tx_fee;
-    outs.insert(bob_address.to_string(), to_send);
+    outs.insert(bob_client.get_address().to_string(), to_send);
     if change > Amount::from_btc(0.0).unwrap() {
-        outs.insert(alice_address.to_string(), change);
+        outs.insert(alice_client.get_address().to_string(), change);
     }
 
     let raw_tx = alice_client
-        .create_raw_transaction(&[raw_tx_input], &outs, None, Some(true))
+        .create_raw_transaction(&[raw_tx_input], &outs)
         .expect("Failed to create raw transaction");
 
-    let signed_tx = alice_client
-        .sign_raw_transaction_with_wallet(&raw_tx, None, None)
-        .unwrap();
+    let signed_tx = alice_client.sign_raw_transaction(&raw_tx, None).unwrap();
 
     let res = make_send_tx_request(&adapter_client, &signed_tx.hex);
 
@@ -793,7 +783,9 @@ fn test_send_tx() {
 fn test_receives_blocks_from_forks() {
     let logger = no_op_logger();
     let bitcoind1 = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
     let client1 = Client::new(
+        network,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -801,6 +793,7 @@ fn test_receives_blocks_from_forks() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        network,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -825,19 +818,13 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address1 = client1.get_address();
     client1.generate_to_address(10, &address1).unwrap();
 
     wait_for_blocks(&client1, 10);
     wait_for_blocks(&client2, 10);
 
-    let address2 = client2
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address2 = client2.get_address();
     client2.generate_to_address(10, &address2).unwrap();
 
     wait_for_blocks(&client1, 20);
@@ -867,7 +854,9 @@ fn test_receives_blocks_from_forks() {
 fn test_bfs_order() {
     let logger = no_op_logger();
     let bitcoind1 = get_default_bitcoind();
+    let network = bitcoin::Network::Regtest;
     let client1 = Client::new(
+        network,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -875,6 +864,7 @@ fn test_bfs_order() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        network,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -899,10 +889,7 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address1 = client1.get_address();
     // IMPORTANT:
     // Increasing the number of blocks in this test could lead to flakiness due to the number of "request rounds"
     // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
@@ -927,10 +914,7 @@ fn test_bfs_order() {
         .generate_to_address(branch_length, &address1)
         .unwrap();
 
-    let address2 = client2
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let address2 = client2.get_address();
     let fork2 = client2
         .generate_to_address(branch_length, &address2)
         .unwrap();
