@@ -199,7 +199,7 @@ system_test_nns(
     name = "nns_recovery_test",
     env = MAINNET_ENV | IMPERSONATE_UPSTREAMS_ENV | MESSAGE_CANISTER_ENV | {
         "RECOVERY_GUESTOS_IMG_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:update-img.tar.zst)",
-        "RECOVERY_GUESTOS_IMG_VERSION": "STABLE_VERSION",
+        "RECOVERY_GUESTOS_IMG_VERSION": "RECOVERY_VERSION",
     },
     flaky = True,
     tags = ["long_test"],
