@@ -36,7 +36,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .block_on_bash_script(&format!(
             r#"
                 # Generate TLS certificates for the upstreams.
-                mkdir {CERTS_ROOT}
+                mkdir -p {CERTS_ROOT}
                 cd {CERTS_ROOT}
                 cp /config/minica.pem .
                 cp /config/minica-key.pem .
@@ -44,6 +44,18 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
                 docker run -v "$(pwd)":/output minica:image --domains {domains}
                 sudo mv {common_name}/cert.pem {common_name}/key.pem .
                 sudo chmod 644 cert.pem key.pem
+
+                # Serve a static file server with the TLS certificates.
+                mkdir -p {WEB_ROOT}
+                cd {WEB_ROOT}
+                docker load -i /config/static-file-server.tar
+                docker run -d \
+                       -p 443:8080 \
+                       -e TLS_CERT=/certs/cert.pem \
+                       -e TLS_KEY=/certs/key.pem \
+                       -v {CERTS_ROOT}:/certs \
+                       -v "$(pwd)":/web \
+                       static-file-server:image
             "#,
             domains = UPSTREAMS.join(","),
             common_name = UPSTREAMS[0],
@@ -83,29 +95,18 @@ fn uvm_serve_file(env: &TestEnv, file: Vec<u8>, uri: &Path) -> Result<()> {
         "mkdir -p {}",
         file_path.parent().unwrap().display(),
     ))?;
+
     // Send the file to the UVM.
-    let session = uvm.block_on_ssh_session()?;
-    let mut remote_artifacts = session.scp_send(&file_path, 0o644, file.len() as u64, None)?;
+    let mut remote_artifacts =
+        uvm.block_on_ssh_session()?
+            .scp_send(&file_path, 0o644, file.len() as u64, None)?;
     remote_artifacts.write_all(&file)?;
     remote_artifacts.send_eof()?;
     remote_artifacts.wait_eof()?;
     remote_artifacts.close()?;
     remote_artifacts.wait_close()?;
 
-    uvm.block_on_bash_script(&format!(
-        r#"
-            # Serve the recovery artifacts with a static file server.
-            cd {WEB_ROOT}
-            docker load -i /config/static-file-server.tar
-            docker run -d \
-                       -p 443:8080 \
-                       -e TLS_CERT=/certs/cert.pem \
-                       -e TLS_KEY=/certs/key.pem \
-                       -v {CERTS_ROOT}:/certs \
-                       -v "$(pwd)":/web \
-                       static-file-server:image
-        "#,
-    ))?;
+    // The static server is already running and will serve the file at the given URI.
 
     Ok(())
 }
