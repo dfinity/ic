@@ -280,7 +280,7 @@ async fn simulate_node_provider_action(
 
     // Once HostOS is back up, spoof its DNS such that it downloads the GuestOS image from the UVM
     let host = env.get_nested_vm(vm_name).unwrap();
-    let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(&env);
+    let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
         "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", vm_name, server_ipv6
@@ -311,7 +311,7 @@ async fn simulate_node_provider_action(
 pub fn nns_recovery_test(env: TestEnv) {
     let logger = env.logger();
 
-    let recovery_img = std::fs::read(&get_dependency_path(
+    let recovery_img = std::fs::read(get_dependency_path(
         std::env::var("RECOVERY_GUESTOS_IMG_PATH")
             .expect("RECOVERY_GUESTOS_IMG_PATH environment variable not found"),
     ))
