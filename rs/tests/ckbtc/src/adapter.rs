@@ -228,16 +228,14 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (RpcClient, Address) {
 
     let client = RpcClient::new(
         Network::Regtest,
-        format!(
-            "http://[{}]:{}/wallet/{}",
-            bitcoind_addr, BITCOIND_RPC_PORT, name
-        )
-        .as_str(),
+        format!("http://[{}]:{}", bitcoind_addr, BITCOIND_RPC_PORT).as_str(),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
             crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
     )
+    .unwrap()
+    .with_account(name)
     .unwrap()
     .ensure_wallet()
     .unwrap();
