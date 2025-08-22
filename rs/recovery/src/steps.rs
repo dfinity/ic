@@ -1104,7 +1104,7 @@ impl CreateNNSRecoveryTarStep {
             None => {
                 // If no output directory is not specified, save the files in a directory that will
                 // not be deleted by the cleanup step (i.e., not `self.work_dir`).
-                String::from("output_dir=\"$(mktemp -d)\"\n")
+                String::from("output_dir=\"/tmp/recovery_artifacts\"\n")
             }
         };
 
