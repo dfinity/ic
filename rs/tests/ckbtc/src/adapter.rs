@@ -235,9 +235,9 @@ fn get_test_wallet(env: &TestEnv, name: &str) -> (RpcClient, Address) {
         ),
     )
     .unwrap()
-    .with_account(name)
-    .unwrap()
     .ensure_wallet()
+    .unwrap()
+    .with_account(name)
     .unwrap();
 
     let address = client.get_address().unwrap().clone();
