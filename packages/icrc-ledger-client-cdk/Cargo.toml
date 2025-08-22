@@ -16,4 +16,4 @@ documentation.workspace = true
 async-trait = { workspace = true }
 candid = { workspace = true }
 ic-cdk = { workspace = true }
-icrc-ledger-client = { path = "../icrc-ledger-client" }
+icrc-ledger-client = { path = "../icrc-ledger-client", version = "0.1.4" }
