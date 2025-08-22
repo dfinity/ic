@@ -31,6 +31,7 @@ use icrc_ledger_types::icrc1::{
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
     ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
@@ -1668,7 +1669,7 @@ fn test_icrc21_for_legacy_transfer() {
     let transfer_args = TransferArgs {
         memo: icp_ledger::Memo(15u64),
         amount: Tokens::from(1_000_000u64),
-        fee: Tokens::from(12),
+        fee: Tokens::from(10000),
         from_subaccount: from_account.subaccount.map(icp_ledger::Subaccount),
         to: AccountIdentifier::from(receiver_account).to_address(),
         created_at_time: None,
@@ -1803,6 +1804,56 @@ Charged for processing the transfer.
         fields_message, new_exp_fields_message,
         "Expected: {:?}, got: {:?}",
         new_exp_fields_message, fields_message
+    );
+}
+
+#[test]
+fn test_icrc21_fee_error() {
+    ic_ledger_suite_state_machine_tests::test_icrc21_fee_error(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc21_legacy_transfer_incorrect_fee() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    let transfer_args = TransferArgs {
+        memo: icp_ledger::Memo(15u64),
+        amount: Tokens::from(1_000_000u64),
+        fee: Tokens::from(1),
+        from_subaccount: None,
+        to: AccountIdentifier::from(Account::from(PrincipalId::new_user_test_id(1).0)).to_address(),
+        created_at_time: None,
+    };
+
+    let args = ConsentMessageRequest {
+        method: "transfer".to_owned(),
+        arg: Encode!(&transfer_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: Some(60),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+        .unwrap_err();
+    assert_eq!(
+        error,
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description:
+                "The fee specified in the arguments (1) is different than the ledger fee (10_000)"
+                    .to_string()
+        })
     );
 }
 
