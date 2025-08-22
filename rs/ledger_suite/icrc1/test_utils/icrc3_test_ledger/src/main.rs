@@ -50,7 +50,6 @@ fn supported_standards() -> Vec<StandardRecord> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     supported_standards()
 }
@@ -97,31 +96,25 @@ pub fn get_block_count() -> u64 {
 
 fn main() {}
 
-#[cfg(test)]
-candid::export_service!();
+#[test]
+fn check_candid_interface() {
+    use candid_parser::utils::{service_equal, CandidSource};
 
-#[cfg(test)]
-mod tests {
-    use crate::__export_service;
+    candid::export_service!();
 
-    #[test]
-    fn check_candid_interface() {
-        use candid_parser::utils::{service_equal, CandidSource};
+    let new_interface = __export_service();
 
-        let new_interface = __export_service();
-
-        let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        let old_interface = manifest_dir.join("icrc3_test_ledger.did");
-        service_equal(
-            CandidSource::Text(&new_interface),
-            CandidSource::File(old_interface.as_path()),
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let old_interface = manifest_dir.join("icrc3_test_ledger.did");
+    service_equal(
+        CandidSource::Text(&new_interface),
+        CandidSource::File(old_interface.as_path()),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the icrc3_test_ledger interface is not compatible with {}: {:?}",
+            old_interface.display(),
+            e
         )
-        .unwrap_or_else(|e| {
-            panic!(
-                "the icrc3_test_ledger interface is not compatible with {}: {:?}",
-                old_interface.display(),
-                e
-            )
-        });
-    }
+    });
 }
