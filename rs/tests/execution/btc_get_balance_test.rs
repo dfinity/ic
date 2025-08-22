@@ -127,6 +127,8 @@ pub fn get_balance(env: TestEnv) {
                 "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
             ),
         )
+        .unwrap()
+        .ensure_wallet()
         .unwrap(),
     );
 
