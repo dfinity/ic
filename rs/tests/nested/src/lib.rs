@@ -12,6 +12,8 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
+        constants::SSH_USERNAME,
+        driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         ic::{InternetComputer, Subnet},
         ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
         nested::NestedVms,
@@ -351,7 +353,41 @@ pub fn nns_recovery_test(env: TestEnv) {
         Duration::from_secs(10),
     );
 
+    // add SSH key as backup key to the registry
+    info!(logger, "Update the registry with the backup key");
+    let ssh_priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let ssh_priv_key =
+        std::fs::read_to_string(&ssh_priv_key_path).expect("Failed to read SSH private key");
+    let ssh_pub_key_path = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME);
+    let ssh_pub_key =
+        std::fs::read_to_string(&ssh_pub_key_path).expect("Failed to read SSH public key");
+    let payload = get_updatesubnetpayload_with_keys(
+        topology_after_removal.root_subnet_id(),
+        None,
+        Some(vec![ssh_pub_key]),
+    );
+    block_on(update_subnet_record(
+        dfinity_owned_node.get_public_url(),
+        payload,
+    ));
+    let backup_mean = AuthMean::PrivateKey(ssh_priv_key);
+    for node in nns_subnet.nodes() {
+        info!(
+            logger,
+            "Waiting for authentication to be granted on node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+        wait_until_authentication_is_granted(&node.get_ip_addr(), "backup", &backup_mean);
+    }
 
+    let ic_version = get_guestos_img_version().unwrap();
+    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
+
+    // identifies the version of the replica after the recovery
+    let working_version = get_guestos_update_img_version().unwrap();
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
