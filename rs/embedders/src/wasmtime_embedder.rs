@@ -762,38 +762,6 @@ fn sigsegv_memory_tracker<S>(
         };
         let sigsegv_memory_tracker_clone = Arc::clone(&sigsegv_memory_tracker);
 
-        // println!(
-        //     "Current memory size for {} in pages: {}",
-        //     mem_type,
-        //     size / PAGE_SIZE
-        // );
-
-        // let uffd = UffdBuilder::new()
-        //     .close_on_exec(true)
-        //     .non_blocking(true)
-        //     .user_mode_only(true)
-        //     .create()
-        //     .expect("Failed to create userfaultfd");
-        // println!(
-        //     "Created userfaultfd: {:?} for mem_type {}, size {}",
-        //     uffd,
-        //     mem_type,
-        //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
-        // );
-        // uffd.register_with_mode(
-        //     base,
-        //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES,
-        //     RegisterMode::MISSING | RegisterMode::WRITE_PROTECT,
-        // )
-        // .expect("Failed to register region");
-        // println!(
-        //     "Registered uffd region at {:?} for mem_type: {} size {}",
-        //     base,
-        //     mem_type,
-        //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
-        // );
-
-        // let base = base as usize;
         let handle = stoppable_thread::spawn(move |stopped| {
             while !stopped.get() {
                 let event = uffd.read_event().expect("Failed to read uffd event");
@@ -830,10 +798,6 @@ fn sigsegv_memory_tracker<S>(
                             memory_tracker.expand(delta);
                         }
                     }
-
-                    // // We need to handle page faults in units of pages(!). So, round faulting
-                    // // address down to page boundary.
-                    // let fault_addr = (addr as usize & !(PAGE_SIZE - 1)) as *mut libc::c_void;
 
                     match (kind, rw) {
                         (FaultKind::Missing, ReadWrite::Read) => {
@@ -887,18 +851,6 @@ fn sigsegv_memory_tracker<S>(
                     }
                 }
             }
-            // let base = base as *mut libc::c_void;
-            // uffd.unregister(
-            //     base,
-            //     current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES,
-            // )
-            // .expect("Failed to unregister uffd region");
-            // println!(
-            //     "Unregistered uffd region at {:?} for mem_type: {} size {}",
-            //     base,
-            //     mem_type,
-            //     max_memory_size_in_pages * WASM_PAGE_SIZE_IN_BYTES
-            // );
         });
 
         result.insert(mem_type, (sigsegv_memory_tracker_clone, handle));
