@@ -3,7 +3,7 @@
 //!
 
 use candid::{CandidType, Principal};
-use ic_cdk::{caller, init, post_upgrade, println, update};
+use ic_cdk::{api::msg_caller, init, post_upgrade, println, update};
 use serde::Deserialize;
 
 use crate::{
@@ -35,7 +35,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonErro
     if rate_limited() {
         return Err(ValidatonError::RateLimited);
     }
-    let caller = caller();
+    let caller = msg_caller();
     match validate_request(args.source, args.target, caller).await {
         Err(e) => {
             println!("Failed to validate request {:?}: {:?}", args, e);

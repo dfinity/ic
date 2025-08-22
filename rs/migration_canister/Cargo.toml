@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 candid = { workspace = true }
+futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-stable-structures = "0.7.0"
