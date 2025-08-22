@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+futures = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client = { path = "../../canister_client" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

@@ -1,10 +1,12 @@
 use std::str::FromStr;
 use std::time::Duration;
 
+use anyhow::Result;
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message_with_retries,
+use futures::future::join_all;
 };
 use ic_recovery::{
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
@@ -37,8 +39,8 @@ use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayloa
 use ic_types::{hostos_version::HostosVersion, Height};
 use reqwest::Client;
 
-use slog::info;
 use sha2::{Digest, Sha256};
+use slog::{info, Logger};
 
 mod util;
 use util::{
@@ -202,6 +204,106 @@ pub fn registration(env: TestEnv) {
 /// This test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
 pub const DKG_INTERVAL: u64 = 9;
+
+async fn overwrite_expected_recovery_hash<T>(node: &T, artifacts_hash: &str) -> Result<String>
+where
+    T: SshSession + Sync,
+{
+    let expected_recovery_hash_path = "/opt/ic/share/expected_recovery_hash";
+    // File-system is read-only, so we write the hash in a temporary file and replace the
+    // original with a bind mount.
+    let command = format!(
+        r#"
+            echo {artifacts_hash} | sudo tee -a /tmp/expected_recovery_hash > /dev/null
+
+            sudo chown --reference=/tmp/expected_recovery_hash {expected_recovery_hash_path}
+            sudo chmod --reference=/tmp/expected_recovery_hash {expected_recovery_hash_path}
+
+            sudo mount --bind /tmp/expected_recovery_hash {expected_recovery_hash_path}
+        "#,
+    );
+
+    node.block_on_bash_script_async(&command).await
+}
+
+async fn simulate_node_provider_action(
+    logger: &Logger,
+    env: &TestEnv,
+    vm_name: &str,
+    img_version: &str,
+    img_short_hash: &str,
+    artifacts_hash: &str,
+) {
+    let host = env.get_nested_vm(vm_name).unwrap();
+    let host_boot_id_pre_reboot = get_host_boot_id(&host);
+
+    // Trigger HostOS reboot and run guestos-recovery-upgrader
+    info!(
+        logger,
+        "Remounting /boot as read-write, updating boot_args file and rebooting host {}", vm_name,
+    );
+    let boot_args_command = format!(
+        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
+        &img_version, &img_short_hash
+    );
+    host.block_on_bash_script_async(&boot_args_command)
+        .await
+        .expect("Failed to update boot_args file and reboot host");
+
+    // Wait for HostOS to reboot by checking that its boot ID changes
+    retry_with_msg_async!(
+        format!(
+            "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
+            host_boot_id_pre_reboot
+        ),
+        &logger,
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(5),
+        || async {
+            let host_boot_id = get_host_boot_id(&host);
+            if host_boot_id != host_boot_id_pre_reboot {
+                info!(
+                    logger,
+                    "Host boot ID changed from '{}' to '{}'", host_boot_id_pre_reboot, host_boot_id
+                );
+                Ok(())
+            } else {
+                bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
+            }
+        }
+    )
+    .await
+    .unwrap();
+
+    // Once HostOS is back up, spoof its DNS such that it downloads the GuestOS image from the UVM
+    let host = env.get_nested_vm(vm_name).unwrap();
+    let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(&env);
+    info!(
+        logger,
+        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", vm_name, server_ipv6
+    );
+    impersonate_upstreams::spoof_node_dns_async(&host, &server_ipv6)
+        .await
+        .expect("Failed to spoof HostOS DNS");
+
+    // Once GuestOS is launched, we still need to overwrite the expected recovery hash with the
+    // correct one and spoof its DNS for the same reason as HostOS
+    let guest = host.get_guest_ssh().unwrap();
+    info!(
+        logger,
+        "Manually overwriting recovery engine with artifacts expected hash {}", artifacts_hash
+    );
+    overwrite_expected_recovery_hash(&guest, artifacts_hash)
+        .await
+        .expect("Failed to overwrite expected recovery hash");
+    info!(
+        logger,
+        "Spoofing GuestOS DNS to point the upstreams to the UVM at {}", server_ipv6
+    );
+    impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
+        .await
+        .expect("Failed to spoof GuestOS DNS");
+}
 
 pub fn nns_recovery_test(env: TestEnv) {
     let logger = env.logger();
@@ -557,6 +659,23 @@ pub fn nns_recovery_test(env: TestEnv) {
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_guestos_image(&env, recovery_img, &recovery_img_version)
         .unwrap();
+
+    info!(logger, "Simulate node provider action on 2f+1 nodes");
+    block_on(join_all(
+        get_host_vm_names(SUBNET_SIZE)
+            .iter()
+            .take(2 * f + 1)
+            .map(|vm_name| {
+                simulate_node_provider_action(
+                    &logger,
+                    &env,
+                    vm_name,
+                    &recovery_img_version,
+                    &recovery_img_hash,
+                    &artifacts_hash,
+                )
+            }),
+    ));
 }
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
