@@ -45,6 +45,7 @@ jobs:
           - "//rs/execution_environment:execute_query_bench"
           - "//rs/execution_environment:execute_update_bench"
           - "//rs/execution_environment:wasm_instructions_bench"
+          - "//rs/http_endpoints/..."
           - "//rs/p2p/..."
     steps:
       - name: Checkout
