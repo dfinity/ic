@@ -12,7 +12,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::InternetComputer,
+        ic::{InternetComputer, Subnet},
         ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
         nested::NestedVms,
         test_env::TestEnv,
@@ -26,8 +26,8 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::{block_on, runtime_from_url},
 };
-use ic_types::hostos_version::HostosVersion;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
+use ic_types::{hostos_version::HostosVersion, Height};
 use reqwest::Client;
 
 use slog::info;
@@ -53,14 +53,18 @@ const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
-fn setup_ic_infrastructure(env: &TestEnv) {
+fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
 
     // Setup "testnet"
+    let mut subnet = Subnet::fast_single_node(SubnetType::System);
+    if let Some(dkg_interval) = dkg_interval {
+        subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
+    }
     InternetComputer::new()
-        .add_fast_single_node_subnet(SubnetType::System)
+        .add_subnet(subnet)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
@@ -120,10 +124,10 @@ fn assert_version_compatibility() {
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS (x num_hosts)
-pub fn config(env: TestEnv, num_hosts: usize) {
+pub fn config(env: TestEnv, num_hosts: usize, dkg_interval: Option<u64>) {
     assert_version_compatibility();
 
-    setup_ic_infrastructure(&env);
+    setup_ic_infrastructure(&env, dkg_interval);
     let host_vm_names = get_host_vm_names(num_hosts);
     let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
     setup_nested_vm_group(env.clone(), &host_vm_names_refs);
@@ -187,8 +191,10 @@ pub fn registration(env: TestEnv) {
     assert_eq!(num_unassigned_nodes, 1);
 }
 
-/// Test that all four VMs can register with the network successfully.
 /// This test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
+pub const SUBNET_SIZE: usize = 4;
+pub const DKG_INTERVAL: u64 = 9;
+
 pub fn nns_recovery_test(env: TestEnv) {
     let logger = env.logger();
 
