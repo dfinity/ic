@@ -93,13 +93,7 @@ fn setup(env: TestEnv) {
         .await;
     });
 
-    info!(
-        env.logger(),
-        "Upgrade the application subnet to test the protocol \
-        compatibility between subnets running different replica versions."
-    );
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-    upgrade_subnet_if_necessary(&env, &subnet, &node);
+    upgrade_application_subnet_if_necessary(&env);
 }
 
 fn nns_delegation_on_nns_test(env: TestEnv) {
@@ -444,16 +438,23 @@ where
         .map_err(|err| format!("Failed to deserialize response: {err}"))
 }
 
-fn upgrade_subnet_if_necessary(env: &TestEnv, subnet: &SubnetSnapshot, node: &IcNodeSnapshot) {
+fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
+    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
     let nns_node = get_nns_node(&env.topology_snapshot());
 
     let initial_version = get_guestos_img_version().expect("initial version");
     let target_version = get_guestos_update_img_version().expect("target IC version");
 
     if initial_version == target_version {
-        // No upgrade needed
+        info!(env.logger(), "No need to upgrade the application subnet");
         return;
     }
+
+    info!(
+        env.logger(),
+        "Upgrade the application subnet to test the protocol \
+        compatibility between subnets running different replica versions."
+    );
 
     let sha256 = get_guestos_update_img_sha256().unwrap();
     let upgrade_url = get_guestos_update_img_url().unwrap();
@@ -473,7 +474,7 @@ fn upgrade_subnet_if_necessary(env: &TestEnv, subnet: &SubnetSnapshot, node: &Ic
         subnet.subnet_id,
     ));
 
-    assert_assigned_replica_version(node, &target_version, env.logger());
+    assert_assigned_replica_version(&node, &target_version, env.logger());
 }
 
 fn main() -> Result<()> {
