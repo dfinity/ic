@@ -487,6 +487,8 @@ fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        // We potentially upgrade the app subnet in the setup which could take several minutes
+        .with_overall_timeout(std::time::Duration::from_secs(25 * 60))
         .with_timeout_per_test(std::time::Duration::from_secs(15 * 60))
         .add_test(systest!(nns_delegation_on_nns_test))
         .add_test(systest!(nns_delegation_on_app_subnet_test))

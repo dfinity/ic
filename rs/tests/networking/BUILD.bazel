@@ -266,6 +266,9 @@ system_test_nns(
         "long_test",
     ],
     test_driver_target = ":nns_delegation_test",
+    # The test will is long because we upgrade a subnet and then wait for a delegation to be refreshed
+    # which could take more than 15 minutes in total.
+    test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_nns_mainnet_img = True,
     uses_guestos_update = True,
