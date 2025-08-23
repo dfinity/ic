@@ -2,25 +2,79 @@ use bitcoin::{
     address::{NetworkUnchecked, ParseError as AddressParseError},
     amount::ParseAmountError,
     consensus::encode,
+    hex::DisplayHex,
     Address, Amount, BlockHash, Network, Transaction, Txid,
 };
-use bitcoincore_rpc::{bitcoincore_rpc_json as json, Client as BtcClient, RpcApi as BtcRpcApi};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::sync::Arc;
 
-pub use bitcoincore_rpc::{Auth, Error as ClientError, RawTx};
-pub use json::{
-    CreateRawTransactionInput, EstimateMode, GetBalancesResult, GetBlockchainInfoResult,
-    GetMempoolEntryResult, ListUnspentResultEntry, SignRawTransactionInput,
-    SignRawTransactionResult,
+pub use crate::rpc_json::{
+    CreateRawTransactionInput, GetBalancesResult, GetBlockchainInfoResult, GetMempoolEntryResult,
+    ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput, SignRawTransactionResult,
 };
 
 pub type Result<T> = std::result::Result<T, RpcError>;
 
+/// The different authentication methods for the client.
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Auth {
+    None,
+    UserPass(String, String),
+    CookieFile(PathBuf),
+}
+
+impl Auth {
+    /// Convert into the arguments that jsonrpc::Client needs.
+    pub fn get_user_pass(self) -> Result<(Option<String>, Option<String>)> {
+        match self {
+            Auth::None => Ok((None, None)),
+            Auth::UserPass(u, p) => Ok((Some(u), Some(p))),
+            Auth::CookieFile(path) => {
+                let line = BufReader::new(File::open(path)?)
+                    .lines()
+                    .next()
+                    .ok_or(RpcError::InvalidCookieFile)??;
+                let colon = line.find(':').ok_or(RpcError::InvalidCookieFile)?;
+                Ok((Some(line[..colon].into()), Some(line[colon + 1..].into())))
+            }
+        }
+    }
+}
+/// Used to pass raw txs into the API.
+pub trait RawTx: Sized + Clone {
+    fn raw_hex(self) -> String;
+}
+
+impl<'a> RawTx for &'a Transaction {
+    fn raw_hex(self) -> String {
+        encode::serialize_hex(self)
+    }
+}
+
+impl<'a> RawTx for &'a [u8] {
+    fn raw_hex(self) -> String {
+        self.to_lower_hex_string()
+    }
+}
+
+impl<'a> RawTx for &'a Vec<u8> {
+    fn raw_hex(self) -> String {
+        self.to_lower_hex_string()
+    }
+}
+
 #[derive(Debug)]
 pub enum RpcError {
-    ClientError(ClientError),
+    Amount(ParseAmountError),
+    Json(serde_json::error::Error),
+    JsonRpc(jsonrpc::error::Error),
+    FromHex(encode::FromHexError),
+    IO(std::io::Error),
     InvalidAddress(AddressParseError),
+    InvalidCookieFile,
     AddressNotAvailable,
 }
 
@@ -32,37 +86,43 @@ impl From<AddressParseError> for RpcError {
 
 impl From<ParseAmountError> for RpcError {
     fn from(e: ParseAmountError) -> Self {
-        Self::ClientError(e.into())
+        Self::Amount(e)
     }
 }
 
 impl From<serde_json::error::Error> for RpcError {
     fn from(e: serde_json::error::Error) -> Self {
-        Self::ClientError(e.into())
+        Self::Json(e)
+    }
+}
+
+impl From<jsonrpc::error::Error> for RpcError {
+    fn from(e: jsonrpc::error::Error) -> Self {
+        Self::JsonRpc(e)
     }
 }
 
 impl From<encode::FromHexError> for RpcError {
     fn from(e: encode::FromHexError) -> Self {
-        Self::ClientError(e.into())
+        Self::FromHex(e)
     }
 }
 
 impl From<std::io::Error> for RpcError {
     fn from(e: std::io::Error) -> Self {
-        Self::ClientError(e.into())
-    }
-}
-
-impl From<ClientError> for RpcError {
-    fn from(e: ClientError) -> Self {
-        Self::ClientError(e)
+        Self::IO(e)
     }
 }
 
 /// The RPC interface of Bitcoin daemon. It is only a subnet of the
 /// supported API and tailored for our own testing purpose.
 pub trait RpcApi {
+    fn call<T: for<'a> serde::de::Deserialize<'a>>(
+        &self,
+        cmd: &str,
+        args: &[serde_json::Value],
+    ) -> Result<T>;
+
     fn stop(&self) -> Result<String>;
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult>;
     fn get_connection_count(&self) -> Result<usize>;
@@ -75,6 +135,13 @@ pub trait RpcApi {
         utxos: &[CreateRawTransactionInput],
         outs: &HashMap<String, Amount>,
     ) -> Result<Transaction>;
+    fn create_raw_transaction_hex(
+        &self,
+        utxos: &[CreateRawTransactionInput],
+        outs: &HashMap<String, Amount>,
+        locktime: Option<i64>,
+        _replaceable: Option<bool>,
+    ) -> Result<String>;
     fn sign_raw_transaction<R: RawTx>(
         &self,
         tx: R,
@@ -98,17 +165,18 @@ pub trait RpcApi {
 /// RPC client that sends RPC commands to a Bitcoin daemon.
 pub struct RpcClient {
     network: Network,
-    client: Arc<BtcClient>,
+    client: Arc<jsonrpc::client::Client>,
     address: Option<Address>,
 }
 
-fn get_new_address(client: &BtcClient, network: Network, label: Option<&str>) -> Result<Address> {
+fn get_new_address(client: &RpcClient, network: Network, label: Option<&str>) -> Result<Address> {
     let address: Address<NetworkUnchecked> =
         client.call("getnewaddress", &opt_into_vec_json(label)?)?;
     let address = address.require_network(network)?;
     Ok(address)
 }
 
+/*
 impl Drop for RpcClient {
     fn drop(&mut self) {
         if self.address.is_some() {
@@ -116,11 +184,15 @@ impl Drop for RpcClient {
         }
     }
 }
+*/
 
 impl RpcClient {
     /// Create a RPC client using the given [Network], url and [Auth].
     pub fn new(network: Network, url: &str, auth: Auth) -> Result<Self> {
-        let client = Arc::new(BtcClient::new(url, auth)?);
+        let (user, pass) = auth.get_user_pass()?;
+        let client = jsonrpc::client::Client::simple_http(url, user, pass)
+            .map_err(|e| RpcError::JsonRpc(e.into()))?;
+        let client = Arc::new(client);
         Ok(RpcClient {
             network,
             client,
@@ -134,7 +206,7 @@ impl RpcClient {
     /// because all accounts will share the same wallet.
     /// We cann't rely on the wallet feature because Dogecoin does not support it.
     pub fn with_account(&self, account: &str) -> Result<Self> {
-        let address = get_new_address(&self.client, self.network, Some(account))?;
+        let address = get_new_address(self, self.network, Some(account))?;
         Ok(RpcClient {
             network: self.network,
             client: self.client.clone(),
@@ -146,23 +218,21 @@ impl RpcClient {
     pub fn ensure_wallet(mut self) -> Result<Self> {
         loop {
             if self
-                .client
                 .call::<serde_json::Value>("getblockchaininfo", &[])
                 .is_ok()
             {
                 // Try creating new wallet, if fails due to already existing wallet file
                 // try loading the same. Return if still errors.
                 if self
-                    .client
                     .create_wallet("default", None, None, None, None)
                     .is_err()
                 {
-                    self.client.load_wallet("default")?;
+                    self.load_wallet("default")?;
                 }
                 break;
             }
         }
-        self.address = Some(get_new_address(&self.client, self.network, None)?);
+        self.address = Some(get_new_address(&self, self.network, None)?);
         Ok(self)
     }
 
@@ -212,35 +282,69 @@ impl RpcClient {
         let tx = self.sign_raw_transaction(&raw_tx, None)?;
         self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
     }
+
+    fn create_wallet(
+        &self,
+        wallet: &str,
+        disable_private_keys: Option<bool>,
+        blank: Option<bool>,
+        passphrase: Option<&str>,
+        avoid_reuse: Option<bool>,
+    ) -> Result<LoadWalletResult> {
+        let args = [
+            wallet.into(),
+            opt_into_json(disable_private_keys, into_json(false)?)?,
+            opt_into_json(blank, into_json(false)?)?,
+            opt_into_json(passphrase, into_json("")?)?,
+            opt_into_json(avoid_reuse, into_json(false)?)?,
+        ];
+        self.call("createwallet", &args)
+    }
+
+    fn load_wallet(&self, wallet: &str) -> Result<LoadWalletResult> {
+        self.call("loadwallet", &[wallet.into()])
+    }
 }
 
 impl RpcApi for RpcClient {
+    /// Call an `cmd` rpc with given `args` list
+    fn call<T: for<'a> serde::de::Deserialize<'a>>(
+        &self,
+        cmd: &str,
+        args: &[serde_json::Value],
+    ) -> Result<T> {
+        let raw = serde_json::value::to_raw_value(args)?;
+        let req = self.client.build_request(&cmd, Some(&*raw));
+        let resp = self.client.send_request(req).map_err(RpcError::from);
+        Ok(resp?.result()?)
+    }
+
     fn stop(&self) -> Result<String> {
-        Ok(self.client.call("stop", &[])?)
+        Ok(self.call("stop", &[])?)
     }
 
     fn get_new_address(&self) -> Result<Address> {
-        get_new_address(&self.client, self.network, None)
+        get_new_address(self, self.network, None)
     }
 
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {
-        Ok(self.client.get_blockchain_info()?)
+        Ok(self.call("get_blockchain_info", &[])?)
     }
 
     fn get_connection_count(&self) -> Result<usize> {
-        Ok(self.client.call("getconnectioncount", &[])?)
+        Ok(self.call("getconnectioncount", &[])?)
     }
 
     fn get_block_hash(&self, height: u64) -> Result<BlockHash> {
-        Ok(self.client.call("getblockhash", &[height.into()])?)
+        Ok(self.call("getblockhash", &[height.into()])?)
     }
 
     fn get_best_block_hash(&self) -> Result<BlockHash> {
-        Ok(self.client.call("getbestblockhash", &[])?)
+        Ok(self.call("getbestblockhash", &[])?)
     }
 
     fn generate_to_address(&self, block_num: u64, address: &Address) -> Result<Vec<BlockHash>> {
-        Ok(self.client.call(
+        Ok(self.call(
             "generatetoaddress",
             &[block_num.into(), address.to_string().into()],
         )?)
@@ -256,10 +360,27 @@ impl RpcApi for RpcClient {
         utxos: &[CreateRawTransactionInput],
         outs: &HashMap<String, Amount>,
     ) -> Result<Transaction> {
-        let hex: String = self
-            .client
-            .create_raw_transaction_hex(utxos, outs, None, Some(true))?;
+        let hex: String = self.create_raw_transaction_hex(utxos, outs, None, Some(true))?;
         Ok(encode::deserialize_hex(&hex)?)
+    }
+
+    fn create_raw_transaction_hex(
+        &self,
+        utxos: &[CreateRawTransactionInput],
+        outs: &HashMap<String, Amount>,
+        locktime: Option<i64>,
+        _replaceable: Option<bool>,
+    ) -> Result<String> {
+        let outs_converted = serde_json::Map::from_iter(
+            outs.iter()
+                .map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
+        );
+        let args = [
+            into_json(utxos)?,
+            into_json(outs_converted)?,
+            opt_into_json(locktime, null())?,
+        ];
+        Ok(self.call("createrawtransaction", &args)?)
     }
 
     fn sign_raw_transaction<R: RawTx>(
@@ -268,20 +389,16 @@ impl RpcApi for RpcClient {
         utxos: Option<&[SignRawTransactionInput]>,
     ) -> Result<SignRawTransactionResult> {
         let args = [tx.raw_hex().into(), opt_into_json(utxos, empty_arr())?];
-        Ok(self.client.call("signrawtransactionwithwallet", &args)?)
+        Ok(self.call("signrawtransactionwithwallet", &args)?)
     }
 
     fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<Txid> {
-        Ok(self
-            .client
-            .call("sendrawtransaction", &[tx.raw_hex().into()])?)
+        Ok(self.call("sendrawtransaction", &[tx.raw_hex().into()])?)
     }
 
     fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount> {
         let args = [address.to_string().into(), opt_into_json(minconf, null())?];
-        Ok(Amount::from_btc(
-            self.client.call("getreceivedbyaddress", &args)?,
-        )?)
+        Ok(Amount::from_btc(self.call("getreceivedbyaddress", &args)?)?)
     }
 
     fn list_unspent(
@@ -296,31 +413,27 @@ impl RpcApi for RpcClient {
             into_json(true)?,
             null(),
         ];
-        Ok(self.client.call("listunspent", &args)?)
+        Ok(self.call("listunspent", &args)?)
     }
 
     fn get_raw_mempool(&self) -> Result<Vec<Txid>> {
-        Ok(self.client.call("getrawmempool", &[])?)
+        Ok(self.call("getrawmempool", &[])?)
     }
 
     fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult> {
-        Ok(self.client.call("getmempoolentry", &[into_json(txid)?])?)
+        Ok(self.call("getmempoolentry", &[into_json(txid)?])?)
     }
 
     fn add_node(&self, addr: &str) -> Result<()> {
-        Ok(self
-            .client
-            .call("addnode", &[into_json(addr)?, into_json("add")?])?)
+        Ok(self.call("addnode", &[into_json(addr)?, into_json("add")?])?)
     }
 
     fn onetry_node(&self, addr: &str) -> Result<()> {
-        Ok(self
-            .client
-            .call("addnode", &[into_json(addr)?, into_json("onetry")?])?)
+        Ok(self.call("addnode", &[into_json(addr)?, into_json("onetry")?])?)
     }
 
     fn disconnect_node(&self, addr: &str) -> Result<()> {
-        Ok(self.client.call("disconnectnode", &[into_json(addr)?])?)
+        Ok(self.call("disconnectnode", &[into_json(addr)?])?)
     }
 }
 

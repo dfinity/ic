@@ -791,6 +791,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "itertools": crate.spec(
                 version = "^0.12.0",
             ),
+            "jsonrpc": crate.spec(
+                version = "^0.18.0",
+                features = [
+                  "minreq_http",
+                ],
+            ),
             "json-patch": crate.spec(
                 version = "^0.2.6",
             ),
