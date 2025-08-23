@@ -25,7 +25,7 @@ use ic_tests_ckbtc::{
     utils::{
         generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
-        wait_for_update_balance,
+        wait_for_update_balance, BITCOIN_NETWORK_TRANSFER_FEE,
     },
     BTC_MIN_CONFIRMATIONS, CHECK_FEE, TRANSFER_FEE,
 };
@@ -107,8 +107,6 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             .get_withdrawal_account()
             .await
             .expect("Error while calling get_withdrawal_account");
-
-        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
         let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - CHECK_FEE - TRANSFER_FEE;
 

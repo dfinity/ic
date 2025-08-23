@@ -57,6 +57,9 @@ pub const LONG_TIMEOUT: Duration = Duration::from_secs(600);
 /// The initial amount of Satoshi per blocks (before halving).
 pub const BTC_BLOCK_REWARD: u64 = 50_0000_0000;
 
+/// The bitcoin transfer fee per transaction
+pub const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 1000;
+
 pub async fn stop_canister(canister: &Canister<'_>) {
     let stop_result = canister.stop().await;
     assert!(
@@ -385,7 +388,11 @@ pub async fn get_btc_address(
 }
 
 pub async fn send_to_btc_address(btc_rpc: &RpcClient, logger: &Logger, dst: &Address, amount: u64) {
-    match btc_rpc.send_to(dst, Amount::from_sat(amount), Amount::from_sat(1000)) {
+    match btc_rpc.send_to(
+        dst,
+        Amount::from_sat(amount),
+        Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
+    ) {
         Ok(txid) => {
             debug!(&logger, "txid: {:?}", txid);
         }

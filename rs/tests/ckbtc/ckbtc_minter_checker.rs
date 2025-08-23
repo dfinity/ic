@@ -25,7 +25,7 @@ use ic_tests_ckbtc::{
         assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         generate_blocks, get_btc_address, get_btc_client, send_to_btc_address, start_canister,
         stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
-        BTC_BLOCK_REWARD,
+        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD,
     },
     BTC_MIN_CONFIRMATIONS, CHECK_FEE,
 };
@@ -113,7 +113,6 @@ pub fn test_btc_checker(env: TestEnv) {
 
         // Mint block to the first sub-account (with single utxo).
         let first_transfer_amount = 100_000_000;
-        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
         send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
