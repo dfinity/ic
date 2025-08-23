@@ -59,5 +59,4 @@ icrc-ledger-types = { path = "../icrc-ledger-types" }
 ic-error-types = { path = "../ic-error-types" }
 ic-vetkeys = { workspace = true }
 k256 = { workspace = true }
-lazy_static = { workspace = true }
 wat = { workspace = true }
