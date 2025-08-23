@@ -328,7 +328,7 @@ impl RpcApi for RpcClient {
     }
 
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {
-        Ok(self.call("get_blockchain_info", &[])?)
+        Ok(self.call("getblockchaininfo", &[])?)
     }
 
     fn get_connection_count(&self) -> Result<usize> {
