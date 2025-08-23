@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bitcoin::Amount;
-use ic_btc_adapter_test_utils::{CreateRawTransactionInput, RpcApi};
+use ic_btc_adapter_test_utils::rpc_client::{CreateRawTransactionInput, RpcApi};
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,

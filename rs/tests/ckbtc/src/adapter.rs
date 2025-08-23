@@ -1,7 +1,7 @@
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_btc_adapter_test_utils::{ListUnspentResultEntry, RpcApi, RpcClient};
+use ic_btc_adapter_test_utils::rpc_client::{ListUnspentResultEntry, RpcApi, RpcClient};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,

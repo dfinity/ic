@@ -10,9 +10,7 @@ use hex::FromHex;
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 pub mod bitcoind;
-pub mod bitcoind_rpc_client;
-
-pub use bitcoind_rpc_client::*;
+pub mod rpc_client;
 
 // Re-export bitcoin
 pub use bitcoin;

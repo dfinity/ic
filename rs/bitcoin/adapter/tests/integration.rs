@@ -3,7 +3,7 @@ use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
     bitcoind::{BitcoinD, Conf},
-    CreateRawTransactionInput, RpcApi, RpcClient as Client,
+    rpc_client::{CreateRawTransactionInput, RpcApi, RpcClient},
 };
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
@@ -143,7 +143,7 @@ fn start_client(
     .btc_mainnet_client
 }
 
-fn check_received_blocks(client: &Client, blocks: &[Vec<u8>], start_index: usize) {
+fn check_received_blocks(client: &RpcClient, blocks: &[Vec<u8>], start_index: usize) {
     for (h, block) in blocks.iter().enumerate() {
         assert_eq!(
             *block,
@@ -209,7 +209,7 @@ fn start_active_adapter_and_client(
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
 }
 
-fn wait_for_blocks(client: &Client, blocks: u64) {
+fn wait_for_blocks(client: &RpcClient, blocks: u64) {
     let mut tries = 0;
     while client.get_blockchain_info().unwrap().blocks != blocks {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -220,7 +220,7 @@ fn wait_for_blocks(client: &Client, blocks: u64) {
     }
 }
 
-fn wait_for_connection(client: &Client, connection_count: usize) {
+fn wait_for_connection(client: &RpcClient, connection_count: usize) {
     let mut tries = 0;
     while client.get_connection_count().unwrap() != connection_count {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -232,7 +232,7 @@ fn wait_for_connection(client: &Client, connection_count: usize) {
 }
 
 // This is an expensive operation. Should only be used when checking for an upper bound on the number of connections.
-fn exact_connections(client: &Client, connection_count: usize) {
+fn exact_connections(client: &RpcClient, connection_count: usize) {
     // It always takes less than 5 seconds for the client to connect to the adapter.
     // TODO: Rethink this. It's not a good idea to have a fixed sleep time. ditto in wait_for_connection
     std::thread::sleep(std::time::Duration::from_secs(5));
@@ -247,7 +247,7 @@ fn exact_connections(client: &Client, connection_count: usize) {
 
 fn sync_until_end_block(
     adapter_client: &BitcoinAdapterClient,
-    client: &Client,
+    client: &RpcClient,
     start_index: u64,
     headers: &mut Vec<Vec<u8>>,
     max_tries: u64,
@@ -384,7 +384,7 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client) {
     (alice_client, bob_client)
 }
 
-fn fund_with_btc(to_fund_client: &Client) {
+fn fund_with_btc(to_fund_client: &RpcClient) {
     let to_fund_address = to_fund_client.get_address().unwrap();
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))

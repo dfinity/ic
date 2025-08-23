@@ -1,7 +1,7 @@
 use anyhow::Result;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::RpcApi;
+use ic_btc_adapter_test_utils::rpc_client::RpcApi;
 use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{

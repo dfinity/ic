@@ -32,7 +32,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::{RpcApi, RpcClient};
+use crate::rpc_client::{Auth, RpcApi, RpcClient, RpcError};
 
 const MINIMUM_PROTOCOL_VERSION: u32 = 70001;
 
@@ -300,7 +300,7 @@ impl WorkDir {
 
 pub struct Conf<'a> {
     // auth setting of the daemon. it will an auto-generated cookie file if not specified.
-    pub auth: Option<crate::Auth>,
+    pub auth: Option<Auth>,
     pub p2p: bool,
     pub view_stdout: bool,
     pub work_dir: Option<PathBuf>,
@@ -324,7 +324,7 @@ impl BitcoinD {
         bitcoind_path: &str,
         network: bitcoin::Network,
         conf: Conf,
-    ) -> Result<BitcoinD, crate::RpcError> {
+    ) -> Result<BitcoinD, RpcError> {
         // let bitcoind_path = std::env::var_os("BITCOIND_BIN")
         //    .expect("Missing BITCOIND_BIN (path to bitcoind executable) in env.");
         let work_dir = match conf.work_dir {
@@ -341,10 +341,10 @@ impl BitcoinD {
         let auth = match conf.auth {
             None => {
                 let cookie_file = work_dir.path().join(network.to_string()).join(".cookie");
-                crate::Auth::CookieFile(cookie_file)
+                Auth::CookieFile(cookie_file)
             }
             Some(auth) => {
-                if let crate::Auth::UserPass(user, password) = &auth {
+                if let Auth::UserPass(user, password) = &auth {
                     rpc_user = format!("rpc_user:{user}");
                     rpc_pass = format!("rpc_password:{password}");
                 }
@@ -386,8 +386,6 @@ impl BitcoinD {
         }
         assert!(process.stderr.is_none());
 
-        eprintln!("here!");
-        eprintln!("rpc_url = {rpc_url} auth = {auth:?}");
         let mut i = 0;
         let rpc_client = loop {
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -408,7 +406,7 @@ impl BitcoinD {
         })
     }
 
-    pub fn stop(&mut self) -> Result<process::ExitStatus, crate::RpcError> {
+    pub fn stop(&mut self) -> Result<process::ExitStatus, RpcError> {
         self.rpc_client.stop()?;
         Ok(self.process.wait()?)
     }

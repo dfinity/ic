@@ -25,7 +25,7 @@ use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Amount, Txid},
-    Auth, RpcApi, RpcClient,
+    rpc_client::{Auth, RpcApi, RpcClient},
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;

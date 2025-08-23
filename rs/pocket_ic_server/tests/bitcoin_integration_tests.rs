@@ -2,7 +2,7 @@ use candid::{CandidType, Encode, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Network as BtcNetwork},
     bitcoind::{BitcoinD, Conf},
-    ClientError, RpcApi, RpcError,
+    rpc_client::{ClientError, RpcApi, RpcError},
 };
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;

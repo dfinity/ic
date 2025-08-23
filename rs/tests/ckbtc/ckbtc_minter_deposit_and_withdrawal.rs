@@ -3,7 +3,7 @@ use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_adapter_test_utils::{
     bitcoin::{hashes::Hash, Txid},
-    RpcApi,
+    rpc_client::RpcApi,
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{

@@ -3,7 +3,7 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_adapter_test_utils::{
     bitcoin::{hashes::Hash, Txid},
-    RpcApi,
+    rpc_client::RpcApi,
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
@@ -148,7 +148,7 @@ pub fn test_batching(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc.get_address().unwrap();
+        let destination_btc_address = btc_rpc.get_new_address().unwrap();
 
         info!(&logger, "Call retrieve_btc");
 
@@ -264,7 +264,7 @@ pub fn test_batching(env: TestEnv) {
 
         // We can now check that the destination_btc_address received some utxos
         let unspent_result = btc_rpc
-            .list_unspent(Some(6), Some(&[destination_btc_address]))
+            .list_unspent(Some(6), Some(&[&destination_btc_address]))
             .expect("failed to get tx infos");
         let destination_balance = unspent_result
             .iter()
