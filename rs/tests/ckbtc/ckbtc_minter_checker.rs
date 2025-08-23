@@ -199,7 +199,7 @@ pub fn test_btc_checker(env: TestEnv) {
                         &logger,
                         block_index,
                         &account1,
-                        first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                        first_transfer_amount - CHECK_FEE,
                     )
                     .await;
                 }
@@ -251,7 +251,7 @@ pub fn test_btc_checker(env: TestEnv) {
                 &logger,
                 *block_index,
                 &account1,
-                first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                first_transfer_amount - CHECK_FEE,
             )
             .await;
         } else {
