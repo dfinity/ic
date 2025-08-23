@@ -1,5 +1,5 @@
 {
-  "checksum": "2f544248e66d7a3b36a82813fae1dcfea2aec99052de9f7444387d235c228479",
+  "checksum": "001d6f62cbb9e507855462094e3166ae2676bd2930bb493ed076dfe645e19602",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21776,6 +21776,10 @@
             {
               "id": "json5 0.4.1",
               "target": "json5"
+            },
+            {
+              "id": "jsonrpc 0.18.0",
+              "target": "jsonrpc"
             },
             {
               "id": "k256 0.13.4",
@@ -95690,6 +95694,7 @@
     "itertools 0.12.0",
     "json-patch 0.2.7",
     "json5 0.4.1",
+    "jsonrpc 0.18.0",
     "k256 0.13.4",
     "k8s-openapi 0.22.0",
     "kube 0.94.2",
