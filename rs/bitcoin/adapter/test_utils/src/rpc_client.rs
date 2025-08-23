@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub use crate::rpc_json::{
     CreateRawTransactionInput, GetBalancesResult, GetBlockchainInfoResult, GetMempoolEntryResult,
     ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput, SignRawTransactionResult,
+    UnloadWalletResult,
 };
 
 pub type Result<T> = std::result::Result<T, RpcError>;
@@ -176,15 +177,13 @@ fn get_new_address(client: &RpcClient, network: Network, label: Option<&str>) ->
     Ok(address)
 }
 
-/*
 impl Drop for RpcClient {
     fn drop(&mut self) {
         if self.address.is_some() {
-            let _ = self.client.unload_wallet(Some("default"));
+            let _ = self.unload_wallet(Some("default"));
         }
     }
 }
-*/
 
 impl RpcClient {
     /// Create a RPC client using the given [Network], url and [Auth].
@@ -303,6 +302,11 @@ impl RpcClient {
 
     fn load_wallet(&self, wallet: &str) -> Result<LoadWalletResult> {
         self.call("loadwallet", &[wallet.into()])
+    }
+
+    fn unload_wallet(&self, wallet: Option<&str>) -> Result<Option<UnloadWalletResult>> {
+        let args = [opt_into_json(wallet, null())?];
+        self.call("unloadwallet", &args)
     }
 }
 

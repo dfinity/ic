@@ -216,6 +216,11 @@ pub struct LoadWalletResult {
     pub warning: Option<String>,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+pub struct UnloadWalletResult {
+    pub warning: Option<String>,
+}
+
 /// deserialize_bip70_network deserializes a Bitcoin Core network according to BIP70
 /// The accepted input variants are: {"main", "test", "signet", "regtest"}
 fn deserialize_bip70_network<'de, D>(deserializer: D) -> Result<Network, D::Error>
