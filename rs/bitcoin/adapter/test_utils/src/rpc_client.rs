@@ -48,19 +48,19 @@ pub trait RawTx: Sized + Clone {
     fn raw_hex(self) -> String;
 }
 
-impl<'a> RawTx for &'a Transaction {
+impl RawTx for &Transaction {
     fn raw_hex(self) -> String {
         encode::serialize_hex(self)
     }
 }
 
-impl<'a> RawTx for &'a [u8] {
+impl RawTx for &[u8] {
     fn raw_hex(self) -> String {
         self.to_lower_hex_string()
     }
 }
 
-impl<'a> RawTx for &'a Vec<u8> {
+impl RawTx for &Vec<u8> {
     fn raw_hex(self) -> String {
         self.to_lower_hex_string()
     }
@@ -314,13 +314,13 @@ impl RpcApi for RpcClient {
         args: &[serde_json::Value],
     ) -> Result<T> {
         let raw = serde_json::value::to_raw_value(args)?;
-        let req = self.client.build_request(&cmd, Some(&*raw));
+        let req = self.client.build_request(cmd, Some(&raw));
         let resp = self.client.send_request(req).map_err(RpcError::from);
         Ok(resp?.result()?)
     }
 
     fn stop(&self) -> Result<String> {
-        Ok(self.call("stop", &[])?)
+        self.call("stop", &[])
     }
 
     fn get_new_address(&self) -> Result<Address> {
@@ -328,26 +328,26 @@ impl RpcApi for RpcClient {
     }
 
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {
-        Ok(self.call("getblockchaininfo", &[])?)
+        self.call("getblockchaininfo", &[])
     }
 
     fn get_connection_count(&self) -> Result<usize> {
-        Ok(self.call("getconnectioncount", &[])?)
+        self.call("getconnectioncount", &[])
     }
 
     fn get_block_hash(&self, height: u64) -> Result<BlockHash> {
-        Ok(self.call("getblockhash", &[height.into()])?)
+        self.call("getblockhash", &[height.into()])
     }
 
     fn get_best_block_hash(&self) -> Result<BlockHash> {
-        Ok(self.call("getbestblockhash", &[])?)
+        self.call("getbestblockhash", &[])
     }
 
     fn generate_to_address(&self, block_num: u64, address: &Address) -> Result<Vec<BlockHash>> {
-        Ok(self.call(
+        self.call(
             "generatetoaddress",
             &[block_num.into(), address.to_string().into()],
-        )?)
+        )
     }
 
     fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount> {
@@ -380,7 +380,7 @@ impl RpcApi for RpcClient {
             into_json(outs_converted)?,
             opt_into_json(locktime, null())?,
         ];
-        Ok(self.call("createrawtransaction", &args)?)
+        self.call("createrawtransaction", &args)
     }
 
     fn sign_raw_transaction<R: RawTx>(
@@ -389,11 +389,11 @@ impl RpcApi for RpcClient {
         utxos: Option<&[SignRawTransactionInput]>,
     ) -> Result<SignRawTransactionResult> {
         let args = [tx.raw_hex().into(), opt_into_json(utxos, empty_arr())?];
-        Ok(self.call("signrawtransactionwithwallet", &args)?)
+        self.call("signrawtransactionwithwallet", &args)
     }
 
     fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<Txid> {
-        Ok(self.call("sendrawtransaction", &[tx.raw_hex().into()])?)
+        self.call("sendrawtransaction", &[tx.raw_hex().into()])
     }
 
     fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount> {
@@ -413,27 +413,27 @@ impl RpcApi for RpcClient {
             into_json(true)?,
             null(),
         ];
-        Ok(self.call("listunspent", &args)?)
+        self.call("listunspent", &args)
     }
 
     fn get_raw_mempool(&self) -> Result<Vec<Txid>> {
-        Ok(self.call("getrawmempool", &[])?)
+        self.call("getrawmempool", &[])
     }
 
     fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult> {
-        Ok(self.call("getmempoolentry", &[into_json(txid)?])?)
+        self.call("getmempoolentry", &[into_json(txid)?])
     }
 
     fn add_node(&self, addr: &str) -> Result<()> {
-        Ok(self.call("addnode", &[into_json(addr)?, into_json("add")?])?)
+        self.call("addnode", &[into_json(addr)?, into_json("add")?])
     }
 
     fn onetry_node(&self, addr: &str) -> Result<()> {
-        Ok(self.call("addnode", &[into_json(addr)?, into_json("onetry")?])?)
+        self.call("addnode", &[into_json(addr)?, into_json("onetry")?])
     }
 
     fn disconnect_node(&self, addr: &str) -> Result<()> {
-        Ok(self.call("disconnectnode", &[into_json(addr)?])?)
+        self.call("disconnectnode", &[into_json(addr)?])
     }
 }
 
