@@ -270,7 +270,9 @@ where
 
 const LOCAL_IP: net::Ipv4Addr = net::Ipv4Addr::new(127, 0, 0, 1);
 
+/// Bitcoin daemon.
 pub struct BitcoinD {
+    /// RPC client that connects to this Bitcoin daemon.
     pub rpc_client: RpcClient,
     _work_dir: WorkDir,
     p2p_socket: Option<net::SocketAddrV4>,
@@ -284,7 +286,7 @@ impl Drop for BitcoinD {
     }
 }
 
-pub enum WorkDir {
+enum WorkDir {
     Persisted(PathBuf),
     Temporary(TempDir),
 }
@@ -298,12 +300,18 @@ impl WorkDir {
     }
 }
 
+/// Configuration for [BitcoinD].
 pub struct Conf<'a> {
-    // auth setting of the daemon. it will an auto-generated cookie file if not specified.
+    /// [Auth] setting of the daemon. If not specified, an auto-generated cookie file will be used.
     pub auth: Option<Auth>,
+    /// Whether p2p port should be enabled.
     pub p2p: bool,
+    /// Whether output of the daemon should be duplicated to stdout.
     pub view_stdout: bool,
+    /// Work directory. If not specified, a randomly generated temporary directory will be used.
     pub work_dir: Option<PathBuf>,
+    /// Additional args to pass to the daemon command line. If not specified, the default args
+    /// are `["-regtest", "-fallbackfee=0.0001"]`.
     pub args: Vec<&'a str>,
 }
 
@@ -320,13 +328,13 @@ impl<'a> Default for Conf<'a> {
 }
 
 impl BitcoinD {
+    /// Create a new Bitcoin daemon by running the executable at the given path, network and
+    /// configration.
     pub fn new(
         bitcoind_path: &str,
         network: bitcoin::Network,
         conf: Conf,
     ) -> Result<BitcoinD, RpcError> {
-        // let bitcoind_path = std::env::var_os("BITCOIND_BIN")
-        //    .expect("Missing BITCOIND_BIN (path to bitcoind executable) in env.");
         let work_dir = match conf.work_dir {
             Some(dir) => {
                 fs::create_dir_all(dir.clone())?;
@@ -382,7 +390,8 @@ impl BitcoinD {
             .spawn()?;
 
         if let Some(status) = process.try_wait()? {
-            eprintln!("early exit with: {:?}", status);
+            // TODO: return an error instead panic.
+            panic!("early exit with: {:?}", status);
         }
         assert!(process.stderr.is_none());
 
@@ -406,17 +415,19 @@ impl BitcoinD {
         })
     }
 
+    /// Stop the daemon process and return its [ExitStatus].
     pub fn stop(&mut self) -> Result<process::ExitStatus, RpcError> {
         self.rpc_client.stop()?;
         Ok(self.process.wait()?)
     }
 
+    /// Return the p2p socket the daemon listens on if `p2p` was specified.
     pub fn p2p_socket(&self) -> Option<net::SocketAddrV4> {
         self.p2p_socket
     }
 }
 
-pub fn get_available_port() -> Result<u16, std::io::Error> {
+fn get_available_port() -> Result<u16, std::io::Error> {
     // using 0 as port let the system assign a port available
     let t = net::TcpListener::bind(("127.0.0.1", 0))?; // 0 means the OS choose a free port
     t.local_addr().map(|s| s.port())

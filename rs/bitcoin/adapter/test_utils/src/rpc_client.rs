@@ -60,6 +60,8 @@ impl From<ClientError> for RpcError {
     }
 }
 
+/// The RPC interface of Bitcoin daemon. It is only a subnet of the
+/// supported API and tailored for our own testing purpose.
 pub trait RpcApi {
     fn stop(&self) -> Result<String>;
     fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult>;
@@ -89,13 +91,13 @@ pub trait RpcApi {
     ) -> Result<Vec<ListUnspentResultEntry>>;
     fn get_raw_mempool(&self) -> Result<Vec<Txid>>;
     fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult>;
-    fn get_address(&self) -> Result<&Address>;
     fn get_new_address(&self) -> Result<Address>;
     fn add_node(&self, addr: &str) -> Result<()>;
     fn onetry_node(&self, addr: &str) -> Result<()>;
     fn disconnect_node(&self, addr: &str) -> Result<()>;
 }
 
+/// RPC client that sends RPC commands to a Bitcoin daemon.
 pub struct RpcClient {
     network: Network,
     client: Arc<BtcClient>,
@@ -111,11 +113,14 @@ fn get_new_address(client: &BtcClient, network: Network, label: Option<&str>) ->
 
 impl Drop for RpcClient {
     fn drop(&mut self) {
-        let _ = self.client.unload_wallet(Some("default"));
+        if self.address.is_some() {
+            let _ = self.client.unload_wallet(Some("default"));
+        }
     }
 }
 
 impl RpcClient {
+    /// Create a RPC client using the given [Network], url and [Auth].
     pub fn new(network: Network, url: &str, auth: Auth) -> Result<Self> {
         let client = Arc::new(BtcClient::new(url, auth)?);
         Ok(RpcClient {
@@ -125,6 +130,11 @@ impl RpcClient {
         })
     }
 
+    /// Return a new RPC client that shares the same connect by using a different
+    /// account name and default address.
+    /// This is different than the wallet feature supported by the Bitcoin daemon
+    /// because all accounts will share the same wallet.
+    /// We cann't rely on the wallet feature because Dogecoin does not support it.
     pub fn with_account(&self, account: &str) -> Result<Self> {
         let address = get_new_address(&self.client, self.network, Some(account))?;
         Ok(RpcClient {
@@ -134,6 +144,7 @@ impl RpcClient {
         })
     }
 
+    /// Ensure the default wallet exists by either creating or loading it.
     pub fn ensure_wallet(mut self) -> Result<Self> {
         loop {
             if self
@@ -156,15 +167,21 @@ impl RpcClient {
         self.address = Some(get_new_address(&self.client, self.network, None)?);
         Ok(self)
     }
+
+    /// Return the default address of the client, which is only created
+    /// after wallet exists. Some API operations will assume a default
+    /// address, including [send_to] and [get_balance].
+    ///
+    /// To change the default address one has to create a new [RpcClient]
+    /// by calling [with_account].
+    pub fn get_address(&self) -> Result<&Address> {
+        self.address.as_ref().ok_or(RpcError::AddressNotAvailable)
+    }
 }
 
 impl RpcApi for RpcClient {
     fn stop(&self) -> Result<String> {
         Ok(self.client.call("stop", &[])?)
-    }
-
-    fn get_address(&self) -> Result<&Address> {
-        self.address.as_ref().ok_or(RpcError::AddressNotAvailable)
     }
 
     fn get_new_address(&self) -> Result<Address> {
@@ -241,7 +258,7 @@ impl RpcApi for RpcClient {
         tx: R,
         utxos: Option<&[SignRawTransactionInput]>,
     ) -> Result<SignRawTransactionResult> {
-        let args = [tx.raw_hex().into(), opt_into_json(utxos, &[])?];
+        let args = [tx.raw_hex().into(), opt_into_json(utxos, empty_arr())?];
         Ok(self.client.call("signrawtransactionwithwallet", &args)?)
     }
 
@@ -252,10 +269,7 @@ impl RpcApi for RpcClient {
     }
 
     fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount> {
-        let args = [
-            address.to_string().into(),
-            opt_into_json_with_default(minconf, null())?,
-        ];
+        let args = [address.to_string().into(), opt_into_json(minconf, null())?];
         Ok(Amount::from_btc(
             self.client.call("getreceivedbyaddress", &args)?,
         )?)
@@ -267,9 +281,9 @@ impl RpcApi for RpcClient {
         addresses: Option<&[&Address]>,
     ) -> Result<Vec<ListUnspentResultEntry>> {
         let args = [
-            opt_into_json(minconf, 0)?,
+            opt_into_json(minconf, into_json(0)?)?,
             into_json(9999999)?,
-            opt_into_json_with_default(addresses, empty_arr())?,
+            opt_into_json(addresses, empty_arr())?,
             into_json(true)?,
             null(),
         ];
@@ -301,6 +315,7 @@ impl RpcApi for RpcClient {
     }
 }
 
+// Shorthand for converting an Option into a JSON array.
 fn opt_into_vec_json<T>(opt: Option<T>) -> Result<Vec<serde_json::Value>>
 where
     T: serde::ser::Serialize,
@@ -311,19 +326,8 @@ where
     }
 }
 
-/// Shorthand for converting an Option into an Option<serde_json::Value>.
-fn opt_into_json<T>(opt: Option<T>, default: T) -> Result<serde_json::Value>
-where
-    T: serde::ser::Serialize,
-{
-    opt_into_json_with_default(opt, into_json(default)?)
-}
-
-/// Shorthand for converting an Option into an Option<serde_json::Value>.
-fn opt_into_json_with_default<T>(
-    opt: Option<T>,
-    default: serde_json::Value,
-) -> Result<serde_json::Value>
+// Shorthand for converting an Option into a JSON value.
+fn opt_into_json<T>(opt: Option<T>, default: serde_json::Value) -> Result<serde_json::Value>
 where
     T: serde::ser::Serialize,
 {
@@ -333,7 +337,7 @@ where
     }
 }
 
-/// Shorthand for converting a variable into a serde_json::Value.
+// Shorthand for converting a variable into a JSON value.
 fn into_json<T>(val: T) -> Result<serde_json::Value>
 where
     T: serde::ser::Serialize,
@@ -341,12 +345,12 @@ where
     Ok(serde_json::to_value(val)?)
 }
 
-/// Shorthand for `serde_json::Value::Null`.
+// Shorthand for JSON value null.
 fn null() -> serde_json::Value {
     serde_json::Value::Null
 }
 
-/// Shorthand for an empty serde_json::Value array.
+// Shorthand for an empty JSON array.
 fn empty_arr() -> serde_json::Value {
     serde_json::Value::Array(vec![])
 }
