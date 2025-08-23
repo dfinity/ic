@@ -53,14 +53,14 @@ pub fn test_update_balance(env: TestEnv) {
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
 
-    let default_btc_address = btc_rpc.get_new_address().unwrap();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
     debug!(
         &logger,
-        "Generating 10 blocks to default address: {}", &default_btc_address
+        "Generating 10 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(10, &default_btc_address)
+        .generate_to_address(10, default_btc_address)
         .unwrap();
 
     block_on(async {

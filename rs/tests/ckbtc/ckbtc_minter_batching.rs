@@ -52,14 +52,14 @@ pub fn test_batching(env: TestEnv) {
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
     let btc_rpc = get_btc_client(&env);
 
-    let default_btc_address = btc_rpc.get_new_address().unwrap();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
         "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
@@ -119,7 +119,7 @@ pub fn test_batching(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         wait_for_update_balance(&minter_agent, &logger, Some(subaccount0)).await;
@@ -253,7 +253,7 @@ pub fn test_batching(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         let finalized_txid =

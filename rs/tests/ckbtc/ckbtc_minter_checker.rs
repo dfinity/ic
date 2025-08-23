@@ -47,14 +47,14 @@ pub fn test_btc_checker(env: TestEnv) {
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
 
-    let default_btc_address = btc_rpc.get_new_address().unwrap();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
-        "Generating 101 blocks to default address: {}", &default_btc_address
+        "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
