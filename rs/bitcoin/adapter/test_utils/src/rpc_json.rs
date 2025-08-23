@@ -113,29 +113,49 @@ pub struct GetMempoolEntryResult {
     pub ancestor_size: u64,
     /// Hash of serialized transaction, including witness data
     pub wtxid: Option<bitcoin::Txid>,
+    /// Fee information (only for Bitcoin)
+    pub fees: Option<GetMempoolEntryResultFees>,
+    /// Fee (only for Dogecoin)
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         with = "bitcoin::amount::serde::as_btc::opt"
     )]
-    /// Fee (only for Dogecoin)
     pub fee: Option<Amount>,
-    /// Fee information (only for Bitcoin)
-    pub fees: Option<GetMempoolEntryResultFees>,
-    /// Transaction fee with fee deltas used for mining priority in BTC
-    #[serde(with = "bitcoin::amount::serde::as_btc")]
-    pub modifiedfee: Amount,
-    /// Modified fees (see above) of in-mempool ancestors (including this one) in BTC
-    #[serde(with = "bitcoin::amount::serde::as_btc")]
-    pub ancestorfees: Amount,
-    /// Modified fees (see above) of in-mempool descendants (including this one) in BTC
-    #[serde(with = "bitcoin::amount::serde::as_btc")]
-    pub descendantfees: Amount,
+    /// Transaction fee with fee deltas used for mining priority in BTC (only for Dogecoin)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "bitcoin::amount::serde::as_btc::opt"
+    )]
+    pub modifiedfee: Option<Amount>,
+    /// Modified fees (see above) of in-mempool ancestors (including this one) in BTC (only for
+    /// Dogecoin)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "bitcoin::amount::serde::as_btc::opt"
+    )]
+    pub ancestorfees: Option<Amount>,
+    /// Modified fees (see above) of in-mempool descendants (including this one) in BTC (only for
+    /// Dogecoin)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "bitcoin::amount::serde::as_btc::opt"
+    )]
+    pub descendantfees: Option<Amount>,
     /// Unconfirmed transactions used as inputs for this transaction
     pub depends: Vec<Txid>,
+    /// Unconfirmed transactions spending outputs from this transaction
+    #[serde(rename = "spentby")]
+    pub spent_by: Vec<Txid>,
     /// Whether this transaction could be replaced due to BIP125 (replace-by-fee, only for Bitcoin)
     #[serde(rename = "bip125-replaceable")]
     pub bip125_replaceable: Option<bool>,
+    /// Whether this transaction is currently unbroadcast (initial broadcast not yet acknowledged by any peers)
+    /// Added in Bitcoin Core v0.21
+    pub unbroadcast: Option<bool>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
