@@ -387,15 +387,8 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
-pub async fn send_to_btc_address(
-    btc_rpc: &RpcClient,
-    logger: &Logger,
-    src: &Address,
-    dst: &Address,
-    amount: u64,
-) {
-    match btc_rpc.send(
-        src,
+pub async fn send_to_btc_address(btc_rpc: &RpcClient, logger: &Logger, dst: &Address, amount: u64) {
+    match btc_rpc.send_to(
         dst,
         Amount::from_sat(amount),
         Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
