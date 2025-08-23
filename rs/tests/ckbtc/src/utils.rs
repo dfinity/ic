@@ -58,7 +58,7 @@ pub const LONG_TIMEOUT: Duration = Duration::from_secs(600);
 pub const BTC_BLOCK_REWARD: u64 = 50_0000_0000;
 
 /// The bitcoin transfer fee per transaction
-pub const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 1000;
+pub const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
 pub async fn stop_canister(canister: &Canister<'_>) {
     let stop_result = canister.stop().await;
