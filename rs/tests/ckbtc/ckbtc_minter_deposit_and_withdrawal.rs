@@ -91,7 +91,14 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 
         // Let's send some btc to the deposit address
         let btc_to_wrap = 100_000_000_u64;
-        send_to_btc_address(&btc_rpc, &logger, &btc_address0, btc_to_wrap).await;
+        send_to_btc_address(
+            &btc_rpc,
+            &logger,
+            &default_btc_address,
+            &btc_address0,
+            btc_to_wrap,
+        )
+        .await;
 
         generate_blocks(
             &btc_rpc,

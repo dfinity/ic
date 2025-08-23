@@ -113,7 +113,14 @@ pub fn test_btc_checker(env: TestEnv) {
 
         // Mint block to the first sub-account (with single utxo).
         let first_transfer_amount = 100_000_000;
-        send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
+        send_to_btc_address(
+            &btc_rpc,
+            &logger,
+            &default_btc_address,
+            &btc_address1,
+            first_transfer_amount,
+        )
+        .await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
         // Put the btc checker canister into reject all utxos mode.
@@ -144,7 +151,14 @@ pub fn test_btc_checker(env: TestEnv) {
 
         upgrade_canister(&mut minter_canister).await;
         // If the btc checker canister is unavailable we should get an error.
-        send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
+        send_to_btc_address(
+            &btc_rpc,
+            &logger,
+            &default_btc_address,
+            &btc_address1,
+            first_transfer_amount,
+        )
+        .await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         wait_for_bitcoin_balance(
             &universal_canister,
@@ -210,7 +224,14 @@ pub fn test_btc_checker(env: TestEnv) {
         }
 
         stop_canister(&ledger_canister).await;
-        send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
+        send_to_btc_address(
+            &btc_rpc,
+            &logger,
+            &default_btc_address,
+            &btc_address1,
+            first_transfer_amount,
+        )
+        .await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         wait_for_bitcoin_balance(
             &universal_canister,
