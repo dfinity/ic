@@ -136,15 +136,11 @@ pub fn get_balance(env: TestEnv) {
     );
 
     // Generate an address.
-    let btc_address = btc_rpc.get_address().unwrap();
-    info!(
-        &logger,
-        "Created temporary btc address: {}",
-        btc_address.to_string()
-    );
+    let btc_address = btc_rpc.get_new_address().unwrap();
+    info!(&logger, "Created temporary btc address: {btc_address}");
 
     // Mint some blocks for the address we generated.
-    let block = btc_rpc.generate_to_address(101, btc_address).unwrap();
+    let block = btc_rpc.generate_to_address(101, &btc_address).unwrap();
     info!(&logger, "Generated {} btc blocks.", block.len());
 
     // We have minted 101 blocks and each one gives 50 bitcoin to the target address,
