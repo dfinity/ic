@@ -377,7 +377,7 @@ fn get_blackhole_address() -> Address {
         .assume_checked()
 }
 
-fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client) {
+fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (RpcClient, RpcClient) {
     let client = &bitcoind.rpc_client;
     let alice_client = client.with_account("alice").unwrap();
     let bob_client = client.with_account("bob").unwrap();
