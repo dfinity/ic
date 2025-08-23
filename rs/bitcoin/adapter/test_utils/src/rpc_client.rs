@@ -69,8 +69,6 @@ pub trait RpcApi {
     fn get_block_hash(&self, height: u64) -> Result<BlockHash>;
     fn get_best_block_hash(&self) -> Result<BlockHash>;
     fn generate_to_address(&self, block_num: u64, address: &Address) -> Result<Vec<BlockHash>>;
-    fn send_to(&self, address: &Address, amount: Amount, fee: Amount) -> Result<Txid>;
-    fn get_balance(&self, minconf: Option<usize>) -> Result<Amount>;
     fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount>;
     fn create_raw_transaction(
         &self,
@@ -169,13 +167,50 @@ impl RpcClient {
     }
 
     /// Return the default address of the client, which is only created
-    /// after wallet exists. Some API operations will assume a default
-    /// address, including [send_to] and [get_balance].
+    /// after wallet exists.
     ///
     /// To change the default address one has to create a new [RpcClient]
     /// by calling [with_account].
     pub fn get_address(&self) -> Result<&Address> {
         self.address.as_ref().ok_or(RpcError::AddressNotAvailable)
+    }
+
+    /// Return the balance available at the default address.
+    pub fn get_balance(&self, minconf: Option<usize>) -> Result<Amount> {
+        self.get_balance_of(minconf, self.get_address()?)
+    }
+
+    /// Send bitcoin from the default address.
+    pub fn send_to(&self, to_address: &Address, amount: Amount, fee: Amount) -> Result<Txid> {
+        self.send(self.get_address()?, to_address, amount, fee)
+    }
+
+    /// Send bitcoin from the given [from_address].
+    pub fn send(
+        &self,
+        from_address: &Address,
+        to_address: &Address,
+        amount: Amount,
+        fee: Amount,
+    ) -> Result<Txid> {
+        let unspent = self.list_unspent(Some(0), Some(&[from_address]))?;
+        let total: Amount = unspent.iter().map(|x| x.amount).sum();
+        let inputs = unspent
+            .iter()
+            .map(|x| CreateRawTransactionInput {
+                txid: x.txid,
+                vout: x.vout,
+                sequence: None,
+            })
+            .collect::<Vec<_>>();
+        let mut outputs = HashMap::new();
+        outputs.insert(to_address.to_string(), amount);
+        if total > amount + fee {
+            outputs.insert(from_address.to_string(), total - amount - fee);
+        }
+        let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
+        let tx = self.sign_raw_transaction(&raw_tx, None)?;
+        self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
     }
 }
 
@@ -209,32 +244,6 @@ impl RpcApi for RpcClient {
             "generatetoaddress",
             &[block_num.into(), address.to_string().into()],
         )?)
-    }
-
-    fn send_to(&self, address: &Address, amount: Amount, fee: Amount) -> Result<Txid> {
-        let my_address = self.get_address()?;
-        let unspent = self.list_unspent(Some(0), Some(&[my_address]))?;
-        let total: Amount = unspent.iter().map(|x| x.amount).sum();
-        let inputs = unspent
-            .iter()
-            .map(|x| CreateRawTransactionInput {
-                txid: x.txid,
-                vout: x.vout,
-                sequence: None,
-            })
-            .collect::<Vec<_>>();
-        let mut outputs = HashMap::new();
-        outputs.insert(address.to_string(), amount);
-        if total > amount + fee {
-            outputs.insert(my_address.to_string(), total - amount - fee);
-        }
-        let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
-        let tx = self.sign_raw_transaction(&raw_tx, None)?;
-        self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
-    }
-
-    fn get_balance(&self, minconf: Option<usize>) -> Result<Amount> {
-        self.get_balance_of(minconf, self.get_address()?)
     }
 
     fn get_balance_of(&self, minconf: Option<usize>, address: &Address) -> Result<Amount> {
