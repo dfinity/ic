@@ -446,8 +446,7 @@ impl ExecutionState {
 
     // Returns the global memory currently used by the `ExecutionState`.
     pub fn global_memory_usage(&self) -> NumBytes {
-        // We use 8 bytes per global.
-        let globals_size_bytes = 8 * self.exported_globals.len() as u64;
+        let globals_size_bytes = size_of::<Global>() as u64 * self.exported_globals.len() as u64;
         NumBytes::from(globals_size_bytes)
     }
 

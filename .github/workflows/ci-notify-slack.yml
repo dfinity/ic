@@ -11,6 +11,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Sanitize PR title for Slack (<, >, &)
+      - name: Sanitize PR title
+        id: sanitize
+        run: |
+          RAW_TITLE="${{ github.event.pull_request.title }}"
+          ESCAPED_TITLE=$(echo "$RAW_TITLE" \
+            | sed 's/&/\&amp;/g' \
+            | sed 's/</\&lt;/g' \
+            | sed 's/>/\&gt;/g')
+          echo "safe_title=$ESCAPED_TITLE" >> "$GITHUB_OUTPUT"
+
       - name: Get requested team reviewers
         id: get-reviewers
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -18,6 +30,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             return "requested_team" in context.payload ? context.payload.requested_team.name : ""
+
       - name: Lookup Slack channel
         id: lookup
         if: steps.get-reviewers.outputs.result != '""'
@@ -27,7 +40,8 @@ jobs:
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
+          MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title }}>"
+
       - name: Post to a Slack channel
         if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
         id: slack

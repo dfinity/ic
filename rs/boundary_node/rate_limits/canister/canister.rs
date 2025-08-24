@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+#![allow(deprecated)]
 
 use crate::access_control::{AccessLevelResolver, WithAuthorization};
 use crate::add_config::{AddsConfig, ConfigAdder};
@@ -180,7 +181,10 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     Ok(())
 }
 
-#[query(decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => with_canister_state(|state| {
@@ -232,6 +236,16 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         }
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
 }
 
 fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn CanisterApi>) {

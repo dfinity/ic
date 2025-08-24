@@ -82,6 +82,7 @@ component_files = {
     Label("networking/nftables/hostos/setup-nftables.service"): "/etc/systemd/system/setup-nftables.service",
     Label("networking/nftables/hostos/setup-nftables.sh"): "/opt/ic/bin/setup-nftables.sh",
     Label("networking/hosts"): "/etc/hosts",
+    Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
 
     # ssh
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",

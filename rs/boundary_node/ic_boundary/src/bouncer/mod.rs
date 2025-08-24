@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{bail, Context, Error};
 use async_trait::async_trait;
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
@@ -72,11 +72,11 @@ impl Bouncer {
         registry: &Registry,
     ) -> Result<Self, Error> {
         if rate_per_second == 0 {
-            return Err(anyhow!("rate_per_second should be > 0"));
+            bail!("rate_per_second should be > 0");
         }
 
         if burst_size < rate_per_second {
-            return Err(anyhow!("burst_size should be >= rate_per_second"));
+            bail!("burst_size should be >= rate_per_second");
         }
 
         let metrics = Metrics {

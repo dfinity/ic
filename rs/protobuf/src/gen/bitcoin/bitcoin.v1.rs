@@ -179,6 +179,9 @@ pub enum Network {
     Testnet = 1,
     Mainnet = 2,
     Regtest = 3,
+    DogecoinMainnet = 4,
+    DogecoinTestnet = 5,
+    DogecoinRegtest = 6,
 }
 impl Network {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -191,6 +194,9 @@ impl Network {
             Self::Testnet => "NETWORK_TESTNET",
             Self::Mainnet => "NETWORK_MAINNET",
             Self::Regtest => "NETWORK_REGTEST",
+            Self::DogecoinMainnet => "NETWORK_DOGECOIN_MAINNET",
+            Self::DogecoinTestnet => "NETWORK_DOGECOIN_TESTNET",
+            Self::DogecoinRegtest => "NETWORK_DOGECOIN_REGTEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -200,6 +206,9 @@ impl Network {
             "NETWORK_TESTNET" => Some(Self::Testnet),
             "NETWORK_MAINNET" => Some(Self::Mainnet),
             "NETWORK_REGTEST" => Some(Self::Regtest),
+            "NETWORK_DOGECOIN_MAINNET" => Some(Self::DogecoinMainnet),
+            "NETWORK_DOGECOIN_TESTNET" => Some(Self::DogecoinTestnet),
+            "NETWORK_DOGECOIN_REGTEST" => Some(Self::DogecoinRegtest),
             _ => None,
         }
     }

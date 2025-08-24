@@ -1,57 +1,46 @@
-use candid::Nat;
+use candid::{Encode, Nat};
 use canister_test::Wasm;
-use ic_base_types::CanisterId;
-use ic_base_types::PrincipalId;
-use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
-use ic_nervous_system_common::E8;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
-use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::add_wasms_to_sns_wasm;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::cycles_ledger;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::propose_and_wait;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
-use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
-use ic_sns_cli::register_extension;
-use ic_sns_cli::register_extension::RegisterExtensionArgs;
-use ic_sns_cli::register_extension::RegisterExtensionInfo;
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
+use ic_nervous_system_common::{
+    ledger::compute_distribution_subaccount_bytes, E8, ONE_MONTH_SECONDS,
+};
+use ic_nervous_system_integration_tests::{
+    create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers::{
+        add_wasms_to_sns_wasm, cycles_ledger, install_canister_with_controllers,
+        load_registry_mutations, nns, sns, sns::governance::propose_and_wait, NnsInstaller,
+    },
+};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_sns_cli::{
+    neuron_id_to_candid_subaccount::ParsedSnsNeuron,
+    register_extension,
+    register_extension::{RegisterExtensionArgs, RegisterExtensionInfo},
+};
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance_api::pb::v1::proposal::Action;
-use ic_sns_governance_api::pb::v1::ExecuteExtensionOperation;
-use ic_sns_governance_api::pb::v1::ExtensionOperationArg;
-use ic_sns_governance_api::pb::v1::PreciseValue;
-use ic_sns_governance_api::pb::v1::Proposal;
+use ic_sns_governance_api::pb::v1::{
+    proposal::Action, ExecuteExtensionOperation, ExtensionOperationArg, PreciseValue, Proposal,
+};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
 use maplit::btreemap;
-use pocket_ic::nonblocking::PocketIc;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use pretty_assertions::assert_eq;
-use sns_treasury_manager::Asset;
-use sns_treasury_manager::AuditTrailRequest;
-use sns_treasury_manager::BalanceBook;
-use sns_treasury_manager::BalancesRequest;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
+use sns_treasury_manager::{Asset, AuditTrailRequest, BalanceBook, BalancesRequest};
+use std::{path::PathBuf, str::FromStr, time::Duration};
 use tempfile::TempDir;
 use url::Url;
 
 mod src {
-    pub use ic_nns_governance_api::create_service_nervous_system::initial_token_distribution::{
-        developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-        TreasuryDistribution,
+    pub use ic_nns_governance_api::create_service_nervous_system::{
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
+        },
+        InitialTokenDistribution,
     };
-    pub use ic_nns_governance_api::create_service_nervous_system::InitialTokenDistribution;
 } // end mod src
 
 const ICP_FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
@@ -98,6 +87,13 @@ async fn test_treasury_manager() {
             .with_custom_registry_mutations(vec![initial_mutations]);
         nns_installer.install(&pocket_ic).await;
     }
+
+    add_fiduciary_subnet_type(&pocket_ic).await;
+    add_fiduciary_subnet_to_cmc(
+        &pocket_ic,
+        SubnetId::from(PrincipalId::from(fiduciary_subnet_id)),
+    )
+    .await;
 
     let sns = deploy_sns(&pocket_ic, false).await;
 
@@ -585,4 +581,67 @@ async fn validate_treasury_balances(
     }
 
     Ok(())
+}
+
+/// Add the "fiduciary" subnet type to CMC by impersonating Governance
+async fn add_fiduciary_subnet_type(pocket_ic: &PocketIc) {
+    #[derive(candid::CandidType)]
+    enum UpdateSubnetTypeArgs {
+        Add(String),
+    }
+
+    let args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
+    let payload = Encode!(&args).expect("Failed to encode UpdateSubnetTypeArgs");
+
+    let result = pocket_ic
+        .update_call(
+            CYCLES_MINTING_CANISTER_ID.get().into(),
+            GOVERNANCE_CANISTER_ID.get().into(),
+            "update_subnet_type",
+            payload,
+        )
+        .await;
+
+    match result {
+        Ok(_) => println!("Successfully added fiduciary subnet type to CMC"),
+        Err(e) => panic!("Failed to add fiduciary subnet type to CMC: {:?}", e),
+    }
+}
+
+/// Register the fiduciary subnet with the "fiduciary" type in CMC by impersonating Governance  
+async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: SubnetId) {
+    #[derive(candid::CandidType)]
+    struct SubnetListWithType {
+        subnets: Vec<SubnetId>,
+        subnet_type: String,
+    }
+
+    #[derive(candid::CandidType)]
+    enum ChangeSubnetTypeAssignmentArgs {
+        Add(SubnetListWithType),
+    }
+
+    let args = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+        subnets: vec![fiduciary_subnet_id],
+        subnet_type: "fiduciary".to_string(),
+    });
+
+    let payload = Encode!(&args).expect("Failed to encode ChangeSubnetTypeAssignmentArgs");
+
+    let result = pocket_ic
+        .update_call(
+            CYCLES_MINTING_CANISTER_ID.get().into(),
+            GOVERNANCE_CANISTER_ID.get().into(),
+            "change_subnet_type_assignment",
+            payload,
+        )
+        .await;
+
+    match result {
+        Ok(_) => println!(
+            "Successfully registered fiduciary subnet {} with CMC",
+            fiduciary_subnet_id
+        ),
+        Err(e) => panic!("Failed to register fiduciary subnet with CMC: {:?}", e),
+    }
 }

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_agent::agent::RejectCode;
