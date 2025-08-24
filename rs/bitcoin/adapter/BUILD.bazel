@@ -147,6 +147,8 @@ rust_test(
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],
+    # Because dogecoind is not available on darwin.
+    restricted_to = ["//platforms:linux_x86_64"],
 )
 
 rust_bench(
