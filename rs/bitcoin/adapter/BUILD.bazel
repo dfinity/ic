@@ -133,6 +133,8 @@ rust_test(
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
+    # Because dogecoind is not available on darwin.
+    restricted_to = ["//platforms:linux_x86_64"],
     tags = ["requires-network"],
     deps = [
         ":adapter",
@@ -147,8 +149,6 @@ rust_test(
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],
-    # Because dogecoind is not available on darwin.
-    restricted_to = ["//platforms:linux_x86_64"],
 )
 
 rust_bench(
