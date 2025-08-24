@@ -26,6 +26,7 @@ ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
+ic-test-utilities-crypto = { path = "../../test_utilities/crypto" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
