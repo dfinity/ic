@@ -100,6 +100,14 @@ alias(
     }),
 )
 
+alias(
+    name = "dogecoind",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@dogecoin_core_darwin_aarch64//:dogecoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@dogecoin_core_linux_x86//:dogecoind",
+    }),
+)
+
 ### Pocket IC
 
 # The pocket-ic server binary. Use this as a test dependency if the test
