@@ -219,12 +219,13 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles - max_execution_cost,
     );
 
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(a_id);
@@ -235,7 +236,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - call_charge
             - (test.canister_execution_cost(a_id) - initial_execution_cost)
@@ -300,12 +301,16 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles - max_execution_cost,
     );
 
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(canister_id);
@@ -316,7 +321,10 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles
             - cycles_to_burn
             - (test.canister_execution_cost(canister_id) - initial_execution_cost)
@@ -402,13 +410,14 @@ fn dts_update_concurrent_cycles_change_fails() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles - max_execution_cost,
     );
 
-    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    let cycles_debit = test.canister_state(a_id).system_state.metadata.balance();
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(a_id);
@@ -433,7 +442,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - (test.canister_execution_cost(a_id) - initial_execution_cost)
             - cycles_debit,
@@ -497,12 +506,16 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     );
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles - max_execution_cost,
     );
 
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(canister_id);
@@ -522,7 +535,10 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     )));
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles
             - (test.canister_execution_cost(canister_id) - initial_execution_cost)
             - cycles_debit,
@@ -748,9 +764,10 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         );
 
         // Change the cycles balance of the clean canister.
-        let balance = test.canister_state(a_id).system_state.balance();
+        let balance = test.canister_state(a_id).system_state.metadata.balance();
         test.canister_state_mut(a_id)
             .system_state
+            .metadata
             .add_cycles(balance + Cycles::new(1), CyclesUseCase::NonConsumed);
 
         test.execute_slice(a_id);
@@ -985,7 +1002,7 @@ fn dts_abort_of_replicated_execution_works() {
         assert_eq!(result, WasmResult::Reply(vec![42]));
 
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
+            test.canister_state(a_id).system_state.metadata.balance(),
             Cycles::new(initial_cycles)
                 - transferred_cycles
                 - test.canister_execution_cost(a_id)
@@ -994,7 +1011,7 @@ fn dts_abort_of_replicated_execution_works() {
         );
 
         assert_eq!(
-            test.canister_state(b_id).system_state.balance(),
+            test.canister_state(b_id).system_state.metadata.balance(),
             Cycles::new(initial_cycles) + transferred_cycles - test.canister_execution_cost(b_id)
         );
     });
@@ -1038,11 +1055,13 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
         let cycles_debit = Cycles::new(1000);
         test.canister_state_mut(a_id)
             .system_state
+            .metadata
             .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
         assert!(
             test.canister_state(a_id)
                 .system_state
+                .metadata
                 .ingress_induction_cycles_debit()
                 > Cycles::zero()
         );
@@ -1052,6 +1071,7 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
         assert_eq!(
             test.canister_state(a_id)
                 .system_state
+                .metadata
                 .ingress_induction_cycles_debit(),
             Cycles::zero()
         );
@@ -1062,7 +1082,7 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
 
         assert_eq!(result, WasmResult::Reply(vec![42]));
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
+            test.canister_state(a_id).system_state.metadata.balance(),
             Cycles::new(initial_canister_cycles)
                 - test.canister_execution_cost(a_id)
                 - cycles_debit
@@ -1216,11 +1236,23 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
     assert_matches!(ingress_status, IngressStatus::Unknown);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Execute canister A ingress.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -1244,11 +1276,23 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
     assert_matches!(ingress_status, IngressStatus::Unknown);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Execute canister A ingress.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Make sure the execution was not ok.
     let call_context_manager = test

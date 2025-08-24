@@ -146,15 +146,15 @@ impl CanisterState {
     }
 
     pub fn canister_id(&self) -> CanisterId {
-        self.system_state.canister_id()
+        self.system_state.metadata.canister_id()
     }
 
     pub fn controllers(&self) -> &BTreeSet<PrincipalId> {
-        &self.system_state.controllers
+        &self.system_state.metadata.controllers
     }
 
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
-        &self.system_state.log_visibility
+        &self.system_state.metadata.log_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.
@@ -174,7 +174,7 @@ impl CanisterState {
     }
 
     pub fn new_local_snapshot_id(&mut self) -> u64 {
-        self.system_state.new_local_snapshot_id()
+        self.system_state.metadata.new_local_snapshot_id()
     }
 
     /// See `SystemState::push_input` for documentation.
@@ -458,16 +458,16 @@ impl CanisterState {
 
     /// Returns the amount of memory used by canister history in bytes.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
-        self.system_state.canister_history_memory_usage()
+        self.system_state.metadata.canister_history_memory_usage()
     }
 
     /// Returns the memory usage of the wasm chunk store in bytes.
     pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
-        self.system_state.wasm_chunk_store.memory_usage()
+        self.system_state.metadata.wasm_chunk_store.memory_usage()
     }
 
     pub fn snapshots_memory_usage(&self) -> NumBytes {
-        self.system_state.snapshots_memory_usage
+        self.system_state.metadata.snapshots_memory_usage
     }
 
     /// Returns the snapshot size estimation in bytes based on the current canister's state.
@@ -484,22 +484,22 @@ impl CanisterState {
 
         execution_usage
             + self.wasm_chunk_store_memory_usage()
-            + NumBytes::new(self.system_state.certified_data.len() as u64)
+            + NumBytes::new(self.system_state.metadata.certified_data.len() as u64)
     }
 
     /// Returns the current memory allocation of the canister.
     pub fn memory_allocation(&self) -> MemoryAllocation {
-        self.system_state.memory_allocation
+        self.system_state.metadata.memory_allocation
     }
 
     /// Returns the current Wasm memory threshold of the canister.
     pub fn wasm_memory_threshold(&self) -> NumBytes {
-        self.system_state.wasm_memory_threshold
+        self.system_state.metadata.wasm_memory_threshold
     }
 
     /// Returns the Wasm memory limit from the canister settings.
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
-        self.system_state.wasm_memory_limit
+        self.system_state.metadata.wasm_memory_limit
     }
 
     /// Returns the current compute allocation for the canister.
@@ -587,17 +587,17 @@ impl CanisterState {
 
     /// Appends the given log to the canister log.
     pub fn append_log(&mut self, other: &mut CanisterLog) {
-        self.system_state.canister_log.append(other);
+        self.system_state.metadata.canister_log.append(other);
     }
 
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
-        self.system_state.canister_log.clear();
+        self.system_state.metadata.canister_log.clear();
     }
 
     /// Sets the new canister log.
     pub fn set_log(&mut self, other: CanisterLog) {
-        self.system_state.canister_log = other;
+        self.system_state.metadata.canister_log = other;
     }
 
     /// Returns the cumulative amount of heap delta represented by this canister's state.
@@ -607,7 +607,7 @@ impl CanisterState {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.heap_delta())
-            + self.system_state.wasm_chunk_store.heap_delta()
+            + self.system_state.metadata.wasm_chunk_store.heap_delta()
     }
 
     /// Updates status of `OnLowWasmMemory` hook.
@@ -619,6 +619,7 @@ impl CanisterState {
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
     pub fn is_low_wasm_memory_hook_condition_satisfied(&self) -> bool {
         self.system_state
+            .metadata
             .is_low_wasm_memory_hook_condition_satisfied(
                 self.memory_usage(),
                 self.wasm_memory_usage(),

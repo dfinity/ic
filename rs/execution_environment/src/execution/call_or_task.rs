@@ -117,14 +117,14 @@ pub fn execute_call_or_task(
         };
 
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
+        clean_canister.system_state.metadata.freeze_threshold,
+        clean_canister.system_state.metadata.memory_allocation,
         clean_canister.memory_usage(),
         clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
+        clean_canister.system_state.metadata.reserved_balance(),
     );
 
     let request_metadata = match &call_or_task {
@@ -274,11 +274,14 @@ fn finish_err(
 ) -> ExecuteMessageResult {
     let mut canister = clean_canister;
 
-    canister.system_state.apply_ingress_induction_cycles_debit(
-        canister.canister_id(),
-        round.log,
-        round.counters.charging_from_balance_error,
-    );
+    canister
+        .system_state
+        .metadata
+        .apply_ingress_induction_cycles_debit(
+            canister.canister_id(),
+            round.log,
+            round.counters.charging_from_balance_error,
+        );
 
     let wasm_execution_mode = canister
         .execution_state
@@ -363,7 +366,9 @@ impl CallOrTaskHelper {
                         num_bytes_try_from(es.wasm_memory.size).unwrap()
                     });
 
-                if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
+                if let Some(wasm_memory_limit) =
+                    clean_canister.system_state.metadata.wasm_memory_limit
+                {
                     // A Wasm memory limit of 0 means unlimited.
                     if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                         let err = HypervisorError::WasmMemoryLimitExceeded {
@@ -398,7 +403,7 @@ impl CallOrTaskHelper {
             )
             .unwrap();
 
-        let initial_cycles_balance = canister.system_state.balance();
+        let initial_cycles_balance = canister.system_state.metadata.balance();
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_)
@@ -407,7 +412,7 @@ impl CallOrTaskHelper {
             | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
-                canister.system_state.global_timer = CanisterTimer::Inactive;
+                canister.system_state.metadata.global_timer = CanisterTimer::Inactive;
             }
         }
 
@@ -486,6 +491,7 @@ impl CallOrTaskHelper {
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
+            .metadata
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -494,7 +500,7 @@ impl CallOrTaskHelper {
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        let old_balance = self.canister.system_state.balance();
+        let old_balance = self.canister.system_state.metadata.balance();
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();

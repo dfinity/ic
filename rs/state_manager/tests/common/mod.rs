@@ -371,11 +371,11 @@ pub fn insert_canister_with_many_controllers(
         NumSeconds::from(100_000),
     );
 
-    let mut controllers = std::mem::take(&mut canister_state.system_state.controllers);
+    let mut controllers = std::mem::take(&mut canister_state.system_state.metadata.controllers);
     for i in 25..(24 + num_controllers) {
         controllers.insert(user_test_id(i).get());
     }
-    canister_state.system_state.controllers = controllers;
+    canister_state.system_state.metadata.controllers = controllers;
 
     let mut execution_state = initial_execution_state();
     execution_state.wasm_binary = WasmBinary::new(wasm);

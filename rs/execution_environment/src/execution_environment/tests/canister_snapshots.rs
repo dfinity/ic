@@ -329,12 +329,14 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
         *snapshot.chunk_store(),
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .wasm_chunk_store
     );
     // Confirm that `snapshots_memory_usage` is updated correctly.
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
@@ -370,6 +372,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
@@ -432,6 +435,7 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
         *snapshot.chunk_store(),
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .wasm_chunk_store
     );
 
@@ -511,6 +515,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
         let reserved_cycles_before = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         let subnet_memory_usage_before =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
@@ -524,6 +529,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
         let reserved_cycles_after = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         let subnet_memory_usage_after =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
@@ -571,6 +577,7 @@ fn canister_snapshot_reserves_cycles_difference() {
         let initial_reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         // Make sure there are no reserved cycles.
         assert_eq!(initial_reserved_cycles, Cycles::zero());
@@ -586,6 +593,7 @@ fn canister_snapshot_reserves_cycles_difference() {
         let reserved_cycles_after_snapshot_1 = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         // Take a snapshot 2 for the canister by replacing previous snapshot.
@@ -600,6 +608,7 @@ fn canister_snapshot_reserves_cycles_difference() {
         let reserved_cycles_after_snapshot_2 = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         // Make sure the reserved cycles are the same.
         assert_eq!(
@@ -615,6 +624,7 @@ fn canister_snapshot_reserves_cycles_difference() {
         let reserved_cycles_after_delete = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         // Make sure the reserved cycles are the same.
         assert_eq!(
@@ -629,6 +639,7 @@ fn canister_snapshot_reserves_cycles_difference() {
         let reserved_cycles_after_a_new_snapshot = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         // Make sure the reserved cycles are increased even more than before.
         assert!(
@@ -918,9 +929,15 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     // Make balance just a bit higher than freezing threshold, so `take_canister_snapshot` fails.
     let threshold = test.freezing_threshold(canister_id);
     let new_balance = threshold + Cycles::from(1_000_u128);
-    let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
+    let to_remove = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance()
+        - new_balance;
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .remove_cycles(to_remove, CyclesUseCase::BurnedCycles);
 
     let initial_subnet_available_memory = test.subnet_available_memory();
@@ -939,6 +956,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     );
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
@@ -1182,6 +1200,7 @@ fn delete_canister_snapshot_succeeds() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
@@ -1202,6 +1221,7 @@ fn delete_canister_snapshot_succeeds() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
@@ -1594,6 +1614,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .canister_version;
     assert_eq!(canister_version_before, 1u64);
 
@@ -1602,6 +1623,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .get_canister_history()
         .clone();
     let history_before = canister_history
@@ -1621,6 +1643,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .wasm_chunk_store
         .keys()
         .next()
@@ -1635,6 +1658,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .wasm_chunk_store
         .keys()
         .next()
@@ -1646,6 +1670,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .canister_version;
     // Canister version should be bumped after loading a snapshot.
     assert!(canister_version_after > canister_version_before);
@@ -1658,6 +1683,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .get_canister_history()
         .clone();
     let history_after = canister_history
@@ -1904,7 +1930,11 @@ fn take_canister_snapshot_charges_canister_cycles() {
     grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
 
-    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let initial_balance = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
 
@@ -1925,7 +1955,10 @@ fn take_canister_snapshot_charges_canister_cycles() {
     assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_balance - expected_charge,
     );
 }
@@ -1966,7 +1999,11 @@ fn load_canister_snapshot_charges_canister_cycles() {
     assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
 
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
-    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let initial_balance = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
 
@@ -1984,7 +2021,11 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let result = test.subnet_message("load_canister_snapshot", args.encode());
     assert!(result.is_ok());
     assert!(
-        test.canister_state(canister_id).system_state.balance() < initial_balance - expected_charge
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance()
+            < initial_balance - expected_charge
     );
 }
 
@@ -2979,6 +3020,7 @@ fn canister_snapshot_roundtrip_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .get_canister_history()
         .clone();
     let history_after = canister_history

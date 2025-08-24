@@ -245,7 +245,10 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
     assert!(((memory_bytes - initial_memory_bytes) as usize) > BIG_REPLY_SIZE);
 
     // Bump up the version
-    test.canister_state_mut(a_id).system_state.canister_version += 1;
+    test.canister_state_mut(a_id)
+        .system_state
+        .metadata
+        .canister_version += 1;
 
     // Invalidate and pop the result.
     let query_cache = &query_handler(&test).query_cache;
@@ -487,6 +490,7 @@ fn query_cache_ignores_balance_changes_when_query_does_not_read_balance() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
+            .metadata
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
 
         // Run the same query for the second time.
@@ -517,6 +521,7 @@ fn query_cache_ignores_balance_and_time_changes_when_query_is_static() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
+            .metadata
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
         // Change the time.
         test.state_mut().metadata.batch_time += Duration::from_secs(1);
@@ -636,7 +641,10 @@ fn query_cache_returns_different_results_for_different_canister_versions() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Bump up the version
-        test.canister_state_mut(b_id).system_state.canister_version += 1;
+        test.canister_state_mut(b_id)
+            .system_state
+            .metadata
+            .canister_version += 1;
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -668,6 +676,7 @@ fn query_cache_returns_different_results_for_different_canister_balances() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
+            .metadata
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
 
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -695,6 +704,7 @@ fn query_cache_returns_different_results_for_different_canister_balance128s() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
+            .metadata
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
 
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -728,9 +738,13 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
 
         // Change the batch time more than the max expiry time.
         test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
-        test.canister_state_mut(b_id).system_state.canister_version += 1;
         test.canister_state_mut(b_id)
             .system_state
+            .metadata
+            .canister_version += 1;
+        test.canister_state_mut(b_id)
+            .system_state
+            .metadata
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
 
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -777,10 +791,13 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     assert!(memory_bytes > BIG_RESPONSE_SIZE);
 
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
-    test.canister_state_mut(id).system_state.remove_cycles(
-        ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
-        CyclesUseCase::Memory,
-    );
+    test.canister_state_mut(id)
+        .system_state
+        .metadata
+        .remove_cycles(
+            ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
+            CyclesUseCase::Memory,
+        );
 
     // The new 42 reply must invalidate and replace the previous 1MB reply in the cache.
     let res = test

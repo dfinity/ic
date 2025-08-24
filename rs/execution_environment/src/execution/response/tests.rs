@@ -110,12 +110,12 @@ fn execute_response_refunds_cycles() {
     let response_payload_size = response.payload_size_bytes();
 
     // Execute response.
-    let balance_before = test.canister_state(a_id).system_state.balance();
+    let balance_before = test.canister_state(a_id).system_state.metadata.balance();
     let instructions_before = test.canister_executed_instructions(a_id);
     test.execute_response(a_id, response);
     let instructions_after = test.canister_executed_instructions(a_id);
     let instructions_executed = instructions_after - instructions_before;
-    let balance_after = test.canister_state(a_id).system_state.balance();
+    let balance_after = test.canister_state(a_id).system_state.metadata.balance();
 
     // The balance is equivalent to the amount of cycles before executing`execute_response`
     // plus the unaccepted cycles (no more the cycles sent via request),
@@ -386,7 +386,7 @@ fn cycles_correct_if_response_fails() {
     let execution_cost_after = test.canister_execution_cost(a_id);
     assert!(execution_cost_after > execution_cost_before);
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -436,7 +436,7 @@ fn cycles_correct_if_cleanup_fails() {
     let execution_cost_after = test.canister_execution_cost(a_id);
     assert!(execution_cost_after > execution_cost_before);
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -510,8 +510,8 @@ fn dts_works_in_response_callback() {
         // The canister state should be clean. Specifically, no changes in the
         // cycles balance and call contexts.
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -585,8 +585,8 @@ fn dts_works_in_cleanup_callback() {
         // The canister state should be clean. Specifically, no changes in the
         // cycles balance and call contexts.
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -679,8 +679,8 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         // The canister state should be clean. Specifically, no changes in the
         // cycles balance and call contexts.
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -782,8 +782,8 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
         // The canister state should be clean. Specifically, no changes in the
         // cycles balance and call contexts.
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -870,8 +870,8 @@ fn dts_abort_works_in_response_callback() {
     // The canister state should be clean. Specifically, no changes in the
     // cycles balance and call contexts.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(a_id).system_state.metadata.balance(),
+        original_system_state.metadata.balance()
     );
     assert_eq!(
         test.canister_state(a_id)
@@ -887,8 +887,8 @@ fn dts_abort_works_in_response_callback() {
         Some(1)
     );
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(a_id).system_state.metadata.balance(),
+        original_system_state.metadata.balance()
     );
     assert_eq!(
         test.canister_state(a_id)
@@ -964,8 +964,8 @@ fn dts_abort_works_in_cleanup_callback() {
             // The canister state should be clean. Specifically, no changes in the
             // cycles balance and call contexts.
             assert_eq!(
-                test.canister_state(a_id).system_state.balance(),
-                original_system_state.balance()
+                test.canister_state(a_id).system_state.metadata.balance(),
+                original_system_state.metadata.balance()
             );
             assert_eq!(
                 test.canister_state(a_id)
@@ -977,8 +977,8 @@ fn dts_abort_works_in_cleanup_callback() {
         // Aborting doesn't change the clean canister state.
         test.abort_all_paused_executions();
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -1169,8 +1169,8 @@ fn dts_and_nondts_cycles_match_after_response() {
         "Time should have progressed further in DTS"
     );
     assert_eq!(
-        test_a.canister_state(a_id).system_state.balance(),
-        test_b.canister_state(b_id).system_state.balance(),
+        test_a.canister_state(a_id).system_state.metadata.balance(),
+        test_b.canister_state(b_id).system_state.metadata.balance(),
     );
 }
 
@@ -1195,8 +1195,8 @@ fn dts_and_nondts_cycles_match_if_response_fails() {
         "Time should have progressed further in DTS"
     );
     assert_eq!(
-        test_a.canister_state(a_id).system_state.balance(),
-        test_b.canister_state(b_id).system_state.balance(),
+        test_a.canister_state(a_id).system_state.metadata.balance(),
+        test_b.canister_state(b_id).system_state.metadata.balance(),
     );
 }
 
@@ -1222,8 +1222,8 @@ fn dts_and_nondts_cycles_match_if_cleanup_fails() {
     );
 
     assert_eq!(
-        test_a.canister_state(a_id).system_state.balance(),
-        test_b.canister_state(b_id).system_state.balance(),
+        test_a.canister_state(a_id).system_state.metadata.balance(),
+        test_b.canister_state(b_id).system_state.metadata.balance(),
     );
 }
 
@@ -1323,7 +1323,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles,
     );
 
@@ -1331,6 +1331,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let cycles_debit = Cycles::new(1000);
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     // Complete the response callback execution.
@@ -1342,7 +1343,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles + refund - call_charge - cycles_debit
             + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
     );
@@ -1443,14 +1444,15 @@ fn dts_response_concurrent_cycles_change_fails() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles,
     );
 
     // Emulate a postponed charge.
-    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    let cycles_debit = test.canister_state(a_id).system_state.metadata.balance();
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(a_id);
@@ -1473,7 +1475,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles + refund - cycles_debit
             + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
     );
@@ -1586,14 +1588,16 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles,
     );
 
     // Emulate a postponed charge.
-    let mut cycles_debit = test.canister_state(a_id).system_state.balance() - Cycles::new(1000);
+    let mut cycles_debit =
+        test.canister_state(a_id).system_state.metadata.balance() - Cycles::new(1000);
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     // We don't know when the response callback finishes and the cleanup
@@ -1603,6 +1607,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     while test.canister_state(a_id).next_execution() != NextExecution::None {
         test.canister_state_mut(a_id)
             .system_state
+            .metadata
             .add_postponed_charge_to_ingress_induction_cycles_debit(Cycles::new(1));
         cycles_debit += Cycles::new(1);
         test.execute_slice(a_id);
@@ -1612,7 +1617,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles + refund - cycles_debit
             + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
     );
@@ -1695,9 +1700,10 @@ fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
     );
 
     // Emulate a postponed charge that drives the cycles balance of the canister to zero.
-    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    let cycles_debit = test.canister_state(a_id).system_state.metadata.balance();
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     // Keep running the cleanup callback until it finishes.
@@ -1719,7 +1725,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
     // canister's balance, it's going to be capped by the amount removed from the
     // balance during Wasm execution, so the canister will maintain a positive
     // balance.
-    assert!(test.canister_state(a_id).system_state.balance() > Cycles::zero());
+    assert!(test.canister_state(a_id).system_state.metadata.balance() > Cycles::zero());
 }
 
 #[test]
@@ -2038,8 +2044,8 @@ fn response_callback_succeeds_with_memory_reservation() {
         // The canister state should be clean. Specifically, no changes in the
         // cycles balance and call contexts.
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -2160,8 +2166,8 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
         // The canister state should be clean. Specifically, no changes in the
         // cycles balance and call contexts.
         assert_eq!(
-            test.canister_state(a_id).system_state.balance(),
-            original_system_state.balance()
+            test.canister_state(a_id).system_state.metadata.balance(),
+            original_system_state.metadata.balance()
         );
         assert_eq!(
             test.canister_state(a_id)
@@ -2484,6 +2490,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
@@ -2568,6 +2575,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
+        .metadata
         .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
@@ -2624,15 +2632,15 @@ fn cycles_balance_changes_applied_correctly() {
             Cycles::new(10_000_000_000_000),
         )
         .build();
-    let a_balance_old = test.canister_state(a_id).system_state.balance();
-    let b_balance_old = test.canister_state(b_id).system_state.balance();
+    let a_balance_old = test.canister_state(a_id).system_state.metadata.balance();
+    let b_balance_old = test.canister_state(b_id).system_state.metadata.balance();
     let res = test.ingress(a_id, "update", a).unwrap();
     match res {
         WasmResult::Reply(_) => {}
         WasmResult::Reject(msg) => unreachable!("rejected : {}", msg),
     }
-    let a_balance_new = test.canister_state(a_id).system_state.balance();
-    let b_balance_new = test.canister_state(b_id).system_state.balance();
+    let a_balance_new = test.canister_state(a_id).system_state.metadata.balance();
+    let b_balance_new = test.canister_state(b_id).system_state.metadata.balance();
 
     assert!(a_balance_old + b_balance_old > a_balance_new + b_balance_new);
 }
@@ -2722,12 +2730,24 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
     assert_matches!(ingress_status, IngressStatus::Unknown);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2742,7 +2762,13 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
 
     // Execute canister A on reply callback.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 3);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        3
+    );
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
@@ -2771,12 +2797,24 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
     assert_matches!(ingress_status, IngressStatus::Unknown);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2791,7 +2829,13 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
 
     // Execute canister A on reply callback.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was not ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
@@ -2820,12 +2864,24 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
     assert_matches!(ingress_status, IngressStatus::Unknown);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2841,7 +2897,13 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
     // Execute canister A on reply callback.
     test.execute_message(a_id);
     // The cleanup execution increases the canister version.
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 3);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        3
+    );
 
     // Make sure the execution was not ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
@@ -2875,12 +2937,24 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
     assert_matches!(ingress_status, IngressStatus::Unknown);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        1
+    );
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2896,7 +2970,13 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
     // Execute canister A on reply callback.
     test.execute_message(a_id);
     // The cleanup traps, so the canister version is unchanged.
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .metadata
+            .canister_version,
+        2
+    );
 
     // Make sure the execution was not ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));

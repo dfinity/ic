@@ -328,6 +328,7 @@ fn fetch_canister_logs(
     let response = FetchCanisterLogsResponse {
         canister_log_records: canister
             .system_state
+            .metadata
             .canister_log
             .records()
             .iter()

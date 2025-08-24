@@ -97,7 +97,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             canister.scheduler_state.last_full_execution_round,
             test.last_round()
         );
-        let canister_metrics = &canister.system_state.canister_metrics;
+        let canister_metrics = &canister.system_state.metadata.canister_metrics;
         assert_eq!(canister_metrics.skipped_round_due_to_no_messages, 0);
         assert_eq!(canister_metrics.executed, 1);
         assert_eq!(canister_metrics.interrupted_during_execution, 0);
@@ -1102,7 +1102,11 @@ fn only_charge_for_allocation_after_specified_duration() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     assert_eq!(
-        test.canister_state(canister).system_state.balance().get(),
+        test.canister_state(canister)
+            .system_state
+            .metadata
+            .balance()
+            .get(),
         initial_cycles
     );
 
@@ -1111,7 +1115,11 @@ fn only_charge_for_allocation_after_specified_duration() {
     test.set_time(initial_time + 2 * time_between_batches);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
-        test.canister_state(canister).system_state.balance().get(),
+        test.canister_state(canister)
+            .system_state
+            .metadata
+            .balance()
+            .get(),
         initial_cycles - 10,
     );
 }
@@ -1155,7 +1163,11 @@ fn charging_for_message_memory_works() {
         ingress(1).call(other_side(canister, 1), on_response(1)),
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let balance_before = test.canister_state(canister).system_state.balance();
+    let balance_before = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
 
     // Set time to at least one interval between charges to trigger a charge
     // because of message memory consumption.
@@ -1169,7 +1181,10 @@ fn charging_for_message_memory_works() {
     // The balance of the canister should have been reduced by the cost of
     // message memory during the charge period.
     assert_eq!(
-        test.canister_state(canister).system_state.balance(),
+        test.canister_state(canister)
+            .system_state
+            .metadata
+            .balance(),
         balance_before
             - test.memory_cost(
                 test.canister_state(canister).message_memory_usage().total(),
@@ -1274,13 +1289,17 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
         );
         assert_eq!(
             system_state
+                .metadata
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
             0
         );
-        assert_eq!(system_state.canister_metrics.executed, 0);
+        assert_eq!(system_state.metadata.canister_metrics.executed, 0);
         assert_eq!(
-            system_state.canister_metrics.interrupted_during_execution,
+            system_state
+                .metadata
+                .canister_metrics
+                .interrupted_during_execution,
             0
         );
     }
@@ -1320,10 +1339,10 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             ComputeAllocation::zero()
         );
         assert_eq!(
-            canister.system_state.memory_allocation,
+            canister.system_state.metadata.memory_allocation,
             MemoryAllocation::BestEffort
         );
-        assert_eq!(canister.system_state.canister_version, 1);
+        assert_eq!(canister.system_state.metadata.canister_version, 1);
     }
     assert_eq!(
         test.scheduler()
@@ -1369,6 +1388,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         .canister_state_mut(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
@@ -1479,6 +1499,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         .canister_state_mut(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
@@ -1598,9 +1619,16 @@ fn dont_charge_allocations_for_long_running_canisters() {
     assert!(test.canister_state(paused_canister).has_paused_execution());
     assert!(!test.canister_state(canister).has_paused_execution());
 
-    let paused_canister_balance_before =
-        test.canister_state(paused_canister).system_state.balance();
-    let canister_balance_before = test.canister_state(canister).system_state.balance();
+    let paused_canister_balance_before = test
+        .canister_state(paused_canister)
+        .system_state
+        .metadata
+        .balance();
+    let canister_balance_before = test
+        .canister_state(canister)
+        .system_state
+        .metadata
+        .balance();
 
     let duration_between_allocation_charges = test
         .scheduler()
@@ -1611,12 +1639,18 @@ fn dont_charge_allocations_for_long_running_canisters() {
     test.charge_for_resource_allocations();
     // Balance has not changed for canister that has long running execution.
     assert_eq!(
-        test.canister_state(paused_canister).system_state.balance(),
+        test.canister_state(paused_canister)
+            .system_state
+            .metadata
+            .balance(),
         paused_canister_balance_before
     );
     // Balance has changed for this canister.
     assert_eq!(
-        test.canister_state(canister).system_state.balance(),
+        test.canister_state(canister)
+            .system_state
+            .metadata
+            .balance(),
         canister_balance_before
             - test.memory_cost(NumBytes::from(1 << 30), duration_between_allocation_charges)
     );
@@ -1660,13 +1694,17 @@ fn can_execute_messages_with_just_enough_instructions() {
         );
         assert_eq!(
             system_state
+                .metadata
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
             0
         );
-        assert_eq!(system_state.canister_metrics.executed, 1);
+        assert_eq!(system_state.metadata.canister_metrics.executed, 1);
         assert_eq!(
-            system_state.canister_metrics.interrupted_during_execution,
+            system_state
+                .metadata
+                .canister_metrics
+                .interrupted_during_execution,
             0
         );
     }
@@ -1717,6 +1755,7 @@ fn execute_idle_and_canisters_with_messages() {
     );
     assert_eq!(
         idle.system_state
+            .metadata
             .canister_metrics
             .skipped_round_due_to_no_messages,
         1
@@ -1730,13 +1769,17 @@ fn execute_idle_and_canisters_with_messages() {
     );
     assert_eq!(
         system_state
+            .metadata
             .canister_metrics
             .skipped_round_due_to_no_messages,
         0
     );
-    assert_eq!(active.system_state.canister_metrics.executed, 1);
+    assert_eq!(active.system_state.metadata.canister_metrics.executed, 1);
     assert_eq!(
-        system_state.canister_metrics.interrupted_during_execution,
+        system_state
+            .metadata
+            .canister_metrics
+            .interrupted_during_execution,
         0
     );
 
@@ -1781,13 +1824,17 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
         );
         assert_eq!(
             system_state
+                .metadata
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
             0
         );
-        assert_eq!(system_state.canister_metrics.executed, 1);
+        assert_eq!(system_state.metadata.canister_metrics.executed, 1);
         assert_eq!(
-            system_state.canister_metrics.interrupted_during_execution,
+            system_state
+                .metadata
+                .canister_metrics
+                .interrupted_during_execution,
             0
         );
     }
@@ -1955,7 +2002,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     assert!(
         penalized.scheduler_state.accumulated_priority < other.scheduler_state.accumulated_priority
     );
-    let penalized_executed_before = penalized.system_state.canister_metrics.executed;
+    let penalized_executed_before = penalized.system_state.metadata.canister_metrics.executed;
 
     // Send a bunch of messages.
     for canister_id in &canister_ids {
@@ -1967,7 +2014,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
     assert_eq!(
         penalized_executed_before + 1,
-        penalized.system_state.canister_metrics.executed
+        penalized.system_state.metadata.canister_metrics.executed
     );
 }
 
@@ -2072,6 +2119,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
         assert_ne!(
             canister
                 .system_state
+                .metadata
                 .canister_metrics
                 .interrupted_during_execution,
             0
@@ -4178,7 +4226,11 @@ fn http_outcalls_free() {
     test.state_mut().metadata.own_subnet_features.http_requests = true;
     test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
 
-    let cycles_before = test.canister_state(caller_canister).system_state.balance();
+    let cycles_before = test
+        .canister_state(caller_canister)
+        .system_state
+        .metadata
+        .balance();
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -4230,7 +4282,11 @@ fn http_outcalls_free() {
         Some(NumBytes::from(response_size_limit)),
     );
     assert_eq!(fee, Cycles::new(0));
-    let cycles_after = test.canister_state(caller_canister).system_state.balance();
+    let cycles_after = test
+        .canister_state(caller_canister)
+        .system_state
+        .metadata
+        .balance();
     assert_eq!(cycles_before, cycles_after);
 }
 
@@ -4250,6 +4306,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let removed_cycles = Cycles::from(1000u128);
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
 
     observe_replicated_state_metrics(
@@ -4285,6 +4342,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     let removed_cycles = Cycles::from(1000u128);
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
 
     test.inject_call_to_ic00(
@@ -5152,7 +5210,7 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
             continue;
         }
         prop_assert_eq!(
-            canister.system_state.canister_metrics.executed,
+            canister.system_state.metadata.canister_metrics.executed,
             num_short_messages as u64
         );
     }
@@ -5197,7 +5255,7 @@ fn filter_after_long_executions() {
     // After the first round the canister should have a paused long execution.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     for canister in test.state().canisters_iter() {
-        assert_eq!(canister.system_state.canister_metrics.executed, 1);
+        assert_eq!(canister.system_state.metadata.canister_metrics.executed, 1);
         assert!(canister.has_paused_execution());
     }
 
@@ -5205,7 +5263,7 @@ fn filter_after_long_executions() {
     // finish the paused execution and should not start any new executions.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     for canister in test.state().canisters_iter() {
-        assert_eq!(canister.system_state.canister_metrics.executed, 2);
+        assert_eq!(canister.system_state.metadata.canister_metrics.executed, 2);
         assert!(!canister.has_paused_execution());
     }
 }
@@ -6398,7 +6456,7 @@ fn inner_round_first_execution_is_not_a_full_execution() {
         let scheduler_state = &canister.scheduler_state;
         // All ingresses should be executed in the previous round.
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(system_state.canister_metrics.executed, 1);
+        assert_eq!(system_state.metadata.canister_metrics.executed, 1);
         if canister.canister_id() == target_id {
             // The target canister, despite being executed first in the second inner round,
             // should not be marked as fully executed.
@@ -6455,7 +6513,7 @@ fn inner_round_long_execution_is_a_full_execution() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
         // All canisters should be executed.
-        assert_eq!(system_state.canister_metrics.executed, 1);
+        assert_eq!(system_state.metadata.canister_metrics.executed, 1);
         if canister.canister_id() == target_id {
             // The target canister was not executed first, and still have messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
@@ -6512,7 +6570,7 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
-            prop_assert_eq!(canister.system_state.canister_metrics.executed, 1);
+            prop_assert_eq!(canister.system_state.metadata.canister_metrics.executed, 1);
             prop_assert_eq!(
                 canister.scheduler_state.last_full_execution_round,
                 test.last_round()
@@ -6520,7 +6578,7 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         } else {
             // The second half of the canisters should still have their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
-            prop_assert_eq!(canister.system_state.canister_metrics.executed, 0);
+            prop_assert_eq!(canister.system_state.metadata.canister_metrics.executed, 0);
             prop_assert_eq!(canister.scheduler_state.last_full_execution_round, 0.into());
         }
         total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
@@ -6541,7 +6599,7 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
     let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         // Now all the canisters should be executed once.
-        prop_assert_eq!(canister.system_state.canister_metrics.executed, 1);
+        prop_assert_eq!(canister.system_state.metadata.canister_metrics.executed, 1);
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should have messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);

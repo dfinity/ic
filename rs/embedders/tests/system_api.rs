@@ -973,7 +973,7 @@ fn test_fail_add_cycles_when_not_enough_balance() {
         .with_max_num_instructions(max_num_instructions)
         .build();
     let system_state = get_system_state_with_cycles(cycles_amount);
-    let canister_id = system_state.canister_id();
+    let canister_id = system_state.metadata.canister_id();
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
@@ -1015,7 +1015,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
         .with_max_num_instructions(max_num_instructions)
         .build();
     let system_state = get_system_state_with_cycles(Cycles::from(cycles_amount));
-    let canister_id = system_state.canister_id();
+    let canister_id = system_state.metadata.canister_id();
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
@@ -1212,7 +1212,7 @@ fn certified_data_set() {
             &no_op_logger(),
         )
         .unwrap();
-    assert_eq!(system_state.certified_data, vec![10; 32])
+    assert_eq!(system_state.metadata.certified_data, vec![10; 32])
 }
 
 #[test]
@@ -1386,7 +1386,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             &no_op_logger(),
         )
         .unwrap();
-    assert_eq!(system_state.balance(), initial_cycles);
+    assert_eq!(system_state.metadata.balance(), initial_cycles);
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);
@@ -1481,8 +1481,8 @@ fn helper_test_on_low_wasm_memory(
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut execution_parameters = execution_parameters(api_type.execution_mode());
-    execution_parameters.memory_allocation = system_state.memory_allocation;
-    execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
+    execution_parameters.memory_allocation = system_state.metadata.memory_allocation;
+    execution_parameters.wasm_memory_limit = system_state.metadata.wasm_memory_limit;
 
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
@@ -1719,7 +1719,7 @@ fn push_output_request_respects_memory_limits() {
         api_type.call_context_id(),
         CanisterCyclesCostSchedule::Normal,
     );
-    let own_canister_id = system_state.canister_id;
+    let own_canister_id = system_state.metadata.canister_id;
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
@@ -1830,7 +1830,7 @@ fn push_output_request_oversized_request_memory_limits() {
         api_type.call_context_id(),
         CanisterCyclesCostSchedule::Normal,
     );
-    let own_canister_id = system_state.canister_id;
+    let own_canister_id = system_state.metadata.canister_id;
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
@@ -1942,7 +1942,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
     );
 
     // Propagate system state changes
-    assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
+    assert_eq!(system_state.metadata.global_timer, CanisterTimer::Inactive);
     let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
@@ -1954,7 +1954,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
         )
         .unwrap();
     assert_eq!(
-        system_state.global_timer,
+        system_state.metadata.global_timer,
         CanisterTimer::Active(Time::from_nanos_since_unix_epoch(2))
     );
 }
@@ -1962,7 +1962,8 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
 #[test]
 fn ic0_is_controller_test() {
     let mut system_state = SystemStateBuilder::default().build();
-    system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
+    system_state.metadata.controllers =
+        BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
     let api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,

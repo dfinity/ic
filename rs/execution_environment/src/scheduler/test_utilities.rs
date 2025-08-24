@@ -259,6 +259,7 @@ impl SchedulerTest {
         );
         canister_state
             .system_state
+            .metadata
             .controllers
             .insert(self.xnet_canister_id.get());
         self.state
@@ -615,7 +616,7 @@ impl SchedulerTest {
 
     pub(crate) fn set_canister_global_timer(&mut self, canister: CanisterId, time: Time) {
         let canister_state = self.canister_state_mut(canister);
-        canister_state.system_state.global_timer = CanisterTimer::Active(time);
+        canister_state.system_state.metadata.global_timer = CanisterTimer::Active(time);
     }
 
     pub(crate) fn set_time(&mut self, time: Time) {

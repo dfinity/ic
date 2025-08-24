@@ -111,9 +111,9 @@ where
         .1
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
-    canister_state.system_state.memory_allocation =
+    canister_state.system_state.metadata.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
-    canister_state.system_state.freeze_threshold = 0.into();
+    canister_state.system_state.metadata.freeze_threshold = 0.into();
 
     // Create call context and callback
     let call_origin = CallOrigin::CanisterUpdate(
