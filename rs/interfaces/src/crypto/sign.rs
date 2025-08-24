@@ -143,6 +143,12 @@ pub trait BasicSigVerifier<T: Signable> {
         message: &T,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()>;
+
+    fn verify_multi_sig_batch(
+        &self,
+        batch: &[(&T, &BasicSignatureBatch<T>)],
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()>;
 }
 
 /// A Crypto Component interface to create multi-signatures.
