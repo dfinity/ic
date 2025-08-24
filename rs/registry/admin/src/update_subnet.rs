@@ -118,7 +118,7 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// Only one key_id is permitted at a time at the moment.
     ///
     /// Keys must be given in Scheme:AlgorithmID:KeyName format, like `ecdsa:Secp256k1:some_key_name`.
-    chain_key_signing_enable: Option<Vec<String>>,
+    chain_key_enable: Option<Vec<String>>,
 
     #[clap(long)]
     /// Configuration for chain key:
@@ -126,7 +126,7 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// Cannot have same values as ecdsa_key_signing_enable, or proposal will not execute.
     ///
     /// Keys must be given in Scheme:AlgorithmID:KeyName format, like `ecdsa:Secp256k1:some_key_name`.
-    pub chain_key_signing_disable: Option<Vec<String>>,
+    pub chain_key_disable: Option<Vec<String>>,
 
     /// Configuration for chain key:
     /// The number of nanoseconds that a chain key signature request will time out.
@@ -287,18 +287,18 @@ impl ProposeToUpdateSubnetCmd {
             })
         };
 
-        let chain_key_signing_enable = self
-            .chain_key_signing_enable
+        let chain_key_enable = self
+            .chain_key_enable
             .as_ref()
             .map(|key_strings| parse_chain_keys(key_strings));
 
-        let chain_key_signing_disable = self
-            .chain_key_signing_disable
+        let chain_key_disable = self
+            .chain_key_disable
             .as_ref()
             .map(|key_strings| parse_chain_keys(key_strings));
 
         if let (Some(enable_signing), Some(disable_signing)) =
-            (&chain_key_signing_enable, &chain_key_signing_disable)
+            (&chain_key_enable, &chain_key_disable)
         {
             let enable_set = enable_signing.iter().collect::<HashSet<_>>();
             let disable_set = disable_signing.iter().collect::<HashSet<_>>();
@@ -336,8 +336,8 @@ impl ProposeToUpdateSubnetCmd {
             max_number_of_canisters: self.max_number_of_canisters,
 
             chain_key_config,
-            chain_key_signing_enable,
-            chain_key_signing_disable,
+            chain_key_enable,
+            chain_key_disable,
 
             // Deprecated fields
             max_artifact_streams_per_peer: None,
@@ -401,8 +401,8 @@ mod tests {
             ssh_readonly_access: None,
             ssh_backup_access: None,
             chain_key_config: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
         }
     }
 
@@ -428,8 +428,8 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             chain_key_configs_to_generate: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
             max_parallel_pre_signature_transcripts_in_creation: None,
@@ -490,9 +490,9 @@ mod tests {
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
 
-        let chain_key_signing_enable = Some(vec!["ecdsa:Secp256k1:some_key_name_3".to_string()]);
+        let chain_key_enable = Some(vec!["ecdsa:Secp256k1:some_key_name_3".to_string()]);
 
-        let chain_key_signing_disable = Some(vec!["ecdsa:Secp256k1:some_key_name_4".to_string()]);
+        let chain_key_disable = Some(vec!["ecdsa:Secp256k1:some_key_name_4".to_string()]);
 
         let signature_request_timeout_ns = Some(222_222);
         let idkg_key_rotation_period_ms = Some(222);
@@ -501,8 +501,8 @@ mod tests {
         // Run code under test
         let cmd = ProposeToUpdateSubnetCmd {
             chain_key_configs_to_generate,
-            chain_key_signing_enable,
-            chain_key_signing_disable,
+            chain_key_enable,
+            chain_key_disable,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
             max_parallel_pre_signature_transcripts_in_creation,
@@ -566,11 +566,11 @@ mod tests {
                     idkg_key_rotation_period_ms: Some(222),
                     max_parallel_pre_signature_transcripts_in_creation: Some(2),
                 }),
-                chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                chain_key_enable: Some(vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: "some_key_name_3".to_string(),
                 })]),
-                chain_key_signing_disable: Some(vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                chain_key_disable: Some(vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: "some_key_name_4".to_string(),
                 })]),

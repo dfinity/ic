@@ -227,7 +227,7 @@ fn test(env: TestEnv) {
 
         let disable_signing_payload = UpdateSubnetPayload {
             subnet_id: app_subnet.subnet_id,
-            chain_key_signing_disable: Some(all_key_ids.clone()),
+            chain_key_disable: Some(all_key_ids.clone()),
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(
@@ -285,7 +285,7 @@ fn test(env: TestEnv) {
 
         let proposal_payload = UpdateSubnetPayload {
             subnet_id: new_subnet_id,
-            chain_key_signing_enable: Some(all_key_ids.clone()),
+            chain_key_enable: Some(all_key_ids.clone()),
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(
