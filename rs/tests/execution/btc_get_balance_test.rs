@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use candid::Decode;
 use ic_btc_adapter_test_utils::{
     bitcoin,
-    rpc_client::{Auth, RpcApi, RpcClient},
+    rpc_client::{Auth, RpcClient},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;

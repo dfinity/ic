@@ -119,6 +119,7 @@ rust_test(
     data = [
         # Keep sorted.
         "//:bitcoind",
+        "//:dogecoind",
         "@bitcoin_adapter_mainnet_blocks//file",
         "@bitcoin_adapter_mainnet_headers//file",
         "@bitcoin_adapter_testnet_blocks//file",
@@ -126,12 +127,18 @@ rust_test(
     ],
     env = {
         "BITCOIN_CORE_PATH": "$(rootpath //:bitcoind)",
+        "DOGECOIN_CORE_PATH": "$(rootpath //:dogecoind)",
         "HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
         "BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_blocks//file)",
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
     tags = ["requires-network"],
+    # Because dogecoind binary package is not available on darwin or arm64.
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
     deps = [
         ":adapter",
         "//rs/bitcoin/adapter/test_utils",
