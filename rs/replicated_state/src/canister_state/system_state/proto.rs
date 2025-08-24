@@ -1,3 +1,4 @@
+/*
 use super::*;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -274,3 +275,4 @@ impl TryFrom<pb::CanisterHistory> for CanisterHistory {
         })
     }
 }
+*/

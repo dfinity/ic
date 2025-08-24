@@ -6,7 +6,9 @@ mod tests;
 
 use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::system_state::{
+    CanisterStatus, ExecutionTask, RunningStatus, StoppedStatus, StoppingStatus, SystemState,
+};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
@@ -210,6 +212,7 @@ impl CanisterState {
     }
 
     /// Returns what the canister is going to execute next.
+    /*
     pub fn next_execution(&self) -> NextExecution {
         let next_task = self.system_state.task_queue.front();
         match (next_task, self.has_input()) {
@@ -224,65 +227,68 @@ impl CanisterState {
             | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
         }
     }
+    */
 
+    /*
     /// Returns a reference to the next task in the task queue if any.
     pub fn next_task(&self) -> Option<&ExecutionTask> {
         self.system_state.task_queue.front()
     }
-
-    /// Returns true if the canister has an aborted execution.
-    pub fn has_aborted_execution(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::AbortedExecution { .. }) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
-        }
-    }
+    */
 
     /// Returns true if the canister has a paused execution.
     pub fn has_paused_execution(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::PausedExecution { .. }) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
+        match &self.system_state.status {
+            CanisterStatus::Running(running) => {
+                matches!(running.status, RunningStatus::PausedMessageOrTask(_))
+            }
+            CanisterStatus::Stopping(stopping) => {
+                matches!(stopping.status, StoppingStatus::PausedResponse(_))
+            }
+            CanisterStatus::Stopped(_) => false,
+        }
+    }
+
+    /// Returns true if the canister has an aborted execution.
+    pub fn has_aborted_execution(&self) -> bool {
+        match &self.system_state.status {
+            CanisterStatus::Running(running) => {
+                matches!(running.status, RunningStatus::AbortedMessageOrTask(_))
+            }
+            CanisterStatus::Stopping(stopping) => {
+                matches!(stopping.status, StoppingStatus::AbortedResponse(_))
+            }
+            CanisterStatus::Stopped(_) => false,
         }
     }
 
     /// Returns true if the canister has a paused install code.
     pub fn has_paused_install_code(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::PausedInstallCode(..)) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
+        match &self.system_state.status {
+            CanisterStatus::Running(running) => {
+                matches!(running.status, RunningStatus::PausedInstallCode(_))
+            }
+            CanisterStatus::Stopping(stopping) => {
+                matches!(stopping.status, StoppingStatus::PausedInstallCode(_))
+            }
+            CanisterStatus::Stopped(stopped) => {
+                matches!(stopped.status, StoppedStatus::PausedInstallCode(_))
+            }
         }
     }
 
     /// Returns true if the canister has an aborted install code.
     pub fn has_aborted_install_code(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::AbortedInstallCode { .. }) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedExecution { .. }) => false,
+        match &self.system_state.status {
+            CanisterStatus::Running(running) => {
+                matches!(running.status, RunningStatus::AbortedInstallCode(_))
+            }
+            CanisterStatus::Stopping(stopping) => {
+                matches!(stopping.status, StoppingStatus::AbortedInstallCode(_))
+            }
+            CanisterStatus::Stopped(stopped) => {
+                matches!(stopped.status, StoppedStatus::AbortedInstallCode(_))
+            }
         }
     }
 
@@ -571,7 +577,7 @@ impl CanisterState {
     /// the only way to ensure consistency for messages that would otherwise be
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
-    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+    pub(super) fn drop_in_progress_management_calls_after_split(&mut self) {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
@@ -582,7 +588,9 @@ impl CanisterState {
             scheduler_state: _,
         } = self;
 
-        system_state.drop_in_progress_management_calls_after_split();
+        system_state
+            .status
+            .drop_in_progress_management_calls_after_split();
     }
 
     /// Appends the given log to the canister log.
