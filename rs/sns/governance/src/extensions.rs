@@ -24,7 +24,7 @@ use ic_management_canister_types_private::{
 use ic_nervous_system_common::{
     ledger::compute_distribution_subaccount_bytes, NANO_SECONDS_PER_SECOND, ONE_HOUR_SECONDS,
 };
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc1::account::Account, icrc2::allowance::AllowanceArgs};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use sns_treasury_manager::{
@@ -465,7 +465,6 @@ impl ValidatedRegisterExtension {
                 CanisterInstallMode::Install,
             )
             .await?;
-
         Ok(())
     }
 }
@@ -539,7 +538,7 @@ impl Governance {
                 format!("Could not encode RegisterExtensionRequest: {err:?}"),
             )
         })?;
-
+        log!(INFO, "Y");
         let reply = self
             .env
             .call_canister(
@@ -554,7 +553,7 @@ impl Governance {
                     format!("Canister method call failed: {err:?}"),
                 )
             })?;
-
+        log!(INFO, "X");
         let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
             .map_err(|err| {
                 GovernanceError::new_with_message(
@@ -562,7 +561,7 @@ impl Governance {
                     format!("Could not decode RegisterExtensionResponse: {err:?}"),
                 )
             })?;
-
+        log!(INFO, "W");
         if let Some(register_extension_response::Result::Err(CanisterCallError {
             code,
             description,
@@ -602,14 +601,14 @@ impl Governance {
             subaccount: None,
         };
 
-        let expiry_time_sec = self.env.now().saturating_add(ONE_HOUR_SECONDS);
-        let expiry_time_nsec = expiry_time_sec.saturating_mul(NANO_SECONDS_PER_SECOND);
+        // let expiry_time_sec = self.env.now().saturating_add(ONE_HOUR_SECONDS);
+        // let expiry_time_nsec = expiry_time_sec.saturating_mul(NANO_SECONDS_PER_SECOND);
 
         self.ledger
             .icrc2_approve(
                 to,
                 sns_amount_e8s.saturating_sub(self.transaction_fee_e8s_or_panic()),
-                Some(expiry_time_nsec),
+                Some(u64::MAX),
                 self.transaction_fee_e8s_or_panic(),
                 self.sns_treasury_subaccount(),
             )
@@ -626,7 +625,7 @@ impl Governance {
             .icrc2_approve(
                 to,
                 icp_amount_e8s.saturating_sub(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
-                Some(expiry_time_nsec),
+                Some(u64::MAX),
                 icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
                 self.icp_treasury_subaccount(),
             )
@@ -1120,15 +1119,6 @@ async fn execute_treasury_manager_deposit(
         original,
     } = arg;
 
-    // 1. Transfer funds from treasury to treasury manager
-    governance
-        .approve_treasury_manager(
-            extension_canister_id,
-            treasury_allocation_sns_e8s,
-            treasury_allocation_icp_e8s,
-        )
-        .await?;
-
     let context = governance.treasury_manager_deposit_context().await?;
     let arg_blob =
         construct_treasury_manager_deposit_payload(context, original).map_err(|err| {
@@ -1140,6 +1130,71 @@ async fn execute_treasury_manager_deposit(
                 ),
             )
         })?;
+
+    // 1. Transfer funds from treasury to treasury manager
+    governance
+        .approve_treasury_manager(
+            extension_canister_id,
+            treasury_allocation_sns_e8s,
+            treasury_allocation_icp_e8s,
+        )
+        .await?;
+
+    let sns_allowance = governance
+        .env
+        .call_canister(
+            governance.ledger.canister_id(),
+            "icrc2_allowance",
+            Encode!(&AllowanceArgs {
+                account: Account {
+                    owner: governance.env.canister_id().get().0,
+                    subaccount: governance.sns_treasury_subaccount(),
+                },
+                spender: Account {
+                    owner: extension_canister_id.get().0,
+                    subaccount: None,
+                },
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let icp_allowance = governance
+        .env
+        .call_canister(
+            governance.nns_ledger.canister_id(),
+            "icrc2_allowance",
+            Encode!(&AllowanceArgs {
+                account: Account {
+                    owner: governance.env.canister_id().get().0,
+                    subaccount: governance.icp_treasury_subaccount(),
+                },
+                spender: Account {
+                    owner: extension_canister_id.get().0,
+                    subaccount: None,
+                },
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let sns_allowance = Decode!(
+        &sns_allowance,
+        icrc_ledger_types::icrc2::allowance::Allowance
+    )
+    .unwrap();
+    let icp_allowance = Decode!(
+        &icp_allowance,
+        icrc_ledger_types::icrc2::allowance::Allowance
+    )
+    .unwrap();
+
+    panic!(
+        "sns_allowance: {:?}, icp_allowance: {:?}",
+        sns_allowance, icp_allowance
+    );
 
     // 2. Call deposit on treasury manager
     let balances = governance

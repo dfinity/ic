@@ -114,7 +114,7 @@ impl ICRC1Ledger for LedgerCanister {
             from_subaccount,
             memo: None,
             created_at_time: None,
-            expected_allowance: None,
+            expected_allowance: Some(Nat::from(0_u64)),
         };
 
         let result: Result<Nat, ApproveError> = self

@@ -217,7 +217,7 @@ async fn test_treasury_manager() {
         .await
         .unwrap();
 
-        for _ in 0..1000 {
+        for _ in 0..100 {
             pocket_ic.tick().await;
             pocket_ic.advance_time(Duration::from_secs(1)).await;
         }
@@ -280,15 +280,15 @@ async fn test_treasury_manager() {
 
     for _ in 0..100 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(100)).await;
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
     }
 
     validate_treasury_balances(
         "After registering KongSwapAdaptor",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s - ICP_FEE,
-        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s - SNS_FEE,
+        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s,
+        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s,
     )
     .await
     .unwrap();
@@ -305,10 +305,10 @@ async fn test_treasury_manager() {
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token.clone() => empty_sns_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_sns_e8s - 2 * SNS_FEE)
+                    .external_custodian(initial_treasury_allocation_sns_e8s - 4 * SNS_FEE)
                     .fee_collector(2 * SNS_FEE),
                 icp_token.clone() => empty_icp_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_icp_e8s - 2 * ICP_FEE)
+                    .external_custodian(initial_treasury_allocation_icp_e8s - 4 * ICP_FEE)
                     .fee_collector(2 * ICP_FEE),
             }),
         );

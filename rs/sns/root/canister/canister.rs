@@ -272,6 +272,7 @@ async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtens
     )
     .await;
 
+    log!(INFO, "register_extension done");
     RegisterExtensionResponse::from(result)
 }
 
