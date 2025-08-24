@@ -1,10 +1,7 @@
 use anyhow::Result;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::{
-    bitcoin::{hashes::Hash, Txid},
-    rpc_client::RpcApi,
-};
+use ic_btc_adapter_test_utils::bitcoin::{hashes::Hash, Txid};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;

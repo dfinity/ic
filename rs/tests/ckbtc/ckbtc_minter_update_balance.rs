@@ -2,7 +2,6 @@ use anyhow::Result;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::rpc_client::RpcApi;
 use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
