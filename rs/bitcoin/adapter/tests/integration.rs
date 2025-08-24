@@ -1,9 +1,12 @@
-use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
-use ic_btc_adapter::{start_server, Config, IncomingSource};
+use bitcoin::{
+    consensus::encode::deserialize, dogecoin::Network as DogeNetwork, Amount, BlockHash,
+    Network as BtcNetwork,
+};
+use ic_btc_adapter::{start_server, AdapterNetwork, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
     bitcoind::{BitcoinD, Conf},
-    rpc_client::{CreateRawTransactionInput, RpcApi, RpcClient},
+    rpc_client::{CreateRawTransactionInput, RpcClient, RpcClientType},
 };
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
@@ -18,12 +21,11 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     path::Path,
-    str::FromStr,
 };
 use tempfile::{Builder, TempPath};
 use tokio::runtime::Runtime;
 
-type BitcoinAdapterClient = Box<
+type AdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
 >;
 
@@ -54,7 +56,7 @@ impl ForkTestData {
 }
 
 fn make_get_successors_request(
-    adapter_client: &BitcoinAdapterClient,
+    adapter_client: &AdapterClient,
     anchor: Vec<u8>,
     headers: Vec<Vec<u8>>,
 ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
@@ -73,7 +75,7 @@ fn make_get_successors_request(
 }
 
 fn make_send_tx_request(
-    adapter_client: &BitcoinAdapterClient,
+    adapter_client: &AdapterClient,
     raw_tx: &[u8],
 ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
     let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
@@ -89,13 +91,13 @@ fn make_send_tx_request(
     )
 }
 
-fn start_adapter(
+fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
     logger: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
-    network: bitcoin::Network,
+    network: T,
 ) {
     let config = Config {
         network: network.into(),
@@ -110,40 +112,53 @@ fn start_adapter(
     start_server(logger, metrics_registry, rt_handle, config);
 }
 
-fn start_bitcoind() -> BitcoinD {
-    let network = bitcoin::Network::Regtest;
+fn start_bitcoind<T: RpcClientType>(network: T) -> BitcoinD<T> {
     let conf = Conf {
         p2p: true,
+        view_stdout: true,
         ..Conf::default()
     };
-
-    let path =
-        std::env::var("BITCOIN_CORE_PATH").expect("Failed to get BITCOIND_CORE_PATH env variable");
+    let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
+    let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
     BitcoinD::new(&path, network, conf).unwrap()
 }
 
-fn start_client(
+fn start_client<T: RpcClientType>(
     logger: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     uds_path: &Path,
-) -> BitcoinAdapterClient {
-    let adapters_config = AdaptersConfig {
-        bitcoin_mainnet_uds_path: Some(uds_path.into()),
-        ..Default::default()
-    };
+) -> AdapterClient {
+    let mut adapters_config = AdaptersConfig::default();
+    if T::NAME == BtcNetwork::NAME {
+        adapters_config.bitcoin_mainnet_uds_path = Some(uds_path.into());
+    } else if T::NAME == DogeNetwork::NAME {
+        adapters_config.dogecoin_mainnet_uds_path = Some(uds_path.into());
+    } else {
+        panic!("Unsupported network {}", T::NAME);
+    }
 
-    setup_bitcoin_adapter_clients(
+    let clients = setup_bitcoin_adapter_clients(
         logger.clone(),
         metrics_registry,
         rt_handle.clone(),
         adapters_config,
-    )
-    .btc_mainnet_client
+    );
+    if T::NAME == BtcNetwork::NAME {
+        clients.btc_mainnet_client
+    } else if T::NAME == DogeNetwork::NAME {
+        clients.doge_mainnet_client
+    } else {
+        unreachable!()
+    }
 }
 
-fn check_received_blocks(client: &RpcClient, blocks: &[Vec<u8>], start_index: usize) {
+fn check_received_blocks<T: RpcClientType>(
+    client: &RpcClient<T>,
+    blocks: &[Vec<u8>],
+    start_index: usize,
+) {
     for (h, block) in blocks.iter().enumerate() {
         assert_eq!(
             *block,
@@ -152,13 +167,13 @@ fn check_received_blocks(client: &RpcClient, blocks: &[Vec<u8>], start_index: us
     }
 }
 
-fn start_adapter_and_client(
+fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: T,
     adapter_state: AdapterState,
-) -> (BitcoinAdapterClient, TempPath) {
+) -> (AdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
     let res = Builder::new()
         .make(|uds_path| {
@@ -170,7 +185,7 @@ fn start_adapter_and_client(
                 uds_path,
                 network,
             );
-            Ok(start_client(
+            Ok(start_client::<T>(
                 &logger,
                 &metrics_registry,
                 rt.handle(),
@@ -191,25 +206,25 @@ fn start_adapter_and_client(
     res
 }
 
-fn start_idle_adapter_and_client(
+fn start_idle_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
-) -> (BitcoinAdapterClient, TempPath) {
+    network: T,
+) -> (AdapterClient, TempPath) {
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle)
 }
 
-fn start_active_adapter_and_client(
+fn start_active_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
-) -> (BitcoinAdapterClient, TempPath) {
+    network: T,
+) -> (AdapterClient, TempPath) {
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
 }
 
-fn wait_for_blocks(client: &RpcClient, blocks: u64) {
+fn wait_for_blocks<T: RpcClientType>(client: &RpcClient<T>, blocks: u64) {
     let mut tries = 0;
     while client.get_blockchain_info().unwrap().blocks != blocks {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -220,7 +235,7 @@ fn wait_for_blocks(client: &RpcClient, blocks: u64) {
     }
 }
 
-fn wait_for_connection(client: &RpcClient, connection_count: usize) {
+fn wait_for_connection<T: RpcClientType>(client: &RpcClient<T>, connection_count: usize) {
     let mut tries = 0;
     while client.get_connection_count().unwrap() != connection_count {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -232,7 +247,7 @@ fn wait_for_connection(client: &RpcClient, connection_count: usize) {
 }
 
 // This is an expensive operation. Should only be used when checking for an upper bound on the number of connections.
-fn exact_connections(client: &RpcClient, connection_count: usize) {
+fn exact_connections<T: RpcClientType>(client: &RpcClient<T>, connection_count: usize) {
     // It always takes less than 5 seconds for the client to connect to the adapter.
     // TODO: Rethink this. It's not a good idea to have a fixed sleep time. ditto in wait_for_connection
     std::thread::sleep(std::time::Duration::from_secs(5));
@@ -245,13 +260,13 @@ fn exact_connections(client: &RpcClient, connection_count: usize) {
     }
 }
 
-fn sync_until_end_block(
-    adapter_client: &BitcoinAdapterClient,
-    client: &RpcClient,
+fn sync_until_end_block<T: RpcClientType>(
+    adapter_client: &AdapterClient,
+    client: &RpcClient<T>,
     start_index: u64,
     headers: &mut Vec<Vec<u8>>,
     max_tries: u64,
-) -> Vec<Block> {
+) -> Vec<T::Block> {
     let mut blocks = vec![];
     let mut anchor = client.get_block_hash(start_index).unwrap()[..].to_vec();
     let mut tries = 0;
@@ -265,7 +280,11 @@ fn sync_until_end_block(
                 if !new_blocks.is_empty() {
                     let new_headers: Vec<Vec<u8>> = new_blocks
                         .iter()
-                        .map(|block| deserialize::<Block>(block).unwrap().block_hash()[..].to_vec())
+                        .map(|block| {
+                            (T::block_hash(&deserialize::<T::Block>(block).unwrap()).as_ref()
+                                as &[u8])
+                                .to_vec()
+                        })
                         .collect();
 
                     check_received_blocks(
@@ -295,13 +314,13 @@ fn sync_until_end_block(
     blocks
 }
 
-fn sync_blocks(
-    adapter_client: &BitcoinAdapterClient,
+fn sync_blocks<T: RpcClientType>(
+    adapter_client: &AdapterClient,
     headers: &mut Vec<Vec<u8>>,
     anchor: Vec<u8>,
     max_num_blocks: usize,
     max_tries: u64,
-) -> Vec<Block> {
+) -> Vec<T::Block> {
     let mut blocks = vec![];
 
     let mut tries = 0;
@@ -313,7 +332,11 @@ fn sync_blocks(
                 if !new_blocks.is_empty() {
                     let new_headers: Vec<Vec<u8>> = new_blocks
                         .iter()
-                        .map(|block| deserialize::<Block>(block).unwrap().block_hash()[..].to_vec())
+                        .map(|block| {
+                            (T::block_hash(&deserialize::<T::Block>(block).unwrap()).as_ref()
+                                as &[u8])
+                                .to_vec()
+                        })
                         .collect();
 
                     headers.extend(new_headers);
@@ -337,13 +360,13 @@ fn sync_blocks(
 }
 
 // Returns once all the blocks are received. If the result is built from multiple calls then we can't properly check the BFS ordering.
-fn sync_blocks_at_once(
-    adapter_client: &BitcoinAdapterClient,
+fn sync_blocks_at_once<T: RpcClientType>(
+    adapter_client: &AdapterClient,
     headers: &[Vec<u8>],
     anchor: Vec<u8>,
     max_num_blocks: usize,
     max_tries: u64,
-) -> Vec<Block> {
+) -> Vec<T::Block> {
     let mut blocks = vec![];
 
     let mut tries = 0;
@@ -371,25 +394,21 @@ fn sync_blocks_at_once(
     blocks
 }
 
-fn get_blackhole_address() -> Address {
-    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
-        .unwrap()
-        .assume_checked()
-}
-
-fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (RpcClient, RpcClient) {
+fn create_alice_and_bob_wallets<T: RpcClientType>(
+    bitcoind: &BitcoinD<T>,
+) -> (RpcClient<T>, RpcClient<T>) {
     let client = &bitcoind.rpc_client;
     let alice_client = client.with_account("alice").unwrap();
     let bob_client = client.with_account("bob").unwrap();
     (alice_client, bob_client)
 }
 
-fn fund_with_btc(to_fund_client: &RpcClient) {
+fn fund_with_btc<T: RpcClientType>(to_fund_client: &RpcClient<T>) {
+    let blackhole_address = to_fund_client.get_new_address().unwrap();
     let to_fund_address = to_fund_client.get_address().unwrap();
     let initial_amount = to_fund_client
-        .get_received_by_address(to_fund_address, Some(0))
-        .unwrap()
-        .to_btc();
+        .get_balance_of(None, to_fund_address)
+        .unwrap();
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -397,15 +416,16 @@ fn fund_with_btc(to_fund_client: &RpcClient) {
 
     // Generate 100 blocks for coinbase maturity
     to_fund_client
-        .generate_to_address(100, &get_blackhole_address())
+        .generate_to_address(100, &blackhole_address)
         .unwrap();
 
     // The reward for mining a block is 50 bitcoins
+    // The check below uses `listunspent` internally, which is more reliable than `receivedbyaddress`.
     assert_eq!(
         to_fund_client
-            .get_received_by_address(to_fund_address, Some(0))
+            .get_balance_of(None, to_fund_address)
             .unwrap(),
-        Amount::from_btc(initial_amount + 50.0).unwrap()
+        initial_amount + T::REGTEST_INITIAL_BLOCK_REWARDS,
     );
 }
 
@@ -432,11 +452,11 @@ fn make_bfs_order(
     res
 }
 
-fn check_fork_bfs_order(
+fn check_fork_bfs_order<T: RpcClientType>(
     shared_blocks: &[BlockHash],
     fork1: &ForkTestData,
     fork2: &ForkTestData,
-    adapter_client: &BitcoinAdapterClient,
+    adapter_client: &AdapterClient,
     anchor: Vec<u8>,
 ) -> (Vec<BlockHash>, Vec<BlockHash>, Vec<BlockHash>) {
     let mut processed_hashes: HashSet<BlockHash> = HashSet::new();
@@ -461,7 +481,7 @@ fn check_fork_bfs_order(
         - excluded_amount_fork1
         - excluded_amount_fork2;
 
-    let blocks = sync_blocks_at_once(
+    let blocks = sync_blocks_at_once::<T>(
         adapter_client,
         &processed_hashes
             .iter()
@@ -472,12 +492,12 @@ fn check_fork_bfs_order(
         400,
     );
     assert_eq!(blocks.len(), expected_len);
-    let block_hashes: Vec<BlockHash> = blocks.iter().map(|block| block.block_hash()).collect();
+    let block_hashes: Vec<BlockHash> = blocks.iter().map(|block| T::block_hash(block)).collect();
 
     (block_hashes, bfs_order1, bfs_order2)
 }
 
-fn sync_headers_until_checkpoint(adapter_client: &BitcoinAdapterClient, anchor: Vec<u8>) {
+fn sync_headers_until_checkpoint(adapter_client: &AdapterClient, anchor: Vec<u8>) {
     loop {
         let res = make_get_successors_request(adapter_client, anchor.clone(), vec![]);
         match res {
@@ -492,10 +512,10 @@ fn sync_headers_until_checkpoint(adapter_client: &BitcoinAdapterClient, anchor: 
 }
 
 /// Checks that the client (replica) receives the mined blocks using the gRPC service.
-#[test]
-fn test_receives_blocks() {
+fn test_receives_blocks<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind = start_bitcoind(network);
     let client = &bitcoind.rpc_client;
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
@@ -510,7 +530,7 @@ fn test_receives_blocks() {
         &rt,
         vec![SocketAddr::V4(bitcoind.p2p_socket().unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        network,
     );
 
     let blocks = sync_until_end_block(&adapter_client, client, 0, &mut vec![], 15);
@@ -518,18 +538,28 @@ fn test_receives_blocks() {
     assert_eq!(blocks.len(), 150);
 }
 
-// Checks that the adapter disconnects from the clients when it becomes idle.
 #[test]
-fn test_adapter_disconnects_when_idle() {
+fn btc_test_receives_blocks() {
+    test_receives_blocks::<BtcNetwork>()
+}
+
+#[test]
+fn doge_test_receives_blocks() {
+    test_receives_blocks::<DogeNetwork>()
+}
+
+// Checks that the adapter disconnects from the clients when it becomes idle.
+fn test_adapter_disconnects_when_idle<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind = start_bitcoind(network);
     let client = &bitcoind.rpc_client;
 
     let url = SocketAddr::V4(bitcoind.p2p_socket().unwrap());
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
+    let _r = start_active_adapter_and_client(&rt, vec![url], logger, network);
 
     // The client should be connected to the adapter
     wait_for_connection(client, 1);
@@ -542,11 +572,21 @@ fn test_adapter_disconnects_when_idle() {
     exact_connections(client, 0);
 }
 
-/// Checks that an idle adapter does not connect to any peers.
 #[test]
-fn idle_adapter_does_not_connect_to_peers() {
+fn btc_test_adapter_disconnects_when_idle() {
+    test_adapter_disconnects_when_idle::<BtcNetwork>()
+}
+
+#[test]
+fn doge_test_adapter_disconnects_when_idle() {
+    test_adapter_disconnects_when_idle::<DogeNetwork>()
+}
+
+/// Checks that an idle adapter does not connect to any peers.
+fn idle_adapter_does_not_connect_to_peers<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind = start_bitcoind(network);
     let client = &bitcoind.rpc_client;
 
     let url = SocketAddr::V4(bitcoind.p2p_socket().unwrap());
@@ -556,24 +596,33 @@ fn idle_adapter_does_not_connect_to_peers() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
+    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, network);
 
     // The client still does not have any connections
     exact_connections(client, 0);
 }
 
-/// Checks that the adapter can connect to multiple BitcoinD peers.
 #[test]
-fn test_connection_to_multiple_peers() {
-    let logger = no_op_logger();
+fn btc_idle_adapter_does_not_connect_to_peers() {
+    idle_adapter_does_not_connect_to_peers::<BtcNetwork>()
+}
 
-    let bitcoind1 = start_bitcoind();
+#[test]
+fn doge_idle_adapter_does_not_connect_to_peers() {
+    idle_adapter_does_not_connect_to_peers::<DogeNetwork>()
+}
+
+/// Checks that the adapter can connect to multiple BitcoinD peers.
+fn test_connection_to_multiple_peers<T: RpcClientType + Into<AdapterNetwork>>() {
+    let logger = no_op_logger();
+    let network = T::REGTEST;
+    let bitcoind1 = start_bitcoind(network);
     let client1 = &bitcoind1.rpc_client;
 
-    let bitcoind2 = start_bitcoind();
+    let bitcoind2 = start_bitcoind(network);
     let client2 = &bitcoind2.rpc_client;
 
-    let bitcoind3 = start_bitcoind();
+    let bitcoind3 = start_bitcoind(network);
     let client3 = &bitcoind3.rpc_client;
 
     let url1 = SocketAddr::V4(bitcoind1.p2p_socket().unwrap());
@@ -596,37 +645,44 @@ fn test_connection_to_multiple_peers() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(
-        &rt,
-        vec![url1, url2, url3],
-        logger,
-        bitcoin::Network::Regtest,
-    );
+    let _r = start_active_adapter_and_client(&rt, vec![url1, url2, url3], logger, network);
 
     wait_for_connection(client1, 3);
     wait_for_connection(client2, 3);
     wait_for_connection(client3, 3);
 }
 
-/// The client (replica) receives newly created transactions by 3rd parties using the gRPC service.
 #[test]
-fn test_receives_new_3rd_party_txs() {
+fn btc_test_connection_to_multiple_peers() {
+    test_connection_to_multiple_peers::<BtcNetwork>()
+}
+
+#[test]
+fn doge_test_connection_to_multiple_peers() {
+    test_connection_to_multiple_peers::<DogeNetwork>()
+}
+
+/// The client (replica) receives newly created transactions by 3rd parties using the gRPC service.
+fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind = start_bitcoind(network);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(bitcoind.p2p_socket().unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        network,
     );
 
     let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
+    let blackhole_address = alice_client.get_new_address().unwrap();
 
     fund_with_btc(&alice_client);
 
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
+    let initial_alice_balance = alice_client.get_balance(None).unwrap();
     let txid = alice_client
         .send_to(
             bob_client.get_address().unwrap(),
@@ -636,14 +692,17 @@ fn test_receives_new_3rd_party_txs() {
         .expect("Failed to send to Bob");
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
     alice_client
-        .generate_to_address(1, &get_blackhole_address())
+        .generate_to_address(1, &blackhole_address)
         .unwrap();
     assert_eq!(102, alice_client.get_blockchain_info().unwrap().blocks);
 
     let alice_balance = alice_client.get_balance(None).unwrap();
 
     // Take the tx fee into consideration
-    assert_eq!(alice_balance, Amount::from_btc(48.999).unwrap());
+    assert_eq!(
+        alice_balance + Amount::from_btc(1.001).unwrap(),
+        initial_alice_balance
+    );
     assert_eq!(
         bob_client.get_balance(None).unwrap(),
         Amount::from_btc(1.0).unwrap()
@@ -652,21 +711,31 @@ fn test_receives_new_3rd_party_txs() {
     let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 1);
-    assert!(blocks[0].txdata.iter().any(|tx| tx.compute_txid() == txid));
+    assert!(T::iter_transactions(&blocks[0]).any(|tx| tx.compute_txid() == txid));
+}
+
+#[test]
+fn btc_test_receives_new_3rd_party_txs() {
+    test_receives_new_3rd_party_txs::<BtcNetwork>()
+}
+
+#[test]
+fn doge_test_receives_new_3rd_party_txs() {
+    test_receives_new_3rd_party_txs::<DogeNetwork>()
 }
 
 /// Ensures the client (replica) can send a transaction (1 BTC from Alice to Bob) using the gRPC service.
-#[test]
-fn test_send_tx() {
+fn test_send_tx<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind = start_bitcoind(network);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(bitcoind.p2p_socket().unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        network,
     );
 
     let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
@@ -720,14 +789,24 @@ fn test_send_tx() {
     }
 }
 
-/// Checks that the client (replica) receives blocks from both created forks.
 #[test]
-fn test_receives_blocks_from_forks() {
+fn btc_test_send_tx() {
+    test_send_tx::<BtcNetwork>()
+}
+
+#[test]
+fn doge_test_send_tx() {
+    test_send_tx::<DogeNetwork>()
+}
+
+/// Checks that the client (replica) receives blocks from both created forks.
+fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind1 = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind1 = start_bitcoind(network);
     let client1 = &bitcoind1.rpc_client;
 
-    let bitcoind2 = start_bitcoind();
+    let bitcoind2 = start_bitcoind(network);
     let client2 = &bitcoind2.rpc_client;
 
     let url1 = bitcoind1.p2p_socket().unwrap();
@@ -738,7 +817,7 @@ fn test_receives_blocks_from_forks() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
+        network,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -776,18 +855,28 @@ fn test_receives_blocks_from_forks() {
     wait_for_blocks(client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 29, 201);
+    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 201);
     assert_eq!(blocks.len(), 29);
 }
 
-/// Checks that the adapter returns blocks in BFS order.
 #[test]
-fn test_bfs_order() {
+fn btc_test_receives_blocks_from_forks() {
+    test_receives_blocks_from_forks::<BtcNetwork>()
+}
+
+#[test]
+fn doge_test_receives_blocks_from_forks() {
+    test_receives_blocks_from_forks::<DogeNetwork>()
+}
+
+/// Checks that the adapter returns blocks in BFS order.
+fn test_bfs_order<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
-    let bitcoind1 = start_bitcoind();
+    let network = T::REGTEST;
+    let bitcoind1 = start_bitcoind(network);
     let client1 = &bitcoind1.rpc_client;
 
-    let bitcoind2 = start_bitcoind();
+    let bitcoind2 = start_bitcoind(network);
     let client2 = &bitcoind2.rpc_client;
 
     let url1 = bitcoind1.p2p_socket().unwrap();
@@ -798,7 +887,7 @@ fn test_bfs_order() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
+        network,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -858,7 +947,7 @@ fn test_bfs_order() {
 
     let mut fork_test_data2 = ForkTestData::new(fork2, 0, 0);
 
-    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
+    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order::<T>(
         &shared_blocks,
         &fork_test_data1,
         &fork_test_data2,
@@ -869,7 +958,7 @@ fn test_bfs_order() {
 
     fork_test_data1.update_excluded(2, 4);
     fork_test_data2.update_excluded(4, 6);
-    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
+    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order::<T>(
         &shared_blocks,
         &fork_test_data1,
         &fork_test_data2,
@@ -880,7 +969,7 @@ fn test_bfs_order() {
 
     fork_test_data1.update_excluded(0, 6);
     fork_test_data2.update_excluded(4, 6);
-    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
+    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order::<T>(
         &shared_blocks,
         &fork_test_data1,
         &fork_test_data2,
@@ -890,10 +979,20 @@ fn test_bfs_order() {
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 }
 
+#[test]
+fn btc_bfs_order() {
+    test_bfs_order::<BtcNetwork>()
+}
+
+#[test]
+fn doge_bfs_order() {
+    test_bfs_order::<DogeNetwork>()
+}
+
 // This test makes use of mainnet data. It first syncs the headerchain until the adapter
 // checkpoint is passed and then requests 10 blocks, from 350,990 to 350,999.
 #[test]
-fn test_mainnet_data() {
+fn test_btc_mainnet_data() {
     let logger = no_op_logger();
     let headers_data_path =
         std::env::var("HEADERS_DATA_PATH").expect("Failed to get test data path env variable");
@@ -912,12 +1011,8 @@ fn test_mainnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Bitcoin,
-    );
+    let (adapter_client, _path) =
+        start_active_adapter_and_client(&rt, vec![bitcoind_addr], logger, BtcNetwork::Bitcoin);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     // Block 350,989's block hash.
@@ -925,14 +1020,15 @@ fn test_mainnet_data() {
         .parse()
         .unwrap();
 
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 250);
+    let blocks =
+        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 250);
     assert_eq!(blocks.len(), 10);
 }
 
 // This test makes use of testnet data. It first syncs the headerchain until the adapter
 // checkpoint is passed and then requests 9 blocks.
 #[test]
-fn test_testnet_data() {
+fn test_btc_testnet_data() {
     let logger = no_op_logger();
     let headers_data_path = std::env::var("TESTNET_HEADERS_DATA_PATH")
         .expect("Failed to get test data path env variable");
@@ -951,18 +1047,15 @@ fn test_testnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Testnet,
-    );
+    let (adapter_client, _path) =
+        start_active_adapter_and_client(&rt, vec![bitcoind_addr], logger, BtcNetwork::Testnet);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     let anchor: BlockHash = "0000000000ec75f32a0805740a6fa1364cc1683e419e915d99892db97c3e80b2"
         .parse()
         .unwrap();
 
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 250);
+    let blocks =
+        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 250);
     assert_eq!(blocks.len(), 9);
 }
