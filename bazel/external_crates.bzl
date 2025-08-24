@@ -324,9 +324,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "bitcoincore-rpc": crate.spec(
                 version = "^0.19.0",
             ),
-            "bitcoind": crate.spec(
-                version = "^0.32.0",
-            ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
             ),
@@ -790,6 +787,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "itertools": crate.spec(
                 version = "^0.12.0",
+            ),
+            "jsonrpc": crate.spec(
+                version = "^0.18.0",
+                features = [
+                    "minreq_http",
+                ],
             ),
             "json-patch": crate.spec(
                 version = "^0.2.6",

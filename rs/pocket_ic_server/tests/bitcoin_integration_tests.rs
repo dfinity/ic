@@ -2,7 +2,7 @@ use candid::{CandidType, Encode, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Network as BtcNetwork},
     bitcoind::{BitcoinD, Conf},
-    rpc_client::{ClientError, RpcApi, RpcError},
+    rpc_client::{RpcApi, RpcError},
 };
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
@@ -124,7 +124,7 @@ fn bitcoin_integration_test() {
                 .assume_checked(),
         ) {
             Ok(_) => break,
-            Err(RpcError::ClientError(ClientError::JsonRpc(err))) => {
+            Err(RpcError::JsonRpc(err)) => {
                 if start.elapsed() > std::time::Duration::from_secs(30) {
                     panic!("Timed out when waiting for bitcoind; last error: {}", err);
                 }

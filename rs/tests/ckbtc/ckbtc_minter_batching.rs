@@ -243,10 +243,13 @@ pub fn test_batching(env: TestEnv) {
         // Hence, we expect the fee to be 3650
         // By checking the fee we know that we have the right amount of inputs and outputs
         const EXPECTED_FEE: u64 = 3650;
-        assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
+        assert_eq!(
+            get_tx_infos.fees.map(|fees| fees.base.to_sat()),
+            Some(EXPECTED_FEE)
+        );
 
         // Check that we can modify the fee
-        assert!(get_tx_infos.bip125_replaceable);
+        assert_eq!(get_tx_infos.bip125_replaceable, Some(true));
 
         // Generate more blocks and wait for the minter to finalize the retrieval.
         generate_blocks(
