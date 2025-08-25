@@ -595,8 +595,10 @@ impl StreamHandlerImpl {
                         request
                     );
 
-                    let reject_response = generate_reject_response_for(reason, request);
-                    if !self.should_accept_message_from(&reject_response, remote_subnet_id, state) {
+                    let reject_response = generate_reject_response_for(reason, request, state);
+                    if should_accept_message_from(&reject_response, remote_subnet_id, state)
+                        != ShouldAcceptMessage::Yes
+                    {
                         // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
                         //
                         // This can only happen if the initial request was misrouted or if a
@@ -752,60 +754,76 @@ impl StreamHandlerImpl {
             RequestOrResponse::Request(_) => LABEL_VALUE_TYPE_REQUEST,
             RequestOrResponse::Response(_) => LABEL_VALUE_TYPE_RESPONSE,
         };
-        if self.should_accept_message_from(&msg, remote_subnet_id, state) {
-            // Sender subnet is valid.
-            match self.induct_message_impl(
-                msg,
-                msg_type,
-                state,
-                available_guaranteed_response_memory,
-            ) {
-                Accept(maybe_lost_cycles) => {
-                    // Message successfully inducted or dropped.
-                    stream.push_accept_signal();
-                    maybe_lost_cycles
-                }
-                Reject(reason, RequestOrResponse::Request(request))
-                    if state.metadata.certification_version < CertificationVersion::V19 =>
-                {
-                    // Unable to induct a request, generate reject response and push it into `stream`.
-                    stream.push(generate_reject_response_for(reason, &request));
-                    stream.push_accept_signal();
-                    Cycles::zero()
-                }
-                Reject(reason, RequestOrResponse::Request(_)) => {
-                    // Unable to induct a request, push a reject signal.
-                    stream.push_reject_signal(reason);
-                    Cycles::zero()
-                }
-                Reject(RejectReason::CanisterMigrating, RequestOrResponse::Response(_)) => {
-                    // Unable to deliver a response due to migrating canister, push reject signal.
-                    stream.push_reject_signal(RejectReason::CanisterMigrating);
-                    Cycles::zero()
-                }
-                Reject(_, RequestOrResponse::Response(_)) => {
-                    unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
+        match should_accept_message_from(&msg, remote_subnet_id, state) {
+            ShouldAcceptMessage::Yes => {
+                // Sender subnet is valid.
+                match self.induct_message_impl(
+                    msg,
+                    msg_type,
+                    state,
+                    available_guaranteed_response_memory,
+                ) {
+                    Accept(maybe_lost_cycles) => {
+                        // Message successfully inducted or dropped.
+                        stream.push_accept_signal();
+                        maybe_lost_cycles
+                    }
+                    Reject(reason, RequestOrResponse::Request(request))
+                        if state.metadata.certification_version < CertificationVersion::V19 =>
+                    {
+                        // Unable to induct a request, generate reject response and push it into `stream`.
+                        stream.push(generate_reject_response_for(reason, &request, state));
+                        stream.push_accept_signal();
+                        Cycles::zero()
+                    }
+                    Reject(reason, RequestOrResponse::Request(_)) => {
+                        // Unable to induct a request, push a reject signal.
+                        stream.push_reject_signal(reason);
+                        Cycles::zero()
+                    }
+                    Reject(RejectReason::CanisterMigrating, RequestOrResponse::Response(_)) => {
+                        // Unable to deliver a response due to migrating canister, push reject signal.
+                        stream.push_reject_signal(RejectReason::CanisterMigrating);
+                        Cycles::zero()
+                    }
+                    Reject(_, RequestOrResponse::Response(_)) => {
+                        unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
+                    }
                 }
             }
-        } else {
-            // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
-            //
-            // Do not enqueue a reject response as remote subnet is likely malicious and
-            // trying to cause a memory leak by sending bogus messages and never consuming
-            // reject responses.
-            error!(
-                self.log,
-                "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
-                CRITICAL_ERROR_SENDER_SUBNET_MISMATCH,
-                remote_subnet_id,
-                msg.sender(),
-                msg
-            );
-            self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_SUBNET_MISMATCH);
-            self.metrics.critical_error_sender_subnet_mismatch.inc();
-            stream.push_accept_signal();
-            // Cycles are lost.
-            msg.cycles()
+
+            ShouldAcceptMessage::Reject => {
+                // Sender subnet is valid, but the message should be rejected.
+                debug!(
+                    self.log,
+                    "Inducting request failed: Canister {} is migrating\n{:?}",
+                    msg.sender(),
+                    msg
+                );
+                stream.push_reject_signal(RejectReason::CanisterMigrating);
+                Cycles::zero()
+            }
+
+            ShouldAcceptMessage::RemoteSubnetIdInvalid => {
+                // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
+                //
+                // Do not enqueue a reject response as remote subnet is likely malicious and
+                // trying to cause a memory leak by sending bogus messages and never consuming
+                // reject responses.
+                error!(
+                    self.log,
+                    "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
+                    CRITICAL_ERROR_SENDER_SUBNET_MISMATCH,
+                    remote_subnet_id,
+                    msg.sender(),
+                    msg
+                );
+                self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_SUBNET_MISMATCH);
+                self.metrics.critical_error_sender_subnet_mismatch.inc();
+                stream.push_accept_signal();
+                // Cycles are lost.
+                msg.cycles()
+            }
         }
     }
 
@@ -956,65 +974,6 @@ impl StreamHandlerImpl {
         }
     }
 
-    /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
-    /// (i.e. whether it is its current host according to the routing table; or an
-    /// exception applies due to a canister migrations).
-    fn should_accept_message_from(
-        &self,
-        msg: &RequestOrResponse,
-        actual_subnet_id: SubnetId,
-        state: &ReplicatedState,
-    ) -> bool {
-        // Remote subnet that should have sent the message according to the routing table.
-        let expected_subnet_id = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(msg.sender().get());
-
-        match expected_subnet_id {
-            // The actual originating subnet and the routing table entry for the sender are in agreement.
-            Some(expected_subnet_id) if expected_subnet_id == actual_subnet_id => true,
-
-            // If a message addressed to a canister on this subnet A comes from a remote subnet B,
-            // but the routing table claims it should come from a different subnet C, it must be accepted
-            // iff the sender of this message is undergoing a migration from subnet B to C or C to B.
-            Some(expected_subnet_id)
-                if migration_trace(state, msg.sender()).is_some_and(|trace| {
-                    trace.contains(&actual_subnet_id) && trace.contains(&expected_subnet_id)
-                }) =>
-            {
-                true
-            }
-
-            // A reject response addressed to a canister hosted on this subnet A, but coming from a
-            // different subnet B must be accepted iff this canister is marked as undergoing a
-            // migration process from subnet B to subnet A.
-            //
-            // Since this case arises only in terms of reject signals for requests, it is important
-            // that this be applied to reject responses only.
-            _ if matches!(
-                msg,
-                RequestOrResponse::Response(response) if matches!(response.response_payload, Payload::Reject(_))
-            ) && migration_trace(state, msg.receiver()).is_some_and(|trace| {
-                matches!(
-                    (
-                        trace.iter().position(|subnet_id| subnet_id == &actual_subnet_id),
-                        trace.iter().position(|subnet_id| subnet_id == &state.metadata.own_subnet_id),
-                    ),
-                    (Some(index_1), Some(index_2)) if index_1 < index_2
-                )
-            }) =>
-            {
-                true
-            }
-
-            // The sender is not known to be hosted by the originating subnet now (according to the
-            // routing table) or previously (according to canister migration traces).
-            _ => false,
-        }
-    }
-
     /// Checks whether a message addressed to a canister known not to be hosted by
     /// `self.subnet_id` should be rejected (as opposed to silently dropped).
     ///
@@ -1094,6 +1053,91 @@ impl StreamHandlerImpl {
     }
 }
 
+/// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
+/// (i.e. whether it is its current host according to the routing table; or an
+/// exception applies due to a canister migrations).
+fn should_accept_message_from(
+    msg: &RequestOrResponse,
+    actual_subnet_id: SubnetId,
+    state: &ReplicatedState,
+) -> ShouldAcceptMessage {
+    // Remote subnet that should have sent the message according to the routing table.
+    let expected_subnet_id = state
+        .metadata
+        .network_topology
+        .routing_table
+        .route(msg.sender().get());
+
+    match expected_subnet_id {
+        // The actual originating subnet and the routing table entry for the sender are in agreement.
+        Some(expected_subnet_id) if expected_subnet_id == actual_subnet_id => {
+            ShouldAcceptMessage::Yes
+        }
+
+        // If a message is a response and addressed to a canister on this subnet A coming from a remote
+        // subnet B, but the routing table claims it should come from a different subnet C, it must be
+        // accepted iff the sender of this message is undergoing a migration from subnet B to C or C to B.
+        Some(expected_subnet_id)
+            if matches!(msg, RequestOrResponse::Response(_))
+                && migration_trace(state, msg.sender()).is_some_and(|trace| {
+                    trace.contains(&actual_subnet_id) && trace.contains(&expected_subnet_id)
+                }) =>
+        {
+            ShouldAcceptMessage::Yes
+        }
+
+        // If a message is a request and addressed to a canister on this subnet A coming from a remote
+        // subnet B, but the routing table claims it should come from a different subnet C, it must be
+        // rejected (as opposed to accepted with an error) iff the sender of this message is undergoing
+        // a migration from subnet B to C or C to B.
+        Some(expected_subnet_id)
+            if matches!(msg, RequestOrResponse::Request(_))
+                && migration_trace(state, msg.sender()).is_some_and(|trace| {
+                    trace.contains(&actual_subnet_id) && trace.contains(&expected_subnet_id)
+                }) =>
+        {
+            ShouldAcceptMessage::Reject
+        }
+
+        // A reject response addressed to a canister hosted on this subnet A, but coming from a
+        // different subnet B must be accepted iff this canister is marked as undergoing a
+        // migration process from subnet B to subnet A.
+        //
+        // Since this case arises only in terms of reject signals for requests, it is important
+        // that this be applied to reject responses only.
+        _ if matches!(
+            msg,
+            RequestOrResponse::Response(response) if matches!(response.response_payload, Payload::Reject(_))
+        ) && migration_trace(state, msg.receiver()).is_some_and(|trace| {
+            matches!(
+                (
+                    trace.iter().position(|subnet_id| subnet_id == &actual_subnet_id),
+                    trace.iter().position(|subnet_id| subnet_id == &state.metadata.own_subnet_id),
+                ),
+                (Some(index_1), Some(index_2)) if index_1 < index_2
+            )
+        }) =>
+        {
+            ShouldAcceptMessage::Yes
+        }
+
+        // The sender is not known to be hosted by the originating subnet now (according to the
+        // routing table) or previously (according to canister migration traces).
+        _ => ShouldAcceptMessage::RemoteSubnetIdInvalid,
+    }
+}
+
+/// The return type of `should_accept_message_from`.
+#[derive(Eq, PartialEq, Debug)]
+enum ShouldAcceptMessage {
+    /// The message should be accepted.
+    Yes,
+    /// The message should be rejected.
+    Reject,
+    /// The message should be accepted with an error.
+    RemoteSubnetIdInvalid,
+}
+
 /// Returns a migration trace for `canister_id` in the network topology in `state` (if any).
 fn migration_trace(state: &ReplicatedState, canister_id: CanisterId) -> Option<Vec<SubnetId>> {
     state
@@ -1104,12 +1148,20 @@ fn migration_trace(state: &ReplicatedState, canister_id: CanisterId) -> Option<V
 }
 
 /// Generates a reject `Response` for a pair of `RejectReason` and `Request`.
-fn generate_reject_response_for(reason: RejectReason, request: &Request) -> RequestOrResponse {
+fn generate_reject_response_for(
+    reason: RejectReason,
+    request: &Request,
+    state: &ReplicatedState,
+) -> RequestOrResponse {
     use ic_types::CountBytes;
     let (code, message) = match reason {
+        RejectReason::CanisterMigrating if state.canister_state(&request.sender).is_none() => (
+            RejectCode::SysTransient,
+            format!("Sender {} is migrating", request.sender),
+        ),
         RejectReason::CanisterMigrating => (
             RejectCode::SysTransient,
-            format!("Canister {} is migrating", request.receiver),
+            format!("Receiver {} is migrating", request.receiver),
         ),
         RejectReason::CanisterNotFound => (
             RejectCode::DestinationInvalid,
