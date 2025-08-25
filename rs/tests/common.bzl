@@ -5,6 +5,8 @@ Common dependencies for system-tests.
 load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
+MAINNET_LATEST_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["latest_release"]["version"]
+MAINNET_LATEST_GUESTOS_HASH = mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash"]
 MAINNET_NNS_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"]
 MAINNET_NNS_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"]
 MAINNET_APP_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"]
