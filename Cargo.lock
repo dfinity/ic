@@ -5402,7 +5402,7 @@ dependencies = [
  "nix 0.24.3",
  "parking_lot",
  "rand 0.8.5",
-    "sev",
+ "sev",
  "tempfile",
 ]
 
@@ -15392,17 +15392,17 @@ dependencies = [
  "der 0.7.9",
  "hkdf",
  "mockall",
-    "p384",
+ "p384",
  "pem 1.1.1",
-    "rand 0.8.5",
+ "rand 0.8.5",
  "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
-    "rsa",
+ "rsa",
  "sev",
  "sha2 0.10.9",
  "tempfile",
-    "x509-cert",
+ "x509-cert",
 ]
 
 [[package]]
