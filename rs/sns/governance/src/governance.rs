@@ -2344,8 +2344,14 @@ impl Governance {
             ));
         }
 
-        let validated_register_extension =
-            validate_register_extension(self, register_extension).await?;
+        let validated_register_extension = validate_register_extension(self, register_extension)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid RegisterExtension: {:?}", err),
+                )
+            })?;
 
         validated_register_extension.execute(self).await?;
 

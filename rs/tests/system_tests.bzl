@@ -301,14 +301,13 @@ def system_test(
         test_driver_target = bin_name
 
     # Environment variable names to targets (targets are resolved)
+    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps = {}
+    icos_images = dict()
+    info_file_vars = dict()
 
     _guestos = "//ic-os/guestos/envs/dev:"
     _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"
-
-    # Always add version.txt for now as all test use it even that they don't declare they use dev image.
-    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
     if int(uses_guestos_img) + int(uses_guestos_nns_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
@@ -322,9 +321,6 @@ def system_test(
 
     if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_latest_release_mainnet_update) >= 2:
         fail("More than one target HostOS (upgrade) image was specified!")
-
-    icos_images = dict()
-    info_file_vars = dict()
 
     if uses_guestos_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]

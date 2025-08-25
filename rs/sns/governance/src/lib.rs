@@ -22,6 +22,7 @@ pub mod types;
 pub mod upgrade_journal;
 
 pub mod icrc_ledger_helper;
+pub mod storage;
 
 // Feature flag for SNS Extensions
 thread_local! {
