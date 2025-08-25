@@ -354,3 +354,129 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config_types::{
+        FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings, GuestOSUpgradeConfig,
+        GuestVMType, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings, CONFIG_VERSION,
+    };
+
+    #[test]
+    fn test_generate_ipv6_prefix() {
+        let result = generate_ipv6_prefix("2001:db8:1234:5678:9abc:def0:1234:5678");
+        assert_eq!(result, "2001:db8:1234:5678::/64");
+
+        // Test IPv6 address with less than 4 segments (should fallback)
+        let result = generate_ipv6_prefix("2001:db8");
+        assert_eq!(result, "::1/128");
+    }
+
+    fn create_test_guestos_config() -> GuestOSConfig {
+        GuestOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings: NetworkSettings {
+                ipv6_config: Ipv6Config::Fixed(FixedIpv6Config {
+                    address: "2001:db8::1/64".to_string(),
+                    gateway: "2001:db8::1".parse().unwrap(),
+                }),
+                ipv4_config: None,
+                domain_name: None,
+            },
+            icos_settings: ICOSSettings {
+                node_reward_type: None,
+                mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
+                deployment_environment: config_types::DeploymentEnvironment::Mainnet,
+                logging: config_types::Logging::default(),
+                use_nns_public_key: false,
+                nns_urls: vec![],
+                use_node_operator_private_key: false,
+                enable_trusted_execution_environment: false,
+                use_ssh_authorized_keys: false,
+                icos_dev_settings: config_types::ICOSDevSettings::default(),
+            },
+            guestos_settings: GuestOSSettings {
+                inject_ic_crypto: false,
+                inject_ic_state: false,
+                inject_ic_registry_local_store: false,
+                guestos_dev_settings: GuestOSDevSettings::default(),
+            },
+            guest_vm_type: GuestVMType::Default,
+            upgrade_config: GuestOSUpgradeConfig::default(),
+            trusted_execution_environment_config: None,
+        }
+    }
+
+    #[test]
+    fn test_configure_ipv4() {
+        // Test with IPv4 config
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.network_settings.ipv4_config = Some(Ipv4Config {
+            address: "192.168.1.100".parse().unwrap(),
+            prefix_length: 24,
+            gateway: "192.168.1.1".parse().unwrap(),
+        });
+
+        let (ipv4_address, ipv4_gateway) = configure_ipv4(&guestos_config);
+        assert_eq!(ipv4_address, "192.168.1.100/24");
+        assert_eq!(ipv4_gateway, "192.168.1.1");
+
+        // Test without IPv4 config
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.network_settings.ipv4_config = None;
+
+        let (ipv4_address, ipv4_gateway) = configure_ipv4(&guestos_config);
+        assert_eq!(ipv4_address, "");
+        assert_eq!(ipv4_gateway, "");
+    }
+
+    #[test]
+    fn test_substitute_template() {
+        let template_content = r#"
+            IPv6 Address: {{ ipv6_address }}
+            IPv6 Prefix: {{ ipv6_prefix }}
+            IPv4 Address: {{ ipv4_address }}
+            IPv4 Gateway: {{ ipv4_gateway }}
+            Domain Name: {{ domain_name }}
+            NNS URLs: {{ nns_urls }}
+            Backup Retention: {{ backup_retention_time_secs }}
+            Backup Purging: {{ backup_purging_interval_secs }}
+            Malicious Behavior: {{ malicious_behavior }}
+            Query Stats Epoch: {{ query_stats_epoch_length }}
+            Node Reward Type: {{ node_reward_type }}
+            Jaeger Address: {{ jaeger_addr }}
+        "#;
+
+        let config_vars = ConfigVariables {
+            ipv6_address: "2001:db8::1".to_string(),
+            ipv6_prefix: "2001:db8::/64".to_string(),
+            ipv4_address: "192.168.1.100/24".to_string(),
+            ipv4_gateway: "192.168.1.1".to_string(),
+            nns_urls: "http://[::1]:8080".to_string(),
+            backup_retention_time_secs: "86400".to_string(),
+            backup_purging_interval_secs: "3600".to_string(),
+            query_stats_epoch_length: "600".to_string(),
+            jaeger_addr: "localhost:6831".to_string(),
+            domain_name: "test.example.com".to_string(),
+            node_reward_type: "normal".to_string(),
+            malicious_behavior: "null".to_string(),
+            generate_ic_boundary_tls_cert: None,
+        };
+
+        let result = substitute_template(template_content, &config_vars);
+
+        assert!(result.contains("IPv6 Address: 2001:db8::1"));
+        assert!(result.contains("IPv6 Prefix: 2001:db8::/64"));
+        assert!(result.contains("IPv4 Address: 192.168.1.100/24"));
+        assert!(result.contains("IPv4 Gateway: 192.168.1.1"));
+        assert!(result.contains("Domain Name: test.example.com"));
+        assert!(result.contains("NNS URLs: http://[::1]:8080"));
+        assert!(result.contains("Backup Retention: 86400"));
+        assert!(result.contains("Backup Purging: 3600"));
+        assert!(result.contains("Malicious Behavior: null"));
+        assert!(result.contains("Query Stats Epoch: 600"));
+        assert!(result.contains("Node Reward Type: normal"));
+        assert!(result.contains("Jaeger Address: localhost:6831"));
+    }
+}
