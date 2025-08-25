@@ -88,24 +88,24 @@ pub mod requests {
 // ============================== Locks ============================== //
 
 struct Locks {
-    pub ids: BTreeSet<&'static str>,
+    pub ids: BTreeSet<String>,
 }
 
 /// A way to acquire locks before entering a critical section which may only
 /// run once at any given time.
 pub struct MethodGuard {
-    id: &'static str,
+    id: String,
 }
 
 impl MethodGuard {
-    pub fn new(tag: &'static str) -> Result<Self, String> {
-        let id = tag;
+    pub fn new(tag: &str) -> Result<Self, String> {
+        let id = String::from(tag);
         LOCKS.with_borrow_mut(|locks| {
             let held_locks = &mut locks.ids;
             if held_locks.contains(&id) {
                 return Err("Failed to acquire lock".to_string());
             }
-            held_locks.insert(id);
+            held_locks.insert(id.clone());
             Ok(Self { id })
         })
     }

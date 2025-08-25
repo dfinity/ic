@@ -12,7 +12,7 @@ use std::{borrow::Cow, time::Duration};
 
 use crate::{
     canister_state::{max_active_requests, num_active_requests},
-    processing::process_all_accepted,
+    processing::{process_accepted, process_all_failed, process_all_generic},
 };
 
 mod canister_state;
@@ -187,7 +187,16 @@ impl Storable for Event {
 
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
-    set_timer_interval(interval, || spawn(process_all_accepted()));
+    set_timer_interval(interval, || {
+        spawn(process_all_generic(
+            "accepted",
+            |r| matches!(r, RequestState::Accepted { .. }),
+            process_accepted,
+        ))
+    });
+
+    // This one has a different type from the generic ones above.
+    set_timer_interval(interval, || spawn(process_all_failed()));
 }
 
 pub fn rate_limited() -> bool {
