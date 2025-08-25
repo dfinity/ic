@@ -9,8 +9,8 @@ use crate::{
         v1 as pb,
         v1::{
             governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
-            ExtensionInit, ExtensionOperationArg, GovernanceError, Precise, PreciseMap,
-            RegisterExtension, Topic,
+            ExtensionInit, ExtensionOperationArg, ExtensionUpgradeArg, GovernanceError, Precise,
+            PreciseMap, RegisterExtension, Topic,
         },
     },
     storage::{cache_registered_extension, get_registered_extension_from_cache},
@@ -186,6 +186,19 @@ fn validate_treasury_manager_init(
     })
 }
 
+/// Validates treasury manager upgrade arguments
+async fn validate_treasury_manager_upgrade(
+    upgrade_arg: Option<ExtensionUpgradeArg>,
+) -> Result<ValidatedExtensionUpgradeArg, String> {
+    // For now, treasury manager doesn't have any specific upgrade arguments
+    // Any upgrade arg provided should be None or an empty value
+    if let Some(ExtensionUpgradeArg { value: Some(_) }) = upgrade_arg {
+        return Err("Treasury manager extensions do not support upgrade arguments yet".to_string());
+    }
+
+    Ok(ValidatedExtensionUpgradeArg::TreasuryManager)
+}
+
 async fn validate_deposit_operation_impl(
     governance: &Governance,
     value: Option<Precise>,
@@ -359,6 +372,17 @@ impl ExtensionSpec {
     ) -> Result<ValidatedExtensionInit, String> {
         match &self.extension_type {
             ExtensionType::TreasuryManager => validate_treasury_manager_init(gov, init).await, // Future extension types would be handled here
+        }
+    }
+
+    pub async fn validate_upgrade_arg(
+        &self,
+        _gov: &Governance,
+        upgrade_arg: Option<ExtensionUpgradeArg>,
+    ) -> Result<ValidatedExtensionUpgradeArg, String> {
+        match &self.extension_type {
+            ExtensionType::TreasuryManager => validate_treasury_manager_upgrade(upgrade_arg).await,
+            // Future extension types would be handled here
         }
     }
 
@@ -961,13 +985,32 @@ pub async fn validate_register_extension(
     })
 }
 
+#[derive(Clone, Debug)]
+pub enum ValidatedExtensionUpgradeArg {
+    TreasuryManager, // Currently has no upgrade args, but can be supported later
+                     // Future: other extension type upgrade arguments would go here
+}
+
+impl ValidatedExtensionUpgradeArg {
+    /// Serialize the upgrade argument to bytes for canister upgrade
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::TreasuryManager => {
+                // Treasury manager currently has no upgrade arguments
+                // Return empty bytes (empty candid encoding)
+                candid::encode_one(()).unwrap_or_default()
+            } // Future: other extension types would serialize their specific arguments here
+        }
+    }
+}
+
 pub struct ValidatedUpgradeExtension {
     pub extension_canister_id: CanisterId,
     pub wasm: Wasm,
     pub spec: ExtensionSpec,
     pub current_version: ExtensionVersion,
     pub new_version: ExtensionVersion,
-    pub upgrade_arg: Vec<u8>,
+    pub upgrade_arg: ValidatedExtensionUpgradeArg,
 }
 
 impl ValidatedUpgradeExtension {
@@ -984,7 +1027,7 @@ impl ValidatedUpgradeExtension {
             .upgrade_non_root_canister(
                 extension_canister_id,
                 wasm,
-                upgrade_arg,
+                upgrade_arg.to_bytes(),
                 CanisterInstallMode::Upgrade,
             )
             .await?;
@@ -1003,8 +1046,7 @@ pub async fn validate_upgrade_extension(
     let pb::UpgradeExtension {
         extension_canister_id,
         canister_upgrade_arg,
-        new_canister_wasm: _,
-        chunked_canister_wasm: _,
+        wasm,
     } = &upgrade_extension;
 
     // Validate extension canister ID
@@ -1025,13 +1067,12 @@ pub async fn validate_upgrade_extension(
         })?;
 
     // Extract and validate WASM (either direct bytes or chunked)
-    let wasm = Wasm::try_from(&upgrade_extension)
-        .map_err(|err| format!("Invalid WASM specification: {}", err))?;
+    let Some(pb_wasm) = wasm else {
+        return Err("wasm field is required".to_string());
+    };
 
-    // Validate WASM structure and size constraints
-    wasm.validate(&*governance.env, canister_upgrade_arg)
-        .await
-        .map_err(|defects| format!("WASM validation failed: {}", defects.join("; ")))?;
+    let wasm =
+        Wasm::try_from(pb_wasm).map_err(|err| format!("Invalid WASM specification: {}", err))?;
 
     // Get the WASM hash for validation against ALLOWED_EXTENSIONS
     let wasm_module_hash = wasm.sha256sum();
@@ -1039,6 +1080,20 @@ pub async fn validate_upgrade_extension(
     // Validate the new WASM against ALLOWED_EXTENSIONS
     let new_spec = validate_extension_wasm(&wasm_module_hash)
         .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+
+    // Validate the typed upgrade argument using the extension spec first
+    let upgrade_arg = new_spec
+        .validate_upgrade_arg(governance, canister_upgrade_arg.clone())
+        .await
+        .map_err(|err| format!("Invalid upgrade argument: {}", err))?;
+
+    // Generate bytes from the validated upgrade arg for WASM validation
+    let upgrade_arg_bytes = upgrade_arg.to_bytes();
+
+    // Validate WASM structure and size constraints with the upgrade arg bytes
+    wasm.validate(&*governance.env, &Some(upgrade_arg_bytes))
+        .await
+        .map_err(|defects| format!("WASM validation failed: {}", defects.join("; ")))?;
 
     // Check that the new extension has the same name as the current one
     if new_spec.name != current_extension.name {
@@ -1063,8 +1118,6 @@ pub async fn validate_upgrade_extension(
             current_extension.extension_type, new_spec.extension_type
         ));
     }
-
-    let upgrade_arg = canister_upgrade_arg.clone().unwrap_or_default();
 
     // Clone the new version before moving new_spec
     let new_version = new_spec.version.clone();

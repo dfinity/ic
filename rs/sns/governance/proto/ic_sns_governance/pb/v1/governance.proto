@@ -473,6 +473,31 @@ message RegisterExtension {
   optional ExtensionInit extension_init = 2;
 }
 
+// WASM specification that can be either direct bytes or chunked
+message Wasm {
+  oneof wasm {
+    // Use this field if the WASM fits within the proposal size limit.
+    bytes bytes = 1;
+    // If the entire WASM does not fit into the 2 MiB ingress limit, use this instead.
+    ChunkedCanisterWasm chunked = 2;
+  }
+}
+
+message ExtensionUpgradeArg {
+  optional Precise value = 1;
+}
+
+message UpgradeExtension {
+  // The id of the extension canister to upgrade.
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  // Arguments passed to the post-upgrade method of the new wasm module.
+  optional ExtensionUpgradeArg canister_upgrade_arg = 2;
+
+  // The new wasm module that the extension canister is upgraded to.
+  optional Wasm wasm = 3;
+}
+
 message ExtensionOperationArg {
   optional Precise value = 1;
 }
@@ -699,6 +724,11 @@ message Proposal {
     //
     // Id = 18.
     ExecuteExtensionOperation execute_extension_operation = 22;
+
+    // Upgrade an SNS extension canister.
+    //
+    // Id = 19.
+    UpgradeExtension upgrade_extension = 23;
   }
 }
 

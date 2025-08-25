@@ -3,7 +3,8 @@ use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     extensions::{
         validate_execute_extension_operation, validate_register_extension,
-        ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+        validate_upgrade_extension, ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+        ValidatedUpgradeExtension,
     },
     governance::{
         bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
@@ -27,8 +28,8 @@ use crate::{
         Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
         ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
         RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
-        TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
-        Valuation as ValuationPb, Vote,
+        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     treasury::assess_treasury_balance,
@@ -451,6 +452,9 @@ pub(crate) async fn validate_and_render_action(
         }
         proposal::Action::RegisterExtension(register_extension) => {
             validate_and_render_register_extension(governance, register_extension).await
+        }
+        proposal::Action::UpgradeExtension(upgrade_extension) => {
+            validate_and_render_upgrade_extension(governance, upgrade_extension).await
         }
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
@@ -1557,6 +1561,46 @@ async fn validate_and_render_register_extension(
 ## Extension Configuration
 
 The extension will be deployed and configured according to the provided parameters.",
+    ))
+}
+
+async fn validate_and_render_upgrade_extension(
+    governance: &crate::governance::Governance,
+    upgrade_extension: &UpgradeExtension,
+) -> Result<String, String> {
+    let validated_upgrade_extension =
+        validate_upgrade_extension(governance, upgrade_extension.clone()).await?;
+
+    let ValidatedUpgradeExtension {
+        extension_canister_id,
+        wasm,
+        spec,
+        current_version,
+        new_version,
+        upgrade_arg: _,
+    } = validated_upgrade_extension;
+
+    let wasm_info = wasm.description();
+
+    Ok(format!(
+        r"# Proposal to Upgrade {spec}
+
+## Extension canister: {extension_canister_id}
+
+## Version Upgrade
+* Current version: {current_version}
+* New version: {new_version}
+
+## Wasm Details
+
+{wasm_info}
+
+## Upgrade Configuration
+
+The extension canister will be upgraded to the new version with the specified WASM.",
+        spec = spec.name,
+        current_version = current_version.0,
+        new_version = new_version.0,
     ))
 }
 
