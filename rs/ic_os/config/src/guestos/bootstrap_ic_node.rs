@@ -5,9 +5,34 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
+use walkdir::WalkDir;
 
 const CONFIG_ROOT_PATH: &str = "/boot/config";
 const STATE_ROOT_PATH: &str = "/var/lib/ic";
+
+/// Validate that the bootstrap tar contains only regular files and directories
+fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
+    for entry in WalkDir::new(extracted_dir) {
+        let entry = entry
+            .with_context(|| format!("Failed to read entry in {}", extracted_dir.display()))?;
+
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("Failed to get metadata for {}", entry.path().display()))?;
+
+        if metadata.is_file() || metadata.is_dir() {
+            continue;
+        } else {
+            anyhow::bail!(
+                "Bootstrap contains non-regular file: {} (file type: {:?})",
+                entry.path().display(),
+                metadata.file_type()
+            );
+        }
+    }
+
+    Ok(())
+}
 
 /// Process the bootstrap package to populate SSH keys and injected data
 pub fn process_bootstrap(
@@ -28,6 +53,8 @@ pub fn process_bootstrap(
         "tar extraction failed with status: {}",
         status
     );
+
+    validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
     let ic_crypto_src = tmpdir.path().join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
@@ -304,5 +331,61 @@ mod tests {
 
         let result = process_bootstrap(&invalid_tar, &config_root, &state_root);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_bootstrap_contents_accepts_regular_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_dir = temp_dir.path().join("test");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        fs::write(test_dir.join("file1.txt"), "content1").unwrap();
+        fs::create_dir(test_dir.join("subdir")).unwrap();
+        fs::write(test_dir.join("subdir").join("file2.txt"), "content2").unwrap();
+
+        let result = validate_bootstrap_contents(&test_dir);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_bootstrap_contents_rejects_symlinks() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_dir = temp_dir.path().join("test");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        fs::write(test_dir.join("regular_file.txt"), "content").unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("regular_file.txt", test_dir.join("symlink.txt")).unwrap();
+
+        let result = validate_bootstrap_contents(&test_dir);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-regular file"));
+    }
+
+    #[test]
+    fn test_validate_bootstrap_contents_rejects_symlinks_in_subdir() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_dir = temp_dir.path().join("test");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let subdir = test_dir.join("subdir");
+        let nested_subdir = subdir.join("nested");
+        fs::create_dir_all(&nested_subdir).unwrap();
+
+        fs::write(nested_subdir.join("regular_file.txt"), "content").unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            "regular_file.txt",
+            nested_subdir.join("symlink_in_subdir.txt"),
+        )
+        .unwrap();
+
+        let result = validate_bootstrap_contents(&test_dir);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("non-regular file"));
+        assert!(error_msg.contains("symlink_in_subdir.txt"));
     }
 }
