@@ -537,6 +537,24 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+/// Extensible configuration type used instead of `bool` and `Option<bool>`:
+/// if provided, the corresponding feature is enabled.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct EmptyConfig {}
+
+/// Specifies nonmainnet features enabled in this instance.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct NonmainnetFeatures {
+    /// Enables features disabled by a feature flag on the ICP mainnet.
+    pub beta_features: Option<EmptyConfig>,
+    /// Disables canister backtraces (enabled on the ICP mainnet).
+    pub disable_canister_backtrace: Option<EmptyConfig>,
+    /// Effectively disable limits on function name length in canister WASM.
+    pub disable_function_name_length_limits: Option<EmptyConfig>,
+    /// Disables rate-limiting of canister execution (instruction and memory writes).
+    pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
+}
+
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
@@ -582,7 +600,7 @@ pub enum InitialTime {
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: bool,
+    pub nonmainnet_features: Option<NonmainnetFeatures>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
