@@ -1214,6 +1214,17 @@ impl PocketIcSubnets {
                 .unwrap(),
                 Tokens::from_tokens(1_000_000_000).unwrap(),
             );
+            // The following account is the account of the anonymous principal
+            // from which funds can be transfered to any other account
+            // without hard-coding any fixed identity controlling
+            // one of the above accounts.
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "1c7a48ba6a562aa9eaa2481a9049cdf0433b9738c992d698c31d8abf89cadc79",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
             let icp_ledger_init_payload =
                 LedgerCanisterInitPayloadBuilder::new_with_mainnet_settings()
                     .initial_values(initial_values)
