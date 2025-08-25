@@ -25,7 +25,6 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
-    "//rs/wasm_transform",
     "@crate_index//:anyhow",
     "@crate_index//:bincode",
     "@crate_index//:ic-btc-interface",
@@ -48,6 +47,7 @@ DEPENDENCIES = [
     "@crate_index//:wasmprinter",
     "@crate_index//:wasmtime",
     "@crate_index//:wasmtime-environ",
+    "@crate_index//:wirm",
 ]
 
 MACRO_DEPENDENCIES = []

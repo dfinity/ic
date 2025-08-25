@@ -26,6 +26,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     Cycles, NumBytes, NumInstructions, PrincipalId,
 };
+use wirm::wasmparser;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
