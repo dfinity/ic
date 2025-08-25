@@ -2,12 +2,12 @@ use crate::canister::test::test_utils::{
     setup_thread_local_canister_for_test, write_rewards_to_csv, TestState, CANISTER_TEST, VM,
 };
 use crate::canister::NodeRewardsCanister;
-use crate::metrics::{ManagementCanisterClient, MetricsManager};
+use crate::metrics::MetricsManager;
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
-use candid::{CandidType, Decode, Encode};
-use flate2::read::GzDecoder;
 use futures_util::FutureExt;
+use ic_base_types::RegistryVersion;
 use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::providers_rewards::{
@@ -19,28 +19,31 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-    NODE_REWARDS_TABLE_KEY,
+    make_subnet_list_record_key, DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::PrincipalId;
-use indexmap::map::Entry;
-use indexmap::IndexMap;
 use maplit::btreemap;
 use prost::Message;
 use rewards_calculation::rewards_calculator::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
 use rewards_calculation::rewards_calculator_results::{
-    DayUtc, NodeProviderRewards, NodeStatus, RewardsCalculatorResults,
+    DayUtc, NodeProviderRewards, RewardsCalculatorResults,
 };
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
-use std::path::PathBuf;
+use std::io::{BufReader, Read};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs;
+use tokio::time::sleep;
+use url::Url;
 
 fn setup_data_for_test_rewards_calculation(
     fake_registry: Arc<FakeRegistry>,
@@ -624,97 +627,106 @@ pub async fn read_items(path: &str) -> Result<Vec<RegistryDelta>, Box<dyn std::e
     Ok(items)
 }
 
-#[derive(Default, CandidType, candid::Deserialize, Debug)]
-struct SubnetMetricsExport {
-    metrics_by_subnet: BTreeMap<PrincipalId, Vec<NodeMetricsHistoryRecord>>,
+async fn all_deltas() -> Vec<RegistryDelta> {
+    let registry_canister = RegistryCanister::new(vec![Url::from_str("https://ic0.app").unwrap()]);
+    let mut local_latest_version = ZERO_REGISTRY_VERSION;
+    let mut all_deltas = Vec::new();
+
+    loop {
+        match registry_canister.get_latest_version().await {
+            Ok(remote_version) => match local_latest_version.get().cmp(&remote_version) {
+                Ordering::Less => {
+                    println!(
+                        "Registry version local {} < remote {}",
+                        local_latest_version.get(),
+                        remote_version
+                    );
+                }
+                Ordering::Equal => {
+                    println!(
+                        "Local Registry version {} is up to date",
+                        local_latest_version.get()
+                    );
+                    break;
+                }
+                Ordering::Greater => {
+                    break;
+                }
+            },
+            Err(e) => {
+                println!("Failed to get latest registry version: {:?}", e);
+            }
+        }
+        let changes = registry_canister
+            .get_changes_since(local_latest_version.get())
+            .await;
+        if let Ok((mut initial_records, _)) = changes {
+            all_deltas.extend_from_slice(&initial_records);
+
+            let version = initial_records
+                .iter()
+                .flat_map(|d| d.values.iter().map(|v| v.version))
+                .max()
+                .unwrap();
+
+            local_latest_version = RegistryVersion::from(version + 1);
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
+    all_deltas
 }
 
-#[test]
-fn test_convert_json_to_candid() {
-    // Path to your JSON
-    let json_path = "/Users/pietro.di.marco/RustroverProjects/dre2/rs/cli/out.json";
-    let candid_path = "/Users/pietro.di.marco/RustroverProjects/ic/rs/node_rewards/canister/src/canister/test/test_data/subnets_metrics_export.candid";
+#[tokio::test]
+async fn test_real() {
+    let from = DayUtc::from("2025-07-15").get();
+    let to = DayUtc::from("2025-08-13").get();
 
-    // Open JSON
-    let file = File::open(json_path).unwrap();
-    let reader = BufReader::new(file);
-
-    // Deserialize JSON -> struct
-    let exported_metrics: SubnetMetricsExport = serde_json::from_reader(reader).unwrap();
-
-    // Encode struct as Candid
-    let bytes = Encode!(&exported_metrics).unwrap();
-
-    // Write Candid-encoded blob to file
-    let mut out = File::create(candid_path).unwrap();
-    out.write_all(&bytes).unwrap();
-
-    println!("✅ Wrote candid file to {}", candid_path);
-}
-#[test]
-fn test_real() {
     let fake_registry = Arc::new(FakeRegistry::new());
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("canister")
-        .join("test")
-        .join("test_data")
-        .join("registry");
+    let all_deltas: Vec<RegistryDelta> = all_deltas().await;
+    let mut present_keys = Vec::new();
 
-    let mut file = File::open(&path).unwrap();
-    let mut file_bytes = Vec::new();
-    file.read_to_end(&mut file_bytes).unwrap();
-    let mut buf = &file_bytes[..];
-    let mut registry = IndexMap::new();
-    while !buf.is_empty() {
-        let delta = RegistryDelta::decode_length_delimited(&mut buf).unwrap();
-
-        for values in delta.values {
-            let string_key = std::str::from_utf8(&delta.key[..]).unwrap().to_string();
-            let value = if values.deletion_marker {
-                None
-            } else {
-                Some(values.value)
-            };
-
-            match registry.get(&(
-                string_key.clone(),
-                values.version,
-                values.timestamp_nanoseconds,
-            )) {
-                None => {}
-                Some(existing) => {
-                    let existing: &Option<Vec<u8>> = existing;
-                    let record =
-                        NodeOperatorRecord::decode(existing.clone().unwrap().as_slice()).unwrap();
+    for delta in all_deltas {
+        let key = std::str::from_utf8(&delta.key[..]).unwrap().to_string();
+        let subnets_list = make_subnet_list_record_key();
+        if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX)
+            || key.starts_with(DATA_CENTER_KEY_PREFIX)
+            || key.starts_with(NODE_RECORD_KEY_PREFIX)
+            || key.starts_with(NODE_REWARDS_TABLE_KEY)
+            || key.starts_with(&subnets_list)
+        {
+            for value in delta.values {
+                if !present_keys.contains(&(key.clone(), value.version)) {
+                    let v = if value.deletion_marker {
+                        None
+                    } else {
+                        Some(value.value)
+                    };
+                    fake_registry.set_value_at_version_with_timestamp(
+                        key.clone(),
+                        value.version,
+                        value.timestamp_nanoseconds,
+                        v,
+                    );
+                    present_keys.push((key.clone(), value.version));
                 }
             }
-            registry.insert(
-                (string_key, values.version, values.timestamp_nanoseconds),
-                value,
-            );
         }
     }
 
-    for ((string_key, version, timestamp_nanoseconds), value) in registry {
-        fake_registry.set_value_at_version_with_timestamp(
-            string_key,
-            version,
-            timestamp_nanoseconds,
-            value,
-        );
-    }
     // Open the file
-    let bytes = std::fs::read("/Users/pietro.di.marco/RustroverProjects/ic/rs/node_rewards/canister/src/canister/test/test_data/subnets_metrics_export.candid").unwrap();
-    let exported_metrics: SubnetMetricsExport = Decode!(&bytes, SubnetMetricsExport).unwrap();
+    let file =
+        File::open("/Users/pietro.di.marco/RustroverProjects/dre/rs/cli/metrics_20250701.json")
+            .unwrap();
+    let reader = BufReader::new(file);
+
+    // Deserialize into your struct
+    let exported_metrics: BTreeMap<PrincipalId, Vec<NodeMetricsHistoryRecord>> =
+        serde_json::from_reader(reader).unwrap();
 
     // Deserialize into the struct
     let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
     mock.expect_node_metrics_history().returning(move |args| {
-        match exported_metrics
-            .metrics_by_subnet
-            .get(&PrincipalId::from(args.subnet_id))
-        {
+        match exported_metrics.get(&PrincipalId::from(args.subnet_id)) {
             None => CallResult::Err((RejectionCode::Unknown, "Error".to_string())),
             Some(subnet_metrics) => CallResult::Ok(subnet_metrics.clone()),
         }
@@ -728,12 +740,10 @@ fn test_real() {
     );
     CANISTER_TEST.with_borrow_mut(|c| *c = canister);
     let request = GetNodeProvidersRewardsRequest {
-        from: DayUtc::from("2025-06-14").get(),
-        to: DayUtc::from("2025-07-13").get(),
+        from_timestamp_nanoseconds: from,
+        to_timestamp_nanoseconds: to,
     };
-
-    println!("finished syncing");
-    let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
+    let _result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
         &CANISTER_TEST,
         request.clone(),
     )

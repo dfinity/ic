@@ -11951,6 +11951,7 @@ dependencies = [
  "flate2",
  "futures",
  "futures-util",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
@@ -11967,6 +11968,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-node-provider-rewards",
  "ic-registry-transport",
  "ic-stable-structures 0.6.8",
@@ -11988,6 +11990,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]

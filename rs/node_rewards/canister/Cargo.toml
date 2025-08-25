@@ -28,6 +28,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
 ic-stable-structures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -39,6 +40,8 @@ prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 serde = { workspace = true }
 itertools = { workspace = true }
+url = "2.5.4"
+ic-agent = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

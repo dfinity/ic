@@ -220,11 +220,13 @@ pub fn write_rewards_to_csv(
             "day",
             "total_adjusted_rewards_xdr_permyriad",
             "nodes_in_registry",
+            "nodes_assigned",
             "underperforming_nodes",
         ])?;
 
         let mut daily_totals: BTreeMap<DayUtc, Decimal> = BTreeMap::new();
         let mut nodes_total: BTreeMap<DayUtc, usize> = BTreeMap::new();
+        let mut nodes_assigned: BTreeMap<DayUtc, usize> = BTreeMap::new();
         let mut underperforming: BTreeMap<DayUtc, Vec<String>> = BTreeMap::new();
 
         for node in &provider_result.nodes_results {
@@ -232,6 +234,13 @@ pub fn write_rewards_to_csv(
                 let day = res.day;
                 *daily_totals.entry(day).or_default() += res.adjusted_rewards;
                 *nodes_total.entry(day).or_default() += 1;
+
+                match res.node_status {
+                    NodeStatus::Assigned { .. } => {
+                        *nodes_assigned.entry(day).or_default() += 1;
+                    }
+                    _ => {}
+                }
 
                 if res.performance_multiplier < Decimal::ONE {
                     underperforming.entry(day).or_default().push(
@@ -252,10 +261,13 @@ pub fn write_rewards_to_csv(
                 .map(|v| v.join(","))
                 .unwrap_or_else(|| "".to_string());
             let nodes_in_registry = nodes_total.remove(day).unwrap_or_default().to_string();
+            let nodes_assigned_day = nodes_assigned.remove(day).unwrap_or_default().to_string();
+
             writer.write_record(&[
                 day.to_string(),
                 format!("{:.4}", total),
                 nodes_in_registry,
+                nodes_assigned_day,
                 nodes,
             ])?;
         }
