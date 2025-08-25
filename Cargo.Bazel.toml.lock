@@ -4386,7 +4386,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11258,7 +11258,7 @@ dependencies = [
  "errno 0.3.10",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11271,7 +11271,7 @@ dependencies = [
  "errno 0.3.10",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11426,7 +11426,7 @@ dependencies = [
  "security-framework 3.0.1",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12997,7 +12997,7 @@ dependencies = [
  "getrandom 0.3.1",
  "once_cell",
  "rustix 1.0.5",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -14013,7 +14013,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 1.0.0",
+ "cfg-if 0.1.10",
  "static_assertions",
 ]
 
@@ -15406,8 +15406,7 @@ dependencies = [
 [[package]]
 name = "wirm"
 version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecb1f9cd7f21297a76719580680eb992a26f2231ab9a6af27c6705f39762d5c9"
+source = "git+https://github.com/adambratschikaye/wirm?rev=cd084093b3beecbe421e32d62375f494cd3428df#cd084093b3beecbe421e32d62375f494cd3428df"
 dependencies = [
  "gimli 0.32.0",
  "log",

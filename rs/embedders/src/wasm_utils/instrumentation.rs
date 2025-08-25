@@ -125,7 +125,7 @@ use wirm::{
         function::FunctionBuilder,
         id::ImportsID,
         module::{module_functions::FuncKind, module_globals::GlobalKind, LocalOrImport},
-        types::{Body, InitExpr, Value},
+        types::{Body, InitExpr, Instructions, Value},
     },
     DataType, InitInstr,
 };
@@ -958,7 +958,7 @@ fn export_additional_symbols<'a>(
     );
 
     // push function to decrement the instruction counter
-    let instructions: Vec<_> = [
+    let instructions = vec![
         // Subtract the parameter amount from the instruction counter
         GlobalGet {
             global_index: instructions_counter,
@@ -998,16 +998,13 @@ fn export_additional_symbols<'a>(
         End,
         // Return the original param so this function doesn't alter the stack
         LocalGet { local_index: 0 },
-    ]
-    .into_iter()
-    .map(|op| wirm::ir::types::Instruction::new(op))
-    .collect();
+    ];
 
     let num_instructions = instructions.len();
     let body = Body {
         locals: vec![(1, DataType::I64)],
         num_locals: 1,
-        instructions,
+        instructions: Instructions::new(instructions),
         num_instructions,
         name: None,
     };
@@ -1025,7 +1022,7 @@ fn export_additional_symbols<'a>(
     let tmp = 3;
     let acc_w = 4; // accumulator index
     let acc_a = 5; // accumulator index
-    let instructions: Vec<_> = vec![
+    let instructions = vec![
         LocalGet { local_index: 0 },
         LocalGet { local_index: 1 },
         I32GeU,
@@ -1091,16 +1088,13 @@ fn export_additional_symbols<'a>(
         I32Sub,
         LocalGet { local_index: acc_a },
         I32Sub,
-    ]
-    .into_iter()
-    .map(|op| wirm::ir::types::Instruction::new(op))
-    .collect();
+    ];
 
     let num_instructions = instructions.len();
     let body = Body {
         locals: vec![(4, DataType::I32)],
         num_locals: 4,
-        instructions,
+        instructions: Instructions::new(instructions),
         num_instructions,
         name: None,
     };
@@ -1221,7 +1215,7 @@ impl InjectionPoint {
 // contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
 fn injections(
-    code: &[wirm::ir::types::Instruction],
+    code: &[wirm::wasmparser::Operator],
     mem_type: WasmMemoryType,
 ) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
@@ -1232,8 +1226,8 @@ fn injections(
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail
-            .increment_cost(instruction_to_cost(&i.op, mem_type));
-        match i.op {
+            .increment_cost(instruction_to_cost(i, mem_type));
+        match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
                 res.push(curr);
@@ -1313,7 +1307,7 @@ fn inject_metering(
 ) {
     let points = match metering_type {
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections(&body.instructions, mem_type),
+        MeteringType::New => injections(body.instructions.get_ops(), mem_type),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1323,8 +1317,8 @@ fn inject_metering(
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
         InjectionPointCostDetail::DynamicCost { .. } => true,
     });
-    let orig_elems = &mut body.instructions;
-    let mut elems: Vec<wirm::ir::types::Instruction> = Vec::new();
+    let orig_elems = body.instructions.get_ops_mut();
+    let mut elems: Vec<wirm::wasmparser::Operator> = Vec::new();
     let mut last_injection_position = 0;
 
     use wirm::wasmparser::Operator::*;
@@ -1333,68 +1327,51 @@ fn inject_metering(
         elems.extend_from_slice(&orig_elems[last_injection_position..point.position]);
         match point.cost_detail {
             InjectionPointCostDetail::StaticCost { scope, cost } => {
-                elems.extend(
-                    [
+                elems.extend([
+                    GlobalGet {
+                        global_index: injected_local_globals.instructions_counter,
+                    },
+                    I64Const { value: cost as i64 },
+                    I64Sub,
+                    GlobalSet {
+                        global_index: injected_local_globals.instructions_counter,
+                    },
+                ]);
+                if scope == Scope::ReentrantBlockStart {
+                    elems.extend([
                         GlobalGet {
                             global_index: injected_local_globals.instructions_counter,
                         },
-                        I64Const { value: cost as i64 },
-                        I64Sub,
-                        GlobalSet {
-                            global_index: injected_local_globals.instructions_counter,
+                        I64Const { value: 0 },
+                        I64LtS,
+                        If {
+                            blockty: wirm::wasmparser::BlockType::Empty,
                         },
-                    ]
-                    .into_iter()
-                    .map(|o| wirm::ir::types::Instruction::new(o)),
-                );
-                if scope == Scope::ReentrantBlockStart {
-                    elems.extend(
-                        [
-                            GlobalGet {
-                                global_index: injected_local_globals.instructions_counter,
-                            },
-                            I64Const { value: 0 },
-                            I64LtS,
-                            If {
-                                blockty: wirm::wasmparser::BlockType::Empty,
-                            },
-                            Call {
-                                function_index: injected_functions.out_of_instructions,
-                            },
-                            End,
-                        ]
-                        .into_iter()
-                        .map(|o| wirm::ir::types::Instruction::new(o)),
-                    );
+                        Call {
+                            function_index: injected_functions.out_of_instructions,
+                        },
+                        End,
+                    ]);
                 }
             }
             InjectionPointCostDetail::DynamicCost { operand_on_stack } => {
                 match operand_on_stack {
                     CostOperandOnStack::X64Bit => {
-                        elems.extend(
-                            [Call {
-                                function_index: injected_local_globals.decr_instruction_counter_fn,
-                            }]
-                            .into_iter()
-                            .map(|o| wirm::ir::types::Instruction::new(o)),
-                        );
+                        elems.extend([Call {
+                            function_index: injected_local_globals.decr_instruction_counter_fn,
+                        }]);
                     }
                     CostOperandOnStack::X32Bit => {
-                        elems.extend(
-                            [
-                                I64ExtendI32U,
-                                Call {
-                                    function_index: injected_local_globals
-                                        .decr_instruction_counter_fn,
-                                },
-                                // decr_instruction_counter returns its argument unchanged,
-                                // so we can convert back to I32 without worrying about
-                                // overflows.
-                                I32WrapI64,
-                            ]
-                            .into_iter()
-                            .map(|o| wirm::ir::types::Instruction::new(o)),
-                        );
+                        elems.extend([
+                            I64ExtendI32U,
+                            Call {
+                                function_index: injected_local_globals.decr_instruction_counter_fn,
+                            },
+                            // decr_instruction_counter returns its argument unchanged,
+                            // so we can convert back to I32 without worrying about
+                            // overflows.
+                            I32WrapI64,
+                        ]);
                     }
                 }
             }
@@ -1419,8 +1396,8 @@ fn inject_try_grow_wasm_memory(
     use wirm::wasmparser::Operator::*;
     let mut injection_points: Vec<usize> = Vec::new();
     {
-        for (idx, instr) in func_body.instructions.iter().enumerate() {
-            if let MemoryGrow { .. } = instr.op {
+        for (idx, instr) in func_body.instructions.get_ops().iter().enumerate() {
+            if let MemoryGrow { .. } = instr {
                 injection_points.push(idx);
             }
         }
@@ -1438,36 +1415,32 @@ fn inject_try_grow_wasm_memory(
             WasmMemoryType::Wasm64 => func_body.locals.push((1, DataType::I64)),
         };
 
-        let orig_elems = &func_body.instructions;
-        let mut elems: Vec<wirm::ir::types::Instruction> = Vec::new();
+        let orig_elems = func_body.instructions.get_ops_mut();
+        let mut elems: Vec<wirm::wasmparser::Operator> = Vec::new();
         let mut last_injection_position = 0;
         for point in injection_points {
-            let memory_grow_instr = orig_elems[point].clone().op;
+            let memory_grow_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
             // At this point we have a memory.grow so the argument to it will be on top of
             // the stack, which we just assign to `memory_local_ix` with a local.tee
             // instruction.
-            elems.extend(
-                [
-                    LocalTee {
-                        local_index: memory_local_ix,
-                    },
-                    memory_grow_instr,
-                    LocalGet {
-                        local_index: memory_local_ix,
-                    },
-                    Call {
-                        function_index: injected_functions.try_grow_wasm_memory,
-                    },
-                ]
-                .into_iter()
-                .map(|o| wirm::ir::types::Instruction::new(o)),
-            );
+            elems.extend([
+                LocalTee {
+                    local_index: memory_local_ix,
+                },
+                memory_grow_instr,
+                LocalGet {
+                    local_index: memory_local_ix,
+                },
+                Call {
+                    function_index: injected_functions.try_grow_wasm_memory,
+                },
+            ]);
             last_injection_position = point + 1;
         }
         elems.extend_from_slice(&orig_elems[last_injection_position..]);
         let num_instructions = elems.len();
-        func_body.instructions = elems;
+        func_body.instructions = Instructions::new(elems);
         func_body.num_instructions = num_instructions;
     }
 }

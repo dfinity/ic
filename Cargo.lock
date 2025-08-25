@@ -25735,8 +25735,7 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 [[package]]
 name = "wirm"
 version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecb1f9cd7f21297a76719580680eb992a26f2231ab9a6af27c6705f39762d5c9"
+source = "git+https://github.com/adambratschikaye/wirm?rev=cd084093b3beecbe421e32d62375f494cd3428df#cd084093b3beecbe421e32d62375f494cd3428df"
 dependencies = [
  "gimli 0.32.0",
  "log",

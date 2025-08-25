@@ -1,5 +1,5 @@
 {
-  "checksum": "ddc118fb052f995c36235210f4baa34b288eaf1ebab256bb7652152bf03ebf8c",
+  "checksum": "adab9fe07b38061319623385a385bedb8a79448c84224ef781d02d6f53c02d34",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -25336,7 +25336,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -64777,7 +64777,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -67010,7 +67010,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -67164,7 +67164,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -68168,7 +68168,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -77820,7 +77820,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -83741,7 +83741,7 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
+              "id": "cfg-if 0.1.10",
               "target": "cfg_if"
             },
             {
@@ -93336,9 +93336,11 @@
       "version": "1.2.0",
       "package_url": "https://github.com/thesuhas/wirm",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wirm/1.2.0/download",
-          "sha256": "ecb1f9cd7f21297a76719580680eb992a26f2231ab9a6af27c6705f39762d5c9"
+        "Git": {
+          "remote": "https://github.com/adambratschikaye/wirm",
+          "commitish": {
+            "Rev": "cd084093b3beecbe421e32d62375f494cd3428df"
+          }
         }
       },
       "targets": [
@@ -93396,7 +93398,7 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": null
+      "license_file": "LICENSE"
     },
     "wit-bindgen-rt 0.33.0": {
       "name": "wit-bindgen-rt",

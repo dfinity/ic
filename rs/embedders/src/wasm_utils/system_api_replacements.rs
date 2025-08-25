@@ -19,7 +19,7 @@ use crate::{
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
-use wirm::{wasmparser::BlockType, DataType};
+use wirm::{ir::types::Instructions, wasmparser::BlockType, DataType};
 
 use ic_types::NumBytes;
 
@@ -36,10 +36,7 @@ fn make_body(
         num_locals: locals.len() as u32,
         num_instructions: instructions.len(),
         locals,
-        instructions: instructions
-            .into_iter()
-            .map(|o| wirm::ir::types::Instruction::new(o))
-            .collect(),
+        instructions: Instructions::new(instructions),
         name: None,
     }
 }

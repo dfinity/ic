@@ -1418,8 +1418,8 @@ fn wasm_function_complexity(
     use Operator::*;
 
     let mut complexity: u64 = 0;
-    for instruction in &body.instructions {
-        complexity = complexity.saturating_add(match instruction.op {
+    for instruction in body.instructions.get_ops() {
+        complexity = complexity.saturating_add(match instruction {
             Block { .. }
             | Loop { .. }
             | If { .. }
