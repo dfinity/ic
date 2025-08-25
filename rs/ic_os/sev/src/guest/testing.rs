@@ -87,17 +87,19 @@ impl FakeAttestationReportSigner {
 
         // ARK - RSA with RSASSA-PSS (root cert)
         let ark_key = RsaPrivateKey::new(&mut rng, 1024).unwrap();
-        let ark_cert = create_cert("ARK", ark_key.to_public_key(), ark_key.clone(), None).unwrap();
+        let ark_cert =
+            create_certificate("ARK", ark_key.to_public_key(), ark_key.clone(), None).unwrap();
 
         // ASK - RSA with RSASSA-PSS (signed by ARK)
         let ask_key = ark_key.clone(); // Reuse the key to save some time
         let ask_cert =
-            create_cert("ASK", ask_key.to_public_key(), ark_key, Some(&ark_cert)).unwrap();
+            create_certificate("ASK", ask_key.to_public_key(), ark_key, Some(&ark_cert)).unwrap();
 
         // VCEK - P384 ECDSA (signed by ASK)
         let vcek_key = p384::ecdsa::SigningKey::random(&mut rng);
         let vcek_cert =
-            create_cert("VCEK", *vcek_key.verifying_key(), ask_key, Some(&ask_cert)).unwrap();
+            create_certificate("VCEK", *vcek_key.verifying_key(), ask_key, Some(&ask_cert))
+                .unwrap();
 
         FakeAttestationReportSigner {
             ark_cert,
@@ -148,7 +150,7 @@ impl FakeAttestationReportSigner {
     }
 }
 
-fn create_cert(
+fn create_certificate(
     subject: &str,
     public_key: impl EncodePublicKey,
     issuer_key: RsaPrivateKey,
