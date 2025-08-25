@@ -244,7 +244,7 @@ pub fn main() -> Result<()> {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
             let setupos_config: SetupOSConfig =
-                serde_json::from_reader(File::open(setupos_config_json_path)?)?;
+                config::deserialize_config(setupos_config_json_path)?;
 
             let hostos_config = HostOSConfig {
                 config_version: setupos_config.config_version,
