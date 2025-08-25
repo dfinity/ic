@@ -155,7 +155,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::{export::Principal, Agent, AgentError};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
@@ -718,6 +718,42 @@ impl TopologySnapshot {
     }
 }
 
+/// Panics if not found.
+pub fn find_subnet_that_hosts_canister_id(
+    topology_snapshot: &TopologySnapshot,
+    canister_id: CanisterId,
+) -> SubnetSnapshot {
+    // Scan for subnet
+    let mut subnets = topology_snapshot
+        .subnets()
+        .filter(|subnet| {
+            subnet.subnet_canister_ranges()
+                .into_iter()
+                .any(|canister_id_range| canister_id_range.contains(&canister_id))
+        })
+        .collect::<Vec<_>>();
+
+    // Only one subnet.
+    assert_eq!(
+        subnets.len(), 1,
+        "{:#?}\n\n{:#?}",
+        subnets
+            .into_iter()
+            .map(|subnet| subnet.subnet_id)
+            .collect::<Vec<_>>(),
+        topology_snapshot
+            .subnets()
+            .into_iter()
+            .map(|subnet| (
+                subnet.subnet_id,
+                subnet.subnet_canister_ranges(),
+            ))
+            .collect::<Vec<_>>(),
+    );
+
+    subnets.pop().unwrap()
+}
+
 #[derive(Clone)]
 pub struct SubnetSnapshot {
     pub subnet_id: SubnetId,
@@ -749,6 +785,23 @@ impl SubnetSnapshot {
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
+}
+
+pub fn new_subnet_runtime(subnet: &SubnetSnapshot) -> Runtime {
+    let node = subnet
+        .nodes()
+        .next()
+        .unwrap();
+
+    let agent = InternalAgent::new(
+        node.get_public_url(),
+        Sender::from_principal_id(PrincipalId::from(GOVERNANCE_CANISTER_ID)),
+    );
+
+    Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: PrincipalId::from(REGISTRY_CANISTER_ID),
+    })
 }
 
 #[derive(Clone)]
@@ -1681,7 +1734,7 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
@@ -1689,9 +1742,25 @@ pub struct NnsCustomizations {
     pub install_at_ids: bool,
 }
 
+impl NnsCustomizations {
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        if self.ledger_balances.is_none() {
+            self.ledger_balances = Some(HashMap::new());
+        }
+        let ledger_balances = self.ledger_balances
+            .as_mut()
+            .unwrap(); // This is infallible, due to the earlier code in this method.
+
+        ledger_balances.insert(account_identifier, amount);
+
+        self
+    }
+}
+
 pub struct NnsInstallationBuilder {
     customizations: NnsCustomizations,
     installation_timeout: Duration,
+    is_subnet_rental_canister_enabled: bool,
 }
 
 impl Default for NnsInstallationBuilder {
@@ -1705,6 +1774,7 @@ impl NnsInstallationBuilder {
         Self {
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
+            is_subnet_rental_canister_enabled: false,
         }
     }
 
@@ -1723,6 +1793,16 @@ impl NnsInstallationBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(mut self) -> Self {
+        self.is_subnet_rental_canister_enabled = true;
+        self
+    }
+
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        self.customizations = self.customizations.with_balance(account_identifier, amount);
+        self
+    }
+
     pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
         let ic_name = node.ic_name();
@@ -1738,10 +1818,7 @@ impl NnsInstallationBuilder {
             &log,
             url,
             &prep_dir,
-            true,
-            self.customizations.install_at_ids,
-            self.customizations.ledger_balances.clone(),
-            self.customizations.neurons.clone(),
+            self,
         );
         block_on(async {
             let timeout_result =
@@ -2177,17 +2254,27 @@ pub async fn install_nns_canisters(
     logger: &Logger,
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
-    nns_test_neurons_present: bool,
-    install_at_ids: bool,
-    ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
-    neurons: Option<Vec<Neuron>>,
+    nns_installation_builder: &NnsInstallationBuilder,
 ) {
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."
     );
+
+    let NnsCustomizations {
+        install_at_ids,
+        ledger_balances,
+        neurons,
+    } = nns_installation_builder.customizations.clone();
+
     let mut init_payloads = NnsInitPayloadsBuilder::new();
-    if nns_test_neurons_present {
+
+    if nns_installation_builder.is_subnet_rental_canister_enabled {
+        init_payloads.with_subnet_rental_canister();
+    }
+
+    // Neurons.
+    {
         let mut ledger_balances = ledger_balances.unwrap_or_default();
         let neurons = neurons.unwrap_or_default();
         ledger_balances.insert(
@@ -2223,6 +2310,7 @@ pub async fn install_nns_canisters(
             .with_additional_neurons(neurons)
             .with_ledger_init_state(ledger_init_payload);
     }
+
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
     init_payloads.with_initial_mutations(initial_mutations);

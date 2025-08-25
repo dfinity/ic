@@ -266,7 +266,7 @@ impl Wasm {
 /// Tries calling function `f` a few times with exponential backoff until it
 /// results an `Ok`. If after a while `f` has returned only `Err`s, gives up and
 /// returns the last error.
-async fn execute_with_retries<F, T, E, Fut>(f: F) -> Result<T, E>
+pub async fn execute_with_retries<F, T, E, Fut>(f: F) -> Result<T, E>
 where
     F: Fn() -> Fut,
     Fut: Future<Output = Result<T, E>>,
