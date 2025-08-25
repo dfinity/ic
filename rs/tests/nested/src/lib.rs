@@ -277,7 +277,6 @@ async fn simulate_node_provider_action(
     .unwrap();
 
     // Once HostOS is back up, spoof its DNS such that it downloads the GuestOS image from the UVM
-    let host = env.get_nested_vm(vm_name).unwrap();
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
