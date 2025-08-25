@@ -21,11 +21,11 @@ DEPENDENCIES = [
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/rust_canisters/dfn_core",
+    "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-wasm",
     "@crate_index//:libflate",
     "@crate_index//:prometheus-parse",
-    "@crate_index//:candid",
 ]
 
 MACRO_DEPENDENCIES = [
