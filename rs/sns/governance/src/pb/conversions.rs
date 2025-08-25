@@ -4522,23 +4522,24 @@ impl From<crate::topics::RegisteredExtensionOperationSpec>
 
 // RegisterExtension conversions already exist above - removed duplicates
 
-// Conversions for API Wasm -> internal Wasm
-impl From<pb_api::Wasm> for crate::types::Wasm {
+// Conversions for API Wasm -> internal protobuf Wasm
+impl From<pb_api::Wasm> for crate::pb::v1::Wasm {
     fn from(value: pb_api::Wasm) -> Self {
-        match value {
-            pb_api::Wasm::Bytes(bytes) => crate::types::Wasm::Bytes(bytes),
-            pb_api::Wasm::Chunked(chunked) => {
-                use ic_base_types::CanisterId;
-                let store_canister_id = chunked
-                    .store_canister_id
-                    .expect("store_canister_id is required for chunked WASM");
-                crate::types::Wasm::Chunked {
-                    wasm_module_hash: chunked.wasm_module_hash,
-                    store_canister_id: CanisterId::try_from_principal_id(store_canister_id)
-                        .expect("Invalid store_canister_id"),
-                    chunk_hashes_list: chunked.chunk_hashes_list,
-                }
-            }
+        let wasm = match value {
+            pb_api::Wasm::Bytes(bytes) => crate::pb::v1::wasm::Wasm::Bytes(bytes),
+            pb_api::Wasm::Chunked(chunked) => crate::pb::v1::wasm::Wasm::Chunked(chunked.into()),
+        };
+        crate::pb::v1::Wasm { wasm: Some(wasm) }
+    }
+}
+
+// Conversions for internal protobuf Wasm -> API Wasm
+impl From<crate::pb::v1::Wasm> for pb_api::Wasm {
+    fn from(value: crate::pb::v1::Wasm) -> Self {
+        let wasm = value.wasm.expect("wasm field is required");
+        match wasm {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => pb_api::Wasm::Bytes(bytes),
+            crate::pb::v1::wasm::Wasm::Chunked(chunked) => pb_api::Wasm::Chunked(chunked.into()),
         }
     }
 }
@@ -4564,47 +4565,23 @@ impl From<crate::pb::v1::wasm::Wasm> for crate::types::Wasm {
     }
 }
 
-// Conversions for UpgradeExtension (bidirectional) - perfectly clean with matching Wasm enums!
 impl From<pb_api::UpgradeExtension> for crate::pb::v1::UpgradeExtension {
     fn from(value: pb_api::UpgradeExtension) -> Self {
-        // Convert API Wasm enum to internal Wasm wrapper
-        let wasm = value.wasm.map(|api_wasm| {
-            let internal_wasm = match api_wasm {
-                pb_api::Wasm::Bytes(bytes) => crate::pb::v1::wasm::Wasm::Bytes(bytes),
-                pb_api::Wasm::Chunked(chunked) => {
-                    crate::pb::v1::wasm::Wasm::Chunked(chunked.into())
-                }
-            };
-            crate::pb::v1::Wasm {
-                wasm: Some(internal_wasm),
-            }
-        });
-
         crate::pb::v1::UpgradeExtension {
             extension_canister_id: value.extension_canister_id,
             canister_upgrade_arg: value
                 .canister_upgrade_arg
                 .map(crate::pb::v1::ExtensionUpgradeArg::from),
-            wasm,
+            wasm: value.wasm.map(crate::pb::v1::Wasm::from),
         }
     }
 }
 
 impl From<crate::pb::v1::UpgradeExtension> for pb_api::UpgradeExtension {
     fn from(value: crate::pb::v1::UpgradeExtension) -> Self {
-        // Convert internal Wasm wrapper to API Wasm enum
-        let wasm = value.wasm.and_then(|wasm_wrapper| {
-            wasm_wrapper.wasm.map(|internal_wasm| match internal_wasm {
-                crate::pb::v1::wasm::Wasm::Bytes(bytes) => pb_api::Wasm::Bytes(bytes),
-                crate::pb::v1::wasm::Wasm::Chunked(chunked) => {
-                    pb_api::Wasm::Chunked(chunked.into())
-                }
-            })
-        });
-
         pb_api::UpgradeExtension {
             extension_canister_id: value.extension_canister_id,
-            wasm,
+            wasm: value.wasm.map(pb_api::Wasm::from),
             canister_upgrade_arg: value
                 .canister_upgrade_arg
                 .map(pb_api::ExtensionUpgradeArg::from),

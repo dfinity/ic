@@ -2921,46 +2921,6 @@ impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
     }
 }
 
-impl TryFrom<&UpgradeExtension> for Wasm {
-    type Error = String;
-
-    fn try_from(upgrade: &UpgradeExtension) -> Result<Self, Self::Error> {
-        const ERR_PREFIX: &str = "Invalid UpgradeExtension";
-
-        let Some(wasm_wrapper) = &upgrade.wasm else {
-            return Err(format!("{ERR_PREFIX}: wasm field is required"));
-        };
-
-        let Some(wasm) = &wasm_wrapper.wasm else {
-            return Err(format!("{ERR_PREFIX}: wasm.wasm field is required"));
-        };
-
-        match wasm {
-            crate::pb::v1::wasm::Wasm::Bytes(bytes) => Ok(Self::Bytes(bytes.clone())),
-            crate::pb::v1::wasm::Wasm::Chunked(ChunkedCanisterWasm {
-                wasm_module_hash,
-                store_canister_id,
-                chunk_hashes_list,
-            }) => {
-                let Some(store_canister_id) = store_canister_id else {
-                    return Err(format!(
-                        "{ERR_PREFIX}.wasm.chunked.store_canister_id must be specified."
-                    ));
-                };
-
-                let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
-                    .map_err(|err| format!("{ERR_PREFIX}.wasm.chunked.store_canister_id: {err}"))?;
-
-                Ok(Self::Chunked {
-                    wasm_module_hash: wasm_module_hash.clone(),
-                    store_canister_id,
-                    chunk_hashes_list: chunk_hashes_list.clone(),
-                })
-            }
-        }
-    }
-}
-
 impl TryFrom<&crate::pb::v1::Wasm> for Wasm {
     type Error = String;
 

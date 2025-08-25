@@ -399,14 +399,14 @@ pub(crate) async fn validate_and_render_action(
     let proposals = governance_proto.proposals.values();
 
     match action {
-        proposal::Action::Unspecified(_unspecified) => {
+        Action::Unspecified(_unspecified) => {
             Err("`unspecified` was used, but is not a valid Proposal action.".into())
         }
-        proposal::Action::Motion(motion) => validate_and_render_motion(motion),
-        proposal::Action::ManageNervousSystemParameters(manage) => {
+        Action::Motion(motion) => validate_and_render_motion(motion),
+        Action::ManageNervousSystemParameters(manage) => {
             validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
-        proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+        Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade, env, root_canister_id)
                 .await
         }
@@ -424,48 +424,48 @@ pub(crate) async fn validate_and_render_action(
                 Err(err) => Err(err),
             }
         }
-        proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
+        Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
                 &disallowed_target_canister_ids,
                 function_to_add,
                 existing_functions,
             )
         }
-        proposal::Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
+        Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
             validate_and_render_remove_nervous_generic_system_function(
                 *id_to_remove,
                 existing_functions,
             )
         }
-        proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
+        Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
         }
-        proposal::Action::ExecuteExtensionOperation(execute) => {
+        Action::ExecuteExtensionOperation(execute) => {
             validate_and_render_execute_extension_operation(governance, execute).await
         }
-        proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
+        Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
                 register_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::RegisterExtension(register_extension) => {
+        Action::RegisterExtension(register_extension) => {
             validate_and_render_register_extension(governance, register_extension).await
         }
-        proposal::Action::UpgradeExtension(upgrade_extension) => {
+        Action::UpgradeExtension(upgrade_extension) => {
             validate_and_render_upgrade_extension(governance, upgrade_extension).await
         }
-        proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
+        Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
+        Action::ManageSnsMetadata(manage_sns_metadata) => {
             validate_and_render_manage_sns_metadata(manage_sns_metadata)
         }
-        proposal::Action::TransferSnsTreasuryFunds(transfer) => {
+        Action::TransferSnsTreasuryFunds(transfer) => {
             return validate_and_render_transfer_sns_treasury_funds(
                 transfer,
                 sns_transfer_fee_e8s,
@@ -476,7 +476,7 @@ pub(crate) async fn validate_and_render_action(
             )
             .await;
         }
-        proposal::Action::MintSnsTokens(mint_sns_tokens) => {
+        Action::MintSnsTokens(mint_sns_tokens) => {
             return validate_and_render_mint_sns_tokens(
                 mint_sns_tokens,
                 sns_transfer_fee_e8s,
@@ -487,20 +487,20 @@ pub(crate) async fn validate_and_render_action(
             )
             .await;
         }
-        proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
+        Action::ManageLedgerParameters(manage_ledger_parameters) => {
             validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
         }
-        proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+        Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
-        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+        Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
             return validate_and_render_advance_sns_target_version_proposal(
                 env.canister_id(),
                 governance_proto,
                 advance_sns_target_version,
             );
         }
-        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+        Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
             validate_and_render_set_topics_for_custom_proposals(
                 set_topics_for_custom_proposals,
                 &governance_proto.custom_functions_to_topics(),
