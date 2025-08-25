@@ -4,12 +4,6 @@ mod canbench;
 
 use candid::Decode;
 use candid::{candid_method, Nat, Principal};
-#[cfg(feature = "notify-method")]
-use dfn_candid::CandidOne;
-#[cfg(feature = "notify-method")]
-use dfn_core::BytesS;
-#[cfg(feature = "notify-method")]
-use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
@@ -37,8 +31,6 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-#[cfg(feature = "notify-method")]
-use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
 #[cfg(not(feature = "canbench-rs"))]
@@ -84,8 +76,6 @@ use ledger_canister::{
     UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
-#[allow(unused_imports)]
-use on_wire::IntoWire;
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::{
@@ -182,17 +172,6 @@ fn init(
         LEDGER.write().unwrap().blockchain.archive =
             Arc::new(RwLock::new(Some(Archive::new(archive_options))))
     }
-}
-
-#[cfg(feature = "notify-method")]
-fn add_payment(
-    memo: Memo,
-    operation: Operation,
-    created_at_time: Option<TimeStamp>,
-) -> (BlockIndex, ic_ledger_hash_of::HashOf<EncodedBlock>) {
-    let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
-    set_certified_data(&hash.into_bytes());
-    (height, hash)
 }
 
 /// This is the only operation that changes the state of the canister blocks and
@@ -417,191 +396,20 @@ async fn icrc1_send(
 }
 
 thread_local! {
-    static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
-/// You can notify a canister that you have made a payment to it. The
-/// payment must have been made to the account of a canister and from the
-/// callers account. You cannot notify a canister about a transaction it has
-/// already been successfully notified of. If the canister rejects the
-/// notification call it is not considered to have been notified.
-///
-/// # Arguments
-///
-/// * `block_height` -  The height of the block you would like to send a
-///   notification about.
-/// * `max_fee` - The fee of the payment.
-/// * `from_subaccount` - The subaccount that made the payment.
-/// * `to_canister` - The canister that received the payment.
-/// * `to_subaccount` - The subaccount that received the payment.
-/// * `notify_using_protobuf` - Whether the notification should be encoded using
-///   protobuf or candid.
 #[cfg(feature = "notify-method")]
-pub async fn notify(
-    block_height: BlockIndex,
-    max_fee: Tokens,
-    from_subaccount: Option<Subaccount>,
-    to_canister: CanisterId,
-    to_subaccount: Option<Subaccount>,
-    notify_using_protobuf: bool,
-) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
-    use dfn_protobuf::ProtoBuf;
-
-    NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
-
+fn trap_since_notify_is_no_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
-
     print(format!(
         "[ledger] notify method called by [{}]",
         caller_principal_id
     ));
 
-    if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!("Notifying from {} is not allowed", caller_principal_id);
-    }
-
-    if !LEDGER.read().unwrap().can_be_notified(&to_canister) {
-        panic!(
-            "Notifying non-whitelisted canister is not allowed: {}",
-            to_canister
-        );
-    }
-
-    let expected_from = AccountIdentifier::new(caller_principal_id, from_subaccount);
-
-    let expected_to = AccountIdentifier::new(to_canister.get(), to_subaccount);
-
-    let transfer_fee = LEDGER.read().unwrap().transfer_fee;
-
-    if max_fee != transfer_fee {
-        panic!("Transfer fee should be {}", transfer_fee);
-    }
-
-    let raw_block: EncodedBlock =
-        match block(block_height).unwrap_or_else(|| panic!("Block {} not found", block_height)) {
-            Ok(raw_block) => raw_block,
-            Err(cid) => {
-                print(format!(
-                    "Searching canister {} for block {}",
-                    cid, block_height
-                ));
-                // Lookup the block on the archive
-                let BlockRes(res) = call_with_cleanup(cid, "get_block_pb", protobuf, block_height)
-                    .await
-                    .map_err(|e| format!("Failed to fetch block {}", e.1))?;
-                res.ok_or("Block not found")?
-                    .map_err(|c| format!("Tried to redirect lookup a second time to {}", c))?
-            }
-        };
-
-    let block = Block::decode(raw_block).unwrap();
-
-    let (from, to, amount) = match block.transaction().operation {
-        Operation::Transfer {
-            from, to, amount, ..
-        } => (from, to, amount),
-        _ => panic!("Notification failed transfer must be of type send"),
-    };
-
-    assert_eq!(
-        (from, to),
-        (expected_from, expected_to),
-        "sender and recipient must match the specified block"
-    );
-
-    let transaction_notification_args = icp_ledger::TransactionNotification {
-        from: caller_principal_id,
-        from_subaccount,
-        to: to_canister,
-        to_subaccount,
-        block_height,
-        amount,
-        memo: block.transaction().memo,
-    };
-
-    let block_timestamp = block.timestamp();
-
-    ledger_canister::change_notification_state(block_height, block_timestamp, true)
-        .expect("Notification failed");
-
-    // This transaction provides an on chain record that a notification was
-    // attempted
-    let transfer = Operation::Transfer {
-        from: expected_from,
-        to: expected_to,
-        spender: None,
-        amount: Tokens::ZERO,
-        fee: max_fee,
-    };
-
-    // While this payment has been made here, it isn't actually committed until you
-    // make an inter canister call. As such we don't reject without rollback until
-    // an inter-canister call has definitely been made
-    add_payment(Memo(block_height), transfer, None);
-
-    let response = if notify_using_protobuf {
-        let bytes = ProtoBuf(transaction_notification_args)
-            .into_bytes()
-            .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
-            "transaction_notification_pb",
-            &bytes[..],
-            Funds::zero(),
-        )
-        .await
-    } else {
-        let bytes = candid::encode_one(transaction_notification_args)
-            .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
-            "transaction_notification",
-            &bytes[..],
-            Funds::zero(),
-        )
-        .await
-    };
-    // Don't panic after here or the notification might look like it succeeded
-    // when actually it failed
-
-    // propagate the response/rejection from 'to_canister' if it's shorter than this
-    // length.
-    // This could be done better because we still read in the whole
-    // String/Vec as is
-    pub const MAX_LENGTH: usize = 8192;
-
-    match response {
-        Ok(bs) => {
-            if bs.len() > MAX_LENGTH {
-                let caller = PrincipalId::from(caller());
-                Err(format!(
-                    "Notification succeeded, but the canister '{}' returned too large of a response",
-                    caller,
-                ))
-            } else {
-                Ok(BytesS(bs))
-            }
-        }
-        Err((_code, err)) => {
-            // It may be that by the time this callback is made the block will have been
-            // garbage collected. That is fine because we don't inspect the
-            // response here.
-            let _ =
-                ledger_canister::change_notification_state(block_height, block_timestamp, false);
-            if err.len() > MAX_LENGTH {
-                let caller = PrincipalId::from(caller());
-                Err(format!(
-                    "Notification failed, but the canister '{}' returned too large of a response",
-                    caller,
-                ))
-            } else {
-                Err(format!("Notification failed with message '{}'", err))
-            }
-        }
-    }
+    trap("The notify method is no longer supported. \
+    Please migrate to the CMC notify flow: https://forum.dfinity.org/t/deprecating-the-ledger-notify-flow-for-minting-cycles-in-favor-of-cmc-notify/42502");
 }
 
 /// This gives you the index of the last block added to the chain
@@ -960,30 +768,7 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
-    use dfn_core::endpoint::over_async_may_reject_explicit;
-    use dfn_protobuf::ProtoBuf;
-
-    // we use over_init because it doesn't reply automatically so we can do explicit
-    // replies in the callback
-    over_async_may_reject_explicit(
-        |ProtoBuf(icp_ledger::NotifyCanisterArgs {
-             block_height,
-             max_fee,
-             from_subaccount,
-             to_canister,
-             to_subaccount,
-         })| async move {
-            notify(
-                block_height,
-                max_fee,
-                from_subaccount,
-                to_canister,
-                to_subaccount,
-                true,
-            )
-            .await
-        },
-    );
+    trap_since_notify_is_no_longer_supported();
 }
 
 #[update]
@@ -1083,28 +868,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
-    use dfn_core::endpoint::over_async_may_reject_explicit;
-
-    // we use over_init because it doesn't reply automatically so we can do explicit
-    // replies in the callback
-    over_async_may_reject_explicit(
-        |CandidOne(icp_ledger::NotifyCanisterArgs {
-             block_height,
-             max_fee,
-             from_subaccount,
-             to_canister,
-             to_subaccount,
-         })| {
-            notify(
-                block_height,
-                max_fee,
-                from_subaccount,
-                to_canister,
-                to_subaccount,
-                false,
-            )
-        },
-    );
+    trap_since_notify_is_no_longer_supported();
 }
 
 #[export_name = "canister_query block_pb"]
@@ -1418,7 +1182,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_notify_method_calls",
-        NOTIFY_METHOD_CALLS.with(|n| *n.borrow()) as f64,
+        0f64,
         "Total number of calls to the notify-method method.",
     )?;
     w.encode_counter(
