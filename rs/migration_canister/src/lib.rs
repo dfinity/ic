@@ -3,12 +3,17 @@
 //! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant.
 
 use candid::{CandidType, Principal};
+use ic_cdk::futures::spawn;
+use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
-use crate::canister_state::{max_active_requests, num_active_requests};
+use crate::{
+    canister_state::{max_active_requests, num_active_requests},
+    processing::process_all_accepted,
+};
 
 mod canister_state;
 mod external_interfaces;
@@ -61,7 +66,13 @@ enum RequestState {
     ///
     /// Certain checks are not informative before this state because the original controller
     /// could still interfere until this state.
-    ControllersChanged { request: Request },
+    SourceControllersChanged { request: Request },
+
+    /// Called mgmt `update_settings` to make us the only controller.
+    ///
+    /// Certain checks are not informative before this state because the original controller
+    /// could still interfere until this state.
+    TargetControllersChanged { request: Request },
 
     /// * Called mgmt `canister_status` to determine:
     ///     * Source and target are stopped.
@@ -175,7 +186,8 @@ impl Storable for Event {
 }
 
 pub fn start_timers() {
-    // TODO: schedule the processing method(s) every few seconds
+    let interval = Duration::from_secs(1);
+    set_timer_interval(interval, || spawn(process_all_accepted()));
 }
 
 pub fn rate_limited() -> bool {

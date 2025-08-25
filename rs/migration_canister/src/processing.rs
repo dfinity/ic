@@ -17,7 +17,7 @@ use futures::future::join_all;
 use ic_cdk::println;
 
 pub async fn process_all_accepted() {
-    // This guard ensures this method runs only once at any given time.
+    // Ensures this method runs only once at any given time.
     let Ok(_guard) = MethodGuard::new("accepted") else {
         return;
     };
@@ -28,44 +28,24 @@ pub async fn process_all_accepted() {
         tasks.push(process_accepted(request.clone()));
     }
     let results = join_all(tasks).await;
-    for (req, res) in zip(&requests, &results) {}
-    // list_accepted()
-    //     .into_iter()
-    //     .map(|r| process_accepted_2(r))
-    //     .map(ProcessingResult::transition)
-    //     .collect::<_>();
+    for (req, res) in zip(requests, results) {
+        res.transition(req);
+    }
 }
 
-async fn process_accepted(request: RequestState) -> ProcessingResult<(), String> {
+async fn process_accepted(request: RequestState) -> ProcessingResult<RequestState, RequestState> {
     let RequestState::Accepted { request } = request else {
         println!("Error: list_accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // set controller of source
-    let res = set_exclusive_controller(request.source).await;
-    // if only we could implement `FromResidual` in stable Rust...
-    if !res.is_success() {
-        return res;
-    }
-    // set controller of target
-    set_exclusive_controller(request.target).await
+    set_exclusive_controller(request.source)
+        .await
+        .map_success(|_| RequestState::SourceControllersChanged {
+            request: request.clone(),
+        })
+        .map_failure(|reason| RequestState::Failed { request, reason })
 }
-
-// TODO: dispatch all requests in parallel and join_all -> waiting times are bounded.
-// bounded wait helps
-
-// #[must_use]
-// enum ProcessingResult {
-//     Success {
-//         old_state: RequestState,
-//         next_state: RequestState,
-//     },
-//     NoProgress,
-//     FatalFailure {
-//         old_state: RequestState,
-//         error_state: RequestState, /* TODO: or HistoryEntry */
-//     },
-// }
 
 #[must_use]
 pub enum ProcessingResult<S, F> {
@@ -75,7 +55,7 @@ pub enum ProcessingResult<S, F> {
 }
 
 impl<S, F> ProcessingResult<S, F> {
-    pub fn map<T>(self, f: impl FnOnce(S) -> T) -> ProcessingResult<T, F> {
+    pub fn map_success<T>(self, f: impl FnOnce(S) -> T) -> ProcessingResult<T, F> {
         match self {
             ProcessingResult::Success(x) => ProcessingResult::Success(f(x)),
             ProcessingResult::NoProgress => ProcessingResult::NoProgress,
@@ -109,65 +89,22 @@ impl<S, F> ProcessingResult<S, F> {
             _ => false,
         }
     }
-
-    // fn transition(
-    //     self,
-    //     old_state: &RequestState,
-    //     f: impl FnOnce(&RequestState, S) -> RequestState,
-    //     g: impl FnOnce(&RequestState, F) -> RequestState,
-    // ) {
-    //     match self {
-    //         ProcessingResult::Success(s) => {
-    //             remove_request(old_state);
-    //             insert_request(f(old_state, s));
-    //         }
-    //         ProcessingResult::NoProgress => {}
-    //         ProcessingResult::FatalFailure(f) => {
-    //             remove_request(&old_state);
-    //             // TODO: history
-    //         }
-    //     }
-    // }
 }
 
 /// Removes the old state from REQUESTS and inserts the new state in the correct
 /// collection (REQUESTS or HISTORY).
 impl ProcessingResult<RequestState, RequestState> {
-    fn transition2(self, old_state: &RequestState) {
+    fn transition(self, old_state: RequestState) {
         match self {
             ProcessingResult::Success(new_state) => {
-                remove_request(old_state);
+                remove_request(&old_state);
                 insert_request(new_state);
             }
             ProcessingResult::NoProgress => {}
             ProcessingResult::FatalFailure(fail_state) => {
-                remove_request(old_state);
+                remove_request(&old_state);
                 // TODO:
             }
         }
     }
 }
-
-// impl ProcessingResult {
-//     /// Removes the old state from REQUESTS and inserts the new state in the correct
-//     /// collection (REQUESTS or HISTORY).
-//     fn transition(self) {
-//         match self {
-//             ProcessingResult::Success {
-//                 old_state,
-//                 next_state,
-//             } => {
-//                 remove_request(&old_state);
-//                 insert_request(next_state);
-//             }
-//             ProcessingResult::NoProgress => {}
-//             ProcessingResult::FatalFailure {
-//                 old_state,
-//                 error_state,
-//             } => {
-//                 remove_request(&old_state);
-//                 // TODO: history
-//             }
-//         }
-//     }
-// }
