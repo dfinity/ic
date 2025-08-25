@@ -1139,7 +1139,7 @@ pub fn get_current_branch_version() -> ReplicaVersion {
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
     let replica_version = ReplicaVersion::try_from(
-        std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        std::env::var("MAINNET_NNS_GUESTOS_REVISION_ENV")
             .expect("could not read mainnet nns version from environment"),
     )?;
 
@@ -1148,7 +1148,7 @@ pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
 
 pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
     let replica_version = ReplicaVersion::try_from(
-        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        std::env::var("MAINNET_APP_GUESTOS_REVISION_ENV")
             .expect("could not read mainnet application subnet version from environment"),
     )?;
 
