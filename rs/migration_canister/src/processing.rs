@@ -28,7 +28,7 @@ pub async fn process_all_accepted() {
         tasks.push(process_accepted(request.clone()));
     }
     let results = join_all(tasks).await;
-    for (req, res) in zip(requests, results) {}
+    for (req, res) in zip(&requests, &results) {}
     // list_accepted()
     //     .into_iter()
     //     .map(|r| process_accepted_2(r))
@@ -107,6 +107,43 @@ impl<S, F> ProcessingResult<S, F> {
         match self {
             ProcessingResult::FatalFailure(_) => true,
             _ => false,
+        }
+    }
+
+    // fn transition(
+    //     self,
+    //     old_state: &RequestState,
+    //     f: impl FnOnce(&RequestState, S) -> RequestState,
+    //     g: impl FnOnce(&RequestState, F) -> RequestState,
+    // ) {
+    //     match self {
+    //         ProcessingResult::Success(s) => {
+    //             remove_request(old_state);
+    //             insert_request(f(old_state, s));
+    //         }
+    //         ProcessingResult::NoProgress => {}
+    //         ProcessingResult::FatalFailure(f) => {
+    //             remove_request(&old_state);
+    //             // TODO: history
+    //         }
+    //     }
+    // }
+}
+
+/// Removes the old state from REQUESTS and inserts the new state in the correct
+/// collection (REQUESTS or HISTORY).
+impl ProcessingResult<RequestState, RequestState> {
+    fn transition2(self, old_state: &RequestState) {
+        match self {
+            ProcessingResult::Success(new_state) => {
+                remove_request(old_state);
+                insert_request(new_state);
+            }
+            ProcessingResult::NoProgress => {}
+            ProcessingResult::FatalFailure(fail_state) => {
+                remove_request(old_state);
+                // TODO:
+            }
         }
     }
 }
