@@ -46,7 +46,7 @@ pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
     let RequestState::Accepted { request } = request else {
-        println!("Error: list_accepted returned bad variant");
+        println!("Error: list_by Accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // Set controller of source
@@ -57,6 +57,27 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed { request, reason })
 }
+
+pub async fn process_source_controllers(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::SourceControllersChanged { request } = request else {
+        println!("Error: list_by SourceControllersChanged returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    // Set controller of target
+    set_exclusive_controller(request.target)
+        .await
+        .map_success(|_| RequestState::TargetControllersChanged {
+            request: request.clone(),
+        })
+        .map_failure(|reason| RequestState::Failed { request, reason })
+}
+
+// pub async fn process_target_controllers(
+//     request: RequestState,
+// ) -> ProcessingResult<RequestState, RequestState> {
+// }
 
 pub async fn process_all_failed() {
     let Ok(_guard) = MethodGuard::new("failed") else {
