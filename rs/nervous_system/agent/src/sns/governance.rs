@@ -22,6 +22,7 @@ pub struct GovernanceCanister {
     pub canister_id: PrincipalId,
 }
 
+#[derive(Debug)]
 pub struct SubmittedProposal {
     pub proposal_id: ProposalId,
 }

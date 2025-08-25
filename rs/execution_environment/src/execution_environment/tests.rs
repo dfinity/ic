@@ -984,7 +984,7 @@ fn get_canister_status_memory_metrics_global_memory_size() {
     let exported_globals = test.execution_state(canister_id).exported_globals.clone();
     assert_eq!(
         csr.global_memory_size(),
-        NumBytes::new(8 * exported_globals.len() as u64)
+        NumBytes::new(32 * exported_globals.len() as u64)
     );
 }
 

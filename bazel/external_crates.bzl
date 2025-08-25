@@ -449,6 +449,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "convert_case": crate.spec(
                 version = "^0.6.0",
             ),
+            "raw-cpuid": crate.spec(
+                version = "11.5",
+            ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
             ),
@@ -668,7 +671,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.18.6",
+                version = "^0.18.7",
             ),
             "ic-cdk-executor": crate.spec(
                 version = "^1.0.2",
@@ -1187,7 +1190,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.1.0",
             ),
             "rust-ini": crate.spec(
-                version = "^0.21.2",
+                version = "^0.21.1",
             ),
             "rustls": crate.spec(
                 version = "^0.23.18",
@@ -1553,6 +1556,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "walkdir": crate.spec(
                 version = "^2.3.1",
+            ),
+            "walrus": crate.spec(
+                version = "^0.23.3",
             ),
             "warp": crate.spec(
                 version = "^0.3.7",

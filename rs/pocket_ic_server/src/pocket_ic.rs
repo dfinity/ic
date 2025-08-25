@@ -1,3 +1,7 @@
+use crate::external_canister_types::{
+    CaptchaConfig, CaptchaTrigger, InternetIdentityInit, OpenIdConfig, RateLimitConfig,
+    StaticCaptchaTrigger,
+};
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
@@ -57,9 +61,11 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
+use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
@@ -155,6 +161,8 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -409,7 +417,7 @@ pub(crate) struct CanisterHttp {
 pub(crate) struct Subnet {
     pub state_machine: Arc<StateMachine>,
     pub canister_http: Arc<Mutex<CanisterHttp>>,
-    delegation_from_nns: watch::Sender<Option<CertificateDelegation>>,
+    delegation_from_nns: watch::Sender<Option<NNSDelegationBuilder>>,
     _canister_http_adapter_parts: CanisterHttpAdapterParts,
 }
 
@@ -435,7 +443,7 @@ impl Subnet {
             state_machine.query_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
-            nns_delegation_rx,
+            NNSDelegationReader::new(nns_delegation_rx, state_machine.replica_logger.clone()),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -454,9 +462,13 @@ impl Subnet {
     }
 
     fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
-        self.delegation_from_nns
-            .send(Some(delegation_from_nns))
-            .unwrap();
+        let builder = NNSDelegationBuilder::try_new(
+            delegation_from_nns.certificate,
+            self.get_subnet_id(),
+            &self.state_machine.replica_logger,
+        )
+        .unwrap();
+        self.delegation_from_nns.send(Some(builder)).unwrap();
     }
 }
 
@@ -517,6 +529,7 @@ struct PocketIcSubnets {
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
+    auto_progress_enabled: bool,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
@@ -596,6 +609,7 @@ impl PocketIcSubnets {
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
+        auto_progress_enabled: bool,
         synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -622,6 +636,7 @@ impl PocketIcSubnets {
             bitcoind_addr,
             icp_features,
             initial_time,
+            auto_progress_enabled,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
         }
@@ -661,8 +676,11 @@ impl PocketIcSubnets {
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
-        let subnet_id = self.routing_table.route(canister_id.get());
-        subnet_id.map(|subnet_id| self.get(subnet_id).unwrap())
+        self.get(SubnetId::from(canister_id.get())).or_else(|| {
+            self.routing_table
+                .lookup_entry(canister_id)
+                .and_then(|(_, subnet_id)| self.get(subnet_id))
+        })
     }
 
     fn time(&self) -> SystemTime {
@@ -892,6 +910,7 @@ impl PocketIcSubnets {
                 cycles_token,
                 nns_governance,
                 sns,
+                ii,
             } = icp_features;
             if registry {
                 self.update_registry();
@@ -910,6 +929,9 @@ impl PocketIcSubnets {
             }
             if sns {
                 self.deploy_sns();
+            }
+            if ii {
+                self.deploy_ii();
             }
         }
 
@@ -1205,6 +1227,17 @@ impl PocketIcSubnets {
             initial_values.insert(
                 AccountIdentifier::from_hex(
                     "2b8fbde99de881f695f279d2a892b1137bfe81a42d7694e064b1be58701e1138",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
+            // The following account is the account of the anonymous principal
+            // from which funds can be transfered to any other account
+            // without hard-coding any fixed identity controlling
+            // one of the above accounts.
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "1c7a48ba6a562aa9eaa2481a9049cdf0433b9738c992d698c31d8abf89cadc79",
                 )
                 .unwrap(),
                 Tokens::from_tokens(1_000_000_000).unwrap(),
@@ -1701,6 +1734,148 @@ impl PocketIcSubnets {
         }
     }
 
+    fn deploy_ii(&self) {
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(IDENTITY_CANISTER_ID)
+        {
+            // Create the Internet Identity canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"rdmx6-jaaaa-aaaaa-aaadq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // Create the Internet Identity canister.
+            // Although the Internet Identity canister is created on a system subnet, it always attaches cycles to canister http outcalls and thus it needs cycles:
+            // - the canister should have enough cycles to never run out of cycles;
+            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(IDENTITY_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, IDENTITY_CANISTER_ID);
+
+            // Install the Internet Identity canister.
+            // The initial values have been adapted from the mainnet values obtained by calling
+            // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
+            // record {
+            //   fetch_root_key = null;
+            //   openid_google = opt opt record {
+            //     client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //   };
+            //   is_production = opt true;
+            //   enable_dapps_explorer = opt false;
+            //   assigned_user_number_range = opt record {
+            //     10_000 : nat64;
+            //     7_569_744 : nat64;
+            //   };
+            //   new_flow_origins = opt vec { "https://id.ai" };
+            //   archive_config = opt record {
+            //     polling_interval_ns = 15_000_000_000 : nat64;
+            //     entries_buffer_limit = 10_000 : nat64;
+            //     module_hash = blob "\17\4d\7e\2c\3d\4d\3b\0f\34\61\63\4d\49\ea\c2\85\55\5a\97\48\de\7c\c7\a8\53\cf\ea\00\41\52\a1\97";
+            //     entries_fetch_limit = 1_000 : nat16;
+            //   };
+            //   canister_creation_cycles_cost = opt (0 : nat64);
+            //   analytics_config = opt opt variant {
+            //     Plausible = record {
+            //       domain = opt "identity.internetcomputer.org";
+            //       track_localhost = null;
+            //       hash_mode = null;
+            //       api_host = null;
+            //     }
+            //   };
+            //   related_origins = opt vec {
+            //     "https://id.ai";
+            //     "https://identity.ic0.app";
+            //     "https://identity.internetcomputer.org";
+            //     "https://identity.icp0.io";
+            //   };
+            //   feature_flag_continue_from_another_device = null;
+            //   captcha_config = opt record {
+            //     max_unsolved_captchas = 500 : nat64;
+            //     captcha_trigger = variant { Static = variant { CaptchaDisabled } };
+            //   };
+            //   dummy_auth = opt null;
+            //   register_rate_limit = opt record {
+            //     max_tokens = 25_000 : nat64;
+            //     time_per_token_ns = 1_000_000_000 : nat64;
+            //   };
+            // },
+
+            // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
+            // and thus we should only provide one if auto progress is enabled
+            // (and canister http outcalls are handled by PocketIC automically).
+            let openid_google = if self.auto_progress_enabled {
+                // We use a different id than in production:
+                // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
+                Some(Some(OpenIdConfig {
+                    client_id:
+                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
+                            .to_string(),
+                }))
+            } else {
+                None
+            };
+            let internet_identity_test_args = Some(InternetIdentityInit {
+                assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
+                archive_config: None,             // DIFFERENT FROM ICP MAINNET
+                canister_creation_cycles_cost: Some(0),
+                register_rate_limit: Some(RateLimitConfig {
+                    max_tokens: 25_000,
+                    time_per_token_ns: 1_000_000_000,
+                }),
+                captcha_config: Some(CaptchaConfig {
+                    max_unsolved_captchas: 500,
+                    captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
+                }),
+                related_origins: None,      // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None,     // DIFFERENT FROM ICP MAINNET
+                openid_google,              // DIFFERENT FROM ICP MAINNET
+                analytics_config: None,     // DIFFERENT FROM ICP MAINNET
+                fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
+                enable_dapps_explorer: Some(false),
+                is_production: Some(false), // DIFFERENT FROM ICP MAINNET
+                dummy_auth: Some(None),
+                feature_flag_continue_from_another_device: None,
+            });
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&internet_identity_test_args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
     // This function should only be called for ingress messages that complete quickly
     // (within 100 rounds).
     fn execute_ingress_on(
@@ -1839,6 +2014,7 @@ impl PocketIc {
         icp_features: Option<IcpFeatures>,
         allow_incomplete_state: Option<bool>,
         initial_time: Option<Time>,
+        auto_progress_enabled: bool,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
@@ -2081,6 +2257,7 @@ impl PocketIc {
             bitcoind_addr,
             icp_features,
             initial_time,
+            auto_progress_enabled,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
@@ -2619,7 +2796,13 @@ fn process_mock_canister_https_response(
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
     let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-    let (_, delegation_rx) = watch::channel(delegation);
+    let builder = delegation.map(|delegation| {
+        NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &subnet.replica_logger)
+            .unwrap()
+    });
+    let (_, delegation_rx) = watch::channel(builder);
+    let nns_delegation_reader =
+        NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone());
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
@@ -2643,7 +2826,7 @@ fn process_mock_canister_https_response(
                 subnet.query_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
-                delegation_rx.clone(),
+                nns_delegation_reader.clone(),
                 subnet.replica_logger.clone(),
             );
             client
@@ -3209,8 +3392,17 @@ impl Operation for CallRequest {
                 let svc = match self.version {
                     CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
-                        let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-                        let (_, delegation_rx) = watch::channel(delegation);
+                        let subnet_id = subnet.get_subnet_id();
+                        let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
+                        let builder = delegation.map(|delegation| {
+                            NNSDelegationBuilder::try_new(
+                                delegation.certificate,
+                                subnet_id,
+                                &subnet.replica_logger,
+                            )
+                            .unwrap()
+                        });
+                        let (_, delegation_rx) = watch::channel(builder);
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -3220,7 +3412,7 @@ impl Operation for CallRequest {
                             metrics,
                             http_handler::Config::default()
                                 .ingress_message_certificate_timeout_seconds,
-                            delegation_rx,
+                            NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                             subnet.state_manager.clone(),
                         )
                     }
@@ -3303,8 +3495,17 @@ impl Operation for QueryRequest {
         match subnet {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-                let (_, delegation_rx) = watch::channel(delegation);
+                let subnet_id = subnet.get_subnet_id();
+                let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
+                let builder = delegation.map(|delegation| {
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        subnet_id,
+                        &subnet.replica_logger,
+                    )
+                    .unwrap()
+                });
+                let (_, delegation_rx) = watch::channel(builder);
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
@@ -3314,7 +3515,7 @@ impl Operation for QueryRequest {
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    delegation_rx,
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
                 )
                 .with_time_source(subnet.time_source.clone())
@@ -3364,15 +3565,24 @@ impl Operation for CanisterReadStateRequest {
         ) {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-                let (_, delegation_rx) = watch::channel(delegation);
+                let subnet_id = subnet.get_subnet_id();
+                let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
+                let builder = delegation.map(|delegation| {
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        subnet_id,
+                        &subnet.replica_logger,
+                    )
+                    .unwrap()
+                });
+                let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
                 let svc = CanisterReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    delegation_rx,
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
@@ -3420,11 +3630,20 @@ impl Operation for SubnetReadStateRequest {
         match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-                let (_, delegation_rx) = watch::channel(delegation);
+                let subnet_id = subnet.get_subnet_id();
+                let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
+                let builder = delegation.map(|delegation| {
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        subnet_id,
+                        &subnet.replica_logger,
+                    )
+                    .unwrap()
+                });
+                let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
                 let svc = SubnetReadStateServiceBuilder::builder(
-                    delegation_rx,
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
                 )
                 .build_service();
@@ -3990,6 +4209,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -4006,6 +4226,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());

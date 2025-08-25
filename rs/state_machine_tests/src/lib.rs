@@ -2152,6 +2152,7 @@ impl StateMachine {
                 return Err("No certified state available.".to_string());
             }
         };
+        // TODO(CON-1487): return the `canister_ranges/{subnet_id}` path as well
         let paths = vec![
             LabeledTreePath::new(vec![
                 b"subnet".into(),
@@ -3413,7 +3414,7 @@ impl StateMachine {
         self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
-            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+            |offset, size| CanisterSnapshotDataKind::WasmMemory { offset, size },
         )
     }
 
@@ -3539,7 +3540,7 @@ impl StateMachine {
             data,
             start_chunk,
             end_chunk,
-            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+            |x| CanisterSnapshotDataOffset::WasmMemory { offset: x },
         )
     }
 

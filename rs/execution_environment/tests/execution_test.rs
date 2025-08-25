@@ -1339,8 +1339,7 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
 #[test]
 fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm64() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.wasm64 = ic_config::flag_status::FlagStatus::Enabled;
+    let embedders_config = ic_config::embedders::Config::default();
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {

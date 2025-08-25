@@ -1404,8 +1404,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
-            let mut config = EmbeddersConfig::default();
-            config.feature_flags.wasm64 = FlagStatus::Enabled;
+            let config = EmbeddersConfig::default();
             let embedder = WasmtimeEmbedder::new(config, log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
