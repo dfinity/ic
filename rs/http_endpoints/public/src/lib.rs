@@ -307,93 +307,70 @@ pub fn start_server(
     let call_v2_router =
         call_async::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
-    let call_v3_router = call_sync::new_router(
-        call_handler.clone(),
-        ingress_watcher_handle.clone(),
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        nns_delegation_reader.clone(),
-        state_reader.clone(),
-        call_sync::Version::V3,
-    );
+    let call_sync_router = |version| {
+        call_sync::new_router(
+            call_handler.clone(),
+            ingress_watcher_handle.clone(),
+            metrics.clone(),
+            config.ingress_message_certificate_timeout_seconds,
+            nns_delegation_reader.clone(),
+            state_reader.clone(),
+            version,
+        )
+    };
 
-    let call_v4_router = call_sync::new_router(
-        call_handler,
-        ingress_watcher_handle,
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        nns_delegation_reader.clone(),
-        state_reader.clone(),
-        call_sync::Version::V4,
-    );
+    let call_v3_router = call_sync_router(call_sync::Version::V3);
+    let call_v4_router = call_sync_router(call_sync::Version::V4);
 
-    let query_v2_router = QueryServiceBuilder::builder(
-        log.clone(),
-        node_id,
-        query_signer.clone(),
-        registry_client.clone(),
-        ingress_verifier.clone(),
-        nns_delegation_reader.clone(),
-        query_execution_service.clone(),
-        query::Version::V2,
-    )
-    .with_health_status(health_status.clone())
-    .with_malicious_flags(malicious_flags.clone())
-    .build_router();
+    let query_router = |version| {
+        QueryServiceBuilder::builder(
+            log.clone(),
+            node_id,
+            query_signer.clone(),
+            registry_client.clone(),
+            ingress_verifier.clone(),
+            nns_delegation_reader.clone(),
+            query_execution_service.clone(),
+            version,
+        )
+        .with_health_status(health_status.clone())
+        .with_malicious_flags(malicious_flags.clone())
+        .build_router()
+    };
 
-    let query_v3_router = QueryServiceBuilder::builder(
-        log.clone(),
-        node_id,
-        query_signer,
-        registry_client.clone(),
-        ingress_verifier.clone(),
-        nns_delegation_reader.clone(),
-        query_execution_service,
-        query::Version::V3,
-    )
-    .with_health_status(health_status.clone())
-    .with_malicious_flags(malicious_flags.clone())
-    .build_router();
+    let query_v2_router = query_router(query::Version::V2);
+    let query_v3_router = query_router(query::Version::V3);
 
-    let canister_read_state_v2_router = CanisterReadStateServiceBuilder::builder(
-        log.clone(),
-        state_reader.clone(),
-        registry_client.clone(),
-        ingress_verifier.clone(),
-        nns_delegation_reader.clone(),
-        read_state::canister::Version::V2,
-    )
-    .with_health_status(health_status.clone())
-    .with_malicious_flags(malicious_flags.clone())
-    .build_router();
+    let canister_read_state_router = |version| {
+        CanisterReadStateServiceBuilder::builder(
+            log.clone(),
+            state_reader.clone(),
+            registry_client.clone(),
+            ingress_verifier.clone(),
+            nns_delegation_reader.clone(),
+            version,
+        )
+        .with_health_status(health_status.clone())
+        .with_malicious_flags(malicious_flags.clone())
+        .build_router()
+    };
 
-    let canister_read_state_v3_router = CanisterReadStateServiceBuilder::builder(
-        log.clone(),
-        state_reader.clone(),
-        registry_client.clone(),
-        ingress_verifier,
-        nns_delegation_reader.clone(),
-        read_state::canister::Version::V3,
-    )
-    .with_health_status(health_status.clone())
-    .with_malicious_flags(malicious_flags)
-    .build_router();
+    let canister_read_state_v2_router =
+        canister_read_state_router(read_state::canister::Version::V2);
+    let canister_read_state_v3_router =
+        canister_read_state_router(read_state::canister::Version::V3);
 
-    let subnet_read_state_v2_router = SubnetReadStateServiceBuilder::builder(
-        nns_delegation_reader.clone(),
-        state_reader.clone(),
-        read_state::subnet::Version::V2,
-    )
-    .with_health_status(health_status.clone())
-    .build_router();
-
-    let subnet_read_state_v3_router = SubnetReadStateServiceBuilder::builder(
-        nns_delegation_reader.clone(),
-        state_reader.clone(),
-        read_state::subnet::Version::V3,
-    )
-    .with_health_status(health_status.clone())
-    .build_router();
+    let subnet_read_state_router = |version| {
+        SubnetReadStateServiceBuilder::builder(
+            nns_delegation_reader.clone(),
+            state_reader.clone(),
+            version,
+        )
+        .with_health_status(health_status.clone())
+        .build_router()
+    };
+    let subnet_read_state_v2_router = subnet_read_state_router(read_state::subnet::Version::V2);
+    let subnet_read_state_v3_router = subnet_read_state_router(read_state::subnet::Version::V3);
 
     let status_router = StatusService::build_router(
         log.clone(),
