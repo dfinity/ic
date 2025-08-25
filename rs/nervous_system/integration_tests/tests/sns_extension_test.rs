@@ -1,4 +1,5 @@
 use candid::Nat;
+use candid::Principal;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
@@ -33,13 +34,13 @@ use ic_sns_governance_api::pb::v1::ExecuteExtensionOperation;
 use ic_sns_governance_api::pb::v1::ExtensionInit;
 use ic_sns_governance_api::pb::v1::ExtensionOperationArg;
 use ic_sns_governance_api::pb::v1::GovernanceError;
+use ic_sns_governance_api::pb::v1::NeuronId;
 use ic_sns_governance_api::pb::v1::PreciseValue;
 use ic_sns_governance_api::pb::v1::Proposal;
 use ic_sns_governance_api::pb::v1::RegisterExtension;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_test_utilities::universal_canister::get_universal_canister_wasm;
 use ic_test_utilities::universal_canister::get_universal_canister_wasm_sha256;
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -79,75 +80,21 @@ async fn test_existing_extension_wasm_rejected() {
 }
 
 async fn test_treasury_manager() {
-    let state_dir = TempDir::new().unwrap();
-    let state_dir = state_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap().path().to_path_buf();
 
-    let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(state_dir.clone())
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .with_ii_subnet()
-        .with_fiduciary_subnet()
-        .build_async()
-        .await;
-
-    let topology = pocket_ic.topology().await;
-    let _sns_subnet_id = topology.get_sns().unwrap();
-
-    let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
-
-    println!(">>> Fiduciary subnet ID: {}", fiduciary_subnet_id);
-
-    // Step 0: Prepare the world.
-
-    // Step 0.0: Install the NNS WASMs built from the working copy.
-    {
-        let registry_proto_path = state_dir.join("registry.proto");
-        let initial_mutations = load_registry_mutations(registry_proto_path);
-
-        let mut nns_installer = NnsInstaller::default();
-        nns_installer
-            .with_current_nns_canister_versions()
-            .with_test_governance_canister()
-            .with_cycles_minting_canister()
-            .with_cycles_ledger()
-            .with_custom_registry_mutations(vec![initial_mutations]);
-        nns_installer.install(&pocket_ic).await;
-    }
-
-    let sns = deploy_sns(&pocket_ic, false).await;
-
-    // Install KongSwap
-    let _kong_backend_canister_id = {
-        let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
-            .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
-
-        let kong_backend_wasm = Wasm::from_file(wasm_path);
-
-        let controllers = vec![PrincipalId::new_user_test_id(42)];
-
-        // Canister ID from the mainnet.
-        // See https://dashboard.internetcomputer.org/canister/2ipq2-uqaaa-aaaar-qailq-cai
-        let canister_id = CanisterId::try_from_principal_id(
-            PrincipalId::from_str("2ipq2-uqaaa-aaaar-qailq-cai").unwrap(),
-        )
-        .unwrap();
-
-        install_canister_with_controllers(
-            &pocket_ic,
-            "KongSwap Backend Canister",
-            canister_id,
-            vec![],
-            kong_backend_wasm,
-            controllers,
-        )
-        .await;
-
-        canister_id
-    };
-
-    let sns_ledger_canister_id = CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
-    let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
+    let World {
+        pocket_ic,
+        fiduciary_subnet_id,
+        sns,
+        sns_ledger_canister_id,
+        sns_root_canister_id,
+        initial_icp_balance_e8s,
+        initial_sns_balance_e8s,
+        initial_treasury_allocation_icp_e8s,
+        initial_treasury_allocation_sns_e8s,
+        neuron_id,
+        sender,
+    } = prepare_the_world(state_dir).await;
 
     let sns_token = Asset::Token {
         symbol: "Kanye".to_string(),
@@ -161,44 +108,9 @@ async fn test_treasury_manager() {
         ledger_fee_decimals: Nat::from(ICP_FEE),
     };
 
-    // These numbers just happen to be what is going on in deploy_sns() above.  They're not particularly
-    // special in any way.
-    let initial_icp_balance_e8s = 650_000 * E8 - ICP_FEE;
-    let initial_sns_balance_e8s = 400 * E8;
-
-    validate_treasury_balances(
-        "Before registering KongSwapAdaptor",
-        &sns,
-        &pocket_ic,
-        initial_icp_balance_e8s,
-        initial_sns_balance_e8s,
-    )
-    .await
-    .unwrap();
-
-    let initial_treasury_allocation_icp_e8s = 100 * E8;
-    let initial_treasury_allocation_sns_e8s = 200 * E8;
-
     let topup_treasury_allocation_icp_e8s = 50 * E8;
     // This cannot be 100, b/c there will be slightly less than 200 left in the treasury at the point where this is called.
     let topup_treasury_allocation_sns_e8s = 99 * E8;
-
-    fn make_deposit_allowances(
-        treasury_allocation_icp_e8s: u64,
-        treasury_allocation_sns_e8s: u64,
-    ) -> Option<PreciseValue> {
-        Some(PreciseValue::Map(btreemap! {
-            "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
-            "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
-        }))
-    }
-
-    let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
-        &pocket_ic,
-        sns.governance.canister_id,
-    )
-    .await
-    .expect("cannot find SNS neuron with dissolve delay over 6 months.");
 
     let extension_canister_id = {
         let agent = PocketIcAgent::new(&pocket_ic, sender);
@@ -235,7 +147,7 @@ async fn test_treasury_manager() {
 
         let proposal_id = proposal_id.unwrap();
 
-        let proposal_data = sns::governance::wait_for_proposal_execution(
+        sns::governance::wait_for_proposal_execution(
             &pocket_ic,
             sns.governance.canister_id,
             proposal_id,
@@ -465,126 +377,23 @@ async fn test_treasury_manager() {
 }
 
 async fn run_existing_extension_wasm_rejected_test() {
-    let state_dir = TempDir::new().unwrap();
-    let state_dir = state_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap().path().to_path_buf();
 
-    let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(state_dir.clone())
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .with_ii_subnet()
-        .with_fiduciary_subnet()
-        .build_async()
-        .await;
+    let World {
+        pocket_ic,
+        fiduciary_subnet_id,
+        sns,
+        sns_root_canister_id,
+        initial_treasury_allocation_icp_e8s,
+        initial_treasury_allocation_sns_e8s,
+        neuron_id,
+        sender,
 
-    let topology = pocket_ic.topology().await;
-    let _sns_subnet_id = topology.get_sns().unwrap();
-
-    let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
-
-    println!(">>> Fiduciary subnet ID: {}", fiduciary_subnet_id);
-
-    // Step 0: Prepare the world.
-
-    // Step 0.0: Install the NNS WASMs built from the working copy.
-    {
-        let registry_proto_path = state_dir.join("registry.proto");
-        let initial_mutations = load_registry_mutations(registry_proto_path);
-
-        let mut nns_installer = NnsInstaller::default();
-        nns_installer
-            .with_current_nns_canister_versions()
-            .with_test_governance_canister()
-            .with_cycles_minting_canister()
-            .with_cycles_ledger()
-            .with_custom_registry_mutations(vec![initial_mutations]);
-        nns_installer.install(&pocket_ic).await;
-    }
-
-    let sns = deploy_sns(&pocket_ic, false).await;
-
-    // Install KongSwap
-    let _kong_backend_canister_id = {
-        let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
-            .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
-
-        let kong_backend_wasm = Wasm::from_file(wasm_path);
-
-        let controllers = vec![PrincipalId::new_user_test_id(42)];
-
-        // Canister ID from the mainnet.
-        // See https://dashboard.internetcomputer.org/canister/2ipq2-uqaaa-aaaar-qailq-cai
-        let canister_id = CanisterId::try_from_principal_id(
-            PrincipalId::from_str("2ipq2-uqaaa-aaaar-qailq-cai").unwrap(),
-        )
-        .unwrap();
-
-        install_canister_with_controllers(
-            &pocket_ic,
-            "KongSwap Backend Canister",
-            canister_id,
-            vec![],
-            kong_backend_wasm,
-            controllers,
-        )
-        .await;
-
-        canister_id
-    };
-
-    let sns_ledger_canister_id = CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
-    let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
-
-    let sns_token = Asset::Token {
-        symbol: "Kanye".to_string(),
-        ledger_canister_id: sns_ledger_canister_id.get().0,
-        ledger_fee_decimals: Nat::from(SNS_FEE),
-    };
-
-    let icp_token = Asset::Token {
-        symbol: "ICP".to_string(),
-        ledger_canister_id: LEDGER_CANISTER_ID.get().0,
-        ledger_fee_decimals: Nat::from(ICP_FEE),
-    };
-
-    // These numbers just happen to be what is going on in deploy_sns() above.  They're not particularly
-    // special in any way.
-    let initial_icp_balance_e8s = 650_000 * E8 - ICP_FEE;
-    let initial_sns_balance_e8s = 400 * E8;
-
-    validate_treasury_balances(
-        "Before registering KongSwapAdaptor",
-        &sns,
-        &pocket_ic,
-        initial_icp_balance_e8s,
-        initial_sns_balance_e8s,
-    )
-    .await
-    .unwrap();
-
-    let initial_treasury_allocation_icp_e8s = 100 * E8;
-    let initial_treasury_allocation_sns_e8s = 200 * E8;
-
-    let topup_treasury_allocation_icp_e8s = 50 * E8;
-    // This cannot be 100, b/c there will be slightly less than 200 left in the treasury at the point where this is called.
-    let topup_treasury_allocation_sns_e8s = 99 * E8;
-
-    fn make_deposit_allowances(
-        treasury_allocation_icp_e8s: u64,
-        treasury_allocation_sns_e8s: u64,
-    ) -> Option<PreciseValue> {
-        Some(PreciseValue::Map(btreemap! {
-            "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
-            "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
-        }))
-    }
-
-    let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
-        &pocket_ic,
-        sns.governance.canister_id,
-    )
-    .await
-    .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+        // Unused in this scenario
+        sns_ledger_canister_id: _,
+        initial_icp_balance_e8s: _,
+        initial_sns_balance_e8s: _,
+    } = prepare_the_world(state_dir).await;
 
     let agent = PocketIcAgent::new(&pocket_ic, sender);
 
@@ -604,7 +413,7 @@ async fn run_existing_extension_wasm_rejected_test() {
     );
 
     let RegisterExtensionInfo {
-        proposal_id,
+        proposal_id: _,
         extension_canister_id,
         wasm_module_hash,
     } = register_extension::exec(
@@ -819,4 +628,136 @@ async fn validate_treasury_balances(
     }
 
     Ok(())
+}
+
+fn make_deposit_allowances(
+    treasury_allocation_icp_e8s: u64,
+    treasury_allocation_sns_e8s: u64,
+) -> Option<PreciseValue> {
+    Some(PreciseValue::Map(btreemap! {
+        "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
+        "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
+    }))
+}
+
+struct World {
+    pocket_ic: PocketIc,
+    fiduciary_subnet_id: Principal,
+    sns: Sns,
+    sns_ledger_canister_id: CanisterId,
+    sns_root_canister_id: CanisterId,
+    initial_icp_balance_e8s: u64,
+    initial_sns_balance_e8s: u64,
+    initial_treasury_allocation_icp_e8s: u64,
+    initial_treasury_allocation_sns_e8s: u64,
+    neuron_id: NeuronId,
+    sender: PrincipalId,
+}
+
+async fn prepare_the_world(state_dir: PathBuf) -> World {
+    let pocket_ic = PocketIcBuilder::new()
+        .with_state_dir(state_dir.clone())
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_ii_subnet()
+        .with_fiduciary_subnet()
+        .build_async()
+        .await;
+
+    let topology = pocket_ic.topology().await;
+    let _sns_subnet_id = topology.get_sns().unwrap();
+
+    let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
+
+    println!(">>> Fiduciary subnet ID: {}", fiduciary_subnet_id);
+
+    // Step 0: Prepare the world.
+
+    // Step 0.0: Install the NNS WASMs built from the working copy.
+    {
+        let registry_proto_path = state_dir.join("registry.proto");
+        let initial_mutations = load_registry_mutations(registry_proto_path);
+
+        let mut nns_installer = NnsInstaller::default();
+        nns_installer
+            .with_current_nns_canister_versions()
+            .with_test_governance_canister()
+            .with_cycles_minting_canister()
+            .with_cycles_ledger()
+            .with_custom_registry_mutations(vec![initial_mutations]);
+        nns_installer.install(&pocket_ic).await;
+    }
+
+    let sns = deploy_sns(&pocket_ic, false).await;
+
+    // Install KongSwap
+    let _kong_backend_canister_id = {
+        let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
+            .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
+
+        let kong_backend_wasm = Wasm::from_file(wasm_path);
+
+        let controllers = vec![PrincipalId::new_user_test_id(42)];
+
+        // Canister ID from the mainnet.
+        // See https://dashboard.internetcomputer.org/canister/2ipq2-uqaaa-aaaar-qailq-cai
+        let canister_id = CanisterId::try_from_principal_id(
+            PrincipalId::from_str("2ipq2-uqaaa-aaaar-qailq-cai").unwrap(),
+        )
+        .unwrap();
+
+        install_canister_with_controllers(
+            &pocket_ic,
+            "KongSwap Backend Canister",
+            canister_id,
+            vec![],
+            kong_backend_wasm,
+            controllers,
+        )
+        .await;
+
+        canister_id
+    };
+
+    let sns_ledger_canister_id = CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
+    let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
+
+    // These numbers just happen to be what is going on in deploy_sns() above.  They're not particularly
+    // special in any way.
+    let initial_icp_balance_e8s = 650_000 * E8 - ICP_FEE;
+    let initial_sns_balance_e8s = 400 * E8;
+
+    validate_treasury_balances(
+        "Before registering KongSwapAdaptor",
+        &sns,
+        &pocket_ic,
+        initial_icp_balance_e8s,
+        initial_sns_balance_e8s,
+    )
+    .await
+    .unwrap();
+
+    let initial_treasury_allocation_icp_e8s = 100 * E8;
+    let initial_treasury_allocation_sns_e8s = 200 * E8;
+
+    let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
+        &pocket_ic,
+        sns.governance.canister_id,
+    )
+    .await
+    .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+    World {
+        pocket_ic,
+        fiduciary_subnet_id,
+        sns,
+        sns_ledger_canister_id,
+        sns_root_canister_id,
+        initial_icp_balance_e8s,
+        initial_sns_balance_e8s,
+        initial_treasury_allocation_icp_e8s,
+        initial_treasury_allocation_sns_e8s,
+        neuron_id,
+        sender,
+    }
 }

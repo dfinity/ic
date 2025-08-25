@@ -21,7 +21,6 @@ use ic_canister_log::log;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -651,26 +650,25 @@ impl Governance {
         &self,
         extension_canister_id: CanisterId,
     ) -> Result<(), GovernanceError> {
-        let uninstall_code_arg =
-            Encode!(&CanisterIdRecord::from(extension_canister_id)).map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Error encoding uninstall_code request.\n{}", err),
-                )
-            })?;
-
-        self.env
-            .call_canister(CanisterId::ic_00(), "uninstall_code", uninstall_code_arg)
-            .await
-            .map_err(|(err_code, err)| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "Error uninstalling old code from extension canister (code {:?}): {}",
-                        err_code, err
-                    ),
-                )
-            })?;
+        // Ideally, we would ensure that the extension canister is not running any code by calling
+        // uninstall_code. However, this would also wipe out the Wasm chunk store, so a subsequent
+        // call to install_code would fail.
+        //
+        // See https://internetcomputer.org/docs/references/ic-interface-spec#ic-uninstall_code
+        //
+        // Instead, we just check that the canister doesn't have any Wasm module installed up until
+        // this point.
+        if let Some(module_hash) = canister_module_hash(&*self.env, extension_canister_id).await? {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Extension canister {} already has code installed (module hash {}). \
+                     Treating this as an attack.",
+                    extension_canister_id,
+                    hex::encode(module_hash),
+                ),
+            ));
+        };
 
         Ok(())
     }
@@ -1509,8 +1507,9 @@ mod tests {
         );
 
         // Mock canister_info call for extension canister (only needed if extension is registered)
+
+        // Get the test hash from our test allowed extensions
         if extension_registered {
-            // Get the test hash from our test allowed extensions
             let test_hash: Vec<u8> = vec![
                 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
