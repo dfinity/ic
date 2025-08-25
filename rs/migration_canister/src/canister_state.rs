@@ -9,7 +9,7 @@ use ic_stable_structures::{
     BTreeMap, Cell, DefaultMemoryImpl,
 };
 
-use crate::{RequestState, DEFAULT_MAX_ACTIVE_REQUESTS};
+use crate::{Event, RequestState, DEFAULT_MAX_ACTIVE_REQUESTS};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -28,6 +28,9 @@ thread_local! {
 
     static REQUESTS: RefCell<BTreeMap<RequestState, (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
+
+    static HISTORY: RefCell<BTreeMap<Event, (), Memory>> =
+        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
 
 }
 

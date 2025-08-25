@@ -120,6 +120,11 @@ enum RequestState {
     Failed { request: Request, reason: String },
 }
 
+enum Event {
+    Succeeded { request: Request },
+    Failed { request: Request, reason: String },
+}
+
 impl Storable for Request {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(to_vec(&self).expect("Request serialization failed"))
@@ -147,6 +152,22 @@ impl Storable for RequestState {
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         from_slice(&bytes).expect("RequestState deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for Event {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(to_vec(&self).expect("Event serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Event deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;
