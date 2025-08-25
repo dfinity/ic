@@ -1825,7 +1825,7 @@ fn ic0_msg_reject_works() {
 
 #[test]
 fn wasm64_active_data_segments() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -2944,7 +2944,7 @@ fn ic0_call_perform_enqueues_request() {
 
 #[test]
 fn wasm64_ic0_call_perform_enqueues_request() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "call_new"
@@ -3463,7 +3463,7 @@ fn ic0_msg_cycles_available_works_for_calls() {
 
 #[test]
 fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_cycles_available128" (func $msg_cycles_available128 (param i64)))
@@ -3491,7 +3491,7 @@ fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
 
 #[test]
 fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_cycles_accept128"
@@ -8643,7 +8643,7 @@ fn ic0_mint_cycles_u64() {
 }
 
 fn check_correct_execution_state(is_wasm64: bool) {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let memory_size = if is_wasm64 { "i64" } else { "" };
     let wat = format!(
         r#"
