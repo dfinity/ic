@@ -2200,11 +2200,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm64(mut self) -> Self {
-        self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
         self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
         self
@@ -2511,7 +2506,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         );
-        state.metadata.cost_schedule = self.cost_schedule;
+        state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
             state: Some(state),

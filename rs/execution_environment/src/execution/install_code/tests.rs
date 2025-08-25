@@ -336,7 +336,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
 
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
-    let total_memory_taken_per_canister_in_bytes = 364249;
+    let total_memory_taken_per_canister_in_bytes = 364441;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)

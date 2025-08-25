@@ -2,12 +2,11 @@ use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use bitcoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_btc_interface::Network;
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Method as Ic00Method,
-    Payload,
+    BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
+    Method as Ic00Method, Payload,
 };
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::retry, universal_vm::UniversalVms},
@@ -78,7 +77,7 @@ impl<'a> AdapterProxy<'a> {
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: Network::Regtest,
+                network: BitcoinNetwork::Regtest,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -123,7 +122,7 @@ impl<'a> AdapterProxy<'a> {
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
         let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: Network::Mainnet,
+            network: BitcoinNetwork::Mainnet,
             transaction,
         };
 

@@ -11,6 +11,7 @@ use ic_system_test_driver::driver::{
 use ic_types::ReplicaVersion;
 use os_qualification_utils::{
     defs::QualificationExecutor,
+    mock_env_variables,
     steps::{
         ensure_elected_version::EnsureElectedVersion,
         retire_elected_version::RetireElectedVersions,
@@ -51,7 +52,7 @@ pub fn main() -> anyhow::Result<()> {
         Some(new_version) => (old_version.clone(), new_version.clone()),
         None => (
             // Should be: 0000000000000000000000000000000000000000
-            get_current_branch_version()?,
+            get_current_branch_version(),
             old_version.clone(),
         ),
     };
@@ -81,9 +82,11 @@ pub fn main() -> anyhow::Result<()> {
         target_version: target_version.clone(),
     };
 
+    // NOTE: This mocks the required IC OS image variables for testing.
+    mock_env_variables(&config);
+
     SystemTestGroup::new()
         .with_timeout_per_test(OVERALL_TIMEOUT)
-        // NOTE: This setup mocks the required IC OS image variables for testing.
         .with_setup(|env| os_qualification_utils::setup(env, config))
         .add_test(ic_system_test_driver::driver::dsl::TestFunction::new(
             "qualification",
@@ -101,10 +104,9 @@ pub fn main() -> anyhow::Result<()> {
                         // always be the case.
                         Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),
-                            url: get_guestos_initial_update_img_url().expect("target IC URL"),
-                            sha256: get_guestos_initial_update_img_sha256().unwrap(),
-                            guest_launch_measurements: get_guestos_initial_launch_measurements()
-                                .unwrap(),
+                            url: get_guestos_initial_update_img_url(),
+                            sha256: get_guestos_initial_update_img_sha256(),
+                            guest_launch_measurements: get_guestos_initial_launch_measurements(),
                         }),
                         // Ensure that application subnets are on the
                         // initial version. As the step above, this
@@ -136,9 +138,9 @@ pub fn main() -> anyhow::Result<()> {
                         // Ensure that the new version is blessed
                         Box::new(EnsureElectedVersion {
                             version: target_version.clone(),
-                            url: get_guestos_update_img_url().expect("target IC URL"),
-                            sha256: get_guestos_update_img_sha256().unwrap(),
-                            guest_launch_measurements: get_guestos_launch_measurements().unwrap(),
+                            url: get_guestos_update_img_url(),
+                            sha256: get_guestos_update_img_sha256(),
+                            guest_launch_measurements: get_guestos_launch_measurements(),
                         }),
                         // Ensure that application subnets are on the
                         // new version.
@@ -190,10 +192,9 @@ pub fn main() -> anyhow::Result<()> {
                         // if it was retired previously
                         Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),
-                            url: get_guestos_initial_update_img_url().expect("target IC URL"),
-                            sha256: get_guestos_initial_update_img_sha256().unwrap(),
-                            guest_launch_measurements: get_guestos_initial_launch_measurements()
-                                .unwrap(),
+                            url: get_guestos_initial_update_img_url(),
+                            sha256: get_guestos_initial_update_img_sha256(),
+                            guest_launch_measurements: get_guestos_initial_launch_measurements(),
                         }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {

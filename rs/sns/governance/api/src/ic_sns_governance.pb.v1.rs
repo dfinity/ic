@@ -4,8 +4,30 @@ use std::collections::BTreeMap;
 
 pub mod topics;
 
+/// Types of extension operations
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub enum ExtensionOperationType {
+    TreasuryManagerDeposit,
+    TreasuryManagerWithdraw,
+}
+
+/// Specification for an extension operation
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub struct ExtensionOperationSpec {
+    pub operation_type: Option<ExtensionOperationType>,
+    pub description: Option<String>,
+    pub extension_type: Option<ExtensionType>,
+    pub topic: Option<topics::Topic>,
+}
+
+/// Types of extensions that can be registered
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub enum ExtensionType {
+    TreasuryManager,
+}
+
 /// A principal with a particular set of permissions over a neuron.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
 pub struct NeuronPermission {
     /// The principal that has the permissions.
     pub principal: Option<PrincipalId>,

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};

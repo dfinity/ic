@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 BUILD_DEPENDENCIES = []
 
@@ -15,6 +16,7 @@ LIB_DEPENDENCIES = [
     "//rs/crypto/iccsa",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/adapter:adapter_with_http",
     "//rs/https_outcalls/client",
@@ -32,6 +34,10 @@ LIB_DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
+    "//rs/nns/handlers/root/impl:root",
+    "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/keys",
@@ -109,6 +115,8 @@ TEST_DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+    "@crate_index//:flate2",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
@@ -125,6 +133,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:walrus",
     "@crate_index//:wat",
 ]
 
@@ -150,15 +159,37 @@ cargo_build_script(
         "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_icp_index_canister//file)",
         "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
         "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_index//file)",
+        "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location @nns_governance_canister_test_at_mainnet_commit//file)",
+        "ROOT_CANISTER_WASM_PATH": "$(location @mainnet_nns_root-canister//file)",
+        "SNS_WASM_CANISTER_WASM_PATH": "$(location @mainnet_nns_sns-wasm-canister//file)",
+        "SNS_ROOT_CANISTER_WASM_PATH": "$(location @mainnet_sns-root-canister//file)",
+        "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location @mainnet_sns-governance-canister//file)",
+        "SNS_SWAP_CANISTER_WASM_PATH": "$(location @mainnet_sns-swap-canister//file)",
+        "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
+        "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
+        "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
+        "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
+        "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
     },
     data = [
         "templates/dashboard.html",
+        "@internet_identity_dev_at_mainnet_commit//file",
         "@mainnet_cycles_ledger_canister//file",
         "@mainnet_cycles_ledger_index//file",
+        "@mainnet_ic-icrc1-archive//file",
+        "@mainnet_ic-icrc1-index-ng//file",
+        "@mainnet_ic-icrc1-ledger//file",
         "@mainnet_icp_index_canister//file",
         "@mainnet_icp_ledger_canister//file",
         "@mainnet_nns_cycles-minting-canister//file",
         "@mainnet_nns_registry_canister//file",
+        "@mainnet_nns_root-canister//file",
+        "@mainnet_nns_sns-wasm-canister//file",
+        "@mainnet_sns-governance-canister//file",
+        "@mainnet_sns-root-canister//file",
+        "@mainnet_sns-swap-canister//file",
+        "@nns_governance_canister_test_at_mainnet_commit//file",
+        "@sns_aggregator_test_at_mainnet_commit//file",
     ],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
@@ -180,6 +211,7 @@ rust_library(
     name = "pocket-ic-server-lib",
     testonly = True,
     srcs = [
+        "src/external_canister_types.rs",
         "src/lib.rs",
         "src/nonmainnet_features.rs",
         "src/pocket_ic.rs",
@@ -193,6 +225,17 @@ rust_library(
         "@mainnet_nns_cycles-minting-canister//file",
         "@mainnet_icp_ledger_canister//file",
         "@mainnet_icp_index_canister//file",
+        "@nns_governance_canister_test_at_mainnet_commit//file",
+        "@mainnet_nns_root-canister//file",
+        "@mainnet_nns_sns-wasm-canister//file",
+        "@mainnet_sns-root-canister//file",
+        "@mainnet_sns-governance-canister//file",
+        "@mainnet_sns-swap-canister//file",
+        "@mainnet_ic-icrc1-ledger//file",
+        "@mainnet_ic-icrc1-archive//file",
+        "@mainnet_ic-icrc1-index-ng//file",
+        "@sns_aggregator_test_at_mainnet_commit//file",
+        "@internet_identity_dev_at_mainnet_commit//file",
     ],
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -203,9 +246,27 @@ rust_library(
         "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_icp_index_canister//file)",
         "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
         "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_index//file)",
+        "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location @nns_governance_canister_test_at_mainnet_commit//file)",
+        "ROOT_CANISTER_WASM_PATH": "$(location @mainnet_nns_root-canister//file)",
+        "SNS_WASM_CANISTER_WASM_PATH": "$(location @mainnet_nns_sns-wasm-canister//file)",
+        "SNS_ROOT_CANISTER_WASM_PATH": "$(location @mainnet_sns-root-canister//file)",
+        "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location @mainnet_sns-governance-canister//file)",
+        "SNS_SWAP_CANISTER_WASM_PATH": "$(location @mainnet_sns-swap-canister//file)",
+        "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
+        "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
+        "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
+        "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
+        "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
     },
     version = "9.0.3",
     deps = LIB_DEPENDENCIES + [":build_script"],
+)
+
+rust_ic_test(
+    name = "pocket-ic-server-lib-test",
+    crate = ":pocket-ic-server-lib",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
 )
 
 [

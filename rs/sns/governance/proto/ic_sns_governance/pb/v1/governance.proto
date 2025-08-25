@@ -485,6 +485,24 @@ message ExecuteExtensionOperation {
   optional ExtensionOperationArg operation_arg = 3;
 }
 
+// Specification for an SNS extension
+message ExtensionSpec {
+  // The name of the extension
+  optional string name = 1;
+  // The version of the extension.
+  optional uint64 version = 2;
+  // The topic that the extension's registration proposal will be under
+  optional Topic topic = 3;
+  // The type of the extension, which determines its standard operations.
+  optional ExtensionType extension_type = 4;
+}
+
+// Types of extensions that can be registered
+enum ExtensionType {
+  EXTENSION_TYPE_UNSPECIFIED = 0;
+  EXTENSION_TYPE_TREASURY_MANAGER = 1;
+}
+
 // A proposal to remove a list of dapps from the SNS and assign them to new controllers
 message DeregisterDappCanisters {
   // The canister IDs to be deregistered (i.e. removed from the management of the SNS).

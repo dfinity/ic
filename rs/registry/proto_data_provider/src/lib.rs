@@ -4,7 +4,7 @@ use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegis
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_registry_transport::upsert;
-use ic_sys::fs::write_atomically;
+use ic_sys::fs::{write_atomically, Clobber};
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
 use std::collections::HashMap;
 use std::{
@@ -147,7 +147,7 @@ impl ProtoRegistryDataProvider {
     where
         P: AsRef<Path>,
     {
-        write_atomically(path, |f| {
+        write_atomically(path, Clobber::Yes, |f| {
             let mut buf: Vec<u8> = vec![];
             self.encode(&mut buf);
             f.write_all(buf.as_slice())

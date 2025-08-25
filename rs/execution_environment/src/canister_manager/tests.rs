@@ -6181,7 +6181,7 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
     "#
     );
 
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
         .unwrap();
