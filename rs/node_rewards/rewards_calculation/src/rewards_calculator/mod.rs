@@ -115,6 +115,8 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
+        start_day: input.reward_period.from,
+        end_day: input.reward_period.to,
         subnets_fr,
         provider_results: results_per_provider,
     })
