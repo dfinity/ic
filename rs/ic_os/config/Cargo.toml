@@ -21,6 +21,7 @@ tempfile = { workspace = true }
 rust-ini = { workspace = true }
 ic_sev = { path = "../sev" }
 fs_extra = { workspace = true }
+walkdir = { workspace = true }
 
 [dev-dependencies]
 once_cell = "1.8"
