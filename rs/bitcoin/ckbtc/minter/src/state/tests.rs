@@ -336,7 +336,7 @@ mod withdrawal_reimbursement {
         );
 
         let dummy_tx = SubmittedBtcTransaction {
-            requests: vec![],
+            requests: vec![].into(),
             txid: "688f1309fe62ae66ea71959ef6d747bb63ec7c5ab3d8b1e25d8233616c3ec71a"
                 .parse()
                 .unwrap(),
@@ -344,6 +344,7 @@ mod withdrawal_reimbursement {
             submitted_at: 0,
             change_output: None,
             fee_per_vbyte: None,
+            withdrawal_fee: None,
         };
         state.push_submitted_transaction(dummy_tx.clone());
 

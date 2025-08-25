@@ -97,9 +97,18 @@ impl TaskQueue {
             }
     }
 
-    /// This function is used only in tests.
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
+    }
+
+    /// This function should only be used to restore the hook status
+    /// when loading a canister snapshot.
+    /// Otherwise, invalid state transitions might happen.
+    pub fn set_on_low_wasm_memory_hook_status_from_snapshot(
+        &mut self,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) {
+        self.on_low_wasm_memory_hook_status = on_low_wasm_memory_hook_status;
     }
 
     /// `check_dts_invariants` should only be called after round execution.

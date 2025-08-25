@@ -58,14 +58,10 @@ The `boot_args.template` file in the GuestOS context directory defines the kerne
 * `BOOT_ARGS_A`: Kernel command line parameters for booting from partition set A
 * `BOOT_ARGS_B`: Kernel command line parameters for booting from partition set B
 
-We also save `extra_boot_args` separately for backwards compatibility.
-
 === During the boot process
 
 1. The GRUB bootloader checks for the existence of a `boot_args` file on the boot partition.
 2. If found, it sources this file to get the appropriate boot arguments based on the active partition set (A or B).
-3. If not found, it falls back to a hardcoded set of parameters and any parameters defined in `extra_boot_args`.
-
 
 == Mount +/boot+ filesystems
 
@@ -196,7 +192,7 @@ This service initializes configuration in +/run/config/config.json+ from the boo
 
 == IC node bootstrap
 
-Service: +bootstrap-ic-node.service+, script +/opt/ic/bin/bootstrap-ic-node.sh+, depends on +mount-config.service+ and +init-config.service+ and requires
+Service: +bootstrap-ic-node.service+, depends on +mount-config.service+ and +init-config.service+ and requires
 +/boot/config+, +/mnt/config+, +/var/lib/ic/data+, and +/var/lib/ic/crypto+ mounts.
 
 This service is only executed once on first boot after provisioning.

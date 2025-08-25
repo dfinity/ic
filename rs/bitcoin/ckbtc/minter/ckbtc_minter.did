@@ -349,6 +349,13 @@ type ReimbursementReason = variant {
     };
 };
 
+type ReplacedReason = variant {
+  to_retry;
+  to_cancel : record {
+    reason : WithdrawalReimbursementReason;
+  };
+};
+
 type WithdrawalReimbursementReason = variant {
     invalid_transaction : InvalidTransactionError;
 };
@@ -366,6 +373,11 @@ type SuspendedReason = variant {
     ValueTooSmall;
     // The Bitcoin checker considered this UTXO to be tainted.
     Quarantined;
+};
+
+type WithdrawalFee = record {
+    minter_fee : nat64;
+    bitcoin_fee : nat64;
 };
 
 type Event = record {
@@ -398,13 +410,17 @@ type EventType = variant {
         change_output : opt record { vout : nat32; value : nat64 };
         submitted_at : nat64;
         fee: opt nat64;
+        withdrawal_fee : opt WithdrawalFee;
     };
     replaced_transaction : record {
         new_txid : blob;
         old_txid : blob;
         change_output : record { vout : nat32; value : nat64 };
         submitted_at : nat64;
-        fee: nat64;
+        fee : nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        reason : opt ReplacedReason;
+        new_utxos : opt vec Utxo;
     };
     confirmed_transaction : record { txid : blob };
     checked_utxo : record {
