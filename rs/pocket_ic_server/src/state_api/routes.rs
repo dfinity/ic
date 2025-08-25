@@ -766,121 +766,132 @@ pub async fn handler_status(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_call_v3(
+async fn handler_call(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
+    version: CallRequestVersion,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        version: CallRequestVersion::V3,
-    };
-    handle_raw(api_state, instance_id, op).await
-}
-
-pub async fn handler_call_v4(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
-    bytes: Bytes,
-) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = CallRequest {
-        effective_canister_id,
-        bytes,
-        version: CallRequestVersion::V4,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_call_v2(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_call(state, path, bytes, CallRequestVersion::V2).await
+}
+
+pub async fn handler_call_v3(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_call(state, path, bytes, CallRequestVersion::V3).await
+}
+
+pub async fn handler_call_v4(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_call(state, path, bytes, CallRequestVersion::V4).await
+}
+
+async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
+    version: query::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = CallRequest {
+    let op = QueryRequest {
         effective_canister_id,
         bytes,
-        version: CallRequestVersion::V2,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_query_v2(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = QueryRequest {
-        effective_canister_id,
-        bytes,
-        version: query::Version::V2,
-    };
-    handle_raw(api_state, instance_id, op).await
+    handler_query(state, path, bytes, query::Version::V2).await
 }
 
 pub async fn handler_query_v3(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_query(state, path, bytes, query::Version::V3).await
+}
+
+async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
+    version: read_state::canister::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = QueryRequest {
+    let op = CanisterReadStateRequest {
         effective_canister_id,
         bytes,
-        version: query::Version::V3,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_canister_read_state_v2(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = CanisterReadStateRequest {
-        effective_canister_id,
-        bytes,
-        version: read_state::canister::Version::V2,
-    };
-    handle_raw(api_state, instance_id, op).await
+    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V2).await
 }
 
 pub async fn handler_canister_read_state_v3(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = CanisterReadStateRequest {
-        effective_canister_id,
+    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V3).await
+}
+
+pub async fn handler_subnet_read_state(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+    version: read_state::subnet::Version,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = SubnetReadStateRequest {
+        subnet_id,
         bytes,
-        version: read_state::canister::Version::V3,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_subnet_read_state_v2(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = SubnetReadStateRequest {
-        subnet_id,
-        bytes,
-        version: read_state::subnet::Version::V2,
-    };
-    handle_raw(api_state, instance_id, op).await
+    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V2).await
 }
 
 pub async fn handler_subnet_read_state_v3(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = SubnetReadStateRequest {
-        subnet_id,
-        bytes,
-        version: read_state::subnet::Version::V3,
-    };
-    handle_raw(api_state, instance_id, op).await
+    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V3).await
 }
 
 async fn handle_raw<T: Operation + Send + Sync + 'static>(
