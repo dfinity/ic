@@ -12,7 +12,7 @@ use clap::Parser;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;
-use ic_sev::guest::key_derivation::{derive_key_from_sev_measurement, Key};
+use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
 use std::ffi::{c_char, c_int, c_void, CStr};

@@ -5,7 +5,7 @@ use std::os::unix::fs::FileExt;
 use std::path::Path;
 
 pub mod firmware;
-pub mod key_derivation;
+pub mod key_deriver;
 pub mod testing;
 
 /// Checks if SEV is active in the Guest Virtual Machine
