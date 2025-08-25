@@ -36,10 +36,10 @@ pub enum StepType {
     CreateRegistryTar,
     CopyIcState,
     GetRecoveryCUP,
+    CreateArtifacts,
     UploadCUPAndRegistry,
     WaitForCUP,
     UploadState,
-    CreateArtifacts,
     Cleanup,
 }
 
@@ -301,6 +301,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     .get_recovery_cup_step(self.params.subnet_id, !self.interactive())?,
             )),
 
+            StepType::CreateArtifacts => Ok(Box::new(
+                self.recovery
+                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
+            )),
+
             StepType::UploadCUPAndRegistry => {
                 if let Some(method) = self.params.upload_method {
                     Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(method)))
@@ -333,11 +338,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     Err(RecoveryError::StepSkipped)
                 }
             }
-
-            StepType::CreateArtifacts => Ok(Box::new(
-                self.recovery
-                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
-            )),
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }
