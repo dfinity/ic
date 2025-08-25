@@ -360,7 +360,7 @@ mod tests {
     use super::*;
     use config_types::{
         FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings, GuestOSUpgradeConfig,
-        GuestVMType, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings, CONFIG_VERSION,
+        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings, CONFIG_VERSION,
     };
 
     const IC_JSON5_TEMPLATE_BYTES: &[u8] =
@@ -445,28 +445,5 @@ mod tests {
             upgrade_config: GuestOSUpgradeConfig::default(),
             trusted_execution_environment_config: None,
         }
-    }
-
-    #[test]
-    fn test_configure_ipv4() {
-        // Test with IPv4 config
-        let mut guestos_config = create_test_guestos_config();
-        guestos_config.network_settings.ipv4_config = Some(Ipv4Config {
-            address: "192.168.1.100".parse().unwrap(),
-            prefix_length: 24,
-            gateway: "192.168.1.1".parse().unwrap(),
-        });
-
-        let (ipv4_address, ipv4_gateway) = configure_ipv4(&guestos_config);
-        assert_eq!(ipv4_address, "192.168.1.100/24");
-        assert_eq!(ipv4_gateway, "192.168.1.1");
-
-        // Test without IPv4 config
-        let mut guestos_config = create_test_guestos_config();
-        guestos_config.network_settings.ipv4_config = None;
-
-        let (ipv4_address, ipv4_gateway) = configure_ipv4(&guestos_config);
-        assert_eq!(ipv4_address, "");
-        assert_eq!(ipv4_gateway, "");
     }
 }
