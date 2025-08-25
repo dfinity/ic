@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
@@ -24,9 +24,7 @@ use ic_sns_governance_api::pb::v1::{
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::{
-    icrc::generic_value::Value, icrc1::account::Account, icrc2::allowance::AllowanceArgs,
-};
+use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
 use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use pretty_assertions::assert_eq;
@@ -100,7 +98,7 @@ async fn test_treasury_manager() {
     let sns = deploy_sns(&pocket_ic, false).await;
 
     // Install KongSwap
-    let kong_backend_canister_id = {
+    let _kong_backend_canister_id = {
         let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
             .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
 
