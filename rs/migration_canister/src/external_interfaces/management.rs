@@ -4,6 +4,9 @@ use serde::Deserialize;
 
 use crate::{processing::ProcessingResult, ValidationError};
 
+// ========================================================================= //
+// `update_settings`
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct CanisterSettings {
     pub controllers: Option<Vec<Principal>>,
@@ -55,6 +58,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
 }
 
 // ========================================================================= //
+// `canister_status`
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct CanisterStatusArgs {
@@ -63,14 +67,14 @@ struct CanisterStatusArgs {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct CanisterStatusResponse {
-    status: CanisterStatusType,
-    ready_for_migration: bool,
-    version: u64,
-    controller: candid::Principal,
-    settings: DefiniteCanisterSettingsArgs,
-    cycles: candid::Nat,
-    freezing_threshold: candid::Nat,
-    reserved_cycles: candid::Nat,
+    pub status: CanisterStatusType,
+    pub ready_for_migration: bool,
+    pub version: u64,
+    pub controller: candid::Principal,
+    pub settings: DefiniteCanisterSettingsArgs,
+    pub cycles: candid::Nat,
+    pub freezing_threshold: candid::Nat,
+    pub reserved_cycles: candid::Nat,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -85,10 +89,10 @@ pub enum CanisterStatusType {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
-    controller: Principal,
-    controllers: Vec<Principal>,
-    freezing_threshold: candid::Nat,
-    reserved_cycles_limit: candid::Nat,
+    pub controller: Principal,
+    pub controllers: Vec<Principal>,
+    pub freezing_threshold: candid::Nat,
+    pub reserved_cycles_limit: candid::Nat,
 }
 
 pub async fn canister_status(
@@ -102,7 +106,67 @@ pub async fn canister_status(
         .with_arg(args)
         .await
     {
-        Ok(_) => todo!(),
-        Err(_) => todo!(),
+        Ok(response) => match response.candid::<CanisterStatusResponse>() {
+            Ok(canister_status) => ProcessingResult::Success(canister_status),
+            Err(e) => {
+                println!(
+                    "Decoding `CanisterStatusResponse` for {:?}, {:?} failed: {:?}",
+                    canister_id, subnet_id, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
+        Err(e) => {
+            println!(
+                "Call `canister_status` for {:?}, {:?} failed {:?}",
+                canister_id, subnet_id, e
+            );
+            ProcessingResult::NoProgress
+        }
+    }
+}
+
+// ========================================================================= //
+// `canister_info`
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CanisterInfoArgs {
+    pub canister_id: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CanisterInfoResponse {
+    pub total_num_changes: u64,
+    pub controllers: Vec<Principal>,
+}
+
+pub async fn canister_info(
+    canister_id: Principal,
+    subnet_id: Principal,
+) -> ProcessingResult<CanisterInfoResponse, ValidationError> {
+    let args = CanisterInfoArgs { canister_id };
+
+    // We have to provide the subnet_id explicitly because `aaaaa-aa` will not always work during migration.
+    match Call::bounded_wait(subnet_id, "canister_info")
+        .with_arg(args)
+        .await
+    {
+        Ok(response) => match response.candid::<CanisterInfoResponse>() {
+            Ok(canister_info) => ProcessingResult::Success(canister_info),
+            Err(e) => {
+                println!(
+                    "Decoding `CanisterInfoResponse` for {:?}, {:?} failed: {:?}",
+                    canister_id, subnet_id, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
+        Err(e) => {
+            println!(
+                "Call `canister_info` for {:?}, {:?} failed {:?}",
+                canister_id, subnet_id, e
+            );
+            ProcessingResult::NoProgress
+        }
     }
 }
