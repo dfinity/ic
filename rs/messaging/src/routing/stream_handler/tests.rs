@@ -2681,12 +2681,16 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
                     message_in_stream(outgoing_stream, 22).clone(),
                 ],
                 signals_end: 47,
+                reject_signals: vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    43.into(),
+                )],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
             // Cycles attached to all messages in the slice are lost.
-            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=46)
+            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 44..=46)
                 .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
             expected_state
                 .metadata
@@ -2708,10 +2712,11 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
                 (
                     LABEL_VALUE_TYPE_REQUEST,
                     LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
-                    2,
+                    1,
                 ),
                 (
                     LABEL_VALUE_TYPE_RESPONSE,
@@ -2721,7 +2726,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                receiver_subnet_mismatch: 4,
+                receiver_subnet_mismatch: 3,
                 ..CriticalErrorCounts::default()
             });
         },
