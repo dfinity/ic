@@ -612,7 +612,7 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
         state_dir: Some(temp_dir.path().to_path_buf()),
-        nonmainnet_features: false,
+        nonmainnet_features: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
@@ -1394,7 +1394,6 @@ fn test_vetkd() {
     let pic = PocketIcBuilder::new()
         .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
-        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 
     // We retrieve the app subnet ID from the topology.
