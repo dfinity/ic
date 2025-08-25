@@ -82,16 +82,6 @@ pub struct SerializedModule {
     pub is_wasm64: bool,
 }
 
-impl MemoryDiskBytes for SerializedModule {
-    fn memory_bytes(&self) -> usize {
-        self.bytes.0.len()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
-}
-
 impl SerializedModule {
     pub(crate) fn new(
         module: &Module,
@@ -164,10 +154,6 @@ pub struct OnDiskSerializedModule {
 }
 
 impl MemoryDiskBytes for OnDiskSerializedModule {
-    fn memory_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-    }
-
     fn disk_bytes(&self) -> usize {
         (self.bytes.metadata().unwrap().len() + self.initial_state_data.metadata().unwrap().len())
             as usize

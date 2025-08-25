@@ -1,6 +1,7 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
+use crate::MemoryDiskBytes;
 use crate::{messages::CallContextId, time::CoarseTime, Cycles};
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -38,6 +39,17 @@ pub enum WasmMethod {
     /// An exported system method. Unlike query or update method, there
     /// are a few fixed system methods as defined in `SystemMethod`.
     System(SystemMethod),
+}
+
+impl MemoryDiskBytes for WasmMethod {
+    fn heap_bytes(&self) -> usize {
+        match self {
+            WasmMethod::Update(s) | WasmMethod::Query(s) | WasmMethod::CompositeQuery(s) => {
+                s.heap_bytes()
+            }
+            WasmMethod::System(_system_method) => 0,
+        }
+    }
 }
 
 impl WasmMethod {
