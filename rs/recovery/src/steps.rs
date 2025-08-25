@@ -1092,7 +1092,7 @@ echo "    - https://download.dfinity.network/recovery/$artifacts_hash/recovery.t
 echo "  - Run the following command and commit + push to a branch of dfinity/ic:"
 echo "    echo $artifacts_hash > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash"
 echo "  - Build a recovery image from that branch."
-echo "  - Provide the Node Providers with the commit hash as version and the image hash. Tell them to reboot and follow the recovery instructions."
+echo "  - Provide other Node Providers with the commit hash as version and the image hash. Ask them to reboot and follow the recovery instructions."
         "#.to_string()
     }
 }
