@@ -139,10 +139,8 @@ fn test_compute_providers_extrapolated_fr() {
     let p1_nodes = generate_rewardable_nodes(vec![(p1_node1, vec![day])]);
     let p1_metrics = BTreeMap::new(); // No metrics available
     let result_p1 = step_2_extrapolated_fr(&p1_nodes, &p1_metrics);
-    // Extrapolated FR for P1 should be 1 since no nodes are assigned
-    assert_eq!(result_p1.extrapolated_fr.get(&day), Some(&Decimal::ONE));
-    // Assigned count should be 0 since no nodes are assigned
-    assert_eq!(result_p1.assigned_count.get(&day), Some(&0));
+    // Extrapolated FR for P1 should be 0 since no nodes are assigned
+    assert_eq!(result_p1.extrapolated_fr.get(&day), Some(&Decimal::ZERO));
 
     // --- P2 Data: Two nodes with metrics ---
     let p2_nodes = generate_rewardable_nodes(vec![(p2_node1, vec![day]), (p2_node2, vec![day])]);
@@ -154,9 +152,6 @@ fn test_compute_providers_extrapolated_fr() {
     // Extrapolated FR for P2 should be the average of its nodes' relative FR
     let expected_fr_p2 = (dec!(0.2) + dec!(0.4)) / dec!(2); // 0.3
     assert_eq!(result_p2.extrapolated_fr.get(&day), Some(&expected_fr_p2));
-
-    // Assigned count should be 2 since no nodes are assigned
-    assert_eq!(result_p2.assigned_count.get(&day), Some(&2));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -301,7 +296,7 @@ fn test_adjust_nodes_rewards() {
     let node4 = test_node_id(4);
     let node5 = test_node_id(5);
 
-    // Day 1 has 5 nodes, Day 2 has 3 nodes.
+    // Day 1 has 5 nodes, Day 2 and Day 3 has 3 nodes.
     let rewardable_nodes = generate_rewardable_nodes(vec![
         (node1, vec![day1, day2, day3]),
         (node2, vec![day1, day2, day3]),
@@ -311,28 +306,23 @@ fn test_adjust_nodes_rewards() {
     ]);
 
     let mut base_rewards = BTreeMap::new();
-    let mut assigned_count = HashMap::new();
     let mut performance_multiplier = HashMap::new();
     for node in &rewardable_nodes {
         for day in &node.rewardable_days {
             base_rewards.insert((*day, node.node_id), dec!(1000));
-            performance_multiplier.insert((*day, node.node_id), dec!(0.5));
-
-            // Test all assigned on day1 and day2
-            let assigned_count_day = assigned_count.entry(*day).or_default();
-            *assigned_count_day += 1;
+            if *day == day1 || *day == day2 {
+                // Assigned nodes
+                performance_multiplier.insert((*day, node.node_id), dec!(0.5));
+            } else {
+                // Unassigned nodes
+                performance_multiplier.insert((*day, node.node_id), dec!(1.0));
+            }
         }
     }
-    let assigned_count_day = assigned_count.entry(day3).or_default();
-    *assigned_count_day = 0;
 
     // --- Execution ---
-    let Step5Results { adjusted_rewards } = step_5_adjust_node_rewards(
-        &rewardable_nodes,
-        &base_rewards,
-        &performance_multiplier,
-        &assigned_count,
-    );
+    let Step5Results { adjusted_rewards } =
+        step_5_adjust_node_rewards(&rewardable_nodes, &base_rewards, &performance_multiplier);
 
     // --- Assertions ---
     // Case 1: More than 4 nodes (5 on day1), penalty applies
