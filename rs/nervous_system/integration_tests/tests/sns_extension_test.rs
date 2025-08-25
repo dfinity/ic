@@ -1,4 +1,4 @@
-use candid::{Encode, Nat};
+use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
@@ -24,7 +24,9 @@ use ic_sns_governance_api::pb::v1::{
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
+use icrc_ledger_types::{
+    icrc::generic_value::Value, icrc1::account::Account, icrc2::allowance::AllowanceArgs,
+};
 use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use pretty_assertions::assert_eq;
@@ -98,7 +100,7 @@ async fn test_treasury_manager() {
     let sns = deploy_sns(&pocket_ic, false).await;
 
     // Install KongSwap
-    let _kong_backend_canister_id = {
+    let kong_backend_canister_id = {
         let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
             .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
 
@@ -337,6 +339,9 @@ async fn test_treasury_manager() {
                 },
             )),
         };
+
+        println!("Time[before proposal]: {:?}", pocket_ic.get_time().await);
+
         let proposal_data = propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
@@ -344,8 +349,76 @@ async fn test_treasury_manager() {
             neuron_id.clone(),
             proposal,
         )
-        .await
+        .await;
+
+        println!("Time[after proposal]: {:?}", pocket_ic.get_time().await);
+
+        for _ in 0..100 {
+            pocket_ic.tick().await;
+            pocket_ic.advance_time(Duration::from_secs(1)).await;
+        }
+
+        let sns_allowance = pocket_ic
+            .query_call(
+                sns_ledger_canister_id.into(),
+                sns.governance.canister_id.into(),
+                "icrc2_allowance",
+                Encode!(&AllowanceArgs {
+                    account: Account {
+                        owner: extension_canister_id.into(),
+                        subaccount: None,
+                    },
+                    spender: Account {
+                        owner: kong_backend_canister_id.get().0,
+                        subaccount: None,
+                    },
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let icp_allowance = pocket_ic
+            .query_call(
+                LEDGER_CANISTER_ID.into(),
+                sns.governance.canister_id.into(),
+                "icrc2_allowance",
+                Encode!(&AllowanceArgs {
+                    account: Account {
+                        owner: extension_canister_id.into(),
+                        subaccount: None,
+                    },
+                    spender: Account {
+                        owner: kong_backend_canister_id.get().0,
+                        subaccount: None,
+                    },
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let sns_allowance = Decode!(
+            &sns_allowance,
+            icrc_ledger_types::icrc2::allowance::Allowance
+        )
         .unwrap();
+        let icp_allowance = Decode!(
+            &icp_allowance,
+            icrc_ledger_types::icrc2::allowance::Allowance
+        )
+        .unwrap();
+
+        println!(
+            "sns_allowance: {:?}, icp_allowance: {:?}",
+            sns_allowance, icp_allowance
+        );
+
+        for block_index in 0..=13 {
+            dbg_print_block(&pocket_ic, sns_ledger_canister_id.into(), block_index).await;
+        }
+
+        let proposal_data = proposal_data.unwrap();
 
         assert_eq!(proposal_data.failure_reason, None);
         assert!(proposal_data.executed_timestamp_seconds > 0);
@@ -450,13 +523,8 @@ async fn test_treasury_manager() {
 }
 
 #[allow(unused)]
-async fn dbg_print_block(
-    pocket_ic: &PocketIc,
-    sns_ledger_canister_id: PrincipalId,
-    block_index: u64,
-) {
-    let block =
-        sns::ledger::get_all_blocks(pocket_ic, sns_ledger_canister_id, block_index, 1).await;
+async fn dbg_print_block(pocket_ic: &PocketIc, ledger_canister_id: PrincipalId, block_index: u64) {
+    let block = sns::ledger::get_all_blocks(pocket_ic, ledger_canister_id, block_index, 1).await;
 
     let Value::Map(block_details) = block.blocks[0].clone() else {
         panic!("Expected a block with details, got: {:?}", block.blocks[0]);
