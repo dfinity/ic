@@ -340,7 +340,7 @@ impl ExtensionType {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct ExtensionVersion(pub u64);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -958,6 +958,124 @@ pub async fn validate_register_extension(
         extension_canister_id,
         spec,
         init,
+    })
+}
+
+pub struct ValidatedUpgradeExtension {
+    pub extension_canister_id: CanisterId,
+    pub wasm: Wasm,
+    pub spec: ExtensionSpec,
+    pub current_version: ExtensionVersion,
+    pub new_version: ExtensionVersion,
+    pub upgrade_arg: Vec<u8>,
+}
+
+impl ValidatedUpgradeExtension {
+    pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
+        let ValidatedUpgradeExtension {
+            extension_canister_id,
+            wasm,
+            upgrade_arg,
+            spec,
+            ..
+        } = self;
+
+        governance
+            .upgrade_non_root_canister(
+                extension_canister_id,
+                wasm,
+                upgrade_arg,
+                CanisterInstallMode::Upgrade,
+            )
+            .await?;
+
+        // Update the extension cache with the new spec
+        cache_registered_extension(extension_canister_id, spec);
+
+        Ok(())
+    }
+}
+
+pub async fn validate_upgrade_extension(
+    governance: &Governance,
+    upgrade_extension: pb::UpgradeExtension,
+) -> Result<ValidatedUpgradeExtension, String> {
+    let pb::UpgradeExtension {
+        extension_canister_id,
+        canister_upgrade_arg,
+        new_canister_wasm: _,
+        chunked_canister_wasm: _,
+    } = &upgrade_extension;
+
+    // Validate extension canister ID
+    let Some(extension_canister_id) = extension_canister_id else {
+        return Err("extension_canister_id is required".to_string());
+    };
+
+    let extension_canister_id = CanisterId::try_from_principal_id(*extension_canister_id)
+        .map_err(|err| format!("Invalid extension_canister_id: {}", err))?;
+
+    // Validate that the extension is registered
+    let current_extension =
+        get_registered_extension_from_cache(extension_canister_id).ok_or_else(|| {
+            format!(
+                "Extension canister {} is not registered",
+                extension_canister_id
+            )
+        })?;
+
+    // Extract and validate WASM (either direct bytes or chunked)
+    let wasm = Wasm::try_from(&upgrade_extension)
+        .map_err(|err| format!("Invalid WASM specification: {}", err))?;
+
+    // Validate WASM structure and size constraints
+    wasm.validate(&*governance.env, canister_upgrade_arg)
+        .await
+        .map_err(|defects| format!("WASM validation failed: {}", defects.join("; ")))?;
+
+    // Get the WASM hash for validation against ALLOWED_EXTENSIONS
+    let wasm_module_hash = wasm.sha256sum();
+
+    // Validate the new WASM against ALLOWED_EXTENSIONS
+    let new_spec = validate_extension_wasm(&wasm_module_hash)
+        .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+
+    // Check that the new extension has the same name as the current one
+    if new_spec.name != current_extension.name {
+        return Err(format!(
+            "Extension name mismatch: current extension is '{}', new extension is '{}'",
+            current_extension.name, new_spec.name
+        ));
+    }
+
+    // Check that the new version is higher than the current version
+    if new_spec.version <= current_extension.version {
+        return Err(format!(
+            "New extension version {} must be higher than current version {}",
+            new_spec.version.0, current_extension.version.0
+        ));
+    }
+
+    // Check that extension types match
+    if new_spec.extension_type != current_extension.extension_type {
+        return Err(format!(
+            "Extension type mismatch: current is {:?}, new is {:?}",
+            current_extension.extension_type, new_spec.extension_type
+        ));
+    }
+
+    let upgrade_arg = canister_upgrade_arg.clone().unwrap_or_default();
+
+    // Clone the new version before moving new_spec
+    let new_version = new_spec.version.clone();
+
+    Ok(ValidatedUpgradeExtension {
+        extension_canister_id,
+        wasm,
+        spec: new_spec,
+        current_version: current_extension.version,
+        new_version,
+        upgrade_arg,
     })
 }
 
