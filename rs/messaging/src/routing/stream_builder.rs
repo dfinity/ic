@@ -305,10 +305,8 @@ impl StreamBuilderImpl {
         };
 
         let mut streams = state.take_streams();
-        let routing_table = state.routing_table();
-        let subnet_types: BTreeMap<_, _> = state
-            .metadata
-            .network_topology
+        let network_topology = state.metadata.network_topology.clone();
+        let subnet_types: BTreeMap<_, _> = network_topology
             .subnets
             .iter()
             .map(|(subnet_id, topology)| (*subnet_id, topology.subnet_type))
@@ -342,7 +340,7 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            match routing_table.route(msg.receiver().get()) {
+            match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     let dst_stream_entry = streams.entry(dst_subnet_id);
