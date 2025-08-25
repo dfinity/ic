@@ -14,10 +14,10 @@ Success::
 
 
 Effective Canister test:
-1. Update call with canister_id A to the endpoint /api/v{2,3}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
+1. Update call with canister_id A to the endpoint /api/v{2,3,4}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
 2. Query call with canister_id A to the endpoint /api/v2/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
-3. Read state request for the path /canisters/A/controllers to the endpoint /api/v2/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
-4. Read state request for the path /time to the endpoint /api/v2/canister/aaaaa-aa/read_state is rejected with 4xx.
+3. Read state request for the path /canisters/A/controllers to the endpoints /api/{v2,v3}/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
+4. Read state request for the path /time to the endpoints /api/{v2,v3}/canister/aaaaa-aa/read_state is rejected with 4xx.
 
 The different canister ID B is
 1. The canister ID of a different canister on the same subnet;
@@ -32,6 +32,7 @@ use anyhow::Result;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
+use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -47,13 +48,10 @@ use ic_system_test_driver::{
     util::{block_on, UniversalCanister},
 };
 use ic_types::{CanisterId, PrincipalId};
-use itertools::Itertools;
 use reqwest::Response;
 use slog::{info, Logger};
 use std::net::SocketAddr;
 use url::Url;
-
-const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -86,7 +84,7 @@ fn setup(env: TestEnv) {
     });
 }
 
-fn update_calls(env: TestEnv) {
+fn update_calls(env: TestEnv, version: Call) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -94,26 +92,22 @@ fn update_calls(env: TestEnv) {
 
     block_on(async {
         // Test that well formed calls get accepted
-        for version in CALL_VERSIONS.iter() {
-            let response = version
-                .call(
-                    socket,
-                    IngressMessage::default().with_canister_id(primary.into(), primary.into()),
-                )
-                .await;
-            let status = inspect_response(response, "Call", &logger).await;
-            assert_2xx(&status);
-        }
+        let response = version
+            .call(
+                socket,
+                IngressMessage::default().with_canister_id(primary.into(), primary.into()),
+            )
+            .await;
+        let status = inspect_response(response, "Call", &logger).await;
+        assert_2xx(&status);
 
         // Test that malformed calls get rejects
-        for (version, effective_canister_id) in
-            CALL_VERSIONS.iter().cartesian_product(test_ids.iter())
-        {
+        for effective_canister_id in test_ids {
             let response = version
                 .call(
                     socket,
                     IngressMessage::default()
-                        .with_canister_id(primary.into(), (*effective_canister_id).into()),
+                        .with_canister_id(primary.into(), effective_canister_id.into()),
                 )
                 .await;
             let status = inspect_response(response, "Call", &logger).await;
@@ -122,7 +116,7 @@ fn update_calls(env: TestEnv) {
     });
 }
 
-fn query_calls(env: TestEnv) {
+fn query_calls(env: TestEnv, version: query::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -130,7 +124,7 @@ fn query_calls(env: TestEnv) {
 
     block_on(async {
         // Test that well formed calls get accepted
-        let response = Query::new(primary.into(), primary.into())
+        let response = Query::new(primary.into(), primary.into(), version)
             .query(socket)
             .await;
         let status = inspect_response(response, "Query", &logger).await;
@@ -138,7 +132,7 @@ fn query_calls(env: TestEnv) {
 
         // Test that malformed calls get rejeceted
         for effective_canister_id in test_ids {
-            let response = Query::new(primary.into(), effective_canister_id.into())
+            let response = Query::new(primary.into(), effective_canister_id.into(), version)
                 .query(socket)
                 .await;
             let status = inspect_response(response, "Query", &logger).await;
@@ -147,10 +141,10 @@ fn query_calls(env: TestEnv) {
     });
 }
 
-fn read_state(env: TestEnv) {
+fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
-    let (primary, test_ids) = get_canister_test_ids(&snapshot);
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
     let socket = get_socket_addr(&snapshot);
 
     block_on(async {
@@ -162,12 +156,22 @@ fn read_state(env: TestEnv) {
                 Label::from("controllers"),
             ])],
             primary.into(),
+            version,
         )
         .read_state(socket)
         .await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
+    });
+}
 
+fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Version) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
+
+    block_on(async {
         // Test that malformed read_state requests are rejected
         for effective_canister_id in test_ids {
             let response = CanisterReadState::new(
@@ -177,6 +181,7 @@ fn read_state(env: TestEnv) {
                     Label::from("controllers"),
                 ])],
                 effective_canister_id.into(),
+                version,
             )
             .read_state(socket)
             .await;
@@ -186,7 +191,7 @@ fn read_state(env: TestEnv) {
     });
 }
 
-fn read_time(env: TestEnv) {
+fn read_time(env: TestEnv, version: read_state::canister::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
@@ -199,13 +204,25 @@ fn read_time(env: TestEnv) {
             CanisterReadState::new(
                 vec![Path::from(Label::from("time"))],
                 effective_canister_id.into(),
+                version,
             )
             .read_state_at_url(url)
         };
-        for url in [&subnet_replica_url, &api_bn_url] {
-            let response = read_state(primary, url.clone()).await;
-            let status = inspect_response(response, "ReadState", &logger).await;
-            assert_2xx(&status);
+
+        let response = read_state(primary, subnet_replica_url.clone()).await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        assert_2xx(&status);
+
+        let response = read_state(primary, api_bn_url.clone()).await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        match version {
+            read_state::canister::Version::V2 => {
+                assert_2xx(&status);
+            }
+            read_state::canister::Version::V3 => {
+                // TODO: change it to 2xx once the boundary node supports the new endpoint
+                assert_4xx(&status);
+            }
         }
 
         // Test that requesting the "time" path on the management canister id fails when using API boundary nodes.
@@ -315,20 +332,33 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
 }
 
 fn assert_2xx(status: &u16) {
-    assert!((200..300).contains(status));
+    assert!(
+        (200..300).contains(status),
+        "Received non-success status: {status}"
+    );
 }
 
 fn assert_4xx(status: &u16) {
-    assert!((400..500).contains(status))
+    assert!(
+        (400..500).contains(status),
+        "Received non-user-error status: {status}"
+    );
 }
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(update_calls))
-        .add_test(systest!(query_calls))
-        .add_test(systest!(read_state))
-        .add_test(systest!(read_time))
+        .add_test(systest!(query_calls; query::Version::V2))
+        .add_test(systest!(query_calls; query::Version::V3))
+        .add_test(systest!(update_calls; Call::V2))
+        .add_test(systest!(update_calls; Call::V3))
+        .add_test(systest!(update_calls; Call::V4))
+        .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V2))
+        .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V3))
+        .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V2))
+        .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V3))
+        .add_test(systest!(read_time; read_state::canister::Version::V2))
+        .add_test(systest!(read_time; read_state::canister::Version::V3))
         .execute_from_args()?;
 
     Ok(())

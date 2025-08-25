@@ -1,6 +1,6 @@
 //! Module that deals with ingress messages
-pub mod call_v2;
-pub mod call_v3;
+pub mod call_async;
+pub mod call_sync;
 mod ingress_watcher;
 
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
@@ -307,6 +307,10 @@ impl IngressMessageSubmitter {
     /// Returns the message id of the ingress message.
     pub(crate) fn message_id(&self) -> MessageId {
         self.message.id()
+    }
+
+    pub(crate) fn canister_id(&self) -> CanisterId {
+        self.message.canister_id()
     }
 
     /// Attempts to submit the ingress message to the ingress pool.
