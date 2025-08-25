@@ -1,5 +1,5 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, InternetIdentityInit, OpenIdConfig, RateLimitConfig,
+    CaptchaConfig, CaptchaTrigger, GoogleOpenIdConfig, InternetIdentityInit, RateLimitConfig,
     StaticCaptchaTrigger,
 };
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -1779,51 +1779,53 @@ impl PocketIcSubnets {
 
             // Install the Internet Identity canister.
             // The initial values have been adapted from the mainnet values obtained by calling
-            // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
-            // record {
-            //   fetch_root_key = null;
-            //   openid_google = opt opt record {
-            //     client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
-            //   };
-            //   is_production = opt true;
-            //   enable_dapps_explorer = opt false;
-            //   assigned_user_number_range = opt record {
-            //     10_000 : nat64;
-            //     7_569_744 : nat64;
-            //   };
-            //   new_flow_origins = opt vec { "https://id.ai" };
-            //   archive_config = opt record {
-            //     polling_interval_ns = 15_000_000_000 : nat64;
-            //     entries_buffer_limit = 10_000 : nat64;
-            //     module_hash = blob "\17\4d\7e\2c\3d\4d\3b\0f\34\61\63\4d\49\ea\c2\85\55\5a\97\48\de\7c\c7\a8\53\cf\ea\00\41\52\a1\97";
-            //     entries_fetch_limit = 1_000 : nat16;
-            //   };
-            //   canister_creation_cycles_cost = opt (0 : nat64);
-            //   analytics_config = opt opt variant {
-            //     Plausible = record {
-            //       domain = opt "identity.internetcomputer.org";
-            //       track_localhost = null;
-            //       hash_mode = null;
-            //       api_host = null;
+            // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
+            //     record {
+            //       fetch_root_key = null;
+            //       openid_google = opt opt record {
+            //         client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //       };
+            //       is_production = opt true;
+            //       enable_dapps_explorer = opt false;
+            //       assigned_user_number_range = opt record {
+            //         10_000 : nat64;
+            //         7_569_744 : nat64;
+            //       };
+            //       new_flow_origins = opt vec { "https://id.ai" };
+            //       archive_config = opt record {
+            //         polling_interval_ns = 15_000_000_000 : nat64;
+            //         entries_buffer_limit = 10_000 : nat64;
+            //         module_hash = blob "\4e\84\31\f2\c0\1c\32\ac\ed\21\43\9e\8a\97\ea\0a\be\22\4a\f8\18\89\58\a4\77\ea\df\ad\46\e6\90\fb";
+            //         entries_fetch_limit = 1_000 : nat16;
+            //       };
+            //       canister_creation_cycles_cost = opt (0 : nat64);
+            //       analytics_config = opt opt variant {
+            //         Plausible = record {
+            //           domain = opt "identity.internetcomputer.org";
+            //           track_localhost = null;
+            //           hash_mode = null;
+            //           api_host = null;
+            //         }
+            //       };
+            //       feature_flag_enable_generic_open_id_fe = null;
+            //       related_origins = opt vec {
+            //         "https://id.ai";
+            //         "https://identity.ic0.app";
+            //         "https://identity.internetcomputer.org";
+            //         "https://identity.icp0.io";
+            //       };
+            //       feature_flag_continue_from_another_device = opt true;
+            //       openid_configs = null;
+            //       captcha_config = opt record {
+            //         max_unsolved_captchas = 500 : nat64;
+            //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
+            //       };
+            //       dummy_auth = opt null;
+            //       register_rate_limit = opt record {
+            //         max_tokens = 25_000 : nat64;
+            //         time_per_token_ns = 1_000_000_000 : nat64;
+            //       };
             //     }
-            //   };
-            //   related_origins = opt vec {
-            //     "https://id.ai";
-            //     "https://identity.ic0.app";
-            //     "https://identity.internetcomputer.org";
-            //     "https://identity.icp0.io";
-            //   };
-            //   feature_flag_continue_from_another_device = null;
-            //   captcha_config = opt record {
-            //     max_unsolved_captchas = 500 : nat64;
-            //     captcha_trigger = variant { Static = variant { CaptchaDisabled } };
-            //   };
-            //   dummy_auth = opt null;
-            //   register_rate_limit = opt record {
-            //     max_tokens = 25_000 : nat64;
-            //     time_per_token_ns = 1_000_000_000 : nat64;
-            //   };
-            // },
 
             // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
             // and thus we should only provide one if auto progress is enabled
@@ -1831,7 +1833,7 @@ impl PocketIcSubnets {
             let openid_google = if self.auto_progress_enabled {
                 // We use a different id than in production:
                 // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
-                Some(Some(OpenIdConfig {
+                Some(Some(GoogleOpenIdConfig {
                     client_id:
                         "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
                             .to_string(),
@@ -1851,15 +1853,17 @@ impl PocketIcSubnets {
                     max_unsolved_captchas: 500,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
-                related_origins: None,      // DIFFERENT FROM ICP MAINNET
-                new_flow_origins: None,     // DIFFERENT FROM ICP MAINNET
-                openid_google,              // DIFFERENT FROM ICP MAINNET
+                related_origins: None,  // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
+                openid_google,          // DIFFERENT FROM ICP MAINNET
+                openid_configs: None,
                 analytics_config: None,     // DIFFERENT FROM ICP MAINNET
                 fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
-                feature_flag_continue_from_another_device: None,
+                feature_flag_continue_from_another_device: Some(true),
+                feature_flag_enable_generic_open_id_fe: None,
             });
             ii_subnet
                 .state_machine
