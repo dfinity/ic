@@ -2,8 +2,8 @@
   "guestos": {
     "subnets": {
       "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
-        "version": "047925dfd8386aca91d154054149727131766084",
-        "update_img_hash": "dd22a2b107cd22d848df4c7d3037bc8637dc23cf27464e0fbb5e66ec5deeceaf"
+        "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
+        "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b"
       },
       "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
         "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",

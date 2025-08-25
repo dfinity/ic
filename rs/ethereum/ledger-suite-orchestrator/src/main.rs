@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_cdk::api::management_canister::main::{
     canister_status, CanisterIdRecord, CanisterStatusResponse,
 };
@@ -17,7 +18,7 @@ mod dashboard;
 #[query]
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("Invalid ERC-20 contract: {:?}", e)));
     let token_id = TokenId::from(contract);
     read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
@@ -59,7 +60,11 @@ fn get_orchestrator_info() -> OrchestratorInfo {
 
 #[export_name = "canister_global_timer"]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    // ic_ledger_suite_orchestrator::scheduler::timer invokes ic_cdk::futures::spawn_017_compat
+    // which must be wrapped in in_executor_context as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[init]
