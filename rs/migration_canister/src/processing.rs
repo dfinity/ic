@@ -16,6 +16,9 @@ use crate::{
 use futures::future::join_all;
 use ic_cdk::println;
 
+/// Given a lock tag, a filter predicate on `RequestState` and a processor function,
+/// invokes the processor on all requests in the given state concurrently and
+/// transitions the result into either the next state, an error or a retry.
 pub async fn process_all_generic<F>(
     tag: &str,
     predicate: impl Fn(&RequestState) -> bool,
@@ -38,7 +41,7 @@ pub async fn process_all_generic<F>(
     }
 }
 
-/// Accepts an `Accepted` request, returns `SourceControllersChanged` or `Failed`.
+/// Accepts an `Accepted` request, returns `SourceControllersChanged` on success.
 pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
@@ -46,7 +49,7 @@ pub async fn process_accepted(
         println!("Error: list_accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
-    // set controller of source
+    // Set controller of source
     set_exclusive_controller(request.source)
         .await
         .map_success(|_| RequestState::SourceControllersChanged {
