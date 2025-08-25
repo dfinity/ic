@@ -65,16 +65,15 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
-          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
-              # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
-              # branch
-              release_build="true"
-              diff_only="false"
-              skip_long_tests="false"
-          else
-              # default behavior is to build all targets and not upload to s3
+          elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
+              # On pushes to dev-gh-* branches don't do a release, build all targets except long_tests.
               release_build="false"
-              diff_only="${{ github.event_name == 'pull_request' }}"
+              diff_only="false"
+              skip_long_tests="true"
+          else
+              # default behavior is to not release, only build targets with modified inputs and skip long_tests.
+              release_build="false"
+              diff_only="true"
               skip_long_tests="true"
           fi
 
