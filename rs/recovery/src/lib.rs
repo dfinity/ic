@@ -883,7 +883,8 @@ impl Recovery {
         }
     }
 
-    /// Return a [CreateFullTarStep] a tar file that contains a tar of the current registry local store and a recovery CUP
+    /// Return a [CreateNNSRecoveryTarStep] creating a tar file that contains a tar of the registry
+    /// local store and a recovery CUP
     pub fn get_create_nns_recovery_tar_step(&self, output_dir: Option<PathBuf>) -> impl Step {
         CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
