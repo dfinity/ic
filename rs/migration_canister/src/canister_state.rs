@@ -2,7 +2,7 @@
 //!
 //!
 
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::BTreeSet};
 
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -14,6 +14,9 @@ use crate::{RequestState, DEFAULT_MAX_ACTIVE_REQUESTS};
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 thread_local! {
+
+    static LOCKS: RefCell<Locks> = const {RefCell::new(Locks{ids: BTreeSet::new()}) };
+
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
@@ -32,8 +35,13 @@ pub fn migrations_disabled() -> bool {
     DISABLED.with_borrow(|x| *x.get())
 }
 
+/// Excludes failed requests.
 pub fn num_active_requests() -> u64 {
-    REQUESTS.with_borrow(|req| req.len())
+    REQUESTS.with_borrow(|req| {
+        req.iter()
+            .filter(|x| !matches!(x.key(), RequestState::Failed { .. }))
+            .count() as u64
+    })
 }
 
 pub fn max_active_requests() -> u64 {
@@ -71,5 +79,37 @@ pub mod requests {
     /// borrow REQUESTS mutably while iterating over the result.
     pub fn list_by(predicate: impl FnMut(&RequestState) -> bool) -> Vec<RequestState> {
         REQUESTS.with_borrow(|req| req.keys().filter(predicate).collect())
+    }
+}
+
+// ============================== Locks ============================== //
+
+struct Locks {
+    pub ids: BTreeSet<&'static str>,
+}
+
+/// A way to acquire locks before entering a critical section which may only
+/// run once at any given time.
+pub struct MethodGuard {
+    id: &'static str,
+}
+
+impl MethodGuard {
+    pub fn new(tag: &'static str) -> Result<Self, String> {
+        let id = tag;
+        LOCKS.with_borrow_mut(|locks| {
+            let held_locks = &mut locks.ids;
+            if held_locks.contains(&id) {
+                return Err("Failed to acquire lock".to_string());
+            }
+            held_locks.insert(id);
+            Ok(Self { id })
+        })
+    }
+}
+
+impl Drop for MethodGuard {
+    fn drop(&mut self) {
+        LOCKS.with_borrow_mut(|locks| locks.ids.remove(&self.id));
     }
 }

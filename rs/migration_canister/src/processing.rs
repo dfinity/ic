@@ -3,8 +3,13 @@
 //! Each method processes a specific type of request, and it may
 //! process several requests in sequence before terminating.
 
+use std::iter::zip;
+
 use crate::{
-    canister_state::requests::{insert_request, list_by, remove_request},
+    canister_state::{
+        requests::{insert_request, list_by, remove_request},
+        MethodGuard,
+    },
     external_interfaces::management::set_exclusive_controller,
     RequestState,
 };
@@ -12,14 +17,18 @@ use futures::future::join_all;
 use ic_cdk::println;
 
 pub async fn process_all_accepted() {
-    // only one of this method must run at the same time.
-    // TODO: lock
+    // This guard ensures this method runs only once at any given time.
+    let Ok(_guard) = MethodGuard::new("accepted") else {
+        return;
+    };
+
     let mut tasks = vec![];
-    for request in list_by(|r| matches!(r, RequestState::Accepted { .. })).iter() {
-        tasks.push(process_accepted(request));
+    let requests = list_by(|r| matches!(r, RequestState::Accepted { .. }));
+    for request in requests.iter() {
+        tasks.push(process_accepted(request.clone()));
     }
     let results = join_all(tasks).await;
-
+    for (req, res) in zip(requests, results) {}
     // list_accepted()
     //     .into_iter()
     //     .map(|r| process_accepted_2(r))
@@ -27,7 +36,7 @@ pub async fn process_all_accepted() {
     //     .collect::<_>();
 }
 
-async fn process_accepted(request: &RequestState) -> ProcessingResult<(), String> {
+async fn process_accepted(request: RequestState) -> ProcessingResult<(), String> {
     let RequestState::Accepted { request } = request else {
         println!("Error: list_accepted returned bad variant");
         return ProcessingResult::NoProgress;
