@@ -103,6 +103,7 @@ LIB_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/bitcoin/adapter/test_utils",
     "//rs/config",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
@@ -112,7 +113,6 @@ TEST_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
