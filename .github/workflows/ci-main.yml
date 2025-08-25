@@ -133,26 +133,13 @@ jobs:
           run: |
             set -euo pipefail
 
-            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
-            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
-            SKIP_LONG_TESTS='${{ needs.config.outputs.skip_long_tests }}'
-            BASE_SHA='${{ github.event.pull_request.base.sha }}'
-            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
 
-            # Determine which tests to skip
-            EXCLUDED_TEST_TAGS=(
-                system_test_large
-                system_test_benchmark
-                fuzz_test
-                fi_tests_nightly
-                nns_tests_nightly
-            )
-
-            # Prepend tags with '-' and join them with commas for Bazel
-            TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
             # Determine bazel_args based on event type or branch name
             bazel_args=(
-              "--test_tag_filters=$TEST_TAG_FILTERS"
+              # skip tests requiring specific hardware
+              "--test_tag_filters=-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
               --config=lint # enable lint checks
               --config=flaky_retry # auto retry eg systests
               )
@@ -164,7 +151,7 @@ jobs:
                 bazel_args+=( --keep_going )
             fi
 
-            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -174,24 +161,30 @@ jobs:
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
             targets_args=()
-            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
-            if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
             fi
-            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
-            # if bazel targets is empty we don't need to run any tests
-            if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
-              echo "No bazel targets to build"
-              exit 0
-            fi
-            bazel_args+=( --target_pattern_file="$target_pattern_file" )
 
-            echo "Building as user: $(whoami)"
-            echo "Bazel version: $(bazel version)"
+            for bazel_cmd in build test; do
+              "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
+                    "${targets_args[@]}" >"$target_pattern_file"
 
-            bazel test "${bazel_args[@]}"
+              # if bazel targets is empty we don't need to run any tests
+              if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+                echo "No bazel targets to $bazel_cmd"
+                continue
+              fi
+
+              echo "Running bazel command: $bazel_cmd"
+
+              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+            done
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
