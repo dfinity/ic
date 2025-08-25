@@ -82,7 +82,7 @@ pub fn uvm_serve_recovery_artifacts(
     uvm_serve_file(
         env,
         artifacts,
-        Path::new(&format!("ic/{}/recovery.tar.zst", artifacts_hash)),
+        Path::new(&format!("recovery/{}/recovery.tar.zst", artifacts_hash)),
     )
 }
 
