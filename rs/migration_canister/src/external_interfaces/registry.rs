@@ -4,6 +4,8 @@ use serde::Deserialize;
 
 use crate::{processing::ProcessingResult, ValidationError};
 
+const REGISTRY_CANISTER_ID: &'static str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct GetSubnetForCanisterArgs {
     principal: Option<Principal>,
@@ -21,9 +23,12 @@ pub async fn get_subnet_for_canister(
         principal: Some(canister_id),
     };
 
-    match Call::bounded_wait(Principal::management_canister(), "update_settings")
-        .with_arg(args)
-        .await
+    match Call::bounded_wait(
+        Principal::from_text(REGISTRY_CANISTER_ID).unwrap(),
+        "get_subnet_for_canister",
+    )
+    .with_arg(args)
+    .await
     {
         Err(e) => {
             println!(

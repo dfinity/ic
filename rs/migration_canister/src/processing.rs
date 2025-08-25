@@ -155,7 +155,7 @@ impl<S, F> ProcessingResult<S, F> {
 }
 
 /// Removes the old state from REQUESTS and inserts the new state in the correct
-/// collection (REQUESTS or HISTORY).
+/// collection.
 impl ProcessingResult<RequestState, RequestState> {
     fn transition(self, old_state: RequestState) {
         match self {
