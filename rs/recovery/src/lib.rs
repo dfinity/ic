@@ -871,9 +871,9 @@ impl Recovery {
         }
     }
 
-    /// Return an [UploadCUPAndTar] uploading CUP and registry tar to the given node IP
+    /// Return an [UploadCUPAndTarStep] uploading CUP and registry tar to the given node IP
     pub fn get_upload_cup_and_tar_step(&self, upload_method: DataLocation) -> impl Step {
-        UploadCUPAndTar {
+        UploadCUPAndTarStep {
             logger: self.logger.clone(),
             registry_helper: self.registry_helper.clone(),
             upload_method,

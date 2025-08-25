@@ -947,7 +947,7 @@ impl Step for CopyIcStateStep {
     }
 }
 
-pub struct UploadCUPAndTar {
+pub struct UploadCUPAndTarStep {
     pub logger: Logger,
     pub registry_helper: RegistryHelper,
     pub upload_method: DataLocation,
@@ -956,7 +956,7 @@ pub struct UploadCUPAndTar {
     pub work_dir: PathBuf,
 }
 
-impl UploadCUPAndTar {
+impl UploadCUPAndTarStep {
     pub fn get_restart_commands(&self) -> String {
         format!(
             r#"
@@ -976,7 +976,7 @@ sudo systemctl restart setup-permissions || true ;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,
-            UploadCUPAndTar::get_upload_dir_name(),
+            UploadCUPAndTarStep::get_upload_dir_name(),
         )
     }
 
@@ -985,7 +985,7 @@ sudo systemctl status ic-replica;
     }
 }
 
-impl Step for UploadCUPAndTar {
+impl Step for UploadCUPAndTarStep {
     fn descr(&self) -> String {
         let replica = match self.upload_method {
             DataLocation::Remote(ip) => &format!("replica {ip}"),
@@ -993,13 +993,13 @@ impl Step for UploadCUPAndTar {
         };
         format!(
             "Uploading CUP and registry to {replica} at {} and execute:\n{}",
-            UploadCUPAndTar::get_upload_dir_name(),
+            UploadCUPAndTarStep::get_upload_dir_name(),
             self.get_restart_commands()
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let upload_dir = UploadCUPAndTar::get_upload_dir_name();
+        let upload_dir = UploadCUPAndTarStep::get_upload_dir_name();
 
         if let DataLocation::Remote(node_ip) = self.upload_method {
             let ssh_helper = SshHelper::new(
