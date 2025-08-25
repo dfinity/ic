@@ -540,7 +540,7 @@ type read_canister_snapshot_data_args = record {
             offset : nat64;
             size : nat64;
         };
-        main_memory : record {
+        wasm_memory : record {
             offset : nat64;
             size : nat64;
         };
@@ -594,7 +594,7 @@ type upload_canister_snapshot_data_args = record {
         wasm_module : record {
             offset : nat64;
         };
-        main_memory : record {
+        wasm_memory : record {
             offset : nat64;
         };
         stable_memory : record {
