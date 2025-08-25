@@ -11,8 +11,8 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
-use ic_sev::guest::is_sev_active;
-use ic_sev::guest::key_deriver::SevKeyDeriver;
+use ic_sev::guest::firmware::SevGuestFirmware;
+use ic_sev::guest::key_derivation::{derive_key_from_sev_measurement, Key};
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
 use std::ffi::{c_char, c_int, c_void, CStr};
@@ -47,6 +47,7 @@ pub enum Partition {
     Store,
 }
 
+#[cfg(target_os = "linux")]
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -61,8 +62,12 @@ fn main() -> Result<()> {
     run(
         args,
         &guestos_config,
-        is_sev_active().context("Failed to check if SEV is active")?,
-        SevKeyDeriver::new,
+        ic_sev::guest::is_sev_active().context("Failed to check if SEV is active")?,
+        || {
+            ::sev::firmware::guest::Firmware::open()
+                .context("Failed to open /dev/sev-guest")
+                .map(|x| Box::new(x) as _)
+        },
         Path::new(PREVIOUS_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
     )
@@ -74,7 +79,7 @@ fn run(
     args: Args,
     guestos_config: &GuestOSConfig,
     is_sev_active: bool,
-    sev_key_deriver_factory: impl Fn() -> Result<SevKeyDeriver>,
+    sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
     generated_key_path: &Path,
 ) -> Result<()> {
@@ -82,7 +87,7 @@ fn run(
 
     let mut encryption: Box<dyn DiskEncryption> = if is_sev_active {
         Box::new(SevDiskEncryption {
-            sev_key_deriver: sev_key_deriver_factory().context("Failed to create SevKeyDeriver")?,
+            sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
             previous_key_path,
         })

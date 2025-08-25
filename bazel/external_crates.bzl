@@ -994,6 +994,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
                 default_features = False,
             ),
+            "p384": crate.spec(
+                version = "0.13",
+                features = [
+                    "ecdsa",
+                    "pem",
+                ],
+                default_features = False,
+            ),
             "pairing": crate.spec(
                 version = "^0.23",
             ),
@@ -1165,7 +1173,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "rsa": crate.spec(
                 version = "^0.9.6",
-                features = ["sha2"],
+                features = ["sha2", "getrandom"],
             ),
             "rstest": crate.spec(
                 version = "^0.19.0",
@@ -1276,6 +1284,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "sha2": crate.spec(
                 version = "^0.10.9",
+                features = [
+                    "oid",
+                ],
             ),
             "sha3": crate.spec(
                 version = "^0.10.8",
