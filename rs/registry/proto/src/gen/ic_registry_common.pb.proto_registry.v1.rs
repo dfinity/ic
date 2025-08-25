@@ -12,4 +12,6 @@ pub struct ProtoRegistryRecord {
     pub version: u64,
     #[prost(message, optional, tag = "3")]
     pub value: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(uint64, tag = "5")]
+    pub timestamp_nanoseconds: u64,
 }
