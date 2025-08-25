@@ -3914,6 +3914,7 @@ dependencies = [
  "virt",
  "vsock",
  "walkdir",
+ "walrus 0.23.3",
  "warp",
  "wasm-bindgen",
  "wasm-encoder 0.228.0",
