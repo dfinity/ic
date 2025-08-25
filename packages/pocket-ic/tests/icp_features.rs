@@ -73,7 +73,7 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
 }
 
 #[test]
-fn test_nns_dapp() {
+fn test_nns_ui() {
     let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
 
     frontend_smoke_test(

@@ -1884,7 +1884,7 @@ impl PocketIcSubnets {
         );
 
         if !nns_subnet.state_machine.canister_exists(NNS_UI_CANISTER_ID) {
-            // Create the governance canister with its ICP mainnet settings.
+            // Create the NNS dapp canister with its ICP mainnet settings.
             // These settings have been obtained by calling
             // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"qoctq-giaaa-aaaaa-aaaea-cai";})' --ic`:
             //     settings = record {
