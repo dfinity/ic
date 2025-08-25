@@ -14,19 +14,9 @@ pub fn generate_ic_config(
     let template_content = read_to_string(template_path)
         .with_context(|| format!("Failed to read template file: {}", template_path.display()))?;
 
-    let (ipv6_address, ipv6_prefix) = configure_ipv6(guestos_config)?;
-    let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
+    let config_vars = get_config_vars(guestos_config)?;
 
-    let config_vars = read_config_variables_with_defaults(guestos_config);
-
-    let output_content = substitute_template(
-        &template_content,
-        &ipv6_address,
-        &ipv6_prefix,
-        &ipv4_address,
-        &ipv4_gateway,
-        &config_vars,
-    );
+    let output_content = substitute_template(&template_content, &config_vars);
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
@@ -51,6 +41,10 @@ pub fn generate_ic_config(
 
 #[derive(Debug)]
 struct ConfigVariables {
+    ipv6_address: String,
+    ipv6_prefix: String,
+    ipv4_address: String,
+    ipv4_gateway: String,
     nns_urls: String,
     backup_retention_time_secs: String,
     backup_purging_interval_secs: String,
@@ -119,7 +113,11 @@ fn configure_ipv4(guestos_config: &GuestOSConfig) -> (String, String) {
     }
 }
 
-fn read_config_variables_with_defaults(guestos_config: &GuestOSConfig) -> ConfigVariables {
+fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
+    let (ipv6_address, ipv6_prefix) = configure_ipv6(guestos_config)?;
+
+    let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
+
     // Helper function to set default value if empty or "null"
     fn with_default(value: String, default: &str) -> String {
         if value.is_empty() || value == "null" {
@@ -200,7 +198,11 @@ fn read_config_variables_with_defaults(guestos_config: &GuestOSConfig) -> Config
         .generate_ic_boundary_tls_cert
         .clone();
 
-    ConfigVariables {
+    Ok(ConfigVariables {
+        ipv6_address,
+        ipv6_prefix,
+        ipv4_address,
+        ipv4_gateway,
         nns_urls: with_default(nns_urls, "http://[::1]:8080"),
         backup_retention_time_secs: with_default(backup_retention_time_secs, "86400"), // 24h
         backup_purging_interval_secs: with_default(backup_purging_interval_secs, "3600"), // 1h
@@ -210,23 +212,16 @@ fn read_config_variables_with_defaults(guestos_config: &GuestOSConfig) -> Config
         node_reward_type: with_empty_default(node_reward_type),
         malicious_behavior: with_default(malicious_behavior, "null"),
         generate_ic_boundary_tls_cert,
-    }
+    })
 }
 
-fn substitute_template(
-    template_content: &str,
-    ipv6_address: &str,
-    ipv6_prefix: &str,
-    ipv4_address: &str,
-    ipv4_gateway: &str,
-    config_vars: &ConfigVariables,
-) -> String {
+fn substitute_template(template_content: &str, config_vars: &ConfigVariables) -> String {
     let mut content = template_content.to_string();
 
-    content = content.replace("{{ ipv6_address }}", ipv6_address);
-    content = content.replace("{{ ipv6_prefix }}", ipv6_prefix);
-    content = content.replace("{{ ipv4_address }}", ipv4_address);
-    content = content.replace("{{ ipv4_gateway }}", ipv4_gateway);
+    content = content.replace("{{ ipv6_address }}", &config_vars.ipv6_address);
+    content = content.replace("{{ ipv6_prefix }}", &config_vars.ipv6_prefix);
+    content = content.replace("{{ ipv4_address }}", &config_vars.ipv4_address);
+    content = content.replace("{{ ipv4_gateway }}", &config_vars.ipv4_gateway);
     content = content.replace("{{ domain_name }}", &config_vars.domain_name);
     content = content.replace("{{ nns_urls }}", &config_vars.nns_urls);
     content = content.replace(
@@ -328,8 +323,7 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
             "-nodes",
             "-subj",
             &format!(
-                "/C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN={}",
-                domain_name
+                "/C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN={domain_name}"
             ),
         ])
         .status()
