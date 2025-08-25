@@ -11,7 +11,6 @@ use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
-use std::fs::File;
 use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
