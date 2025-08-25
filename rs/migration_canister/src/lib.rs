@@ -120,6 +120,7 @@ enum RequestState {
     Failed { request: Request, reason: String },
 }
 
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 enum Event {
     Succeeded { request: Request },
     Failed { request: Request, reason: String },
