@@ -1,7 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
-        old_types::{RequestOrResponseV17, StreamHeaderV18},
+        old_types::{RequestOrResponseV20, StreamHeaderV20},
         types::{
             RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV19,
             SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
