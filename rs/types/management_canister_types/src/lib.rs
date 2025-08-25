@@ -4124,7 +4124,7 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
 ///         offset : nat64;
 ///         size : nat64;
 ///     };
-///     main_memory : record {
+///     wasm_memory : record {
 ///         offset : nat64;
 ///         size : nat64;
 ///     };
@@ -4173,8 +4173,8 @@ impl ReadCanisterSnapshotDataArgs {
 pub enum CanisterSnapshotDataKind {
     #[serde(rename = "wasm_module")]
     WasmModule { offset: u64, size: u64 },
-    #[serde(rename = "main_memory")]
-    MainMemory { offset: u64, size: u64 },
+    #[serde(rename = "wasm_memory")]
+    WasmMemory { offset: u64, size: u64 },
     #[serde(rename = "stable_memory")]
     StableMemory { offset: u64, size: u64 },
     #[serde(rename = "wasm_chunk")]
@@ -4313,7 +4313,7 @@ impl UploadCanisterSnapshotMetadataResponse {
 ///         wasm_module : record {
 ///             offset : nat64;
 ///         };
-///         main_memory : record {
+///         wasm_memory : record {
 ///             offset : nat64;
 ///         };
 ///         stable_memory : record {
@@ -4363,8 +4363,8 @@ impl UploadCanisterSnapshotDataArgs {
 pub enum CanisterSnapshotDataOffset {
     #[serde(rename = "wasm_module")]
     WasmModule { offset: u64 },
-    #[serde(rename = "main_memory")]
-    MainMemory { offset: u64 },
+    #[serde(rename = "wasm_memory")]
+    WasmMemory { offset: u64 },
     #[serde(rename = "stable_memory")]
     StableMemory { offset: u64 },
     #[serde(rename = "wasm_chunk")]

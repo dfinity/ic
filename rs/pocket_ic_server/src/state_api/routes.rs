@@ -1212,6 +1212,7 @@ pub async fn create_instance(
         Some(InitialTime::AutoProgress(config)) => Some(config),
         Some(InitialTime::Timestamp(_)) | None => None,
     };
+    let auto_progress_enabled = auto_progress.is_some();
 
     match api_state
         .add_instance(
@@ -1227,6 +1228,7 @@ pub async fn create_instance(
                     instance_config.icp_features,
                     instance_config.allow_incomplete_state,
                     initial_time,
+                    auto_progress_enabled,
                 )
             },
             auto_progress,

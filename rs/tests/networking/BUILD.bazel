@@ -282,6 +282,8 @@ system_test_nns(
         "long_test",
     ],
     test_driver_target = ":nns_delegation_test",
+    # The nns_delegation_on_app_subnet_test subtest takes ~10 minutes eating up the time budget for other tests.
+    test_timeout = "eternal",
     uses_guestos_img = True,
     uses_guestos_nns_mainnet_img = False,
     uses_guestos_update = True,
