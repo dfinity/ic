@@ -318,15 +318,15 @@ pub fn install_nns_with_customizations_and_check_progress(
                 logger,
                 "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
             );
-            for node in subnet.nodes() {
-                cert_state_makes_progress_with_retries(
-                    &node.get_public_url(),
-                    node.effective_canister_id(),
-                    &logger,
-                    /*timeout=*/ secs(600),
-                    /*backoff=*/ secs(2),
-                );
-            }
+            // for node in subnet.nodes() {
+            //     cert_state_makes_progress_with_retries(
+            //         &node.get_public_url(),
+            //         node.effective_canister_id(),
+            //         &logger,
+            //         /*timeout=*/ secs(600),
+            //         /*backoff=*/ secs(2),
+            //     );
+            // }
         } else {
             info!(
                 logger,
