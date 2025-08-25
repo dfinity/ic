@@ -122,7 +122,6 @@ pub(crate) struct TestIDkgBlockReader {
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
-    idkg_payloads: Vec<IDkgPayload>,
 }
 
 impl TestIDkgBlockReader {
@@ -249,7 +248,7 @@ impl IDkgBlockReader for TestIDkgBlockReader {
     }
 
     fn iter_above(&self, _height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
-        Box::new([].into_iter())
+        Box::new(std::iter::empty())
     }
 }
 
