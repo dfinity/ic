@@ -824,19 +824,17 @@ fn update_memories(
     max_stable_memory_size: NumBytes,
 ) -> (wirm::Module, u32) {
     if let Some(mem) = module.memories.iter_mut().next() {
-        if mem.ty.memory64 {
-            let max_wasm_memory_size_in_wasm_pages =
-                max_memory_size_in_wasm_pages(max_wasm_memory_size);
-            match mem.ty.maximum {
-                Some(max) => {
-                    // In case the maximum memory size is larger than the maximum allowed, cap it.
-                    if max > max_wasm_memory_size_in_wasm_pages {
-                        mem.ty.maximum = Some(max_wasm_memory_size_in_wasm_pages);
-                    }
-                }
-                None => {
+        let max_wasm_memory_size_in_wasm_pages =
+            max_memory_size_in_wasm_pages(max_wasm_memory_size);
+        match mem.ty.maximum {
+            Some(max) => {
+                // In case the maximum memory size is larger than the maximum allowed, cap it.
+                if max > max_wasm_memory_size_in_wasm_pages {
                     mem.ty.maximum = Some(max_wasm_memory_size_in_wasm_pages);
                 }
+            }
+            None => {
+                mem.ty.maximum = Some(max_wasm_memory_size_in_wasm_pages);
             }
         }
     }
