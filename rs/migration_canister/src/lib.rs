@@ -24,11 +24,11 @@ mod processing;
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
-enum ValidatonError {
+enum ValidationError {
     MigrationsDisabled,
     RateLimited,
-    MigrationInProgress { canisters: Vec<Principal> },
-    CanisterNotFound { canisters: Vec<Principal> },
+    MigrationInProgress { canister: Principal },
+    CanisterNotFound { canister: Principal },
     SameSubnet,
     SenderNotController,
     NotController,
@@ -207,7 +207,7 @@ pub async fn validate_request(
     source: Principal,
     target: Principal,
     caller: Principal,
-) -> Result<Request, ValidatonError> {
+) -> Result<Request, ValidationError> {
     // TODO
     todo!()
 }

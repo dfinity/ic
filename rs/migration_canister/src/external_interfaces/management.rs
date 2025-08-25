@@ -29,7 +29,10 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
         Ok(_) => ProcessingResult::Success(()),
         // if we fail due to not being controller, this is a fatal failure
         Err(e) => {
-            println!("Call `update_settings` failed {:?}", e);
+            println!(
+                "Call `update_settings` for {:?} failed {:?}",
+                canister_id, e
+            );
             match e {
                 ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
                 | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,

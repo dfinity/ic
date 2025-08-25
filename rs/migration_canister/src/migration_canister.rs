@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     canister_state::{migrations_disabled, requests::insert_request},
-    rate_limited, start_timers, validate_request, RequestState, ValidatonError,
+    rate_limited, start_timers, validate_request, RequestState, ValidationError,
 };
 
 #[init]
@@ -28,12 +28,12 @@ struct MigrateCanisterArgs {
 }
 
 #[update]
-async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidatonError> {
+async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationError> {
     if migrations_disabled() {
-        return Err(ValidatonError::MigrationsDisabled);
+        return Err(ValidationError::MigrationsDisabled);
     }
     if rate_limited() {
-        return Err(ValidatonError::RateLimited);
+        return Err(ValidationError::RateLimited);
     }
     let caller = msg_caller();
     match validate_request(args.source, args.target, caller).await {
