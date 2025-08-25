@@ -33,6 +33,7 @@ pub async fn process_all_accepted() {
     }
 }
 
+/// Accepts an `Accepted` request, returns `SourceControllersChanged` or `Failed`.
 async fn process_accepted(request: RequestState) -> ProcessingResult<RequestState, RequestState> {
     let RequestState::Accepted { request } = request else {
         println!("Error: list_accepted returned bad variant");
