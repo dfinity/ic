@@ -7,12 +7,16 @@ load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SN
 
 MAINNET_LATEST_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["latest_release"]["version"]
 MAINNET_LATEST_GUESTOS_HASH = mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash"]
+MAINNET_LATEST_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["latest_release"]["dev_hash"]
 MAINNET_NNS_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"]
 MAINNET_NNS_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"]
+MAINNET_NNS_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["dev_hash"]
 MAINNET_APP_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"]
 MAINNET_APP_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash"]
+MAINNET_APP_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["dev_hash"]
 MAINNET_LATEST_HOSTOS_REVISION = mainnet_icos_versions["hostos"]["latest_release"]["version"]
 MAINNET_LATEST_HOSTOS_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+MAINNET_LATEST_HOSTOS_DEV_HASH = mainnet_icos_versions["hostos"]["latest_release"]["dev_hash"]
 
 MAINNET_ENV = {
     "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS_GUESTOS_REVISION,

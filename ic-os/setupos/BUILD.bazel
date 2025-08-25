@@ -61,11 +61,54 @@ genrule(
     ],
 )
 
+# Postprocess SetupOS mainnet dev into a "test" image for use in nested tests
+genrule(
+    name = "mainnet-latest-dev-test-img",
+    srcs = ["@mainnet_latest_setupos_dev_disk_image//file"],
+    outs = ["mainnet-latest-dev-test-img.tar.zst"],
+    cmd = """
+        tar -xf $<
+        $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
+        tar --zstd -Scf $@ disk.img
+    """,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+)
+
 # Extract the GuestOS image from SetupOS
 genrule(
     name = "mainnet-latest-guest-img",
     srcs = ["@mainnet_latest_setupos_disk_image//file"],
     outs = ["mainnet-latest-guest-img.tar.zst"],
+    cmd = """#!/bin/bash
+        if [ "{guestos_version}" != "{setupos_version}" ]; then
+            echo "FAIL: We assume the latest HostOS and GuestOS releases are in line for this to work, and they are not."
+            exit 1
+        fi
+        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
+    """.format(
+        guestos_version = MAINNET_LATEST_GUESTOS_REVISION,
+        setupos_version = MAINNET_LATEST_HOSTOS_REVISION,
+    ),
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+)
+
+# Extract the GuestOS image from SetupOS
+genrule(
+    name = "mainnet-latest-guest-dev-img",
+    srcs = ["@mainnet_latest_setupos_dev_disk_image//file"],
+    outs = ["mainnet-latest-guest-dev-img.tar.zst"],
     cmd = """#!/bin/bash
         if [ "{guestos_version}" != "{setupos_version}" ]; then
             echo "FAIL: We assume the latest HostOS and GuestOS releases are in line for this to work, and they are not."
