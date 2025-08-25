@@ -11,8 +11,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use ic_tests_ckbtc::{
-    adapter::{fund_with_btc, get_blackhole_address, AdapterProxy},
-    adapter_test_setup, subnet_sys,
+    adapter::{fund_with_btc, AdapterProxy},
+    btc_adapter_test_setup, subnet_sys,
     utils::get_btc_client,
 };
 use slog::info;
@@ -82,8 +82,9 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
             Amount::from_btc(0.0001).unwrap(),
         )
         .expect("Failed to send to Bob");
+    let blackhole_address = alice_client.get_new_address().unwrap();
     alice_client
-        .generate_to_address(1, &get_blackhole_address())
+        .generate_to_address(1, &blackhole_address)
         .unwrap();
     assert_eq!(
         alice_client.get_blockchain_info().unwrap().blocks,
@@ -181,7 +182,7 @@ fn test_send_tx(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(adapter_test_setup)
+        .with_setup(btc_adapter_test_setup)
         .add_test(systest!(test_received_blocks))
         .add_test(systest!(test_receives_new_3rd_party_txs))
         .add_test(systest!(test_send_tx))

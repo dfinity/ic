@@ -1,8 +1,7 @@
-use crate::utils::RpcClient;
-use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
+use bitcoin::{block::Header, consensus::deserialize, Amount, Block};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_btc_adapter_test_utils::rpc_client::ListUnspentResultEntry;
+use ic_btc_adapter_test_utils::rpc_client::{ListUnspentResultEntry, RpcClient, RpcClientType};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
@@ -211,9 +210,9 @@ impl<'a> AdapterProxy<'a> {
     }
 }
 
-pub fn fund_with_btc(
-    to_fund_client: &RpcClient,
-    to_fund_address: &Address,
+pub fn fund_with_btc<T: RpcClientType>(
+    to_fund_client: &RpcClient<T>,
+    to_fund_address: &T::Address,
 ) -> ListUnspentResultEntry {
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
@@ -229,8 +228,9 @@ pub fn fund_with_btc(
         .unwrap();
 
     // Generate 100 blocks for coinbase maturity
+    let blackhole_address = to_fund_client.get_new_address().unwrap();
     to_fund_client
-        .generate_to_address(100, &get_blackhole_address())
+        .generate_to_address(100, &blackhole_address)
         .unwrap();
 
     assert_eq!(
@@ -263,10 +263,4 @@ fn calculate_regtest_reward(height: u64) -> Amount {
     let halvings = (height / 150) as u32;
     let base_reward = Amount::from_btc(50.0).unwrap();
     base_reward / 2u64.pow(halvings)
-}
-
-pub fn get_blackhole_address() -> Address {
-    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
-        .unwrap()
-        .assume_checked()
 }
