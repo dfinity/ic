@@ -125,6 +125,12 @@ pub struct Args {
     pub store_type: StoreType,
 
     /// The file to use for the store if [store_type] is file.
+    /// 
+    /// DEPRECATED: This parameter is not used. Use `multi_tokens_store_dir` instead.
+    #[deprecated(
+        since = "1.2.6",
+        note = "This parameter is deprecated. Use `multi_tokens_store_dir` instead to specify the directory where database files will be stored."
+    )]
     #[arg(short = 'f', long, default_value = "/data/db.sqlite")]
     pub store_file: PathBuf,
 
