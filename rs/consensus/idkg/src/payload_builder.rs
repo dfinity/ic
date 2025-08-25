@@ -485,9 +485,13 @@ pub fn create_data_payload(
     // the last few blocks may have references to heights after the finalized
     // tip. So use the chain ending at the parent to resolve refs, rather than the
     // finalized chain.
+    let start_height = context
+        .certified_height
+        .increment()
+        .min(summary_block.height());
     let block_reader = block_chain_reader(
         pool_reader,
-        summary_block.height(),
+        start_height,
         parent_block.clone(),
         Some(idkg_payload_metrics),
         log,
@@ -608,6 +612,7 @@ pub(crate) fn create_data_payload_helper(
 
     let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
     let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
+    let total_pre_signatures = pre_signatures::count_pre_signatures_total(&state, block_reader);
 
     let certified_height = if context.certified_height >= summary_block.height() {
         CertifiedHeight::ReachedSummaryHeight
@@ -626,6 +631,7 @@ pub(crate) fn create_data_payload_helper(
         &receivers,
         all_signing_requests,
         &idkg_dealings_contexts,
+        total_pre_signatures,
         block_reader,
         transcript_builder,
         signature_builder,
@@ -648,6 +654,7 @@ pub(crate) fn create_data_payload_helper_2(
     receivers: &[NodeId],
     all_signing_requests: BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
+    total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
@@ -722,6 +729,12 @@ pub(crate) fn create_data_payload_helper_2(
     ]
     .into_iter()
     .flatten();
+
+    // pre_signatures::make_new_pre_signatures_if_needed_new(
+    //     chain_key_config,
+    //     idkg_payload,
+    //     total_pre_signatures,
+    // );
 
     // Drop transcripts from last round and keep only the
     // ones created in this round.
@@ -976,6 +989,7 @@ mod tests {
             &[node_test_id(0)],
             contexts,
             &BTreeMap::default(),
+            BTreeMap::default(),
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
             &TestThresholdSignatureBuilder::new(),
@@ -1189,6 +1203,7 @@ mod tests {
             &[node_test_id(0)],
             signature_request_contexts.clone(),
             &BTreeMap::default(),
+            BTreeMap::default(),
             &block_reader,
             &transcript_builder,
             &signature_builder,
@@ -1213,6 +1228,7 @@ mod tests {
             &[node_test_id(0)],
             signature_request_contexts,
             &BTreeMap::default(),
+            BTreeMap::default(),
             &block_reader,
             &transcript_builder,
             &signature_builder,
@@ -2222,6 +2238,7 @@ mod tests {
                 &node_ids,
                 BTreeMap::default(),
                 &BTreeMap::default(),
+                BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
@@ -2250,6 +2267,7 @@ mod tests {
                 &node_ids,
                 BTreeMap::default(),
                 &BTreeMap::default(),
+                BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
@@ -2340,6 +2358,7 @@ mod tests {
                 &node_ids,
                 BTreeMap::default(),
                 &BTreeMap::default(),
+                BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
@@ -2515,6 +2534,7 @@ mod tests {
                 &node_ids,
                 BTreeMap::default(),
                 &BTreeMap::default(),
+                BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
@@ -2544,6 +2564,7 @@ mod tests {
                 &node_ids,
                 BTreeMap::default(),
                 &BTreeMap::default(),
+                BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
@@ -2571,6 +2592,7 @@ mod tests {
                 &node_ids,
                 BTreeMap::default(),
                 &BTreeMap::default(),
+                BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
