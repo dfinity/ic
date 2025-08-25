@@ -3770,6 +3770,7 @@ dependencies = [
  "opentelemetry-prometheus 0.13.0",
  "opentelemetry_sdk 0.27.1",
  "p256",
+ "p384",
  "pairing",
  "parking_lot 0.12.1",
  "paste",
