@@ -577,12 +577,14 @@ impl PocketIcSubnets {
         // using `EmptyConfig { }` explicitly
         // to force an update after adding a new field to `EmptyConfig`
         if let Some(EmptyConfig {}) = disable_function_name_length_limits {
+            // the maximum size of a canister WASM is much less than 1GB
+            // and thus the following limits effectively disable all limits
             hypervisor_config
                 .embedders_config
-                .max_number_exported_functions = 100_000;
+                .max_number_exported_functions = 1_000_000_000;
             hypervisor_config
                 .embedders_config
-                .max_sum_exported_function_name_lengths = 5_000_000;
+                .max_sum_exported_function_name_lengths = 1_000_000_000;
         }
         // using `EmptyConfig { }` explicitly
         // to force an update after adding a new field to `EmptyConfig`
