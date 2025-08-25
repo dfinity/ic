@@ -313,9 +313,9 @@ async fn test_treasury_manager() {
     // Wait for the KongSwap Adaptor to be ready for the next operation.
     //
     // This should be less than 1 hour to avoid hitting the next periodic task.
-    for _ in 0..100 {
+    for _ in 0..150 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(35)).await;
+        pocket_ic.advance_time(Duration::from_secs(20)).await;
     }
 
     // Testing the top-up deposit operation.
@@ -337,11 +337,6 @@ async fn test_treasury_manager() {
                 },
             )),
         };
-
-        for _ in 0..100 {
-            pocket_ic.tick().await;
-            pocket_ic.advance_time(Duration::from_secs(1)).await;
-        }
 
         let proposal_data = propose_and_wait(
             &pocket_ic,
@@ -379,11 +374,6 @@ async fn test_treasury_manager() {
                 },
             )),
         };
-
-        for _ in 0..100 {
-            pocket_ic.tick().await;
-            pocket_ic.advance_time(Duration::from_secs(1)).await;
-        }
 
         let proposal_data = propose_and_wait(
             &pocket_ic,
