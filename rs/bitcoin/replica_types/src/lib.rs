@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
 
+// NOTE: The network variants for Bitcoin need to be named without the bitcoin prefix,
+// because these variants need to be backwards compatible with the bitcoin canister.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, CandidType)]
 pub enum Network {
     #[serde(rename = "mainnet")]
