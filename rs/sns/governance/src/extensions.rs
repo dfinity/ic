@@ -543,7 +543,7 @@ impl Governance {
                 format!("Could not encode RegisterExtensionRequest: {err:?}"),
             )
         })?;
-        log!(INFO, "Y");
+
         let reply = self
             .env
             .call_canister(
@@ -558,7 +558,7 @@ impl Governance {
                     format!("Canister method call failed: {err:?}"),
                 )
             })?;
-        log!(INFO, "X");
+
         let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
             .map_err(|err| {
                 GovernanceError::new_with_message(
@@ -566,7 +566,7 @@ impl Governance {
                     format!("Could not decode RegisterExtensionResponse: {err:?}"),
                 )
             })?;
-        log!(INFO, "W");
+
         if let Some(register_extension_response::Result::Err(CanisterCallError {
             code,
             description,
