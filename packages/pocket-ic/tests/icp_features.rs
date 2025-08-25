@@ -56,22 +56,37 @@ fn resolving_client(pic: &PocketIc, host: String) -> Client {
     }
 }
 
-#[test]
-fn test_ii() {
+fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
     let mut pic = PocketIcBuilder::new().with_all_icp_features().build();
 
-    // Start HTTP gateway and derive an endpoint to request II via the HTTP gateway.
+    // Start HTTP gateway and derive an endpoint to request the frontend canister via the HTTP gateway.
     let mut endpoint = pic.make_live(Some(8080));
     assert_eq!(endpoint.host_str().unwrap(), "localhost");
-    let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
-    let host = format!("{}.localhost", ii_canister_id);
+    let host = format!("{}.localhost", frontend_canister_id);
     endpoint.set_host(Some(&host)).unwrap();
 
     // A basic smoke test.
     let client = resolving_client(&pic, host);
     let resp = client.get(endpoint).send().unwrap();
     let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    assert!(body.contains("<title>Internet Identity</title>"));
+    assert!(body.contains(expected_str));
+}
+
+#[test]
+fn test_nns_dapp() {
+    let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+
+    frontend_smoke_test(
+        nns_dapp_canister_id,
+        "<title>Network Nervous System</title>",
+    );
+}
+
+#[test]
+fn test_ii() {
+    let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+
+    frontend_smoke_test(ii_canister_id, "<title>Internet Identity</title>");
 }
 
 #[test]
