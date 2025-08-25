@@ -213,6 +213,7 @@ members = [
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
     "rs/ledger_suite/icrc1/test_utils",
+    "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
     "rs/ledger_suite/icrc1/tokens_u256",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",

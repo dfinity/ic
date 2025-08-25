@@ -10198,6 +10198,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc3-test-ledger"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-icrc1",
+ "ic-icrc1-ledger",
+ "ic-icrc1-test-utils",
+ "ic-ledger-suite-state-machine-tests",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "icrc-ledger-types",
+ "num-traits",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-identity-hsm"
 version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
