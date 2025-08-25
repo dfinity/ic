@@ -363,6 +363,9 @@ mod tests {
         GuestVMType, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings, CONFIG_VERSION,
     };
 
+    const IC_JSON5_TEMPLATE_BYTES: &[u8] =
+        include_bytes!("../../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+
     #[test]
     fn test_generate_ipv6_prefix() {
         let result = generate_ipv6_prefix("2001:db8:1234:5678:9abc:def0:1234:5678");
@@ -371,6 +374,42 @@ mod tests {
         // Test IPv6 address with less than 4 segments (should fallback)
         let result = generate_ipv6_prefix("2001:db8");
         assert_eq!(result, "::1/128");
+    }
+
+    #[test]
+    fn test_template_substitution_with_default_config() {
+        let guestos_config = create_test_guestos_config();
+        let config_vars = get_config_vars(&guestos_config).unwrap();
+
+        let template_content = String::from_utf8_lossy(IC_JSON5_TEMPLATE_BYTES);
+        let result = substitute_template(&template_content, &config_vars);
+
+        // Verify that all placeholders were replaced
+        assert!(!result.contains("{{ ipv6_address }}"));
+        assert!(!result.contains("{{ ipv6_prefix }}"));
+        assert!(!result.contains("{{ ipv4_address }}"));
+        assert!(!result.contains("{{ ipv4_gateway }}"));
+        assert!(!result.contains("{{ domain_name }}"));
+        assert!(!result.contains("{{ nns_urls }}"));
+        assert!(!result.contains("{{ backup_retention_time_secs }}"));
+        assert!(!result.contains("{{ backup_purging_interval_secs }}"));
+        assert!(!result.contains("{{ malicious_behavior }}"));
+        assert!(!result.contains("{{ query_stats_epoch_length }}"));
+        assert!(!result.contains("{{ node_reward_type }}"));
+        assert!(!result.contains("{{ jaeger_addr }}"));
+
+        // Verify that the expected values were substituted
+        assert!(result.contains("node_ip: \"2001:db8::1\""));
+        assert!(result.contains("public_address: \"\""));
+        assert!(result.contains("public_gateway: \"\""));
+        assert!(result.contains("domain: \"\""));
+        assert!(result.contains("nns_url: \"http://[::1]:8080\""));
+        assert!(result.contains("retention_time_secs: 86400"));
+        assert!(result.contains("purging_interval_secs: 3600"));
+        assert!(result.contains("malicious_behavior: null"));
+        assert!(result.contains("query_stats_epoch_length: 600"));
+        assert!(result.contains("node_reward_type: \"\""));
+        assert!(result.contains("jaeger_addr: \"\""));
     }
 
     fn create_test_guestos_config() -> GuestOSConfig {
@@ -429,54 +468,5 @@ mod tests {
         let (ipv4_address, ipv4_gateway) = configure_ipv4(&guestos_config);
         assert_eq!(ipv4_address, "");
         assert_eq!(ipv4_gateway, "");
-    }
-
-    #[test]
-    fn test_substitute_template() {
-        let template_content = r#"
-            IPv6 Address: {{ ipv6_address }}
-            IPv6 Prefix: {{ ipv6_prefix }}
-            IPv4 Address: {{ ipv4_address }}
-            IPv4 Gateway: {{ ipv4_gateway }}
-            Domain Name: {{ domain_name }}
-            NNS URLs: {{ nns_urls }}
-            Backup Retention: {{ backup_retention_time_secs }}
-            Backup Purging: {{ backup_purging_interval_secs }}
-            Malicious Behavior: {{ malicious_behavior }}
-            Query Stats Epoch: {{ query_stats_epoch_length }}
-            Node Reward Type: {{ node_reward_type }}
-            Jaeger Address: {{ jaeger_addr }}
-        "#;
-
-        let config_vars = ConfigVariables {
-            ipv6_address: "2001:db8::1".to_string(),
-            ipv6_prefix: "2001:db8::/64".to_string(),
-            ipv4_address: "192.168.1.100/24".to_string(),
-            ipv4_gateway: "192.168.1.1".to_string(),
-            nns_urls: "http://[::1]:8080".to_string(),
-            backup_retention_time_secs: "86400".to_string(),
-            backup_purging_interval_secs: "3600".to_string(),
-            query_stats_epoch_length: "600".to_string(),
-            jaeger_addr: "localhost:6831".to_string(),
-            domain_name: "test.example.com".to_string(),
-            node_reward_type: "normal".to_string(),
-            malicious_behavior: "null".to_string(),
-            generate_ic_boundary_tls_cert: None,
-        };
-
-        let result = substitute_template(template_content, &config_vars);
-
-        assert!(result.contains("IPv6 Address: 2001:db8::1"));
-        assert!(result.contains("IPv6 Prefix: 2001:db8::/64"));
-        assert!(result.contains("IPv4 Address: 192.168.1.100/24"));
-        assert!(result.contains("IPv4 Gateway: 192.168.1.1"));
-        assert!(result.contains("Domain Name: test.example.com"));
-        assert!(result.contains("NNS URLs: http://[::1]:8080"));
-        assert!(result.contains("Backup Retention: 86400"));
-        assert!(result.contains("Backup Purging: 3600"));
-        assert!(result.contains("Malicious Behavior: null"));
-        assert!(result.contains("Query Stats Epoch: 600"));
-        assert!(result.contains("Node Reward Type: normal"));
-        assert!(result.contains("Jaeger Address: localhost:6831"));
     }
 }

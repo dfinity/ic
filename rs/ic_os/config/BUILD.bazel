@@ -69,6 +69,9 @@ rust_library(
 # bazel test //rs/ic_os/config:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
     name = "config_lib_test",
+    compile_data = [
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
+    ],
     crate = ":config_lib_dev",
     crate_features = ["dev"],
     data = glob(["golden/*"]),
@@ -101,6 +104,9 @@ rust_binary(
 
 rust_test(
     name = "config_test",
+    compile_data = [
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
+    ],
     crate = ":config_dev",
     crate_features = ["dev"],
     deps = DEV_DEPENDENCIES,
