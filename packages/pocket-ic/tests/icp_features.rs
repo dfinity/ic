@@ -1,4 +1,5 @@
 use candid::{CandidType, Encode, Nat, Principal};
+use flate2::read::GzDecoder;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, SubnetSpec};
@@ -11,6 +12,7 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tempfile::TempDir;
@@ -20,6 +22,18 @@ use wslpath::windows_to_wsl;
 fn test_canister_wasm() -> Vec<u8> {
     let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
     std::fs::read(wasm_path).unwrap()
+}
+
+// Ungzips `data`, if possible, and returns `data` otherwise.
+fn decode_gzipped_bytes(data: Vec<u8>) -> Vec<u8> {
+    let mut decoder = GzDecoder::new(&data[..]);
+
+    let mut ungzipped = Vec::new();
+    if decoder.read_to_end(&mut ungzipped).is_ok() {
+        ungzipped
+    } else {
+        data
+    }
 }
 
 #[test]
@@ -56,11 +70,11 @@ fn resolving_client(pic: &PocketIc, host: String) -> Client {
     }
 }
 
-fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
+fn frontend_smoke_test(frontend_canister_id: Principal, port: Option<u16>, expected_str: &str) {
     let mut pic = PocketIcBuilder::new().with_all_icp_features().build();
 
     // Start HTTP gateway and derive an endpoint to request the frontend canister via the HTTP gateway.
-    let mut endpoint = pic.make_live(Some(8080));
+    let mut endpoint = pic.make_live(port);
     assert_eq!(endpoint.host_str().unwrap(), "localhost");
     let host = format!("{}.localhost", frontend_canister_id);
     endpoint.set_host(Some(&host)).unwrap();
@@ -68,7 +82,7 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
     // A basic smoke test.
     let client = resolving_client(&pic, host);
     let resp = client.get(endpoint).send().unwrap();
-    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
     assert!(body.contains(expected_str));
 }
 
@@ -78,6 +92,7 @@ fn test_nns_ui() {
 
     frontend_smoke_test(
         nns_dapp_canister_id,
+        Some(8080),
         "<title>Network Nervous System</title>",
     );
 }
@@ -86,7 +101,7 @@ fn test_nns_ui() {
 fn test_ii() {
     let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
 
-    frontend_smoke_test(ii_canister_id, "<title>Internet Identity</title>");
+    frontend_smoke_test(ii_canister_id, None, "<title>Internet Identity</title>");
 }
 
 #[test]
