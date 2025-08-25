@@ -7,7 +7,6 @@ use p384::pkcs8::EncodePublicKey;
 use rand::thread_rng;
 use rsa::RsaPrivateKey;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
-use sev::certs::snp::{Chain, Verifiable};
 use sev::firmware::guest::AttestationReport;
 use sha2::Sha384;
 use std::str::FromStr;
@@ -64,6 +63,12 @@ impl AttestationReportBuilder {
             .sign_report(&mut attestation_report)
             .expect("Failed to sign attestation report");
         attestation_report
+    }
+}
+
+impl Default for AttestationReportBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -147,6 +152,12 @@ impl FakeAttestationReportSigner {
 
     pub fn get_ark_pem(&self) -> String {
         self.ark_cert.to_pem(LineEnding::LF).unwrap()
+    }
+}
+
+impl Default for FakeAttestationReportSigner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -303,6 +314,7 @@ impl SevGuestFirmware for MockSevGuestFirmwareBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sev::certs::snp::{Chain, Verifiable};
 
     #[test]
     fn test_fake_cert_chain_and_signature_are_accepted_by_sev_lib() {

@@ -7,7 +7,6 @@ use config_types::{
     DeploymentEnvironment, GuestOSConfig, ICOSSettings, Ipv6Config, NetworkSettings,
 };
 use ic_device::device_mapping::{Bytes, TempDevice};
-use ic_sev::guest::firmware::MockSevGuestFirmware;
 use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
 use ic_sev::guest::testing::MockSevGuestFirmwareBuilder;
 use libcryptsetup_rs::consts::flags::CryptActivate;
