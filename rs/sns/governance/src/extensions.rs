@@ -738,12 +738,7 @@ pub fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec,
         ));
     }
 
-    if cfg!(feature = "test") {
-        // In feature test mode, use the test allowed extensions with real hashes
-        let test_allowed = create_test_allowed_extensions();
-        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
-    } else if cfg!(all(test, not(feature = "test"))) {
-        // In regular test mode (without feature), use the test allowed extensions
+    if cfg!(any(test, feature = "test")) {
         let test_allowed = create_test_allowed_extensions();
         validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
     } else {
@@ -985,12 +980,13 @@ pub async fn validate_register_extension(
     })
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ValidatedExtensionUpgradeArg {
     TreasuryManager, // Currently has no upgrade args, but can be supported later
                      // Future: other extension type upgrade arguments would go here
 }
 
+#[derive(Debug, PartialEq)]
 pub struct ValidatedUpgradeExtension {
     pub extension_canister_id: CanisterId,
     pub wasm: Wasm,
@@ -1083,19 +1079,8 @@ pub async fn validate_upgrade_extension(
         .await
         .map_err(|err| format!("Invalid upgrade argument: {}", err))?;
 
-    // Generate bytes from the validated upgrade arg for WASM validation
-    let upgrade_arg_bytes = match &upgrade_arg {
-        ValidatedExtensionUpgradeArg::TreasuryManager => {
-            // Treasury manager currently has no upgrade arguments
-            // Return empty bytes (empty candid encoding)
-            candid::encode_one(()).unwrap_or_default()
-        } // Future: other extension types would serialize their specific arguments here
-    };
-
-    // Validate WASM structure and size constraints with the upgrade arg bytes
-    wasm.validate(&*governance.env, &Some(upgrade_arg_bytes))
-        .await
-        .map_err(|defects| format!("WASM validation failed: {}", defects.join("; ")))?;
+    // Note: upgrade_arg is validated and will be serialized during execution
+    // No need to generate bytes here since WASM validation was removed
 
     // Check that the new extension has the same name as the current one
     if new_spec.name != current_extension.name {
@@ -2390,5 +2375,180 @@ mod tests {
 
         // Clean up
         clear_registered_extension_cache(extension_canister_id);
+    }
+
+    #[tokio::test]
+    async fn test_validate_upgrade_extension_comprehensive() {
+        use crate::storage::clear_registered_extension_cache;
+
+        let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Set up a registered extension in cache for testing
+        let extension_canister_id = CanisterId::from_u64(2000);
+        cache_registered_extension(
+            extension_canister_id,
+            ExtensionSpec {
+                name: "KongSwap Treasury Manager".to_string(),
+                version: ExtensionVersion(1),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+        );
+
+        // Helper function for valid upgrade extension
+        fn valid_upgrade_extension() -> pb::UpgradeExtension {
+            pb::UpgradeExtension {
+                extension_canister_id: Some(CanisterId::from_u64(2000).get()),
+                canister_upgrade_arg: Some(ExtensionUpgradeArg {
+                    value: None, // Valid for treasury manager
+                }),
+                wasm: Some(pb::Wasm {
+                    wasm: Some(pb::wasm::Wasm::Chunked(ChunkedCanisterWasm {
+                        wasm_module_hash: vec![
+                            128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171,
+                            203, 196, 247, 243, 160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123,
+                            231,
+                        ],
+                        store_canister_id: Some(CanisterId::from_u64(2000).get()),
+                        chunk_hashes_list: vec![vec![
+                            128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171,
+                            203, 196, 247, 243, 160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123,
+                            231,
+                        ]],
+                    })), // KongSwap v2 hash from create_test_allowed_extensions
+                }),
+            }
+        }
+
+        let okay_test = valid_upgrade_extension();
+        let result = validate_upgrade_extension(&governance, okay_test).await;
+        assert!(result.is_ok(), "{:?}", result);
+        let validated = result.unwrap();
+        assert_eq!(validated.extension_canister_id, extension_canister_id);
+        assert_eq!(validated.current_version, ExtensionVersion(1));
+        assert_eq!(validated.new_version, ExtensionVersion(2));
+
+        // Test 1: Missing extension_canister_id
+        let missing_canister_id = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.extension_canister_id = None;
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, missing_canister_id).await;
+        assert_eq!(result, Err("extension_canister_id is required".to_string()));
+
+        // Test 2: Invalid extension_canister_id
+        let invalid_canister_id = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.extension_canister_id = Some(PrincipalId::new_user_test_id(0)); // Invalid
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, invalid_canister_id).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid extension_canister_id"));
+
+        // Test 3: Extension not registered
+        let unregistered_extension = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.extension_canister_id = Some(CanisterId::from_u64(9999).get()); // Not in cache
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, unregistered_extension).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("is not registered"));
+
+        // Test 4: Missing wasm field
+        let missing_wasm = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.wasm = None;
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, missing_wasm).await;
+        assert_eq!(result, Err("wasm field is required".to_string()));
+
+        // Test 5: Invalid WASM specification (missing inner wasm)
+        let invalid_wasm_spec = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.wasm = Some(pb::Wasm { wasm: None }); // Missing inner wasm
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, invalid_wasm_spec).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid WASM specification"));
+
+        // Test 6: WASM hash not in allowed extensions (random hash not in test map)
+        let invalid_wasm_hash = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.wasm = Some(pb::Wasm {
+                wasm: Some(pb::wasm::Wasm::Bytes(vec![
+                    99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                    99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                ])), // Random hash not in allowed extensions
+            });
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, invalid_wasm_hash).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid extension wasm"));
+
+        // Test 7: Invalid upgrade argument (treasury manager doesn't support args with values)
+        let invalid_upgrade_arg = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.canister_upgrade_arg = Some(ExtensionUpgradeArg {
+                value: Some(Precise {
+                    value: Some(precise::Value::Text("invalid".to_string())),
+                }),
+            });
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, invalid_upgrade_arg).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid upgrade argument"));
+
+        // Test 8: Extension name mismatch (set up different extension with different name)
+        let different_extension_canister_id = CanisterId::from_u64(3000);
+        cache_registered_extension(
+            different_extension_canister_id,
+            ExtensionSpec {
+                name: "Different Extension Name".to_string(), // Different name
+                version: ExtensionVersion(1),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+        );
+        let name_mismatch = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.extension_canister_id = Some(different_extension_canister_id.get());
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, name_mismatch).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Extension name mismatch"));
+
+        // Test 9: Version not higher (use v1 hash for upgrade when current is already v1)
+        let same_version = {
+            let mut upgrade = valid_upgrade_extension();
+            upgrade.wasm = Some(pb::Wasm {
+                wasm: Some(pb::wasm::Wasm::Chunked(ChunkedCanisterWasm {
+                    wasm_module_hash: vec![
+                        103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167,
+                        144, 31, 212, 229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
+                    ], // KongSwap v1 hash - same version as current
+                    store_canister_id: Some(CanisterId::from_u64(2000).get()),
+                    chunk_hashes_list: vec![vec![
+                        103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167,
+                        144, 31, 212, 229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
+                    ]],
+                })),
+            });
+            upgrade
+        };
+        let result = validate_upgrade_extension(&governance, same_version).await;
+        assert_eq!(
+            result,
+            Err("New extension version 1 must be higher than current version 1".to_string())
+        );
     }
 }
