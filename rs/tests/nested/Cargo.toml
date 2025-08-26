@@ -22,13 +22,13 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
-sha2 = { workspace = true }
-slog = { workspace = true }
-url = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
+sha2 = { workspace = true }
+slog = { workspace = true }
+url = { workspace = true }
 
 [[bin]]
 name = "registration"
