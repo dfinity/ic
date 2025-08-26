@@ -13,6 +13,7 @@ members = [
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
     "packages/ic-metrics-assert",
+    "packages/ic-pub-key",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
@@ -666,12 +667,14 @@ ic-cdk = "0.18.7"
 ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-ed25519 = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
+ic-secp256k1 = "0.2.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
