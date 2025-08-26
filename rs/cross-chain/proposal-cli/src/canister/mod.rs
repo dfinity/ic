@@ -2,9 +2,7 @@
 mod tests;
 
 use std::fmt::Display;
-use std::fs::File;
-use std::io::{BufReader, Cursor, Read};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
 use strum_macros::EnumIter;
@@ -14,24 +12,6 @@ pub enum DownloadableFile {
     Local { path: PathBuf },
     /// For cases where the file is stored remotely.
     Remote { url: String },
-}
-
-impl DownloadableFile {
-    pub async fn download(&self, local_parent_path: &Path) -> BufReader<Box<dyn Read>> {
-        match self {
-            DownloadableFile::Local { path } => {
-                let full_path = local_parent_path.join(path);
-                let canister_ids_file =
-                    File::open(&full_path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
-                BufReader::new(Box::new(canister_ids_file))
-            }
-            DownloadableFile::Remote { url } => {
-                let resp = reqwest::get(url).await.expect("request failed");
-                let body = resp.text().await.expect("body invalid");
-                BufReader::new(Box::new(Cursor::new(body)))
-            }
-        }
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
