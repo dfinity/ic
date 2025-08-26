@@ -11,7 +11,7 @@ use crate::{
         MethodGuard,
     },
     external_interfaces::management::set_exclusive_controller,
-    Event, RequestState,
+    Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
 use ic_cdk::println;
@@ -41,7 +41,7 @@ pub async fn process_all_generic<F>(
     }
 }
 
-/// Accepts an `Accepted` request, returns `SourceControllersChanged` on success.
+/// Accepts an `Accepted` request, returns `ControllersChanged` on success.
 pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
@@ -50,31 +50,32 @@ pub async fn process_accepted(
         return ProcessingResult::NoProgress;
     };
     // Set controller of source
-    set_exclusive_controller(request.source)
+    let res = set_exclusive_controller(request.source)
         .await
-        .map_success(|_| RequestState::SourceControllersChanged {
+        .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
         })
-        .map_failure(|reason| RequestState::Failed { request, reason })
-}
+        .map_failure(|reason| RequestState::Failed {
+            request: request.clone(),
+            reason,
+        });
+    if !res.is_success() {
+        return res;
+    }
+    // This function is an exception in that it tries to make _two_ effectful calls. The reason is
+    // that the cleanup after failure must cleanup both source and target controllers in every
+    // case, so we are not making the cleanup worse by attempting both.
 
-pub async fn process_source_controllers(
-    request: RequestState,
-) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::SourceControllersChanged { request } = request else {
-        println!("Error: list_by SourceControllersChanged returned bad variant");
-        return ProcessingResult::NoProgress;
-    };
     // Set controller of target
     set_exclusive_controller(request.target)
         .await
-        .map_success(|_| RequestState::TargetControllersChanged {
+        .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
         })
         .map_failure(|reason| RequestState::Failed { request, reason })
 }
 
-// pub async fn process_target_controllers(
+// pub async fn process_controllers_changed(
 //     request: RequestState,
 // ) -> ProcessingResult<RequestState, RequestState> {
 // }
@@ -150,6 +151,18 @@ impl<S, F> ProcessingResult<S, F> {
         match self {
             ProcessingResult::FatalFailure(_) => true,
             _ => false,
+        }
+    }
+}
+
+impl<S> ProcessingResult<S, ValidationError> {
+    pub fn into_result(self, context: &str) -> Result<S, ValidationError> {
+        match self {
+            ProcessingResult::Success(s) => Ok(s),
+            ProcessingResult::NoProgress => Err(ValidationError::CallFailed {
+                reason: context.to_string(),
+            }),
+            ProcessingResult::FatalFailure(e) => Err(e),
         }
     }
 }

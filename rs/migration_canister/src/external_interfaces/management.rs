@@ -57,6 +57,11 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
     }
 }
 
+pub async fn set_original_controllers(canister_id: Principal, subnet_id: Principal) -> () {
+    // TODO
+    todo!()
+}
+
 // ========================================================================= //
 // `canister_status`
 
@@ -66,11 +71,10 @@ struct CanisterStatusArgs {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
-struct CanisterStatusResponse {
+pub struct CanisterStatusResponse {
     pub status: CanisterStatusType,
     pub ready_for_migration: bool,
     pub version: u64,
-    pub controller: candid::Principal,
     pub settings: DefiniteCanisterSettingsArgs,
     pub cycles: candid::Nat,
     pub freezing_threshold: candid::Nat,

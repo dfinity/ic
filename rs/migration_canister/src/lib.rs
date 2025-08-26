@@ -3,7 +3,7 @@
 //! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant.
 
 use candid::{CandidType, Principal};
-use ic_cdk::futures::spawn;
+use ic_cdk::{api::canister_self, futures::spawn};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,8 @@ use serde_cbor::{from_slice, to_vec};
 use std::{borrow::Cow, time::Duration};
 
 use crate::{
-    canister_state::{max_active_requests, num_active_requests},
+    canister_state::{max_active_requests, num_active_requests, requests::list_by},
+    external_interfaces::{management::canister_status, registry::get_subnet_for_canister},
     processing::{process_accepted, process_all_failed, process_all_generic},
 };
 
@@ -24,23 +25,24 @@ mod processing;
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
-enum ValidationError {
+pub enum ValidationError {
     MigrationsDisabled,
     RateLimited,
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
     SameSubnet,
-    SenderNotController,
-    NotController,
+    SenderNotController { canister: Principal },
+    NotController { canister: Principal },
     TargetInsufficientCycles,
     SourceNotStopped,
     SourceNotReady,
     TargetNotStopped,
     TargetHasSnapshots,
+    CallFailed { reason: String },
 }
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-struct Request {
+pub struct Request {
     source: Principal,
     source_subnet: Principal,
     source_original_controllers: Vec<Principal>,
@@ -50,8 +52,20 @@ struct Request {
     sender: Principal,
 }
 
+impl Request {
+    fn affects_canister(&self, src_id: Principal, tgt_id: Principal) -> Option<Principal> {
+        if self.source == src_id || self.target == src_id {
+            return Some(src_id);
+        }
+        if self.source == tgt_id || self.target == tgt_id {
+            return Some(tgt_id);
+        }
+        None
+    }
+}
+
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-enum RequestState {
+pub enum RequestState {
     /// Request was validated successfully.
     /// * Called registry `get_subnet_for_canister` to determine:
     ///     * Existence of source and target.
@@ -66,13 +80,7 @@ enum RequestState {
     ///
     /// Certain checks are not informative before this state because the original controller
     /// could still interfere until this state.
-    SourceControllersChanged { request: Request },
-
-    /// Called mgmt `update_settings` to make us the only controller.
-    ///
-    /// Certain checks are not informative before this state because the original controller
-    /// could still interfere until this state.
-    TargetControllersChanged { request: Request },
+    ControllersChanged { request: Request },
 
     /// * Called mgmt `canister_status` to determine:
     ///     * Source and target are stopped.
@@ -131,8 +139,24 @@ enum RequestState {
     Failed { request: Request, reason: String },
 }
 
+impl RequestState {
+    fn request(&self) -> &Request {
+        match self {
+            RequestState::Accepted { request }
+            | RequestState::ControllersChanged { request }
+            | RequestState::StoppedAndReady { request, .. }
+            | RequestState::RenamedTarget { request, .. }
+            | RequestState::UpdatedRoutingTable { request, .. }
+            | RequestState::RoutingTableChangeAccepted { request, .. }
+            | RequestState::SourceDeleted { request, .. }
+            | RequestState::RestoredControllers { request }
+            | RequestState::Failed { request, .. } => request,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-enum Event {
+pub enum Event {
     Succeeded { request: Request },
     Failed { request: Request, reason: String },
 }
@@ -208,6 +232,54 @@ pub async fn validate_request(
     target: Principal,
     caller: Principal,
 ) -> Result<Request, ValidationError> {
-    // TODO
+    // 1. Is any of these canisters already in a migration process?
+    for request in list_by(|_| true) {
+        if let Some(id) = request.request().affects_canister(source, target) {
+            return Err(ValidationError::MigrationInProgress { canister: id });
+        }
+    }
+    // 2. Does source canister exist?
+    let source_subnet = get_subnet_for_canister(source)
+        .await
+        .into_result("Call to registry canister failed. Try again later.")?;
+    // 3. Does target canister exist?
+    let target_subnet = get_subnet_for_canister(target)
+        .await
+        .into_result("Call to registry canister failed. Try again later.")?;
+    // 4. Are they on the same subnet?
+    if source_subnet == target_subnet {
+        return Err(ValidationError::SameSubnet);
+    }
+    // 5. Is the sender controller of the source?
+    let source_status = canister_status(source, source_subnet)
+        .await
+        .into_result("Call to management canister failed. Try again later.")?;
+    if !source_status.settings.controllers.contains(&caller) {
+        return Err(ValidationError::SenderNotController { canister: source });
+    }
+    // 6. Are we controller of the source?
+    if !source_status
+        .settings
+        .controllers
+        .contains(&canister_self())
+    {
+        return Err(ValidationError::NotController { canister: source });
+    }
+    // 7. Is the sender controller of the target?
+    let target_status = canister_status(target, target_subnet)
+        .await
+        .into_result("Call to management canister failed. Try again later.")?;
+    if !target_status.settings.controllers.contains(&caller) {
+        return Err(ValidationError::SenderNotController { canister: target });
+    }
+    // 8. Are we controller of the target?
+    if !target_status
+        .settings
+        .controllers
+        .contains(&canister_self())
+    {
+        return Err(ValidationError::NotController { canister: target });
+    }
+
     todo!()
 }
