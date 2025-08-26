@@ -368,8 +368,9 @@ mod tests {
     };
     use ic_config::{config_parser::ConfigSource, ConfigOptional};
 
-    const IC_JSON5_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+    const IC_JSON5_TEMPLATE_BYTES: &[u8] = include_bytes!(
+        "../../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template"
+    );
 
     #[test]
     fn test_generate_ipv6_prefix() {
