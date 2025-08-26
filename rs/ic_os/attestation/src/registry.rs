@@ -1,5 +1,4 @@
 use ic_interfaces_registry::RegistryClient;
-// use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
 use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::ReplicaVersion;
