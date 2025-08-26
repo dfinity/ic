@@ -313,13 +313,13 @@ fn test_rewardable_nodes_deleted_nodes() {
     // Node 2 should be rewardable in this period.
     let node_2_rewardable_days = node_rewardable_days(&np_1_rewardables, 2);
 
-    assert_eq!(node_2_rewardable_days.first(), Some(&from.into()));
-    assert_eq!(node_2_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(node_2_rewardable_days.first(), Some(&from));
+    assert_eq!(node_2_rewardable_days.last(), Some(&to));
 
     let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
 
     // Node 3 should be rewardable until 2025-07-12 because on 2025-07-13 got deleted.
-    assert_eq!(node_3_rewardable_days.first(), Some(&from.into()));
+    assert_eq!(node_3_rewardable_days.first(), Some(&from));
     assert_eq!(
         node_3_rewardable_days.last(),
         Some(&DayUtc::try_from("2025-07-12").unwrap())
@@ -353,7 +353,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     // Node 1 was deleted on 2025-07-08, so its rewardable period ends there.
     let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, 1);
 
-    assert_eq!(node_1_rewardable_days.first(), Some(&from.into()));
+    assert_eq!(node_1_rewardable_days.first(), Some(&from));
     assert_eq!(
         node_1_rewardable_days.last(),
         Some(&DayUtc::try_from("2025-07-07").unwrap())
@@ -366,7 +366,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
         node_2_rewardable_days.first(),
         Some(&DayUtc::try_from("2025-07-04").unwrap())
     );
-    assert_eq!(node_2_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(node_2_rewardable_days.last(), Some(&to));
 
     // Node 3 became active on 2025-07-11.
     let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
@@ -375,7 +375,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
         node_3_rewardable_days.first(),
         Some(&DayUtc::try_from("2025-07-11").unwrap())
     );
-    assert_eq!(node_3_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(node_3_rewardable_days.last(), Some(&to));
 }
 
 #[test]
