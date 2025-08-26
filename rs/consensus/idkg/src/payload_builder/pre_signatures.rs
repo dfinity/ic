@@ -22,6 +22,7 @@ use ic_types::{
     Height, NodeId, RegistryVersion,
 };
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
@@ -437,6 +438,58 @@ pub(super) fn count_pre_signatures_total(
     total
 }
 
+/// A struct to keep track of the current fill level of a pre-signature stash for a given
+/// key ID and transcript. The [Ord] implementation assigns a higher priority to stashes with
+/// proportionally lower fill level.
+/// Ties between stashes of the same fill level are broken by comparing the key IDs instead.
+#[derive(Clone, Debug, Eq)]
+struct PrioritizedStash<'a> {
+    count: usize,
+    max: usize,
+    key_id: &'a IDkgMasterPublicKeyId,
+    key_transcript: &'a UnmaskedTranscriptWithAttributes,
+}
+
+impl Ord for PrioritizedStash<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Stashes with zero max should receive the least priority
+        if self.max == 0 && other.max == 0 {
+            // Use key_id as a tie breaker
+            return self.key_id.cmp(other.key_id);
+        } else if self.max == 0 {
+            return Ordering::Less;
+        } else if other.max == 0 {
+            return Ordering::Greater;
+        }
+
+        // Compare the fill level by cross-multiplying to avoid floating-point arithmetic
+        let self_level = self.count * other.max;
+        let other_level = other.count * self.max;
+
+        // Reverse the order to make the emptiest stash the greatest priority
+        let res = other_level.cmp(&self_level);
+
+        if res == Ordering::Equal {
+            // Use key_id as a tie breaker
+            return self.key_id.cmp(other.key_id);
+        }
+
+        res
+    }
+}
+
+impl PartialEq for PrioritizedStash<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl PartialOrd for PrioritizedStash<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Create a new masked random transcript config and advance the
 /// next_unused_transcript_id by one.
 fn new_random_config(
@@ -574,7 +627,8 @@ pub(super) mod tests {
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_key_transcript, mock_transcript, mock_unmasked_transcript_type,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
@@ -587,7 +641,8 @@ pub(super) mod tests {
         consensus::{
             dkg::DkgDataPayload,
             idkg::{
-                common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload, UnmaskedTranscript,
+                common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload,
+                IDkgTranscriptAttributes, UnmaskedTranscript,
             },
             BlockPayload, DataPayload, HasHeight, HashedBlock, Payload,
         },
@@ -595,6 +650,7 @@ pub(super) mod tests {
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
+    use rand::prelude::SliceRandom;
     use strum::IntoEnumIterator;
 
     fn set_up(
@@ -717,6 +773,133 @@ pub(super) mod tests {
             // key3: 1 in the stash + 0 at height seven + 0 at height eight = 1
             assert_eq!(count[&new_key_id], 1);
         });
+    }
+
+    fn make_stash<'a>(
+        count: usize,
+        max: usize,
+        key_id: &'a IDkgMasterPublicKeyId,
+        key_transcript: &'a UnmaskedTranscriptWithAttributes,
+    ) -> PrioritizedStash<'a> {
+        PrioritizedStash {
+            count,
+            max,
+            key_id,
+            key_transcript,
+        }
+    }
+
+    fn make_key_transcript() -> UnmaskedTranscriptWithAttributes {
+        let mut rng = reproducible_rng();
+        let alg = AlgorithmId::EcdsaSecp256k1;
+        let transcript =
+            mock_transcript(alg, None, mock_unmasked_transcript_type(&mut rng), &mut rng);
+        UnmaskedTranscriptWithAttributes::new(
+            IDkgTranscriptAttributes::new(BTreeSet::new(), alg, RegistryVersion::from(0)),
+            UnmaskedTranscript::try_from((Height::from(0), &transcript)).unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_emptier_stash_has_greater_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let emptier = make_stash(1, 10, &id1, &transcript);
+        let fuller = make_stash(5, 10, &id2, &transcript);
+
+        // Emptier stash has greater priority
+        assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
+        assert_eq!(fuller.cmp(&emptier), Ordering::Less);
+    }
+
+    #[test]
+    fn test_equal_ratios_uses_key_id_tiebreaker() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let stash1 = make_stash(2, 10, &id1, &transcript);
+        let stash2 = make_stash(1, 5, &id2, &transcript);
+
+        assert_eq!(id1.cmp(&id2), Ordering::Less);
+        assert_eq!(stash1.cmp(&stash2), Ordering::Less);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Greater);
+
+        // switch the key_ids
+        let stash1 = make_stash(2, 10, &id2, &transcript);
+        let stash2 = make_stash(1, 5, &id1, &transcript);
+        // Order should be reversed
+        assert_eq!(stash1.cmp(&stash2), Ordering::Greater);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Less);
+    }
+
+    #[test]
+    fn test_stash_both_max_zero_orders_by_key_id() {
+        let transcript = make_key_transcript();
+        // both max = 0, order by key_id
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let stash1 = make_stash(0, 0, &id1, &transcript);
+        // counts shouldn't matter when max = 0
+        let stash2 = make_stash(999, 0, &id2, &transcript);
+
+        assert_eq!(id1.cmp(&id2), Ordering::Less);
+        assert_eq!(stash1.cmp(&stash2), Ordering::Less);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Greater);
+
+        // switch the key_ids
+        let stash1 = make_stash(0, 0, &id2, &transcript);
+        let stash2 = make_stash(999, 0, &id1, &transcript);
+        // Order should be reversed
+        assert_eq!(stash1.cmp(&stash2), Ordering::Greater);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Less);
+    }
+
+    #[test]
+    fn test_max_zero_has_lowest_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        // Both stashes are over-filled
+        let zero = make_stash(10, 0, &id1, &transcript);
+        let nonzero = make_stash(15, 5, &id2, &transcript);
+
+        // Stash with a max of zero has the lowest priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
+    fn sort_orders_as_specified() {
+        fn make_key_id(i: u64) -> IDkgMasterPublicKeyId {
+            let key_id = fake_ecdsa_idkg_master_public_key_id().inner().clone();
+            key_id_with_name(&key_id, &format!("some_key{i}"))
+                .try_into()
+                .unwrap()
+        }
+
+        let ids = (0..6).map(make_key_id).collect::<Vec<_>>();
+        let transcript = make_key_transcript();
+
+        let expected = vec![
+            make_stash(5, 0, &ids[3], &transcript),  // zero max
+            make_stash(0, 0, &ids[4], &transcript),  // zero max but larger key_id than id 3
+            make_stash(5, 10, &ids[2], &transcript), // ratio 0.5
+            make_stash(2, 10, &ids[1], &transcript), // ratio 0.2
+            make_stash(1, 5, &ids[2], &transcript),  // ratio 0.2 tie but larger key_id
+            make_stash(1, 10, &ids[0], &transcript), // ratio 0.1 has highest priority
+        ];
+
+        let mut shuffled = expected.clone();
+
+        shuffled.shuffle(&mut reproducible_rng());
+        shuffled.sort();
+
+        assert_eq!(expected, shuffled);
     }
 
     #[test]
