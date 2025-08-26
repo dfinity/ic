@@ -799,6 +799,21 @@ fn invalid_stream_header_missing_signals_end() {
     }
 }
 
+#[test]
+#[should_panic(
+    expected = "Other(\"StreamHeader: deprecated reject signal deltas populated: [1, 2, 4]\")"
+)]
+fn invalid_stream_header_populated_deprecated_reject_signal_deltas() {
+    for certification_version in all_supported_versions() {
+        let mut stream_header: types::StreamHeader =
+            (&stream_header(certification_version), certification_version).into();
+        stream_header.deprecated_reject_signal_deltas = vec![1, 2, 4];
+
+        let bytes = types::StreamHeader::proxy_encode(stream_header).unwrap();
+        let _: StreamHeader = types::StreamHeader::proxy_decode(&bytes).unwrap();
+    }
+}
+
 //
 // `RequestOrResponse` decoding
 //
