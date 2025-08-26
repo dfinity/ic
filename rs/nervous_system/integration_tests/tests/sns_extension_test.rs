@@ -1,7 +1,7 @@
 use candid::{Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_crypto_sha2::Sha256;
+
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
 use ic_nervous_system_common::{
     ledger::compute_distribution_subaccount_bytes, E8, ONE_MONTH_SECONDS,
@@ -626,7 +626,8 @@ async fn test_upgrade_extension() {
     // Step 2: Deploy SNS
     let sns = deploy_sns(&pocket_ic, false).await;
 
-    let sns_ledger_canister_id = CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
+    let _sns_ledger_canister_id =
+        CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
     let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
 
     println!("📦 Installing KongSwap v1 extension...");
@@ -760,7 +761,7 @@ async fn test_upgrade_extension() {
         })),
     };
 
-    let proposal_data = propose_and_wait(
+    let _proposal_data = propose_and_wait(
         &pocket_ic,
         sns.governance.canister_id,
         sender,
