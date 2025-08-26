@@ -90,14 +90,13 @@ impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
                 != 0,
         };
 
-        let reject_signals: types::RejectSignalsProd =
-            (&header.reject_signals, header.signals_end).try_into()?;
+        let reject_signals = types::try_from_deltas(header.reject_signals, header.signals_end)?;
 
         Ok(Self::new(
             header.begin.into(),
             header.end.into(),
             header.signals_end.into(),
-            reject_signals.0,
+            reject_signals,
             flags,
         ))
     }

@@ -28,11 +28,11 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::CoarseTime,
-    xnet::{RejectReason, RejectSignal, StreamFlags},
+    xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex},
     CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 //
 // Tests for exact binary encoding
@@ -1275,20 +1275,34 @@ fn encode_with_mutation<T: serde::Serialize>(
 // Own fixtures, to ensure that compatibility tests are self-contained.
 //
 
-fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
+fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
+    let (reject_signals, signals_end) = reject_signals(certification_version);
     StreamHeader::new(
         23.into(),
         25.into(),
-        256.into(),
-        vec![
-            RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
-            RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
-            RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
-        ]
-        .into(),
+        signals_end,
+        reject_signals,
         StreamFlags {
             deprecated_responses_only: true,
         },
+    )
+}
+
+fn reject_signals(
+    _certification_version: CertificationVersion,
+) -> (VecDeque<RejectSignal>, StreamIndex) {
+    (
+        vec![
+            RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+            RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+            RejectSignal::new(RejectReason::CanisterStopped, 251.into()),
+            RejectSignal::new(RejectReason::CanisterStopping, 252.into()),
+            RejectSignal::new(RejectReason::QueueFull, 253.into()),
+            RejectSignal::new(RejectReason::OutOfMemory, 254.into()),
+            RejectSignal::new(RejectReason::Unknown, 255.into()),
+        ]
+        .into(),
+        256.into(),
     )
 }
 

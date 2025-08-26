@@ -277,14 +277,13 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
                 != 0,
         };
 
-        let reject_signals: RejectSignalsProd =
-            (&header.reject_signals, header.signals_end).try_into()?;
+        let reject_signals = try_from_deltas(header.reject_signals, header.signals_end)?;
 
         Ok(Self::new(
             header.begin.into(),
             header.end.into(),
             header.signals_end.into(),
-            reject_signals.0,
+            reject_signals,
             flags,
         ))
     }
@@ -331,63 +330,56 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
     }
 }
 
-/// Wrapper for reject signals used in production code such that `TryFrom` can be implemented.
-/// The trait is required for certain compatibility tests.
-pub(crate) struct RejectSignalsProd(pub VecDeque<RejectSignal>);
+pub(crate) fn try_from_deltas(
+    reject_signals: RejectSignals,
+    signals_end: u64,
+) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
+    use RejectReason::*;
 
-impl TryFrom<(&RejectSignals, u64)> for RejectSignalsProd {
-    type Error = ProxyDecodeError;
+    let mut reject_signals_map = BTreeMap::<StreamIndex, RejectReason>::new();
+    for (reason, deltas) in [
+        (CanisterMigrating, &reject_signals.canister_migrating_deltas),
+        (CanisterNotFound, &reject_signals.canister_not_found_deltas),
+        (CanisterStopped, &reject_signals.canister_stopped_deltas),
+        (CanisterStopping, &reject_signals.canister_stopping_deltas),
+        (QueueFull, &reject_signals.queue_full_deltas),
+        (OutOfMemory, &reject_signals.out_of_memory_deltas),
+        (Unknown, &reject_signals.unknown_deltas),
+    ] {
+        let mut stream_index = StreamIndex::new(signals_end);
+        for delta in deltas.iter().rev() {
+            if *delta == 0 {
+                // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
+                // lead to duplicates or a stream_index of `signals_end`.
+                return Err(ProxyDecodeError::Other(format!(
+                    "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
+                    reason,
+                    deltas,
+                )));
+            }
+            if stream_index < StreamIndex::new(*delta) {
+                // Reject signal deltas are invalid.
+                return Err(ProxyDecodeError::Other(format!(
+                    "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
+                    reason,
+                    signals_end,
+                    deltas,
+                )));
+            }
+            stream_index -= StreamIndex::new(*delta);
 
-    fn try_from((reject_signals, signals_end): (&RejectSignals, u64)) -> Result<Self, Self::Error> {
-        use RejectReason::*;
-
-        let mut reject_signals_map = BTreeMap::<StreamIndex, RejectReason>::new();
-        for (reason, deltas) in [
-            (CanisterMigrating, &reject_signals.canister_migrating_deltas),
-            (CanisterNotFound, &reject_signals.canister_not_found_deltas),
-            (CanisterStopped, &reject_signals.canister_stopped_deltas),
-            (CanisterStopping, &reject_signals.canister_stopping_deltas),
-            (QueueFull, &reject_signals.queue_full_deltas),
-            (OutOfMemory, &reject_signals.out_of_memory_deltas),
-            (Unknown, &reject_signals.unknown_deltas),
-        ] {
-            let mut stream_index = StreamIndex::new(signals_end);
-            for delta in deltas.iter().rev() {
-                if *delta == 0 {
-                    // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
-                    // lead to duplicates or a stream_index of `signals_end`.
-                    return Err(ProxyDecodeError::Other(format!(
-                        "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
-                        reason,
-                        deltas,
-                    )));
-                }
-                if stream_index < StreamIndex::new(*delta) {
-                    // Reject signal deltas are invalid.
-                    return Err(ProxyDecodeError::Other(format!(
-                        "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                        reason,
-                        signals_end,
-                        deltas,
-                    )));
-                }
-                stream_index -= StreamIndex::new(*delta);
-
-                if reject_signals_map.insert(stream_index, reason).is_some() {
-                    return Err(ProxyDecodeError::Other(
-                        "StreamHeader: reject signals are invalid, got duplicates".to_string(),
-                    ));
-                }
+            if reject_signals_map.insert(stream_index, reason).is_some() {
+                return Err(ProxyDecodeError::Other(
+                    "StreamHeader: reject signals are invalid, got duplicates".to_string(),
+                ));
             }
         }
-
-        Ok(Self(
-            reject_signals_map
-                .iter()
-                .map(|(index, reason)| RejectSignal::new(*reason, *index))
-                .collect(),
-        ))
     }
+
+    Ok(reject_signals_map
+        .iter()
+        .map(|(index, reason)| RejectSignal::new(*reason, *index))
+        .collect())
 }
 
 impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponse {
