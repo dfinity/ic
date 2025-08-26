@@ -738,13 +738,9 @@ pub fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec,
     }
 
     if cfg!(feature = "test") {
-        // In feature test mode, accept any wasm hash and return a test spec
-        Ok(ExtensionSpec {
-            name: "Test Extension".to_string(),
-            version: ExtensionVersion(1),
-            topic: Topic::TreasuryAssetManagement,
-            extension_type: ExtensionType::TreasuryManager,
-        })
+        // In feature test mode, use the test allowed extensions with real hashes
+        let test_allowed = create_test_allowed_extensions();
+        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
     } else if cfg!(all(test, not(feature = "test"))) {
         // In regular test mode (without feature), use the test allowed extensions
         let test_allowed = create_test_allowed_extensions();
@@ -1519,15 +1515,22 @@ pub async fn get_sns_token_symbol(
 
 /// Helper function to create test allowed extensions map
 fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
-    // Using a predictable test hash
-    let test_hash: [u8; 32] = [
-        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0,
-    ];
+    // KongSwap v1 hash from integration test
+    let kongswap_v1_hash: [u8; 32] = [190, 217, 161, 147, 21, 131, 72, 132, 60, 134, 97, 97, 108, 101, 177, 82, 245, 127, 135, 88, 99, 247, 93, 173, 59, 117, 98, 122, 214, 162, 180, 252];
+    
+    // KongSwap v2 hash from integration test
+    let kongswap_v2_hash: [u8; 32] = [18, 59, 212, 110, 3, 250, 78, 235, 212, 162, 46, 1, 246, 157, 143, 79, 242, 96, 102, 35, 37, 17, 61, 145, 152, 124, 46, 145, 237, 173, 68, 112];
+    
     btreemap! {
-        test_hash => ExtensionSpec {
-            name: "My Test Extension".to_string(),
+        kongswap_v1_hash => ExtensionSpec {
+            name: "KongSwap Treasury Manager".to_string(),
             version: ExtensionVersion(1),
+            topic: Topic::TreasuryAssetManagement,
+            extension_type: ExtensionType::TreasuryManager,
+        },
+        kongswap_v2_hash => ExtensionSpec {
+            name: "KongSwap Treasury Manager".to_string(),
+            version: ExtensionVersion(2),
             topic: Topic::TreasuryAssetManagement,
             extension_type: ExtensionType::TreasuryManager,
         }
