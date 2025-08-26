@@ -45,7 +45,6 @@ rust_decimal_macros = "1.36.0"
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-hex = "0.4.3"
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

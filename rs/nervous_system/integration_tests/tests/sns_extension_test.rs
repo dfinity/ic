@@ -183,9 +183,6 @@ async fn do_test_treasury_manager() {
             .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
 
         let wasm_path = PathBuf::from(wasm_path);
-        let blah = Wasm::from_file(&wasm_path);
-        println!("Kong V1 hash?: {:?}", blah.sha256_hash());
-        println!("Kong V1 hex: {}", hex::encode(&blah.sha256_hash()));
 
         let icp = Tokens::from_tokens(10).unwrap();
         cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
