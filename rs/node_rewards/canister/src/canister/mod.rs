@@ -1,6 +1,6 @@
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
-use crate::storage::VM;
+use crate::storage::{HISTORICAL_REWARDS, HISTORICAL_SUBNETS_FR, VM};
 use ic_base_types::SubnetId;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -9,6 +9,9 @@ use ic_node_rewards_canister_api::monthly_rewards::{
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
+};
+use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
+    NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -118,15 +121,12 @@ impl NodeRewardsCanister {
         &self,
         request: GetNodeProvidersRewardsRequest,
     ) -> Result<RewardsCalculatorResults, String> {
-        let reward_period = RewardPeriod::new(
-            request.from_timestamp_nanoseconds,
-            request.to_timestamp_nanoseconds,
-        )
-        .map_err(|e| e.to_string())?;
+        let reward_period =
+            RewardPeriod::new(request.from.into(), request.to.into()).map_err(|e| e.to_string())?;
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
-            .version_for_timestamp(reward_period.to.unix_ts_at_day_end())
+            .version_for_timestamp(reward_period.from.unix_ts_at_day_end())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         let rewards_table = registry_querier.get_rewards_table(version);
         let daily_metrics_by_subnet = self
@@ -261,6 +261,30 @@ impl NodeRewardsCanister {
                     (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
                 })
                 .collect();
+
+            HISTORICAL_SUBNETS_FR.with_borrow_mut(|historical_subnets_fr| {
+                for ((day, subnet_id), subnet_fr_percent) in result.subnets_fr {
+                    let key = SubnetsFailureRateKey {
+                        day: Some(day.into()),
+                        subnet_id: Some(subnet_id.get()),
+                    };
+                    let value = SubnetsFailureRateValue {
+                        subnet_fr_percent: Some(subnet_fr_percent.into()),
+                    };
+                    historical_subnets_fr.insert(key, value);
+                }
+            });
+
+            HISTORICAL_REWARDS.with_borrow_mut(|historical_rewards| {
+                for (provider_id, provider_rewards) in result.provider_results {
+                    let key = NodeProviderRewardsKey {
+                        principal_id: Some(provider_id),
+                        end_day: Some(result.end_day.into()),
+                        start_day: Some(result.start_day.into()),
+                    };
+                    historical_rewards.insert(key, provider_rewards.into());
+                }
+            });
 
             Ok(NodeProvidersRewards {
                 rewards_xdr_permyriad,

@@ -3,12 +3,16 @@ use crate::canister::test::test_utils::{
 };
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
-use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
+use crate::storage::HISTORICAL_REWARDS;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
+use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
+    NodeMetrics, SubnetMetricsKey, SubnetMetricsValue,
+};
+use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::NodeProviderRewardsKey;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -21,7 +25,8 @@ use maplit::btreemap;
 use rewards_calculation::rewards_calculator::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
-use rewards_calculation::rewards_calculator_results::{DayUtc, NodeProviderRewards};
+use rewards_calculation::rewards_calculator_results::NodeProviderRewards;
+use rewards_calculation::types::DayUtc;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -31,8 +36,8 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry: Arc<FakeRegistry>,
     metrics_manager: Rc<MetricsManager<VM>>,
 ) {
-    let day1: DayUtc = "2024-01-01".into();
-    let day2: DayUtc = "2024-01-02".into();
+    let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
+    let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();
     let subnet1 = test_subnet_id(1);
     let subnet2 = test_subnet_id(2);
     let p1 = test_provider_id(1);
@@ -329,7 +334,9 @@ const EXPECTED_TEST_1: &str = r#"{
     ],
     "base_rewards_type3": [
       {
-        "day": "01-01-2024",
+        "day": {
+          "value": 1704153599999999999
+        },
         "region": "North America:USA",
         "nodes_count": 2,
         "avg_rewards": "35000",
@@ -337,7 +344,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "value": "31500.00"
       },
       {
-        "day": "02-01-2024",
+        "day": {
+          "value": 1704239999999999999
+        },
         "region": "North America:USA",
         "nodes_count": 1,
         "avg_rewards": "30000",
@@ -353,7 +362,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "dc_id": "dc1",
         "daily_results": [
           {
-            "day": "01-01-2024",
+            "day": {
+              "value": 1704153599999999999
+            },
             "node_status": {
               "Assigned": {
                 "node_metrics": {
@@ -372,7 +383,9 @@ const EXPECTED_TEST_1: &str = r#"{
             "adjusted_rewards": "10000"
           },
           {
-            "day": "02-01-2024",
+            "day": {
+              "value": 1704239999999999999
+            },
             "node_status": {
               "Assigned": {
                 "node_metrics": {
@@ -399,7 +412,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "dc_id": "dc2",
         "daily_results": [
           {
-            "day": "01-01-2024",
+            "day": {
+              "value": 1704153599999999999
+            },
             "node_status": {
               "Assigned": {
                 "node_metrics": {
@@ -418,7 +433,9 @@ const EXPECTED_TEST_1: &str = r#"{
             "adjusted_rewards": "31500.00"
           },
           {
-            "day": "02-01-2024",
+            "day": {
+              "value": 1704239999999999999
+            },
             "node_status": {
               "Unassigned": {
                 "extrapolated_fr": "0"
@@ -438,7 +455,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "dc_id": "dc3",
         "daily_results": [
           {
-            "day": "01-01-2024",
+            "day": {
+              "value": 1704153599999999999
+            },
             "node_status": {
               "Assigned": {
                 "node_metrics": {
@@ -465,7 +484,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "dc_id": "dc1",
         "daily_results": [
           {
-            "day": "01-01-2024",
+            "day": {
+              "value": 1704153599999999999
+            },
             "node_status": {
               "Unassigned": {
                 "extrapolated_fr": "0.1125"
@@ -477,7 +498,9 @@ const EXPECTED_TEST_1: &str = r#"{
             "adjusted_rewards": "9800.0000"
           },
           {
-            "day": "02-01-2024",
+            "day": {
+              "value": 1704239999999999999
+            },
             "node_status": {
               "Unassigned": {
                 "extrapolated_fr": "0"
@@ -497,7 +520,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "dc_id": "dc1",
         "daily_results": [
           {
-            "day": "01-01-2024",
+            "day": {
+              "value": 1704153599999999999
+            },
             "node_status": {
               "Assigned": {
                 "node_metrics": {
@@ -538,7 +563,9 @@ const EXPECTED_TEST_1: &str = r#"{
         "dc_id": "dc1",
         "daily_results": [
           {
-            "day": "01-01-2024",
+            "day": {
+              "value": 1704153599999999999
+            },
             "node_status": {
               "Assigned": {
                 "node_metrics": {
@@ -567,10 +594,12 @@ fn test_get_node_providers_rewards() {
 
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
+    let from = DayUtc::try_from("2024-01-01").unwrap();
+    let to = DayUtc::try_from("2024-01-02").unwrap();
 
     let request = GetNodeProvidersRewardsRequest {
-        from_timestamp_nanoseconds: DayUtc::from("2024-01-01").get(),
-        to_timestamp_nanoseconds: DayUtc::from("2024-01-02").get(),
+        from: from.into(),
+        to: to.into(),
     };
     let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
         &CANISTER_TEST,
@@ -582,7 +611,6 @@ fn test_get_node_providers_rewards() {
     let inner_results = CANISTER_TEST
         .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
         .unwrap();
-
     let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
         serde_json::from_str(EXPECTED_TEST_1).unwrap();
     assert_eq!(inner_results.provider_results, expected);
@@ -594,4 +622,35 @@ fn test_get_node_providers_rewards() {
         },
     };
     assert_eq!(result_endpoint.rewards, Some(expected));
+
+    HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
+        let p1 = test_provider_id(1);
+        let p2 = test_provider_id(2);
+        let mut key = NodeProviderRewardsKey {
+            principal_id: Some(p1),
+            start_day: Some(from.into()),
+            end_day: Some(to.into()),
+        };
+
+        let p1_rewards = historical_rewards.get(&key).unwrap();
+        key.principal_id = Some(p2);
+        let p2_rewards = historical_rewards.get(&key).unwrap();
+
+        assert_eq!(
+            inner_results
+                .provider_results
+                .get(&p1)
+                .cloned()
+                .map(|r| r.into()),
+            Some(p1_rewards)
+        );
+        assert_eq!(
+            inner_results
+                .provider_results
+                .get(&p2)
+                .cloned()
+                .map(|r| r.into()),
+            Some(p2_rewards)
+        );
+    })
 }

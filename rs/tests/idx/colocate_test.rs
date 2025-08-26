@@ -4,13 +4,16 @@ use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
+use ic_system_test_driver::driver::group::{
+    CliArguments, SystemTestGroup, COLOCATE_CONTAINER_NAME,
+};
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
+use itertools::Itertools;
 use slog::{error, info, Logger};
 use ssh2::Session;
 use std::fs::File;
@@ -242,6 +245,13 @@ fn setup(env: TestEnv) {
         "".to_string()
     };
 
+    let cli_arguments = CliArguments::read_attribute(&env);
+    let exclude_logs_args = cli_arguments
+        .exclude_logs
+        .iter()
+        .flat_map(|pattern| ["--exclude-logs", pattern.as_str()])
+        .join(" ");
+
     let prepare_docker_script = &format!(
         r#"
 set -e
@@ -286,6 +296,7 @@ docker run \
     {required_host_features} \
     --group-base-name {colocated_test} \
     {logs_flag} \
+    {exclude_logs_args} \
     run
 EOF
 chmod +x /home/admin/run

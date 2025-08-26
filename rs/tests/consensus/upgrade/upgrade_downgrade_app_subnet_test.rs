@@ -122,7 +122,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
-    let initial_version = get_guestos_img_version().expect("target IC version");
+    let initial_version = get_guestos_img_version();
     info!(logger, "Upgrading to initial version: {}", initial_version);
     upgrade(
         &env,

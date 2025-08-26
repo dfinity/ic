@@ -1558,6 +1558,13 @@ async fn validate_and_render_register_extension(
 
 {extension_init}
 
+## WARNING
+
+Some Decentralized Exchanges lack slippage protection during deposits. Consequently, 
+deposited asset ratios may deviate from those specified in the proposal. 
+This can expose liquidity pool adaptors to mispricing, making them vulnerable to front-running 
+or sandwich attacks. However, any undeposited tokens are automatically returned to the SNS treasury account.
+
 ## Extension Configuration
 
 The extension will be deployed and configured according to the provided parameters.",

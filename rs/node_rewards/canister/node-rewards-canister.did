@@ -12,11 +12,13 @@ type NodeProvidersMonthlyXdrRewards = record {
     registry_version: opt nat64;
 };
 
-type UnixTsNanos = nat64;
+type DayUtc = record {
+  value: nat64;
+};
 
 type GetNodeProvidersRewardsRequest = record {
-  from_timestamp_nanoseconds: UnixTsNanos;
-  to_timestamp_nanoseconds: UnixTsNanos;
+  from: DayUtc;
+  to: DayUtc;
 };
 
 type NodeProvidersRewards = record {

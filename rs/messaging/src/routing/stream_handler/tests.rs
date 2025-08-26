@@ -4085,20 +4085,38 @@ fn with_test_setup_and_config(
 
         // Ensure the routing table maps `LOCAL_CANISTER` to `LOCAL_SUBNET`,
         // `REMOTE_CANISTER` to `REMOTE_SUBNET` and `UNKNOWN_CANISTER` to `None`.
-        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => LOCAL_SUBNET,
-            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => REMOTE_SUBNET,
-        }).unwrap());
-        assert_eq!(
-            Some(LOCAL_SUBNET),
-            routing_table.route(LOCAL_CANISTER.get())
+        let local_range = CanisterIdRange {
+            start: CanisterId::from(0x0),
+            end: CanisterId::from(0xff),
+        };
+        let remote_range = CanisterIdRange {
+            start: CanisterId::from(0x100),
+            end: CanisterId::from(0x1ff),
+        };
+        let routing_table = Arc::new(
+            RoutingTable::try_from(btreemap! {
+                local_range => LOCAL_SUBNET,
+                remote_range => REMOTE_SUBNET,
+            })
+            .unwrap(),
         );
         assert_eq!(
-            Some(REMOTE_SUBNET),
-            routing_table.route(REMOTE_CANISTER.get())
+            Some((local_range, LOCAL_SUBNET)),
+            routing_table.lookup_entry(*LOCAL_CANISTER)
         );
-        assert!(routing_table.route(UNKNOWN_CANISTER.get()).is_none());
+        assert_eq!(
+            Some((remote_range, REMOTE_SUBNET)),
+            routing_table.lookup_entry(*REMOTE_CANISTER)
+        );
+        assert!(routing_table.lookup_entry(*UNKNOWN_CANISTER).is_none());
         state.metadata.network_topology.routing_table = routing_table;
+        for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
+            state
+                .metadata
+                .network_topology
+                .subnets
+                .insert(subnet, Default::default());
+        }
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
         let mut canister_state = CanisterStateBuilder::new()
