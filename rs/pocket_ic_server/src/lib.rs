@@ -35,7 +35,8 @@
 //! been carried out. A state which has no outcoming computations is called a leaf.
 
 mod beta_features;
-mod external_canister_types;
+
+pub mod external_canister_types;
 pub mod pocket_ic;
 pub mod state_api;
 
