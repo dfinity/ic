@@ -678,12 +678,14 @@ pub(super) mod tests {
 
             // Create two pre-signature stashes, one for the first key, one for a new key
             let mut stashes = BTreeMap::new();
+            // The first stash has 2 pre-signatures
             stashes.insert(key_ids[0].clone(), fake_pre_signature_stash(&key_ids[0], 2));
             let new_key_id = IDkgMasterPublicKeyId::try_from(key_id_with_name(
                 key_ids[0].inner(),
                 "some_new_key",
             ))
             .unwrap();
+            // The second stash has 1 pre-signature
             stashes.insert(new_key_id.clone(), fake_pre_signature_stash(&new_key_id, 1));
 
             let mut state = ic_test_utilities_state::get_initial_state(0, 0);
