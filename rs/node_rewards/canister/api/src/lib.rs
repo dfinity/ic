@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::fmt::Display;
 
 pub mod monthly_rewards;
-pub mod provider_rewards;
+pub mod provider_rewards_calculation;
 pub mod providers_rewards;
 
 type UnixTsNanos = u64;

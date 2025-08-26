@@ -7,8 +7,8 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
 };
-use ic_node_rewards_canister_api::provider_rewards::{
-    GetNodeProviderRewardsRequest, GetNodeProviderRewardsResponse,
+use ic_node_rewards_canister_api::provider_rewards_calculation::{
+    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
@@ -295,24 +295,24 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_node_provider_rewards<S: RegistryDataStableMemory>(
+    pub fn get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-        request: GetNodeProviderRewardsRequest,
-    ) -> GetNodeProviderRewardsResponse {
-        return match inner_get_node_provider_rewards::<S>(canister, request) {
-            Ok(rewards) => GetNodeProviderRewardsResponse {
+        request: GetNodeProviderRewardsCalculationRequest,
+    ) -> GetNodeProviderRewardsCalculationResponse {
+        return match inner_get_node_provider_rewards_calculation::<S>(canister, request) {
+            Ok(rewards) => GetNodeProviderRewardsCalculationResponse {
                 rewards: Some(rewards),
                 error: None,
             },
-            Err(e) => GetNodeProviderRewardsResponse {
+            Err(e) => GetNodeProviderRewardsCalculationResponse {
                 rewards: None,
                 error: Some(e),
             },
         };
 
-        fn inner_get_node_provider_rewards<S: RegistryDataStableMemory>(
+        fn inner_get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
             canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-            request: GetNodeProviderRewardsRequest,
+            request: GetNodeProviderRewardsCalculationRequest,
         ) -> Result<NodeProviderRewards, String> {
             let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
             let request_inner = GetNodeProvidersRewardsRequest {
