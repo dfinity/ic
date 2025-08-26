@@ -55,9 +55,9 @@ component_files = {
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
+    Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring
-    Label("monitoring/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
     Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",
     Label("monitoring/node_exporter/node_exporter.key"): "/etc/node_exporter/node_exporter.key",
     Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",
