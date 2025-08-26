@@ -81,7 +81,7 @@ pub struct CanisterStatusResponse {
     pub reserved_cycles: candid::Nat,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum CanisterStatusType {
     #[serde(rename = "running")]
     Running,
@@ -125,7 +125,22 @@ pub async fn canister_status(
                 "Call `canister_status` for {:?}, {:?} failed {:?}",
                 canister_id, subnet_id, e
             );
-            ProcessingResult::NoProgress
+            match e {
+                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
+                | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
+                ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
+                    if call_rejected
+                        .reject_message()
+                        .contains("Only the controllers of the canister")
+                    {
+                        ProcessingResult::FatalFailure(ValidationError::NotController {
+                            canister: canister_id,
+                        })
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+            }
         }
     }
 }
