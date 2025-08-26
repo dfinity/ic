@@ -204,6 +204,8 @@ pub fn registration(env: TestEnv) {
 }
 
 /// nns_recovery_test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
+/// nns_recovery_test uses a DKG interval of 9, which is large enough for a subnet of that size and
+/// as small as possible to keep the test runtime low
 /// nns_recovery_test's RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual
 /// version of the recovery GuestOS image, that Node Providers would use as input to
 /// guestos-recovery-upgrader
