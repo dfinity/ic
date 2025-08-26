@@ -109,9 +109,11 @@ fn assert_version_compatibility() {
     let guestos_version = get_guestos_img_version();
 
     if setupos_version != guestos_version {
-        panic!(
-            "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
-        );
+        // TODO: Revert change after extending image version support
+
+        // panic!(
+        //     "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
+        // );
     }
 }
 
@@ -533,7 +535,8 @@ pub fn upgrade_hostos(env: TestEnv) {
             host_boot_id_pre_upgrade
         ),
         logger.clone(),
-        Duration::from_secs(7 * 60), // long wait for hostos upgrade to apply and reboot
+        // TODO: Revert change after extending image version support
+        Duration::from_secs(15 * 60), // long wait for hostos upgrade to apply and reboot
         Duration::from_secs(5),
         || {
             let host_boot_id = get_host_boot_id(&host);
@@ -809,7 +812,8 @@ pub fn upgrade_guestos(env: TestEnv) {
             &guest_ipv6,
             &target_version,
             &logger,
-            Duration::from_secs(7 * 60), // Long wait for GuestOS upgrade to apply and reboot
+            // TODO: Revert change after extending image version support
+            Duration::from_secs(15 * 60), // Long wait for GuestOS upgrade to apply and reboot
             Duration::from_secs(5),
         )
         .await

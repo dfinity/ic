@@ -13,6 +13,7 @@ use p256::{
     AffinePoint, NistP256, Scalar,
 };
 use rand::{CryptoRng, RngCore};
+use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
 /// An error indicating that decoding a key failed
@@ -26,14 +27,12 @@ pub enum KeyDecodingError {
     UnexpectedPemLabel(String),
 }
 
-lazy_static::lazy_static! {
+static ECDSA_OID: LazyLock<simple_asn1::OID> =
+    LazyLock::new(|| simple_asn1::oid!(1, 2, 840, 10045, 2, 1));
 
-    /// See RFC 3279 section 2.3.5
-    static ref ECDSA_OID: simple_asn1::OID = simple_asn1::oid!(1, 2, 840, 10045, 2, 1);
-
-    /// See RFC 5759 section 3.2
-    static ref SECP256R1_OID: simple_asn1::OID = simple_asn1::oid!(1, 2, 840, 10045, 3, 1, 7);
-}
+/// See RFC 5759 section 3.2
+static SECP256R1_OID: LazyLock<simple_asn1::OID> =
+    LazyLock::new(|| simple_asn1::oid!(1, 2, 840, 10045, 3, 1, 7));
 
 /// A component of a derivation path
 #[derive(Clone, Debug)]

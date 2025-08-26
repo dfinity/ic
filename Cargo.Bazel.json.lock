@@ -1,5 +1,5 @@
 {
-  "checksum": "ddc118fb052f995c36235210f4baa34b288eaf1ebab256bb7652152bf03ebf8c",
+  "checksum": "af4be329ddc15f6da99dbbf59deaca96afa9659ce5be7011f4c9da31d7db39e3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21936,6 +21936,10 @@
             {
               "id": "p256 0.13.2",
               "target": "p256"
+            },
+            {
+              "id": "p384 0.13.1",
+              "target": "p384"
             },
             {
               "id": "pairing 0.23.0",
@@ -65885,6 +65889,7 @@
         "crate_features": {
           "common": [
             "default",
+            "getrandom",
             "pem",
             "sha2",
             "std",
@@ -95739,6 +95744,7 @@
     "opentelemetry-prometheus 0.13.0",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
+    "p384 0.13.1",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
     "paste 1.0.15",

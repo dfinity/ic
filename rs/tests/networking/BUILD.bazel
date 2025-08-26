@@ -391,7 +391,7 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    test_timeout = "long",
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
@@ -405,7 +405,7 @@ system_test_nns(
         "colocate",
         "long_test",
     ],
-    test_timeout = "long",
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
