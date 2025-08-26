@@ -482,7 +482,9 @@ pub fn nns_recovery_test(env: TestEnv) {
         Duration::from_secs(10),
     );
 
-    // add SSH key as backup key to the registry
+    // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
+    // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
+    // the latest certified height of the subnet.
     info!(logger, "Update the registry with the backup key");
     let ssh_priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
