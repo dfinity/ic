@@ -15,6 +15,12 @@ pub trait EncodeSevCustomData {
 }
 
 /// Implement `EncodeSevCustomData` for all types that implement `der::Encode`
+///
+/// DER is a well-defined, stable encoding format. We apply the also stable SHA-512 hash function to
+/// the output of the DER encoding to produce a 64-byte array.
+///
+/// This makes it easy to make a type suitable for SEV custom data by annotating it with
+/// `#[derive(der::Sequence)]`.
 impl<T: Encode> EncodeSevCustomData for T {
     fn encode_for_sev(&self) -> Result<[u8; 64], EncodingError> {
         let mut encoded = vec![];
