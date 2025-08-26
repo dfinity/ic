@@ -3,7 +3,6 @@ use ic_base_types::PrincipalId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use prost::Message;
-use rewards_calculation::types::DayUtc;
 use serde::{Serialize, Serializer};
 use std::borrow::Cow;
 
