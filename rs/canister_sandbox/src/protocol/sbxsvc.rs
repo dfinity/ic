@@ -476,7 +476,7 @@ mod tests {
                     execution_mode: ExecutionMode::Replicated,
                     subnet_memory_saturation: ResourceSaturation::new(8, 5, 10),
                 },
-                subnet_available_memory: SubnetAvailableMemory::new(123, 12, 1),
+                subnet_available_memory: SubnetAvailableMemory::new_for_testing(123, 12, 1),
                 next_wasm_memory_id: MemoryId::new(),
                 next_stable_memory_id: MemoryId::new(),
                 sandbox_safe_system_state: SandboxSafeSystemState::new(

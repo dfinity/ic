@@ -57,7 +57,7 @@ fn make_get_successors_request(
     headers: Vec<Vec<u8>>,
 ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
     let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
-        network: Network::Regtest,
+        network: Network::BitcoinRegtest,
         anchor,
         processed_block_hashes: headers,
     });
@@ -75,7 +75,7 @@ fn make_send_tx_request(
     raw_tx: &[u8],
 ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
     let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
-        network: Network::Regtest,
+        network: Network::BitcoinRegtest,
         transaction: raw_tx.to_vec(),
     });
 

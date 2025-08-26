@@ -5403,6 +5403,7 @@ dependencies = [
  "nix 0.24.3",
  "parking_lot",
  "rand 0.8.5",
+ "sev",
  "tempfile",
 ]
 
@@ -10199,6 +10200,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc3-test-ledger"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-icrc1",
+ "ic-icrc1-ledger",
+ "ic-icrc1-test-utils",
+ "ic-ledger-suite-state-machine-tests",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "icrc-ledger-types",
+ "num-traits",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-identity-hsm"
 version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10965,6 +10985,7 @@ name = "ic-nervous-system-common-test-utils"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "candid",
  "dfn_core",
  "futures",
  "ic-nervous-system-canisters",
@@ -13109,7 +13130,6 @@ dependencies = [
  "hex-literal 0.4.1",
  "hmac",
  "k256 0.13.4",
- "lazy_static",
  "num-bigint 0.4.6",
  "pem 1.1.1",
  "rand 0.8.5",
@@ -13128,7 +13148,6 @@ dependencies = [
  "hex",
  "hex-literal 0.4.1",
  "hmac",
- "lazy_static",
  "num-bigint 0.4.6",
  "p256",
  "pem 1.1.1",
@@ -15392,13 +15411,17 @@ dependencies = [
  "der 0.7.9",
  "hkdf",
  "mockall",
+ "p384",
  "pem 1.1.1",
+ "rand 0.8.5",
  "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
+ "rsa",
  "sev",
  "sha2 0.10.9",
  "tempfile",
+ "x509-cert",
 ]
 
 [[package]]
@@ -19076,7 +19099,6 @@ dependencies = [
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
- "lazy_static",
  "reqwest 0.12.15",
  "schemars",
  "serde",
