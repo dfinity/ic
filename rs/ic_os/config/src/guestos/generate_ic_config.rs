@@ -231,34 +231,28 @@ fn substitute_template(template_content: &str, config_vars: &ConfigVariables) ->
 }
 
 fn get_network_interface() -> Result<String> {
-    // Find network interfaces (excluding virtual ones)
-    let output = Command::new("find")
-        .args([
-            "/sys/class/net",
-            "-type",
-            "l",
-            "-not",
-            "-lname",
-            "*virtual*",
-            "-exec",
-            "basename",
-            "{}",
-            ";",
-        ])
-        .output()
-        .context("Failed to find network interfaces")?;
-
-    let interfaces: Vec<String> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
-
-    if interfaces.is_empty() {
-        anyhow::bail!("No network interfaces found");
-    }
-
-    // Return the first interface
-    Ok(interfaces[0].clone())
+    String::from_utf8_lossy(
+        &Command::new("find")
+            .args([
+                "/sys/class/net",
+                "-type",
+                "l",
+                "-not",
+                "-lname",
+                "*virtual*",
+                "-exec",
+                "basename",
+                "{}",
+                ";",
+            ])
+            .output()
+            .context("Failed to find network interfaces")?
+            .stdout,
+    )
+    .lines()
+    .next()
+    .map(|s| s.to_string())
+    .ok_or_else(|| anyhow::anyhow!("No network interfaces found"))
 }
 
 fn get_interface_ipv6_address(interface: &str) -> Result<String> {
