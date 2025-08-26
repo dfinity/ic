@@ -4,7 +4,7 @@ use der::EncodePem;
 use p384::ecdsa::signature::Signer;
 use p384::ecdsa::Signature;
 use p384::pkcs8::EncodePublicKey;
-use rand::thread_rng;
+use rand::SeedableRng;
 use rsa::RsaPrivateKey;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
 use sev::firmware::guest::AttestationReport;
@@ -87,8 +87,8 @@ pub struct FakeAttestationReportSigner {
 impl FakeAttestationReportSigner {
     const ATTESTATION_REPORT_MEASURABLE_LEN: usize = 0x2a0;
 
-    pub fn new() -> Self {
-        let mut rng = thread_rng();
+    pub fn new(seed: [u8; 32]) -> Self {
+        let mut rng = rand::rngs::StdRng::from_seed(seed);
 
         // ARK - RSA with RSASSA-PSS (root cert)
         let ark_key = RsaPrivateKey::new(&mut rng, 1024).unwrap();
@@ -157,7 +157,7 @@ impl FakeAttestationReportSigner {
 
 impl Default for FakeAttestationReportSigner {
     fn default() -> Self {
-        Self::new()
+        Self::new([0; 32])
     }
 }
 
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_fake_cert_chain_and_signature_are_accepted_by_sev_lib() {
-        let signer = FakeAttestationReportSigner::new();
+        let signer = FakeAttestationReportSigner::default();
         let attestation_report = AttestationReportBuilder::new().build_signed(&signer);
 
         let cert_chain = Chain::from_pem(

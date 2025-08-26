@@ -161,6 +161,8 @@ members = [
     "rs/https_outcalls/consensus",
     "rs/https_outcalls/service",
     "rs/http_utils",
+    "rs/ic_os/attestation",
+    "rs/ic_os/attestation/testing",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/inject_files",
@@ -615,7 +617,7 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
-der = { version = "0.7", default-features = false }
+der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
