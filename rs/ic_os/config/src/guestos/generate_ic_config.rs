@@ -126,11 +126,6 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
         }
     }
 
-    // Helper function to set empty string as default
-    fn with_empty_default(value: String) -> String {
-        with_default(value, "")
-    }
-
     let nns_urls = guestos_config
         .icos_settings
         .nns_urls
@@ -200,9 +195,9 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
         backup_retention_time_secs: with_default(backup_retention_time_secs, "86400"), // 24h
         backup_purging_interval_secs: with_default(backup_purging_interval_secs, "3600"), // 1h
         query_stats_epoch_length: with_default(query_stats_epoch_length, "600"), // Default is 600 blocks (around 10min)
-        jaeger_addr: with_empty_default(jaeger_addr),
-        domain_name: with_empty_default(domain_name),
-        node_reward_type: with_empty_default(node_reward_type),
+        jaeger_addr,
+        domain_name,
+        node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
     })
 }
