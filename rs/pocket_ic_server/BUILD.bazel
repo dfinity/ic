@@ -239,7 +239,7 @@ rust_ic_test(
 )
 
 rust_test(
-    name = "external_types_test",
+    name = "external_types_tests",
     size = "small",
     srcs = ["tests/external_types_tests.rs"],
     data = MAINNET_CANISTER_DATA,
