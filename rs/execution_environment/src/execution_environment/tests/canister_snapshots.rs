@@ -2375,7 +2375,7 @@ fn verify_data_wasm_heap(
     let args_main = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory {
+        CanisterSnapshotDataKind::WasmMemory {
             offset: 0,
             size: max_chunk_size,
         },
@@ -2386,7 +2386,7 @@ fn verify_data_wasm_heap(
     let args_main = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory {
+        CanisterSnapshotDataKind::WasmMemory {
             offset: max_chunk_size,
             size: rest,
         },
@@ -2501,7 +2501,7 @@ fn read_canister_snapshot_data_fails_bad_slice() {
     let args_module = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory {
+        CanisterSnapshotDataKind::WasmMemory {
             offset: 0,
             size: 1 + max_slice_size,
         },
@@ -2515,7 +2515,7 @@ fn read_canister_snapshot_data_fails_bad_slice() {
     let args_module = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory {
+        CanisterSnapshotDataKind::WasmMemory {
             offset: (pages - 1) * PAGE_SIZE as u64,
             size: PAGE_SIZE as u64 + 1000,
         },
@@ -2582,7 +2582,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     let args = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+        CanisterSnapshotDataKind::WasmMemory { offset: 0, size: 0 },
     );
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
@@ -2628,7 +2628,7 @@ fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
     let args = ReadCanisterSnapshotDataArgs::new(
         other_canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+        CanisterSnapshotDataKind::WasmMemory { offset: 0, size: 0 },
     );
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
@@ -2639,7 +2639,7 @@ fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
     let args = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         (canister_id, 42).into(),
-        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+        CanisterSnapshotDataKind::WasmMemory { offset: 0, size: 0 },
     );
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
@@ -2795,7 +2795,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     let args_main = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory {
+        CanisterSnapshotDataKind::WasmMemory {
             offset: 0,
             size: wasm_memory_size,
         },
@@ -2870,7 +2870,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     let args_heap = UploadCanisterSnapshotDataArgs::new(
         canister_id,
         new_snapshot_id,
-        CanisterSnapshotDataOffset::MainMemory { offset: 0 },
+        CanisterSnapshotDataOffset::WasmMemory { offset: 0 },
         snapshot_wasm_heap,
     );
     test.subnet_message(

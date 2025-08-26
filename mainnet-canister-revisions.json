@@ -108,8 +108,8 @@
     "sha256": "5cb2b88b043007b297a084cfe51820e83df836227b76ae140b897cb25f40e945"
   },
   "registry": {
-    "rev": "2407385056dbcd1d5eb15b84a9c0cd5f511ff997",
-    "sha256": "0272a67e02f1a6c3356b00fe11c2ea1574f40f0cfe27001831668dce1c091afa"
+    "rev": "abbed6b27a69f85f3ff539ed9a214faa666e1299",
+    "sha256": "45d28c292ce93744258bf904b107fcdf11a6bc8c87fa4dae04ab7131bc51ac3f"
   },
   "root": {
     "rev": "2407385056dbcd1d5eb15b84a9c0cd5f511ff997",

@@ -606,6 +606,11 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
         ).unwrap());
+        provided_state
+            .metadata
+            .network_topology
+            .subnets
+            .insert(REMOTE_SUBNET, Default::default());
 
         // Set up the provided_canister_states.
         let provided_canister_states = canister_states_with_outputs(msgs.clone());

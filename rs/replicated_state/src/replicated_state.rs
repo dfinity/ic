@@ -907,11 +907,7 @@ impl ReplicatedState {
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
-        let subnet_id = self
-            .metadata
-            .network_topology
-            .routing_table
-            .route(principal_id);
+        let subnet_id = self.metadata.network_topology.route(principal_id);
 
         match subnet_id {
             None => Err(UserError::new(
@@ -1399,8 +1395,12 @@ impl ReplicatedState {
         // Retain only canisters hosted by `own_subnet_id`.
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
-        canister_states
-            .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
+        canister_states.retain(|canister_id, _| {
+            routing_table
+                .lookup_entry(*canister_id)
+                .map(|(_range, subnet_id)| subnet_id)
+                == Some(subnet_id)
+        });
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //

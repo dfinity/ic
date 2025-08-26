@@ -3290,7 +3290,7 @@ impl ExecutionEnvironment {
 
         let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
-        let source_subnet = topology.routing_table.route(request.sender.get());
+        let source_subnet = topology.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
             let cost_schedule = state.get_own_cost_schedule();
             let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
