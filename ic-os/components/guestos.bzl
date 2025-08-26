@@ -74,10 +74,10 @@ component_files = {
     Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
 
     # monitoring
-    Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
-    Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.service"): "/etc/systemd/system/ipv4-connectivity-check.service",
-    Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.timer"): "/etc/systemd/system/ipv4-connectivity-check.timer",
-    Label("monitoring/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
+    Label("guestos/monitoring/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
+    Label("guestos/monitoring/ipv4-connectivity-check/ipv4-connectivity-check.service"): "/etc/systemd/system/ipv4-connectivity-check.service",
+    Label("guestos/monitoring/ipv4-connectivity-check/ipv4-connectivity-check.timer"): "/etc/systemd/system/ipv4-connectivity-check.timer",
+    Label("guestos/monitoring/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
     Label("guestos/monitoring/fstrim/fstrim_tool.service"): "/etc/systemd/system/fstrim_tool.service",
     Label("guestos/monitoring/fstrim/fstrim_tool.timer"): "/etc/systemd/system/fstrim_tool.timer",
     Label("guestos/monitoring/fstrim/setup-fstrim-metrics.service"): "/etc/systemd/system/setup-fstrim-metrics.service",
