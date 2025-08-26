@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
 use candid::{Encode, Principal};
 use ic_agent::agent::CallResponse;
@@ -131,6 +132,7 @@ fn test_creation_of_instance_extended() {
         bitcoind_addr: None,
         icp_features: None,
         allow_incomplete_state: None,
+        initial_time: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

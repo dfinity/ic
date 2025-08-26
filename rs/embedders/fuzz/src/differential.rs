@@ -1,4 +1,5 @@
-use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
+use crate::ic_wasm::ICWasmModule;
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::InstanceRunResult;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_interfaces::execution_environment::SystemApi;
@@ -20,7 +21,6 @@ type DeterministicExecutionResult = Vec<(
 pub fn run_fuzzer(module: ICWasmModule) {
     let wasm = module.module.to_bytes();
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
-    let memory64_enabled = module.config.memory64_enabled;
 
     if wasm_methods.is_empty() {
         return;
@@ -41,7 +41,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
                 let wasm = wasm.clone();
                 let wasm_methods = wasm_methods.clone();
 
-                async move { execute_wasm(wasm, wasm_methods, memory64_enabled) }
+                async move { execute_wasm(wasm, wasm_methods) }
             })
         })
         .collect::<Vec<_>>();
@@ -121,13 +121,9 @@ fn equal(first: DeterministicExecutionResult, second: DeterministicExecutionResu
 }
 
 #[inline(always)]
-fn execute_wasm(
-    wasm: Vec<u8>,
-    wasm_methods: BTreeSet<WasmMethod>,
-    memory64_enabled: bool,
-) -> DeterministicExecutionResult {
+fn execute_wasm(wasm: Vec<u8>, wasm_methods: BTreeSet<WasmMethod>) -> DeterministicExecutionResult {
     let mut result = vec![];
-    let config = ic_embedders_config(memory64_enabled);
+    let config = EmbeddersConfig::default();
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)
         .with_config(config)

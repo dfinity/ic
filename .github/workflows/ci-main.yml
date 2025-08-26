@@ -71,8 +71,13 @@ jobs:
               release_build="true"
               diff_only="false"
               skip_long_tests="false"
+          elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
+              # On pushes to dev-gh-* branches don't do a release, build all targets except long_tests.
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
           else
-              # default behavior is to build all targets and not upload to s3
+              # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
               diff_only="true"
               skip_long_tests="true"
@@ -127,17 +132,17 @@ jobs:
           echo "::notice::Node Name: ${NODE_NAME}"
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
-        env:
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-test-all
           run: |
             set -euo pipefail
+
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            SKIP_LONG_TESTS='${{ needs.config.outputs.skip_long_tests }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
             # Determine which tests to skip
             EXCLUDED_TEST_TAGS=(
@@ -147,10 +152,6 @@ jobs:
                 fi_tests_nightly
                 nns_tests_nightly
             )
-
-            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
-              EXCLUDED_TEST_TAGS+=(long_test)
-            fi
 
             # Prepend tags with '-' and join them with commas for Bazel
             TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
@@ -173,36 +174,24 @@ jobs:
               bazel_args+=( --config=stamped )
             fi
 
-            if [[ "$RUN_ON_DIFF_ONLY" == 'true' ]]; then
-                target_pattern_file=$(mktemp)
-                trap "rm $target_pattern_file" INT TERM EXIT
-
-                merge_base_sha="$MERGE_BASE_SHA"
-                branch_head_sha="$BRANCH_HEAD_SHA"
-
-                # we can't use HEAD as a fallback for branch_head_sha because that is
-                # the merge commit which contains the changes of the current HEAD of master
-                # XXX: the logic was ported from a legacy script though ranges like `HEAD..`
-                # may not make much sense
-                commit_range="${merge_base_sha:-HEAD}..${branch_head_sha:-}"
-                # get bazel targets that changed in the commit range and take the union with
-                # the targets that are expected to be built.
-                comm -12 \
-                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh test "$commit_range" | sort) \
-                  <(IFS='+'; bazel query "//... except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
-
-                # if bazel targets is empty we don't need to run any tests
-                if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
-                  echo "No bazel targets to build"
-                  exit 0
-                fi
-
-                # If there are targets to build, pass them as a file to avoid bash & the OS
-                # complaining about the argument list being too long.
-                bazel_args+=( --target_pattern_file="$target_pattern_file" )
-            else
-                bazel_args+=( //... )
+            # If there are targets to test, pass them as a file to bazel to avoid bash & the OS
+            # complaining about the argument list being too long.
+            target_pattern_file=$(mktemp)
+            trap "rm $target_pattern_file" INT TERM EXIT
+            targets_args=()
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
             fi
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            fi
+            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
+            # if bazel targets is empty we don't need to run any tests
+            if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+              echo "No bazel targets to build"
+              exit 0
+            fi
+            bazel_args+=( --target_pattern_file="$target_pattern_file" )
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
@@ -467,12 +456,56 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           execlogs-artifact-name: execlogs-build-ic
-          run: ./ci/scripts/run-build-ic.sh
-        env:
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
+          run: |
+            set -euo pipefail
+
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+            cd "$CI_PROJECT_DIR"
+
+            # run full release build on "protected" branches
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+                ci/container/build-ic.sh -i -c -b
+                exit 0
+            fi
+
+            # run full non-release build if not asked to diff
+            if ! [ "$DIFF_ONLY" == 'true' ]; then
+                ci/container/build-ic.sh -i -c -b --no-release
+                exit 0
+            fi
+
+            # otherwise, infer targets to build
+            targets=$(mktemp)
+            trap "rm $targets" INT TERM EXIT
+            targets_args=()
+            commit_range_arg=""
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            fi
+            ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
+
+            ARGS=()
+
+            if grep -q '^//ic-os' <"$targets"; then
+                ARGS+=(-i)
+            fi
+            if grep -q '^//publish/canisters' <"$targets"; then
+                ARGS+=(-c)
+            fi
+            if grep -q '^//publish/binaries' <"$targets"; then
+                ARGS+=(-b)
+            fi
+
+            if [[ ${#ARGS[@]} -eq 0 ]]; then
+                echo "No changes that require building IC-OS, binaries or canisters."
+                exit 0
+            fi
+
+            ci/container/build-ic.sh "${ARGS[@]}" --no-release
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
@@ -577,7 +610,8 @@ jobs:
         if: |
           steps.filter.outputs.cargo == 'true' ||
           github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'workflow_call'
         shell: bash
         run: |
           set -eExuo pipefail
@@ -614,9 +648,24 @@ jobs:
         if: |
           steps.filter.outputs.cargo == 'true' ||
           github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'workflow_call'
         shell: bash
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
           cargo build --release --locked
+  check-pull-request-bazel-targets:
+    name: Check PULL_REQUEST_BAZEL_TARGETS
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+      options: >-
+        -e NODE_NAME
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check PULL_REQUEST_BAZEL_TARGETS
+        run: ./ci/bazel-scripts/targets.py check

@@ -153,7 +153,7 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256()?, get_guestos_img_url()?);
+    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256(), get_guestos_img_url());
 
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let group_setup = GroupSetup::read_attribute(test_env);

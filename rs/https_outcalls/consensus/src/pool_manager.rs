@@ -18,12 +18,12 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig, Height, ReplicaVersion,
 };
-use rand::Rng;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -34,9 +34,6 @@ use std::{
 
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
-
-/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
-const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 100;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -53,17 +50,10 @@ pub struct CanisterHttpPoolManagerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     membership: Arc<Membership>,
     replica_config: ReplicaConfig,
+    subnet_type: SubnetType,
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
     metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
-}
-
-//TODO(SOCKS_PROXY_DL): Remove this function.
-fn should_dl_socks_proxy() -> bool {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
-    // This is a dark launch feature. We want to test the SOCKS proxy with some percentage of requests.
-    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 impl CanisterHttpPoolManagerImpl {
@@ -74,6 +64,7 @@ impl CanisterHttpPoolManagerImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         replica_config: ReplicaConfig,
+        subnet_type: SubnetType,
         registry_client: Arc<dyn RegistryClient>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -89,6 +80,7 @@ impl CanisterHttpPoolManagerImpl {
             http_adapter_shim,
             crypto,
             replica_config,
+            subnet_type,
             membership,
             consensus_pool_cache,
             registry_client,
@@ -162,8 +154,18 @@ impl CanisterHttpPoolManagerImpl {
     fn get_socks_proxy_addrs(&self) -> Vec<String> {
         let latest_registry_version = self.registry_client.get_latest_version();
 
-        self.registry_client
-            .get_api_boundary_node_ids(latest_registry_version)
+        let allowed_boundary_nodes = match self.subnet_type {
+            SubnetType::System => self
+                .registry_client
+                .get_system_api_boundary_node_ids(latest_registry_version),
+            SubnetType::Application | SubnetType::VerifiedApplication => {
+                //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
+                // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
+                Ok(vec![])
+            }
+        };
+
+        allowed_boundary_nodes
             .unwrap_or_else(|e| {
                 warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
                 Vec::new()
@@ -233,11 +235,7 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let socks_proxy_addrs = if should_dl_socks_proxy() {
-            self.get_socks_proxy_addrs()
-        } else {
-            Vec::new()
-        };
+        let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
         for (id, context) in http_requests {
             if let Replication::NonReplicated(delegated_node_id) = context.replication {
@@ -536,7 +534,6 @@ pub mod test {
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
@@ -672,6 +669,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -779,6 +777,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -897,6 +896,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -994,6 +994,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -1057,6 +1058,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -1130,6 +1132,7 @@ pub mod test {
                     crypto.clone(),
                     pool.get_cache(),
                     replica_config.clone(),
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,

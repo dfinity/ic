@@ -1,8 +1,8 @@
-use core::convert::Into;
-use core::option::Option::Some;
-
-use crate::pb::v1::{self as pb};
-use crate::topics;
+use crate::{
+    pb::v1::{self as pb},
+    topics,
+};
+use core::{convert::Into, option::Option::Some};
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -4412,8 +4412,15 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                     native_functions,
                     custom_functions,
                 },
+            extension_operations,
             is_critical,
         } = value;
+
+        let extension_operations = extension_operations
+            .into_iter()
+            .map(pb_api::topics::RegisteredExtensionOperationSpec::from)
+            .collect();
+
         pb_api::topics::TopicInfo {
             topic: Some(topic),
             name: Some(name),
@@ -4430,7 +4437,57 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                     .map(pb_api::NervousSystemFunction::from)
                     .collect(),
             ),
+            extension_operations: Some(extension_operations),
             is_critical: Some(is_critical),
+        }
+    }
+}
+
+// Conversions for ExtensionOperationType
+impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
+    fn from(value: crate::extensions::OperationType) -> Self {
+        match value {
+            crate::extensions::OperationType::TreasuryManagerDeposit => {
+                pb_api::ExtensionOperationType::TreasuryManagerDeposit
+            }
+            crate::extensions::OperationType::TreasuryManagerWithdraw => {
+                pb_api::ExtensionOperationType::TreasuryManagerWithdraw
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionType
+impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
+    fn from(value: crate::extensions::ExtensionType) -> Self {
+        match value {
+            crate::extensions::ExtensionType::TreasuryManager => {
+                pb_api::ExtensionType::TreasuryManager
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionOperationSpec
+impl From<crate::extensions::ExtensionOperationSpec> for pb_api::ExtensionOperationSpec {
+    fn from(value: crate::extensions::ExtensionOperationSpec) -> Self {
+        pb_api::ExtensionOperationSpec {
+            operation_type: Some(pb_api::ExtensionOperationType::from(value.operation_type)),
+            description: Some(value.description),
+            extension_type: Some(pb_api::ExtensionType::from(value.extension_type)),
+            topic: Some(pb_api::topics::Topic::try_from(value.topic).unwrap()),
+        }
+    }
+}
+
+// Conversions for RegisteredExtensionOperationSpec
+impl From<crate::topics::RegisteredExtensionOperationSpec>
+    for pb_api::topics::RegisteredExtensionOperationSpec
+{
+    fn from(value: crate::topics::RegisteredExtensionOperationSpec) -> Self {
+        pb_api::topics::RegisteredExtensionOperationSpec {
+            canister_id: Some(value.canister_id.get()),
+            spec: Some(pb_api::ExtensionOperationSpec::from(value.spec)),
         }
     }
 }

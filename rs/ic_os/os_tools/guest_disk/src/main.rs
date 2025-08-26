@@ -11,6 +11,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
+use ic_sev::guest::is_sev_active;
 use ic_sev::guest::key_deriver::SevKeyDeriver;
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
@@ -60,6 +61,7 @@ fn main() -> Result<()> {
     run(
         args,
         &guestos_config,
+        is_sev_active().context("Failed to check if SEV is active")?,
         SevKeyDeriver::new,
         Path::new(PREVIOUS_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
@@ -71,16 +73,14 @@ fn main() -> Result<()> {
 fn run(
     args: Args,
     guestos_config: &GuestOSConfig,
+    is_sev_active: bool,
     sev_key_deriver_factory: impl Fn() -> Result<SevKeyDeriver>,
     previous_key_path: &Path,
     generated_key_path: &Path,
 ) -> Result<()> {
     libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_log), None);
 
-    let mut encryption: Box<dyn DiskEncryption> = if guestos_config
-        .icos_settings
-        .enable_trusted_execution_environment
-    {
+    let mut encryption: Box<dyn DiskEncryption> = if is_sev_active {
         Box::new(SevDiskEncryption {
             sev_key_deriver: sev_key_deriver_factory().context("Failed to create SevKeyDeriver")?,
             guest_vm_type: guestos_config.guest_vm_type,

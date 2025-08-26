@@ -250,7 +250,7 @@ fn step_2_extrapolated_fr(
     for day in all_rewardable_days {
         let frs = grouped_fr.remove(&day).unwrap_or_default();
 
-        // If there are no relative FRs for this day, the extrapolated FR is set to 0.
+        // If there are no relative FRs for this day, the extrapolated FR is set to 0
         let avg_fr = avg(&frs).unwrap_or_default();
 
         result.extrapolated_fr.insert(day, avg_fr);
@@ -495,8 +495,6 @@ fn step_4_compute_base_rewards_type_region(
 // Step 5: Adjusted rewards for all the nodes based on their performance
 // ------------------------------------------------------------------------------------------------
 
-const FULL_REWARDS_MACHINES_LIMIT: usize = 4;
-
 #[derive(Default)]
 struct Step5Results {
     adjusted_rewards: BTreeMap<(DayUtc, NodeId), XDRPermyriad>,
@@ -506,42 +504,21 @@ fn step_5_adjust_node_rewards(
     base_rewards: &BTreeMap<(DayUtc, NodeId), Decimal>,
     performance_multiplier: &HashMap<(DayUtc, NodeId), Decimal>,
 ) -> Step5Results {
-    let mut nodes_count = BTreeMap::new();
     let mut result = Step5Results::default();
-
     for node in rewardable_nodes {
         for day in &node.rewardable_days {
-            nodes_count
-                .entry(day)
-                .and_modify(|count| *count += 1)
-                .or_insert(1);
-        }
-    }
-
-    for node in rewardable_nodes {
-        for day in &node.rewardable_days {
-            let provider_nodes_count = nodes_count.get(&day).expect("Daily nodes count expected");
-
             let base_rewards_for_day = base_rewards
                 .get(&(*day, node.node_id))
                 .expect("Base rewards expected for each node");
 
-            if provider_nodes_count <= &FULL_REWARDS_MACHINES_LIMIT {
-                // Node Providers with up to FULL_REWARDS_MACHINES_LIMIT nodes are rewarded fully,
-                // independently of their performance.
-                result
-                    .adjusted_rewards
-                    .insert((*day, node.node_id), *base_rewards_for_day);
-            } else {
-                let performance_multiplier = performance_multiplier
-                    .get(&(*day, node.node_id))
-                    .expect("Performance multiplier expected for every node");
+            let performance_multiplier = performance_multiplier
+                .get(&(*day, node.node_id))
+                .expect("Performance multiplier expected for every node");
 
-                let adjusted_rewards_for_day = base_rewards_for_day * performance_multiplier;
-                result
-                    .adjusted_rewards
-                    .insert((*day, node.node_id), adjusted_rewards_for_day);
-            }
+            let adjusted_rewards_for_day = base_rewards_for_day * performance_multiplier;
+            result
+                .adjusted_rewards
+                .insert((*day, node.node_id), adjusted_rewards_for_day);
         }
     }
 

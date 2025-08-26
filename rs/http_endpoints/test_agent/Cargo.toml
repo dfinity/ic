@@ -13,3 +13,4 @@ ic-validator = { path = "../../validator" }
 reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }
