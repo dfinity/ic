@@ -9,12 +9,13 @@ mod read_state;
 mod webauthn;
 
 pub use self::http::{
-    Authentication, Certificate, CertificateDelegation, CertificateDelegationFormat, Delegation,
-    HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse,
-    HttpQueryResponseReply, HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpReply,
-    HttpRequest, HttpRequestContent, HttpRequestEnvelope, HttpRequestError,
-    HttpSignedQueryResponse, HttpStatusResponse, HttpUserQuery, NodeSignature, QueryResponseHash,
-    RawHttpRequestVal, ReplicaHealthStatus, SignedDelegation,
+    Authentication, Certificate, CertificateDelegation, CertificateDelegationFormat,
+    CertificateDelegationMetadata, Delegation, HasCanisterId, HttpCallContent, HttpCanisterUpdate,
+    HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
+    HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
+    HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
+    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
+    SignedDelegation,
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;

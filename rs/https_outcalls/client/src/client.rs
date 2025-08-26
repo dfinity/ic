@@ -19,7 +19,7 @@ use ic_types::{
         CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, CertificateDelegationFormat, Query, QuerySource, Request},
+    messages::{CertificateDelegation, CertificateDelegationMetadata, Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
 use std::time::Instant;
@@ -353,13 +353,19 @@ async fn transform_adapter_response(
         method_payload,
     };
 
-    let input = QueryExecutionInput {
+    let query_execution_input = QueryExecutionInput {
         query,
-        nns_delegation: delegation_from_nns,
-        nns_delegation_format: CertificateDelegationFormat::Flat,
+        certificate_delegation_with_metadata: delegation_from_nns.map(|delegation| {
+            (
+                delegation,
+                CertificateDelegationMetadata {
+                    format: ic_types::messages::CertificateDelegationFormat::Flat,
+                },
+            )
+        }),
     };
 
-    match Oneshot::new(query_handler, input).await {
+    match Oneshot::new(query_handler, query_execution_input).await {
         Ok(query_response) => match query_response {
             Ok((res, _time)) => match res {
                 Ok(wasm_result) => match wasm_result {

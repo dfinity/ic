@@ -147,7 +147,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         extract_effective_canister_id, Blob, Certificate, CertificateDelegation,
-        CertificateDelegationFormat, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
+        CertificateDelegationMetadata, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
         HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
         SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
@@ -3728,7 +3728,7 @@ impl StateMachine {
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
-        delegation: Option<CertificateDelegation>,
+        delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let user_query = Query {
@@ -3744,8 +3744,7 @@ impl StateMachine {
         let query_svc = self.query_handler.lock().unwrap().clone();
         let input = QueryExecutionInput {
             query: user_query,
-            nns_delegation: delegation,
-            nns_delegation_format: CertificateDelegationFormat::Flat,
+            certificate_delegation_with_metadata: delegation,
         };
         if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result

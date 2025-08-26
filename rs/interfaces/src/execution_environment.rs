@@ -11,7 +11,8 @@ use ic_types::{
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
     messages::{
-        CertificateDelegation, CertificateDelegationFormat, MessageId, Query, SignedIngressContent,
+        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query,
+        SignedIngressContent,
     },
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
@@ -533,8 +534,8 @@ pub type QueryExecutionResponse =
 /// The input type to a `call()` request in [`QueryExecutionService`].
 pub struct QueryExecutionInput {
     pub query: Query,
-    pub nns_delegation: Option<CertificateDelegation>,
-    pub nns_delegation_format: CertificateDelegationFormat,
+    pub certificate_delegation_with_metadata:
+        Option<(CertificateDelegation, CertificateDelegationMetadata)>,
 }
 
 /// Interface for the component to execute queries.

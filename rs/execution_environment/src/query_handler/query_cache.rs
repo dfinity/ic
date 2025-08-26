@@ -7,7 +7,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CertificateDelegationFormat, Query},
+    messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
     Cycles, MemoryDiskBytes, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
@@ -139,17 +139,21 @@ pub(crate) struct EntryKey {
     /// Receiving canister method payload (argument).
     pub method_payload: Vec<u8>,
     /// Format of the nns delegation.
-    pub certificate_delegation_format: CertificateDelegationFormat,
+    pub certificate_delegation_format: Option<CertificateDelegationFormat>,
 }
 
 impl EntryKey {
-    pub fn new(query: &Query, certificate_delegation_format: CertificateDelegationFormat) -> Self {
+    pub fn new(
+        query: &Query,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+    ) -> Self {
         Self {
             source: query.source.user_id(),
             receiver: query.receiver,
             method_name: query.method_name.clone(),
             method_payload: query.method_payload.clone(),
-            certificate_delegation_format,
+            certificate_delegation_format: certificate_delegation_metadata
+                .map(|metadata| metadata.format),
         }
     }
 }

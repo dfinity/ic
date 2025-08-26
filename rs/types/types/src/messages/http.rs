@@ -720,6 +720,11 @@ pub enum CertificateDelegationFormat {
     Pruned,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct CertificateDelegationMetadata {
+    pub format: CertificateDelegationFormat
+}
+
 /// A `CertificateDelegation` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CertificateDelegation {

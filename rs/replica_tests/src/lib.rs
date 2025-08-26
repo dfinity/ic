@@ -603,8 +603,7 @@ impl LocalTestRuntime {
         let query_svc = self.query_handler.lock().unwrap().clone();
         let input = QueryExecutionInput {
             query,
-            nns_delegation: None,
-            nns_delegation_format: ic_types::messages::CertificateDelegationFormat::Full,
+            certificate_delegation_with_metadata: None,
         };
         let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,

@@ -913,8 +913,7 @@ impl Player {
         self.certify_state_with_dummy_certification();
         let input = QueryExecutionInput {
             query,
-            nns_delegation: None,
-            nns_delegation_format: ic_types::messages::CertificateDelegationFormat::Full,
+            certificate_delegation_with_metadata: None,
         };
         match self
             .runtime
@@ -1225,8 +1224,7 @@ impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
             .clone();
         let input = QueryExecutionInput {
             query,
-            nns_delegation: None,
-            nns_delegation_format: ic_types::messages::CertificateDelegationFormat::Full,
+            certificate_delegation_with_metadata: None,
         };
         query_execution_service.oneshot(input).await
     }
