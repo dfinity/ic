@@ -11,7 +11,7 @@ use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
 };
 use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
-    NodeProviderRewards, NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
+    NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
