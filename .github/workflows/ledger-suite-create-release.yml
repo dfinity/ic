@@ -68,11 +68,15 @@ jobs:
           if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
             echo "log_paths=rs/ledger_suite/common rs/ledger_suite/icrc1 packages/icrc-ledger-types" >> $GITHUB_OUTPUT
             echo "wasm_files=ic-icrc1-archive-u256.wasm.gz ic-icrc1-archive.wasm.gz ic-icrc1-index-ng-u256.wasm.gz ic-icrc1-index-ng.wasm.gz ic-icrc1-ledger-u256.wasm.gz ic-icrc1-ledger.wasm.gz" >> $GITHUB_OUTPUT
+            # DID file mappings: source_did_file:target_name (only non-u256 versions)
+            echo "did_mappings=ic-icrc1-archive.wasm.gz.did:archive.did ic-icrc1-ledger.wasm.gz.did:ledger.did ic-icrc1-index-ng.wasm.gz.did:index-ng.did" >> $GITHUB_OUTPUT
             echo "upgrade_from=ledger-suite-icrc-2024-10-17" >> $GITHUB_OUTPUT
             echo "human_title=ICRC Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_OUTPUT
           else
             echo "log_paths=rs/ledger_suite/common rs/ledger_suite/icp packages/icrc-ledger-types" >> $GITHUB_OUTPUT
             echo "wasm_files=ledger-canister_notify-method.wasm.gz ledger-archive-node-canister.wasm.gz ic-icp-index-canister.wasm.gz" >> $GITHUB_OUTPUT
+            # DID file mappings: source_did_file:target_name
+            echo "did_mappings=ledger-canister_notify-method.wasm.gz.did:ledger.did ledger-archive-node-canister.wasm.gz.did:ledger_archive.did ic-icp-index-canister.wasm.gz.did:index.did" >> $GITHUB_OUTPUT
             echo "human_title=ICP Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_OUTPUT
           fi
 
@@ -141,22 +145,36 @@ jobs:
           WASM_FILES_STRING="${{ steps.variables.outputs.wasm_files }}"
           read -ra WASM_FILES <<< "$WASM_FILES_STRING"
 
-          # Download WASM files and their corresponding DID files
-          echo "Downloading WASM and DID files..."
+          # Get DID file mappings
+          DID_MAPPINGS_STRING="${{ steps.variables.outputs.did_mappings }}"
+          read -ra DID_MAPPINGS <<< "$DID_MAPPINGS_STRING"
+
+          # Download WASM files
+          echo "Downloading WASM files..."
           DOWNLOAD_FILES=()
           for wasm_file in "${WASM_FILES[@]}"; do
-            # Add WASM file
-            DOWNLOAD_FILES+=("$wasm_file")
-            # Add corresponding DID file
-            DOWNLOAD_FILES+=("${wasm_file}.did")
+            echo "  Downloading $wasm_file..."
+            if curl -f -L -o "$TEMP_DIR/$wasm_file" "$BASE_URL/$wasm_file"; then
+              echo "  Downloaded: $wasm_file"
+              DOWNLOAD_FILES+=("$wasm_file")
+            else
+              echo "  Failed to download: $wasm_file"
+              exit 1
+            fi
           done
 
-          for file in "${DOWNLOAD_FILES[@]}"; do
-            echo "  Downloading $file..."
-            if curl -f -L -o "$TEMP_DIR/$file" "$BASE_URL/$file"; then
-              echo "  Downloaded: $file"
+          # Download and rename DID files based on mappings
+          echo "Downloading and renaming DID files..."
+          RENAMED_DID_FILES=()
+          for mapping in "${DID_MAPPINGS[@]}"; do
+            IFS=':' read -r source_did target_name <<< "$mapping"
+            echo "  Downloading $source_did -> $target_name..."
+            if curl -f -L -o "$TEMP_DIR/$target_name" "$BASE_URL/$source_did"; then
+              echo "  Downloaded and renamed: $source_did -> $target_name"
+              DOWNLOAD_FILES+=("$target_name")
+              RENAMED_DID_FILES+=("$source_did:$target_name")
             else
-              echo "  Failed to download: $file"
+              echo "  Failed to download: $source_did"
               exit 1
             fi
           done
@@ -172,19 +190,36 @@ jobs:
 
           echo "Pruning SHA256SUMS to include only downloaded files..."
 
-          # Extract checksums for our downloaded files (exact match only)
           FOUND_COUNT=0
-          for file in "${DOWNLOAD_FILES[@]}"; do
-            # Look for exact match only - ensure line ends with exactly our filename
-            # SHA256SUMS format is: <checksum><whitespace><filename>
-            CHECKSUM_LINE=$(grep "[[:space:]]${file}$" "$TEMP_DIR/SHA256SUMS.full" 2>/dev/null || true)
 
+          # Process WASM files (no renaming needed)
+          for wasm_file in "${WASM_FILES[@]}"; do
+            CHECKSUM_LINE=$(grep "[[:space:]]${wasm_file}$" "$TEMP_DIR/SHA256SUMS.full" 2>/dev/null || true)
             if [[ -n "$CHECKSUM_LINE" ]]; then
-              echo "  Found checksum for: $file"
+              echo "  Found checksum for: $wasm_file"
               echo "$CHECKSUM_LINE" >> "$TEMP_DIR/SHA256SUMS"
               FOUND_COUNT=$((FOUND_COUNT + 1))
             else
-              echo "  Error: No checksum found for required file: $file"
+              echo "  Error: No checksum found for required file: $wasm_file"
+              echo "  Available checksums in SHA256SUMS:"
+              cat "$TEMP_DIR/SHA256SUMS.full"
+              exit 1
+            fi
+          done
+
+          # Process DID files (with renaming)
+          for mapping in "${DID_MAPPINGS[@]}"; do
+            IFS=':' read -r source_did target_name <<< "$mapping"
+            # Find checksum for original source DID file
+            CHECKSUM_LINE=$(grep "[[:space:]]${source_did}$" "$TEMP_DIR/SHA256SUMS.full" 2>/dev/null || true)
+            if [[ -n "$CHECKSUM_LINE" ]]; then
+              # Extract checksum and replace filename with renamed target
+              CHECKSUM=$(echo "$CHECKSUM_LINE" | awk '{print $1}')
+              echo "  Found checksum for: $source_did -> updating to $target_name"
+              echo "$CHECKSUM $target_name" >> "$TEMP_DIR/SHA256SUMS"
+              FOUND_COUNT=$((FOUND_COUNT + 1))
+            else
+              echo "  Error: No checksum found for required DID file: $source_did"
               echo "  Available checksums in SHA256SUMS:"
               cat "$TEMP_DIR/SHA256SUMS.full"
               exit 1
@@ -195,9 +230,10 @@ jobs:
           cat "$TEMP_DIR/SHA256SUMS" | sed 's/^/  /'
 
           # Verify checksum count
-          TOTAL_DOWNLOAD_FILES=${#DOWNLOAD_FILES[@]}
           WASM_FILE_COUNT=${#WASM_FILES[@]}
-          echo "Verification: Found $FOUND_COUNT checksums for $TOTAL_DOWNLOAD_FILES total files"
+          DID_FILE_COUNT=${#DID_MAPPINGS[@]}
+          EXPECTED_TOTAL=$((WASM_FILE_COUNT + DID_FILE_COUNT))
+          echo "Verification: Found $FOUND_COUNT checksums (Expected: $WASM_FILE_COUNT WASM + $DID_FILE_COUNT DID = $EXPECTED_TOTAL total)"
 
           if [[ $FOUND_COUNT -eq 0 ]]; then
             echo "Error: No checksums found for any release files"
@@ -205,14 +241,14 @@ jobs:
           fi
 
           # Require exact match - both WASM and DID files must have checksums
-          if [[ $FOUND_COUNT -ne $TOTAL_DOWNLOAD_FILES ]]; then
+          if [[ $FOUND_COUNT -ne $EXPECTED_TOTAL ]]; then
             echo "Error: Checksum count mismatch!"
-            echo "  Expected: $TOTAL_DOWNLOAD_FILES checksums"
+            echo "  Expected: $EXPECTED_TOTAL checksums ($WASM_FILE_COUNT WASM + $DID_FILE_COUNT DID)"
             echo "  Found: $FOUND_COUNT checksums"
             echo "  All files (WASM and DID) must have checksums in SHA256SUMS"
             exit 1
           fi
-          echo "Checksum verification passed: Found checksums for all $TOTAL_DOWNLOAD_FILES files"
+          echo "Checksum verification passed: Found checksums for all $EXPECTED_TOTAL files"
 
           # List downloaded files
           echo "Downloaded files:"
@@ -367,7 +403,7 @@ jobs:
           # Add release-type specific upgrade notes
           if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
             cat >> release_body.md << EOF
-          - For upgrading the ledger to this release, the installed ledger shall be running [${{ steps.variables.outputs.upgrade_from }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.variables.outputs.upgrade_from }}) or later.
+          - For upgrading the ledger to this release, the installed ledger shall be running [${{ steps.variables.outputs.upgrade_from }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.variables.outputs.upgrade_from }}) or later
           EOF
           fi
 
@@ -443,11 +479,15 @@ jobs:
         run: |
           TEMP_DIR="${{ steps.download.outputs.temp_dir }}"
 
-          echo "📋 Verifying all required files are present in $TEMP_DIR..."
+          echo "Verifying all required files are present in $TEMP_DIR..."
 
           # Get WASM files from variables
           WASM_FILES_STRING="${{ steps.variables.outputs.wasm_files }}"
           read -ra REQUIRED_WASM_FILES <<< "$WASM_FILES_STRING"
+
+          # Get DID file mappings to verify renamed DID files
+          DID_MAPPINGS_STRING="${{ steps.variables.outputs.did_mappings }}"
+          read -ra DID_MAPPINGS <<< "$DID_MAPPINGS_STRING"
 
           # Verify WASM files exist
           for wasm_file in "${REQUIRED_WASM_FILES[@]}"; do
@@ -455,6 +495,17 @@ jobs:
               echo "  Found: $wasm_file"
             else
               echo "  Missing: $wasm_file"
+              exit 1
+            fi
+          done
+
+          # Verify renamed DID files exist
+          for mapping in "${DID_MAPPINGS[@]}"; do
+            IFS=':' read -r source_did target_name <<< "$mapping"
+            if [[ -f "$TEMP_DIR/$target_name" ]]; then
+              echo "  Found: $target_name (renamed from $source_did)"
+            else
+              echo "  Missing: $target_name (should be renamed from $source_did)"
               exit 1
             fi
           done
