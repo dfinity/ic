@@ -33,9 +33,100 @@ type GetNodeProvidersRewardsResponse = record {
   error: opt text;
 };
 
+type DayUtc = record {
+  value: nat64;
+};
+
+type DayUtcOpt = record {
+    value: opt nat64;
+};
+
+type Decimal = record {
+  human_readable: opt text;
+};
+
+type NodeMetricsDaily = record {
+  subnet_assigned: opt PrincipalId;
+  subnet_assigned_fr_percent: opt Decimal;
+  num_blocks_proposed: opt nat64;
+  num_blocks_failed: opt nat64;
+  original_fr_percent: opt Decimal;
+  relative_fr_percent: opt Decimal;
+};
+
+type Assigned = record {
+  node_metrics: opt NodeMetricsDaily;
+};
+
+type Unassigned = record {
+  extrapolated_fr_percent: opt Decimal;
+};
+
+type Status = variant {
+  Assigned: Assigned;
+  Unassigned: Unassigned;
+};
+
+type NodeStatus = record {
+  status: opt Status;
+};
+
+
+type DailyResults = record {
+  day: opt DayUtcOpt;
+  node_status: opt NodeStatus;
+  performance_multiplier_percent: opt Decimal;
+  rewards_reduction_percent: opt Decimal;
+  base_rewards_xdr_permyriad: opt Decimal;
+  adjusted_rewards_xdr_permyriad: opt Decimal;
+};
+
+type NodeResults = record {
+  node_id: opt PrincipalId;
+  node_reward_type: opt text;
+  region: opt text;
+  dc_id: opt text;
+  daily_results: vec DailyResults;
+};
+
+type BaseRewards = record {
+  monthly_xdr_permyriad: opt Decimal;
+  daily_xdr_permyriad: opt Decimal;
+  node_reward_type: opt text;
+  region: opt text;
+};
+
+type DailyBaseRewardsType3 = record {
+  day: opt DayUtcOpt;
+  region: opt text;
+  nodes_count: opt nat64;
+  avg_rewards_xdr_permyriad: opt Decimal;
+  avg_coefficient_percent: opt Decimal;
+  value_xdr_permyriad: opt Decimal;
+};
+
+type NodeProviderRewards = record {
+  rewards_total_xdr_permyriad: opt nat64;
+  base_rewards: vec BaseRewards;
+  base_rewards_type3: vec DailyBaseRewardsType3;
+  nodes_results: vec NodeResults;
+};
+
+type GetNodeProviderRewardsCalculationRequest = record {
+  from: DayUtc;
+  to: DayUtc;
+  provider_id: principal;
+};
+
+type GetNodeProviderRewardsCalculationResponse = record {
+  rewards: opt NodeProviderRewards;
+  error: opt text;
+};
+
 service : () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
         GetNodeProvidersMonthlyXdrRewardsResponse
     );
     get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
+    get_node_provider_rewards_calculation : (GetNodeProviderRewardsCalculationRequest) -> (GetNodeProviderRewardsCalculationResponse) query;
 }
