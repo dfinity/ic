@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = { workspace = true }
+candid.workspace = true
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 futures = { workspace = true }
 ic-nervous-system-canisters = { path = "../../canisters" }
