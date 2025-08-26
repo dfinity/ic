@@ -673,7 +673,7 @@ pub trait IDkgBlockReader: Send + Sync {
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError>;
 
-    /// Iterate over all Blocks above the given height.
+    /// Iterate over all IDkgPayloads above the given height.
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_>;
 }
 
