@@ -55,7 +55,7 @@ component_files = {
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
-    Label("misc/config/guestos/config.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
