@@ -1519,7 +1519,6 @@ pub async fn get_sns_token_symbol(
     Ok(symbol)
 }
 
-/// Helper function to create test allowed extensions map
 fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
     // KongSwap v1 hash from integration test
     let kongswap_v1_hash: [u8; 32] = [
@@ -1533,7 +1532,18 @@ fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
         160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
     ];
 
+    let unit_test_hash: [u8; 32] = [
+        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ];
+
     btreemap! {
+        unit_test_hash => ExtensionSpec {
+            name: "My Test Extension".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::TreasuryAssetManagement,
+            extension_type: ExtensionType::TreasuryManager,
+        },
         kongswap_v1_hash => ExtensionSpec {
             name: "KongSwap Treasury Manager".to_string(),
             version: ExtensionVersion(1),
