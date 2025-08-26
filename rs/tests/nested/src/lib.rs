@@ -512,11 +512,6 @@ pub fn nns_recovery_test(env: TestEnv) {
         wait_until_authentication_is_granted(&node.get_ip_addr(), "backup", &backup_mean);
     }
 
-    let ic_version = get_guestos_img_version();
-    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
-
-    // identifies the version of the replica after the recovery
-    let working_version = get_guestos_update_img_version();
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
@@ -535,6 +530,11 @@ pub fn nns_recovery_test(env: TestEnv) {
         logger,
         "NNS is healthy - message stored and read successfully"
     );
+
+    let ic_version = get_guestos_img_version();
+    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
+    // identifies the version of the replica after the recovery
+    let working_version = get_guestos_update_img_version();
 
     let recovery_dir = get_dependency_path("rs/tests");
     let output_dir = recovery_dir.join("output");
