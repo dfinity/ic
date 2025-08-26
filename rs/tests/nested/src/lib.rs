@@ -203,7 +203,7 @@ pub fn registration(env: TestEnv) {
     assert_eq!(num_unassigned_nodes, 1);
 }
 
-/// This test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
+/// nns_recovery_test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
 pub const DKG_INTERVAL: u64 = 9;
 
