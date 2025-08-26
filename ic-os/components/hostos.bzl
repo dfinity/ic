@@ -26,7 +26,7 @@ component_files = {
     Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
 
     # early-boot
-    Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
+    Label("early-boot/relabel-machine-id/relabel-machine-id-hostos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
     Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
     Label("early-boot/setup-hostname/hostos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
