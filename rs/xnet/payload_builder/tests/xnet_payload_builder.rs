@@ -29,9 +29,7 @@ use ic_test_utilities_types::ids::{
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
-use ic_types::xnet::{
-    CertifiedStreamSlice, RejectReason, StreamIndex, StreamIndexedQueue, StreamSlice,
-};
+use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
 use ic_xnet_payload_builder::testing::*;
@@ -313,7 +311,6 @@ fn get_xnet_payload_respects_signal_limit(
         30..=40, // size_range
         10..=20, // signal_start_range
         (MAX_SIGNALS - 10)..=MAX_SIGNALS, // signal_count_range
-        RejectReason::all(),
     ))]
     out_stream: Stream,
 
@@ -323,7 +320,6 @@ fn get_xnet_payload_respects_signal_limit(
         (MAX_SIGNALS + 20)..=(MAX_SIGNALS + 30), // size_range
         10..=20, // signal_start_range
         0..=10, // signal_count_range
-        RejectReason::all(),
     ))]
     in_stream: Stream,
 ) {
