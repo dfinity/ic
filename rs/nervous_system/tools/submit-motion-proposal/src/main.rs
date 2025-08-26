@@ -1,7 +1,6 @@
 use candid::{Decode, Encode};
 use clap::Parser;
-use ic_agent::{agent::CallResponse, export::Principal, Agent};
-use ic_certification::Certificate;
+use ic_agent::{export::Principal, Agent};
 use ic_identity_hsm::HardwareIdentity;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -81,7 +80,7 @@ async fn main() {
         .await
         .update(&governance_canister_id, "manage_neuron")
         .with_arg(Encode!(&request).unwrap())
-        .call()
+        .call_and_wait()
         .await
         .unwrap();
 
@@ -91,13 +90,7 @@ async fn main() {
 /// Reports what happend as a result of attempting to make/submit a motion
 /// proposal. In the happy case, the main thing this prints out is a URL to the
 /// proposal that was just submitted/made.
-fn handle_response(response: CallResponse<(Vec<u8>, Certificate)>) {
-    // Unpack ic-agent.
-    let response = match response {
-        CallResponse::Response((result_bytes, _certificate)) => result_bytes,
-        _ => panic!("Response from canister is not a Response: {:#?}", response),
-    };
-
+fn handle_response(response: Vec<u8>) {
     // Unpack API.
     let ManageNeuronResponse { command } = Decode!(&response, ManageNeuronResponse).unwrap();
     let command = command.unwrap();
