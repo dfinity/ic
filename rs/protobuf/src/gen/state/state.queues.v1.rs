@@ -28,7 +28,7 @@ pub struct Stream {
     #[prost(uint64, tag = "1")]
     pub messages_begin: u64,
     #[prost(message, repeated, tag = "2")]
-    pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
+    pub messages: ::prost::alloc::vec::Vec<StreamMessage>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
     #[prost(message, repeated, tag = "8")]
@@ -129,6 +129,30 @@ pub mod request_or_response {
         Request(super::Request),
         #[prost(message, tag = "2")]
         Response(super::Response),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamBlocker {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(uint64, tag = "2")]
+    pub index: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamMessage {
+    #[prost(oneof = "stream_message::R", tags = "1, 2, 3")]
+    pub r: ::core::option::Option<stream_message::R>,
+}
+/// Nested message and enum types in `StreamMessage`.
+pub mod stream_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum R {
+        #[prost(message, tag = "1")]
+        Request(super::Request),
+        #[prost(message, tag = "2")]
+        Response(super::Response),
+        #[prost(message, tag = "3")]
+        StreamBlocker(super::StreamBlocker),
     }
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]

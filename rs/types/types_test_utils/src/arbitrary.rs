@@ -4,7 +4,7 @@ use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-        NO_DEADLINE,
+        StreamBlocker, StreamMessage, NO_DEADLINE,
     },
     time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
@@ -228,6 +228,30 @@ pub fn request_or_response() -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
         request().prop_flat_map(|req| Just(req.into())),
         response().prop_flat_map(|rep| Just(rep.into())),
+    ]
+}
+
+prop_compose! {
+    /// Produces an arbitrary [`StreamMessage`].
+    pub fn stream_blocker()(
+        subnet_id in subnet_id(),
+        index in any::<u64>(),
+    ) -> StreamBlocker {
+        StreamBlocker {
+            subnet_id,
+            index: index.into(),
+        }
+    }
+}
+
+/// Produces an arbitrary [`StreamMessage`], with the `deadline` field
+/// populated or not.
+pub fn stream_message_with_config(populate_deadline: bool) -> impl Strategy<Value = StreamMessage> {
+    prop_oneof![
+        request_with_config(populate_deadline).prop_flat_map(|req| Just(req.into())),
+        response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
+        // TODO: Start generating blockers.
+        //stream_blocker().prop_flat_map(|blocker| Just(blocker.into())),
     ]
 }
 

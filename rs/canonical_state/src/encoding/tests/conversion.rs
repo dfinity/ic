@@ -4,7 +4,7 @@ use crate::{all_supported_versions, CertificationVersion, MAX_SUPPORTED_CERTIFIC
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::messages::{Payload, RejectContext, RequestOrResponse};
+use ic_types::messages::{Payload, RejectContext, StreamMessage};
 use ic_types::xnet::RejectReason;
 use std::convert::{TryFrom, TryInto};
 use strum::{EnumCount, IntoEnumIterator};
@@ -237,7 +237,7 @@ fn try_from_empty_request_or_response() {
     };
 
     assert_matches!(
-        RequestOrResponse::try_from(message),
+        StreamMessage::try_from(message),
         Err(ProxyDecodeError::Other(message)) if message == "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `RequestOrResponse { request: None, response: None }`"
     );
 }

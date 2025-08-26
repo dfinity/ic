@@ -10,7 +10,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmR
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
-    messages::{CallbackId, Payload, RequestOrResponse},
+    messages::{CallbackId, Payload, RequestOrResponse, StreamBlocker, StreamMessage},
     xnet::{StreamHeader, StreamIndexedQueue},
     Cycles,
 };
@@ -300,7 +300,7 @@ fn get_output_queue_iter<'a>(
 fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,
-) -> Option<(StreamHeader, StreamIndexedQueue<RequestOrResponse>)> {
+) -> Option<(StreamHeader, StreamIndexedQueue<StreamMessage>)> {
     from_subnet
         .get_latest_state()
         .get_stream(&to_subnet.get_subnet_id())
@@ -605,6 +605,22 @@ impl From<&Option<RequestOrResponse>> for MessageSnapshot {
     }
 }
 
+impl TryFrom<&StreamMessage> for MessageSnapshot {
+    type Error = Arc<StreamBlocker>;
+
+    fn try_from(msg: &StreamMessage) -> Result<Self, Self::Error> {
+        use StreamMessage::{Request, Response, StreamBlocker};
+        match msg {
+            Request(request) => Ok(Self::Request(request.sender_reply_callback)),
+            Response(response) if matches!(response.response_payload, Payload::Data(_)) => {
+                Ok(Self::Response(response.originator_reply_callback))
+            }
+            Response(response) => Ok(Self::RejectResponse(response.originator_reply_callback)),
+            StreamBlocker(blocker) => Err(blocker.clone()),
+        }
+    }
+}
+
 /// Contains the current state of the test `subnet_splitting_test_suite` below.
 #[derive(Clone, PartialEq)]
 struct SubnetSplittingTestState {
@@ -626,7 +642,9 @@ impl SubnetSplittingTestState {
             |(header, msgs)| {
                 (
                     header,
-                    msgs.iter().map(|(_, msg)| msg.into()).collect::<_>(),
+                    msgs.iter()
+                        .map(|(_, msg)| msg.try_into().unwrap())
+                        .collect::<_>(),
                 )
             },
         );
@@ -634,7 +652,9 @@ impl SubnetSplittingTestState {
             .map(|(header, msgs)| {
                 (
                     header,
-                    msgs.iter().map(|(_, msg)| msg.into()).collect::<_>(),
+                    msgs.iter()
+                        .map(|(_, msg)| msg.try_into().unwrap())
+                        .collect::<_>(),
                 )
             });
         let local_queue = subnets_proxy
@@ -703,11 +723,11 @@ impl std::fmt::Debug for SubnetSplittingTestState {
 /// - msg is a request: The callback id is added to `add_callback_id_tracker`.
 /// - msg is a response: The callback id is removed from `remove_callback_id_tracker`.
 fn update_callback_id_trackers(
-    msg: &RequestOrResponse,
+    msg: &StreamMessage,
     add_callback_id_tracker: &mut BTreeSet<CallbackId>,
     remove_callback_id_tracker: &mut BTreeSet<CallbackId>,
 ) -> Result<(), String> {
-    use RequestOrResponse::{Request, Response};
+    use StreamMessage::{Request, Response, StreamBlocker};
     match msg {
         Request(request) => {
             if !add_callback_id_tracker.insert(request.sender_reply_callback) {
@@ -725,6 +745,7 @@ fn update_callback_id_trackers(
                 ));
             }
         }
+        StreamBlocker(_) => {}
     }
     Ok(())
 }
@@ -929,7 +950,6 @@ fn induct_and_observe_until_stale(
 /// include all the relevant subnet splitting scenarios.
 #[test]
 fn state_machine_subnet_splitting_test() {
-    use RequestOrResponse::{Request, Response};
     let old_subnets_proxy = SubnetPairProxy::with_new_subnets();
     old_subnets_proxy.mark_remote_canister_as_being_migrated();
 
@@ -973,12 +993,18 @@ fn state_machine_subnet_splitting_test() {
             old_subnets_proxy.local_output_queue_snapshot(),
             old_subnets_proxy.remote_output_queue_snapshot(),
         ) {
-            (Some(local_q), Some(remote_q)) => {
-                Ok(local_q.iter().any(|msg| matches!(msg, Request(_)))
-                    && local_q.iter().any(|msg| matches!(msg, Response(_)))
-                    && remote_q.iter().any(|msg| matches!(msg, Request(_)))
-                    && remote_q.iter().any(|msg| matches!(msg, Response(_))))
-            }
+            (Some(local_q), Some(remote_q)) => Ok(local_q
+                .iter()
+                .any(|msg| matches!(msg, RequestOrResponse::Request(_)))
+                && local_q
+                    .iter()
+                    .any(|msg| matches!(msg, RequestOrResponse::Response(_)))
+                && remote_q
+                    .iter()
+                    .any(|msg| matches!(msg, RequestOrResponse::Request(_)))
+                && remote_q
+                    .iter()
+                    .any(|msg| matches!(msg, RequestOrResponse::Response(_)))),
             _ => Ok(false),
         }
     })
@@ -1004,8 +1030,12 @@ fn state_machine_subnet_splitting_test() {
         (&new_subnets_proxy.remote_env, &new_subnets_proxy.local_env),
     ] {
         if let Some((_, stream)) = stream_snapshot(from_env, into_env) {
-            assert!(stream.iter().any(|(_, msg)| matches!(msg, Request(_))));
-            assert!(stream.iter().any(|(_, msg)| matches!(msg, Response(_))));
+            assert!(stream
+                .iter()
+                .any(|(_, msg)| matches!(msg, StreamMessage::Request(_))));
+            assert!(stream
+                .iter()
+                .any(|(_, msg)| matches!(msg, StreamMessage::Response(_))));
         } else {
             panic!("Empty stream after setup stage.");
         }

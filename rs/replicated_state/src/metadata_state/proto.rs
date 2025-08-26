@@ -481,11 +481,7 @@ impl From<&Stream> for pb_queues::Stream {
             .collect();
         Self {
             messages_begin: item.messages.begin().get(),
-            messages: item
-                .messages
-                .iter()
-                .map(|(_, req_or_resp)| req_or_resp.into())
-                .collect(),
+            messages: item.messages.iter().map(|(_, msg)| msg.into()).collect(),
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
@@ -500,8 +496,8 @@ impl TryFrom<pb_queues::Stream> for Stream {
 
     fn try_from(item: pb_queues::Stream) -> Result<Self, Self::Error> {
         let mut messages = StreamIndexedQueue::with_begin(item.messages_begin.into());
-        for req_or_resp in item.messages {
-            messages.push(req_or_resp.try_into()?);
+        for msg in item.messages {
+            messages.push(msg.try_into()?);
         }
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::size_bytes(&messages);

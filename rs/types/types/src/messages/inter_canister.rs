@@ -1,8 +1,10 @@
 use crate::{
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
+    xnet::StreamIndex,
     CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
+use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_option, SubnetId};
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -653,6 +655,80 @@ impl From<Response> for RequestOrResponse {
     }
 }
 
+/// A message in a stream that acts as a blocker until another stream from `subnet_id` has progressed
+/// past a certain `index`. This is used to prevent out of order delivery of message that can happen
+/// due to a race condition during subnet splitting when messages from the same canister can come from
+/// different subnets.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct StreamBlocker {
+    pub subnet_id: SubnetId,
+    pub index: StreamIndex,
+}
+
+/// A message in a `Stream` or a `StreamSlice`; it can be either an inter canister message or a stream blocker.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum StreamMessage {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    StreamBlocker(Arc<StreamBlocker>),
+}
+
+impl CountBytes for StreamMessage {
+    fn count_bytes(&self) -> usize {
+        size_of::<Self>()
+            + match self {
+                Self::Request(req) => {
+                    size_of::<Request>() + req.payload_size_bytes().get() as usize
+                }
+                Self::Response(resp) => {
+                    size_of::<Response>() + resp.payload_size_bytes().get() as usize
+                }
+                Self::StreamBlocker(_) => size_of::<StreamBlocker>(),
+            }
+    }
+}
+
+impl From<Request> for StreamMessage {
+    fn from(req: Request) -> Self {
+        StreamMessage::Request(Arc::new(req))
+    }
+}
+
+impl From<Response> for StreamMessage {
+    fn from(resp: Response) -> Self {
+        StreamMessage::Response(Arc::new(resp))
+    }
+}
+
+impl From<StreamBlocker> for StreamMessage {
+    fn from(blocker: StreamBlocker) -> Self {
+        StreamMessage::StreamBlocker(Arc::new(blocker))
+    }
+}
+
+impl From<RequestOrResponse> for StreamMessage {
+    fn from(msg: RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(req) => Self::Request(req),
+            RequestOrResponse::Response(resp) => Self::Response(resp),
+        }
+    }
+}
+
+impl TryFrom<StreamMessage> for RequestOrResponse {
+    type Error = Arc<StreamBlocker>;
+
+    fn try_from(msg: StreamMessage) -> Result<Self, Self::Error> {
+        match msg {
+            StreamMessage::Request(req) => Ok(RequestOrResponse::Request(req)),
+            StreamMessage::Response(resp) => Ok(RequestOrResponse::Response(resp)),
+            StreamMessage::StreamBlocker(blocker) => Err(blocker),
+        }
+    }
+}
+
 impl From<&RequestMetadata> for pb_queues::RequestMetadata {
     fn from(metadata: &RequestMetadata) -> Self {
         Self {
@@ -812,6 +888,65 @@ impl TryFrom<pb_queues::RequestOrResponse> for RequestOrResponse {
             }
             pb_queues::request_or_response::R::Response(r) => {
                 Ok(RequestOrResponse::Response(Arc::new(r.try_into()?)))
+            }
+        }
+    }
+}
+
+impl From<&StreamBlocker> for pb_queues::StreamBlocker {
+    fn from(b: &StreamBlocker) -> Self {
+        Self {
+            subnet_id: Some(subnet_id_into_protobuf(b.subnet_id)),
+            index: b.index.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::StreamBlocker> for StreamBlocker {
+    type Error = ProxyDecodeError;
+
+    fn try_from(b: pb_queues::StreamBlocker) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subnet_id: subnet_id_try_from_option(b.subnet_id)?,
+            index: b.index.into(),
+        })
+    }
+}
+
+impl From<&StreamMessage> for pb_queues::StreamMessage {
+    fn from(msg: &StreamMessage) -> Self {
+        match msg {
+            StreamMessage::Request(req) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::Request(req.as_ref().into())),
+            },
+            StreamMessage::Response(rep) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::Response(rep.as_ref().into())),
+            },
+            StreamMessage::StreamBlocker(blocker) => pb_queues::StreamMessage {
+                r: Some(pb_queues::stream_message::R::StreamBlocker(
+                    blocker.as_ref().into(),
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb_queues::StreamMessage> for StreamMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(rrb: pb_queues::StreamMessage) -> Result<Self, Self::Error> {
+        match rrb
+            .r
+            .ok_or(ProxyDecodeError::MissingField("StreamMessage::r"))?
+        {
+            pb_queues::stream_message::R::Request(r) => {
+                Ok(StreamMessage::Request(Arc::new(r.try_into()?)))
+            }
+            pb_queues::stream_message::R::Response(r) => {
+                Ok(StreamMessage::Response(Arc::new(r.try_into()?)))
+            }
+            pb_queues::stream_message::R::StreamBlocker(r) => {
+                Ok(StreamMessage::StreamBlocker(Arc::new(r.try_into()?)))
             }
         }
     }

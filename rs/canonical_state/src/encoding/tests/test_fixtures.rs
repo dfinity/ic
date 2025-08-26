@@ -3,7 +3,7 @@ use ic_error_types::RejectCode;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        CallbackId, Payload, RejectContext, Request, RequestMetadata, Response, StreamMessage,
         NO_DEADLINE,
     },
     time::CoarseTime,
@@ -38,7 +38,7 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
     StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
 }
 
-pub fn request(certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn request(certification_version: CertificationVersion) -> StreamMessage {
     let metadata = RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000));
     let deadline = if certification_version >= CertificationVersion::V18 {
         CoarseTime::from_secs_since_unix_epoch(8)
@@ -58,7 +58,7 @@ pub fn request(certification_version: CertificationVersion) -> RequestOrResponse
     .into()
 }
 
-pub fn response(certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn response(certification_version: CertificationVersion) -> StreamMessage {
     let deadline = if certification_version >= CertificationVersion::V18 {
         CoarseTime::from_secs_since_unix_epoch(7)
     } else {
@@ -75,7 +75,7 @@ pub fn response(certification_version: CertificationVersion) -> RequestOrRespons
     .into()
 }
 
-pub fn reject_response(certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn reject_response(certification_version: CertificationVersion) -> StreamMessage {
     let deadline = if certification_version >= CertificationVersion::V18 {
         CoarseTime::from_secs_since_unix_epoch(7)
     } else {

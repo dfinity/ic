@@ -10,7 +10,7 @@ use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::{
-    messages::{MessageId, RequestOrResponse},
+    messages::{MessageId, StreamMessage},
     xnet::StreamHeader,
     Cycles,
 };
@@ -636,7 +636,7 @@ pub fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
 pub fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,
-) -> Option<(StreamHeader, Vec<RequestOrResponse>)> {
+) -> Option<(StreamHeader, Vec<StreamMessage>)> {
     from_subnet
         .get_latest_state()
         .get_stream(&to_subnet.get_subnet_id())

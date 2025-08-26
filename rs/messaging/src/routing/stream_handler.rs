@@ -20,7 +20,7 @@ use ic_replicated_state::replicated_state::{
 };
 use ic_replicated_state::{ReplicatedState, StateError};
 use ic_types::messages::{
-    Payload, RejectContext, Request, RequestOrResponse, Response,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StreamBlocker, StreamMessage,
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
@@ -38,6 +38,8 @@ struct StreamHandlerMetrics {
     pub inducted_xnet_messages: IntCounterVec,
     /// Successfully inducted XNet message payload sizes.
     pub inducted_xnet_payload_sizes: Histogram,
+    /// Counts observations of XNet stream blockers.
+    pub incoming_stream_blockers: IntCounter,
     /// Garbage collected XNet messages.
     pub gced_xnet_messages: IntCounter,
     /// Garbage collected XNet reject signals.
@@ -65,10 +67,15 @@ struct StreamHandlerMetrics {
     /// requests for canisters misrouted by this subnet due to a problem with the
     /// routing process or a prematurely completed canister migration.
     pub critical_error_request_misrouted: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// stream blockers for which a reject signal was received which should not
+    /// be possible.
+    pub critical_error_stream_blocker_rejected: IntCounter,
 }
 
 const METRIC_INDUCTED_XNET_MESSAGES: &str = "mr_inducted_xnet_message_count";
 const METRIC_INDUCTED_XNET_PAYLOAD_SIZES: &str = "mr_inducted_xnet_payload_size_bytes";
+const METRIC_INCOMING_STREAM_BLOCKERS: &str = "mr_incoming_stream_blockers";
 const METRIC_GCED_XNET_MESSAGES: &str = "mr_gced_xnet_message_count";
 const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count";
 const METRIC_STREAM_FLAGS_CHANGES: &str = "mr_stream_flags_changes_count";
@@ -91,6 +98,7 @@ const CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE: &str = "mr_bad_reject_signa
 const CRITICAL_ERROR_SENDER_SUBNET_MISMATCH: &str = "mr_sender_subnet_mismatch";
 const CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH: &str = "mr_receiver_subnet_mismatch";
 const CRITICAL_ERROR_REQUEST_MISROUTED: &str = "mr_request_misrouted";
+const CRITICAL_ERROR_STREAM_BLOCKER_REJECTED: &str = "mr_stream_blocker_rejected";
 
 impl StreamHandlerMetrics {
     pub fn new(
@@ -110,6 +118,10 @@ impl StreamHandlerMetrics {
                 MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as f64,
                 decimal_buckets(1, 6),
             ),
+        );
+        let incoming_stream_blockers = metrics_registry.int_counter(
+            METRIC_INCOMING_STREAM_BLOCKERS,
+            "Observed incoming stream blockers",
         );
         let gced_xnet_messages = metrics_registry.int_counter(
             METRIC_GCED_XNET_MESSAGES,
@@ -139,6 +151,8 @@ impl StreamHandlerMetrics {
             metrics_registry.error_counter(CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH);
         let critical_error_request_misrouted =
             metrics_registry.error_counter(CRITICAL_ERROR_REQUEST_MISROUTED);
+        let critical_error_stream_blocker_rejected =
+            metrics_registry.error_counter(CRITICAL_ERROR_STREAM_BLOCKER_REJECTED);
 
         // Initialize all `inducted_xnet_messages` counters with zero, so they are all
         // exported from process start (`IntCounterVec` is really a map).
@@ -165,6 +179,7 @@ impl StreamHandlerMetrics {
         Self {
             inducted_xnet_messages,
             inducted_xnet_payload_sizes,
+            incoming_stream_blockers,
             gced_xnet_messages,
             gced_xnet_reject_signals,
             stream_flags_changes,
@@ -174,6 +189,7 @@ impl StreamHandlerMetrics {
             critical_error_sender_subnet_mismatch,
             critical_error_receiver_subnet_mismatch,
             critical_error_request_misrouted,
+            critical_error_stream_blocker_rejected,
         }
     }
 }
@@ -383,7 +399,7 @@ impl StreamHandlerImpl {
             debug_assert!(loopback_stream
                 .messages()
                 .iter()
-                .all(|(_, msg)| matches!(msg, RequestOrResponse::Response(_))));
+                .all(|(_, msg)| matches!(msg, StreamMessage::Response(_))));
         }
 
         state
@@ -460,6 +476,9 @@ impl StreamHandlerImpl {
     /// Garbage collects the messages of an outgoing `Stream` based on the
     /// signals in an incoming stream slice. Returns any rejected messages.
     ///
+    /// Stream blockers are gc'ed silently except if a reject signal was received
+    /// for them which; then a critical error is recorded.
+    ///
     /// Panics if the slice's `signals_end` refers to a nonexistent (already
     /// garbage collected or future) message; or if `reject_signals` plus
     /// `signals_end` are invalid (not strictly increasing).
@@ -491,7 +510,23 @@ impl StreamHandlerImpl {
 
         // Remove the consumed messages from our outgoing stream.
         self.observe_gced_messages(stream.messages_begin(), signals_end);
-        stream.discard_messages_before(signals_end, reject_signals)
+        let (rejected_messages, rejected_stream_blockers) =
+            stream.discard_messages_before(signals_end, reject_signals);
+
+        // Check for rejected stream blockers, log an error and increment the critical error counter.
+        if !rejected_stream_blockers.is_empty() {
+            self.metrics
+                .critical_error_stream_blocker_rejected
+                .inc_by(rejected_stream_blockers.len() as u64);
+            error!(
+                self.log,
+                "{}: found rejected stream blockers for reject signals {:?}",
+                CRITICAL_ERROR_STREAM_BLOCKER_REJECTED,
+                rejected_stream_blockers,
+            );
+        }
+
+        rejected_messages
     }
 
     /// Garbage collects the signals of an outgoing `Stream` based on the
@@ -666,6 +701,9 @@ impl StreamHandlerImpl {
     /// Inducts the messages in the provided stream slices into the
     /// `InductionPool`, generating a signal for each message.
     ///
+    /// Stream blockers are recorded and then gc'ed by pushing an accept signal
+    /// and then dropping them.
+    ///
     /// See [`Self::induct_message`] for the possible outcomes of inducting a
     /// message.
     ///
@@ -694,13 +732,26 @@ impl StreamHandlerImpl {
                     stream.signals_end(),
                     stream_index
                 );
-                lost_cycles += self.induct_message(
-                    msg,
-                    remote_subnet_id,
-                    &mut state,
-                    stream,
-                    available_guaranteed_response_memory,
-                );
+                match msg.try_into() {
+                    Ok(msg) => {
+                        // Got a `RequestOrResponse`, induct it.
+                        lost_cycles += self.induct_message(
+                            msg,
+                            remote_subnet_id,
+                            &mut state,
+                            stream,
+                            available_guaranteed_response_memory,
+                        );
+                    }
+
+                    // This match is type specific so that we don't accidentally end
+                    // up here for something other than a `StreamBlocker`.
+                    Err::<_, Arc<StreamBlocker>>(_blocker) => {
+                        // Got a `StreamBlocker`, record its observation then drop it.
+                        self.metrics.incoming_stream_blockers.inc();
+                        stream.push_accept_signal();
+                    }
+                }
             }
         }
 
@@ -1191,7 +1242,7 @@ fn assert_valid_signals_for_messages(
 /// Ensures that the given slice messages (if non-empty) begin where the reverse
 /// stream's signals end.
 fn assert_valid_slice_messages_for_stream(
-    slice_messages: Option<&StreamIndexedQueue<RequestOrResponse>>,
+    slice_messages: Option<&StreamIndexedQueue<StreamMessage>>,
     stream_signals_end: StreamIndex,
     subnet: SubnetId,
 ) {

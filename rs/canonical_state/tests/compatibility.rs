@@ -16,7 +16,7 @@ use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
     crypto::CryptoHash,
-    messages::RequestOrResponse,
+    messages::StreamMessage,
     xnet::{RejectReason, StreamHeader},
     CryptoHashOfPartialState,
 };
@@ -254,16 +254,16 @@ fn stream_header_encoding_panic_on_invalid(
 
 /// Produces a `RequestOrResponse` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message(
-) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
+) -> impl Strategy<Value = (StreamMessage, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         (
             // No `deadline` before version 18.
-            arbitrary::request_or_response_with_config(false),
+            arbitrary::stream_message_with_config(false),
             Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
         (
             // Optionally populate `deadline` from version 18 on.
-            arbitrary::request_or_response_with_config(true),
+            arbitrary::stream_message_with_config(true),
             Just(CertificationVersion::V18..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]
@@ -272,7 +272,7 @@ pub(crate) fn arb_valid_versioned_message(
 lazy_static! {
     /// Current and previous canonical `RequestOrResponse` types and applicable
     /// certification versions.
-    static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<RequestOrResponse>> = vec![
+    static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<StreamMessage>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V17,
@@ -296,7 +296,7 @@ lazy_static! {
 #[test_strategy::proptest]
 fn message_unique_encoding(
     #[strategy(arb_valid_versioned_message())] test_message: (
-        RequestOrResponse,
+        StreamMessage,
         RangeInclusive<CertificationVersion>,
     ),
 ) {
@@ -337,7 +337,7 @@ fn message_unique_encoding(
 #[test_strategy::proptest]
 fn message_roundtrip_encoding(
     #[strategy(arb_valid_versioned_message())] test_message: (
-        RequestOrResponse,
+        StreamMessage,
         RangeInclusive<CertificationVersion>,
     ),
 ) {

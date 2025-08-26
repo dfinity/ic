@@ -25,7 +25,10 @@ use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response},
+    messages::{
+        CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+        StreamBlocker, StreamMessage,
+    },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
@@ -812,7 +815,7 @@ impl SystemMetadata {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
-    messages: StreamIndexedQueue<RequestOrResponse>,
+    messages: StreamIndexedQueue<StreamMessage>,
 
     /// Index of the next expected reverse stream message.
     ///
@@ -858,7 +861,7 @@ impl Default for Stream {
 
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
-    pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
+    pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
@@ -873,7 +876,7 @@ impl Stream {
 
     /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
-        messages: StreamIndexedQueue<RequestOrResponse>,
+        messages: StreamIndexedQueue<StreamMessage>,
         signals_end: StreamIndex,
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
@@ -908,7 +911,7 @@ impl Stream {
     }
 
     /// Returns a reference to the message queue.
-    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
+    pub fn messages(&self) -> &StreamIndexedQueue<StreamMessage> {
         &self.messages
     }
 
@@ -938,7 +941,7 @@ impl Stream {
                     .or_insert(0) += 1;
             }
         }
-        self.messages.push(message);
+        self.messages.push(message.into());
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
@@ -947,12 +950,17 @@ impl Stream {
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
-    /// messages for which a reject signal was received.
+    /// messages for which a reject signal was received; also returning all stream
+    /// blockers for which a signal was received (indicating a problem).
+    #[allow(clippy::type_complexity)]
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
-    ) -> Vec<(RejectReason, RequestOrResponse)> {
+    ) -> (
+        Vec<(RejectReason, RequestOrResponse)>,
+        Vec<(RejectSignal, Arc<StreamBlocker>)>,
+    ) {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -978,6 +986,7 @@ impl Stream {
 
         // Garbage collect all messages up to `new_begin`.
         let mut rejected_messages = Vec::new();
+        let mut rejected_stream_blockers = Vec::new();
         while self.messages.begin() < new_begin {
             let (index, msg) = self.messages.pop().unwrap();
 
@@ -985,7 +994,7 @@ impl Stream {
             self.messages_size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
-            if let RequestOrResponse::Response(response) = &msg {
+            if let StreamMessage::Response(response) = &msg {
                 if !response.is_best_effort() {
                     match self
                         .guaranteed_response_counts
@@ -1008,15 +1017,21 @@ impl Stream {
             );
 
             // If we received a reject signal for this message, collect it in
-            // `rejected_messages`.
+            // `rejected_messages`; if the message is a stream blocker, collect
+            // it in `rejected_stream_blockers`.
             if let Some(reject_signal) = reject_signals.peek() {
                 if reject_signal.index == index {
-                    rejected_messages.push((reject_signal.reason, msg));
+                    match msg.try_into() {
+                        Ok(msg) => rejected_messages.push((reject_signal.reason, msg)),
+                        Err(blocker) => {
+                            rejected_stream_blockers.push(((*reject_signal).clone(), blocker))
+                        }
+                    }
                     reject_signals.next();
                 }
             }
         }
-        rejected_messages
+        (rejected_messages, rejected_stream_blockers)
     }
 
     /// Garbage collects signals before `new_signals_begin`.
@@ -1055,16 +1070,16 @@ impl Stream {
     }
 
     /// Calculates the estimated byte size of the given messages.
-    fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
+    fn size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
     fn calculate_guaranteed_response_counts(
-        messages: &StreamIndexedQueue<RequestOrResponse>,
+        messages: &StreamIndexedQueue<StreamMessage>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();
         for (_, msg) in messages.iter() {
-            if let RequestOrResponse::Response(response) = msg {
+            if let StreamMessage::Response(response) = msg {
                 // We only count guaranteed responses
                 if !response.is_best_effort() {
                     *result.entry(response.respondent).or_insert(0) += 1;

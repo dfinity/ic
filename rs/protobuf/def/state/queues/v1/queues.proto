@@ -40,7 +40,7 @@ message StreamFlags {
 
 message Stream {
   uint64 messages_begin = 1;
-  repeated RequestOrResponse messages = 2;
+  repeated StreamMessage messages = 2;
   uint64 signals_end = 5;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
@@ -104,6 +104,19 @@ message RequestOrResponse {
   oneof r {
     Request request = 1;
     Response response = 2;
+  }
+}
+
+message StreamBlocker {
+  types.v1.SubnetId subnet_id = 1;
+  uint64 index = 2;
+}
+
+message StreamMessage {
+  oneof r {
+    Request request = 1;
+    Response response = 2;
+    StreamBlocker stream_blocker = 3;
   }
 }
 
