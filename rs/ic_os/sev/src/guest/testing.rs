@@ -190,15 +190,17 @@ fn create_certificate(
 }
 
 fn convert_signature(signature: &Signature) -> AttestationReportSignature {
-    let mut r = [0; 72];
-    let mut s = [0; 72];
     let mut r_source = signature.r().to_bytes();
-    // to_bytes is big-endian, but AttestationReportSignature is little-endian
+    // to_bytes returns big-endian, but AttestationReportSignature is little-endian (see AMD
+    // documentation)
     r_source.reverse();
     let mut s_source = signature.s().to_bytes();
     s_source.reverse();
+    let mut r = [0; 72];
     r[0..48].copy_from_slice(&r_source);
+    let mut s = [0; 72];
     s[0..48].copy_from_slice(&s_source);
+
     AttestationReportSignature::new(r.try_into().unwrap(), s.try_into().unwrap())
 }
 
@@ -229,13 +231,13 @@ impl MockSevGuestFirmwareBuilder {
         Self::default()
     }
 
-    pub fn with_custom_data_override(mut self, custom_data: [u8; 64]) -> Self {
-        self.custom_data_override = Some(custom_data);
+    pub fn with_custom_data_override(mut self, custom_data: Option<[u8; 64]>) -> Self {
+        self.custom_data_override = custom_data;
         self
     }
 
-    pub fn with_derived_key(mut self, derived_key: [u8; 32]) -> Self {
-        self.derived_key = Some(derived_key);
+    pub fn with_derived_key(mut self, derived_key: Option<[u8; 32]>) -> Self {
+        self.derived_key = derived_key;
         self
     }
 
@@ -249,8 +251,8 @@ impl MockSevGuestFirmwareBuilder {
         self
     }
 
-    pub fn with_signer(mut self, signer: FakeAttestationReportSigner) -> Self {
-        self.signer = Some(signer);
+    pub fn with_signer(mut self, signer: Option<FakeAttestationReportSigner>) -> Self {
+        self.signer = signer;
         self
     }
 

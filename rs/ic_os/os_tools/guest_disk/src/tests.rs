@@ -41,7 +41,8 @@ impl<'a> TestFixture<'a> {
         let previous_key_path = temp_dir.path().join("previous_key");
         let generated_key_path = temp_dir.path().join("generated_key");
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
-        let sev_firmware_builder = MockSevGuestFirmwareBuilder::new().with_derived_key([0; 32]);
+        let sev_firmware_builder =
+            MockSevGuestFirmwareBuilder::new().with_derived_key(Some([0; 32]));
 
         Self {
             device,
@@ -384,7 +385,7 @@ fn test_open_store_multiple_times_with_different_keys() {
         .unwrap();
 
         // After an upgrade, the firmware derives a new key.
-        fixture.sev_firmware_builder = fixture.sev_firmware_builder.with_derived_key([i; 32]);
+        fixture.sev_firmware_builder = fixture.sev_firmware_builder.with_derived_key(Some([i; 32]));
 
         fixture
             .open(Partition::Store)

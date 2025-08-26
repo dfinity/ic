@@ -1284,9 +1284,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "sha2": crate.spec(
                 version = "^0.10.9",
-                features = [
-                    "oid",
-                ],
             ),
             "sha3": crate.spec(
                 version = "^0.10.8",
