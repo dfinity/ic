@@ -257,7 +257,7 @@ fn get_network_interface() -> Result<String> {
 
 fn get_interface_ipv6_address(interface: &str) -> Result<String> {
     let parse_ipv6_address = |output_str: &str| -> Result<String> {
-        output_str
+        let addr = output_str
             .lines()
             .next()
             .context("No output lines found")?
@@ -266,14 +266,13 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
             .context("No IPv6 address found in output")?
             .split('/')
             .next()
-            .context("Invalid address format (missing /)")
-            .and_then(|addr| {
-                if addr.is_empty() {
-                    anyhow::bail!("Empty IPv6 address found")
-                } else {
-                    Ok(addr.to_string())
-                }
-            })
+            .expect("Failed to extract address part");
+
+        if addr.is_empty() {
+            anyhow::bail!("Empty IPv6 address found");
+        }
+
+        Ok(addr.to_string())
     };
 
     // Try to get IPv6 address with retries
