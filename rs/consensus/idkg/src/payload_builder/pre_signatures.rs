@@ -1,22 +1,30 @@
+// TODO(CON-1530): Remove this once the new code is called
+#![allow(dead_code)]
 use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext, ReplicatedState,
+};
 use ic_types::{
     consensus::idkg::{
         self,
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
-        TranscriptAttributes, UnmaskedTranscriptWithAttributes,
+        HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgUIDGenerator,
+        PreSigId, TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
     crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -406,6 +414,29 @@ fn make_new_pre_signatures_if_needed_helper(
     new_pre_signatures
 }
 
+/// Count the number of pre-signatures for each key ID in the given state,
+/// and all blocks above the state height.
+pub(super) fn count_pre_signatures_total(
+    state: &Labeled<Arc<ReplicatedState>>,
+    block_reader: &dyn IDkgBlockReader,
+) -> BTreeMap<IDkgMasterPublicKeyId, usize> {
+    let mut total = state
+        .get_ref()
+        .pre_signature_stashes()
+        .iter()
+        .map(|(key_id, stash)| (key_id.clone(), stash.pre_signatures.len()))
+        .collect::<BTreeMap<_, _>>();
+
+    block_reader
+        .iter_above(state.height())
+        .flat_map(|idkg| idkg.available_pre_signatures.values())
+        .for_each(|pre_sig| {
+            *total.entry(pre_sig.key_id()).or_default() += 1;
+        });
+
+    total
+}
+
 /// Create a new masked random transcript config and advance the
 /// next_unused_transcript_id by one.
 fn new_random_config(
@@ -531,12 +562,17 @@ pub(super) mod test_utils {
 #[cfg(test)]
 pub(super) mod tests {
     use super::{test_utils::*, *};
-    use crate::test_utils::{
-        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
-        TestIDkgTranscriptBuilder,
+    use crate::{
+        test_utils::{
+            create_available_pre_signature, create_available_pre_signature_with_key_transcript,
+            into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
+            TestIDkgTranscriptBuilder,
+        },
+        utils::block_chain_reader,
     };
     use assert_matches::assert_matches;
+    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
@@ -547,8 +583,13 @@ pub(super) mod tests {
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::idkg::{
-            common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload, UnmaskedTranscript,
+        batch::BatchPayload,
+        consensus::{
+            dkg::DkgDataPayload,
+            idkg::{
+                common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload, UnmaskedTranscript,
+            },
+            BlockPayload, DataPayload, HasHeight, HashedBlock, Payload,
         },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
@@ -576,6 +617,92 @@ pub(super) mod tests {
             .expect("Should successfully update the height");
 
         (idkg_payload, env, block_reader)
+    }
+
+    #[test]
+    fn test_count_pre_signatures_total() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                replica_config,
+                ..
+            } = dependencies(pool_config.clone(), 4);
+
+            // Advance 4 rounds without IDkg
+            let mut height = pool.advance_round_normal_operation_n(4);
+            assert_eq!(height.get(), 4);
+
+            // Create an IDkgPayload with available pre-signatures
+            let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+            let (mut idkg_payload, _, _) = set_up(
+                &mut reproducible_rng(),
+                replica_config.subnet_id,
+                key_ids.clone(),
+                height,
+            );
+            // create 3 pre-sigs for the first key, 1 for the second, none for the third
+            for i in 0..3 {
+                create_available_pre_signature(&mut idkg_payload, key_ids[0].clone(), i);
+            }
+            create_available_pre_signature(&mut idkg_payload, key_ids[1].clone(), 3);
+
+            // add this payload 4 times.
+            for _ in 0..4 {
+                let mut block_proposal = pool.make_next_block();
+                let block = block_proposal.content.as_mut();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dkg: DkgDataPayload::new_empty(Height::from(0)),
+                        idkg: Some(idkg_payload.clone()),
+                    }),
+                );
+                block_proposal.content =
+                    HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.advance_round_with_block(&block_proposal);
+                height = block_proposal.height();
+            }
+            assert_eq!(height.get(), 8);
+
+            // Create the blockchain reader
+            let pool_reader = PoolReader::new(&pool);
+            let block_reader = block_chain_reader(
+                &pool_reader,
+                Height::from(0),
+                pool_reader.get_finalized_tip(),
+                None,
+                &no_op_logger(),
+            )
+            .unwrap();
+
+            // Create two pre-signature stashes, one for the first key, one for a new key
+            let mut stashes = BTreeMap::new();
+            stashes.insert(key_ids[0].clone(), fake_pre_signature_stash(&key_ids[0], 2));
+            let new_key_id = IDkgMasterPublicKeyId::try_from(key_id_with_name(
+                key_ids[0].inner(),
+                "some_new_key",
+            ))
+            .unwrap();
+            stashes.insert(new_key_id.clone(), fake_pre_signature_stash(&new_key_id, 1));
+
+            let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+            state
+                .metadata
+                .subnet_call_context_manager
+                .pre_signature_stashes = stashes;
+
+            // create the certified state at height 6 (there are two more IDkgPayloads above)
+            let certified_state =
+                ic_interfaces_state_manager::Labeled::new(Height::new(6), Arc::new(state));
+
+            // Count the total pre-signatures in and above the state
+            let count = count_pre_signatures_total(&certified_state, &block_reader);
+            assert_eq!(count.len(), 3);
+            assert_eq!(count[&key_ids[0]], 8);
+            assert_eq!(count[&key_ids[1]], 2);
+            assert_eq!(count[&new_key_id], 1);
+        });
     }
 
     #[test]
