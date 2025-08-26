@@ -812,6 +812,13 @@ pub(super) mod tests {
         // Emptier stash has greater priority
         assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
         assert_eq!(fuller.cmp(&emptier), Ordering::Less);
+
+        // switch the key_ids
+        let emptier = make_stash(1, 10, &id2, &transcript);
+        let fuller = make_stash(5, 10, &id1, &transcript);
+        // Emptier stash should still have greater priority
+        assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
+        assert_eq!(fuller.cmp(&emptier), Ordering::Less);
     }
 
     #[test]
