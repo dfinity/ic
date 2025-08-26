@@ -171,6 +171,14 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             ))
             .cloned()
     }
+
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
+        Box::new(
+            self.chain
+                .iter_above(height)
+                .flat_map(|block| block.payload.as_ref().as_idkg()),
+        )
+    }
 }
 
 pub(super) fn block_chain_reader(
