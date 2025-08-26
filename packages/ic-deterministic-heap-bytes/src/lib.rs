@@ -1,6 +1,5 @@
 pub use ic_deterministic_heap_bytes_derive::DeterministicHeapBytes;
 use paste::paste;
-use std::collections::BTreeMap;
 
 /// A trait to deterministically report heap memory usage.
 ///
@@ -47,6 +46,8 @@ impl DeterministicHeapBytes for f64 {}
 impl DeterministicHeapBytes for bool {}
 impl DeterministicHeapBytes for char {}
 
+impl DeterministicHeapBytes for std::time::Duration {}
+
 impl DeterministicHeapBytes for String {
     fn deterministic_heap_bytes(&self) -> usize {
         self.len()
@@ -79,7 +80,7 @@ impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Vec<T> {
 }
 
 impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapBytes
-    for BTreeMap<K, V>
+    for std::collections::BTreeMap<K, V>
 {
     /// Calculates the precise heap size by summing the heap usage of all elements.
     ///

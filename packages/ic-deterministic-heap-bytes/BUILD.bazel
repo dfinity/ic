@@ -20,9 +20,4 @@ rust_library(
 rust_test(
     name = "ic-deterministic-heap-bytes-test",
     crate = ":ic-deterministic-heap-bytes",
-    proc_macro_deps = [
-        # Keep sorted.
-        "//packages/ic-deterministic-heap-bytes-derive",
-        "@crate_index//:paste",
-    ],
 )

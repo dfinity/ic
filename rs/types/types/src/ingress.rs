@@ -2,6 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::{CanisterId, MemoryDiskBytes, PrincipalId, Time, UserId};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_error_types::{ErrorCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -166,7 +167,18 @@ impl IngressSets {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
