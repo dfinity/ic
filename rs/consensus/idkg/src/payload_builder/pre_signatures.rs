@@ -694,7 +694,7 @@ pub(super) mod tests {
                 .subnet_call_context_manager
                 .pre_signature_stashes = stashes;
 
-            // create the certified state at height 6 (there are two more IDkgPayloads above)
+            // Create the certified state at height 6 (there are two more IDkgPayloads above)
             let certified_state =
                 ic_interfaces_state_manager::Labeled::new(Height::new(6), Arc::new(state));
 
