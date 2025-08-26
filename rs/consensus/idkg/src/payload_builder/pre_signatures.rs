@@ -698,11 +698,23 @@ pub(super) mod tests {
             let certified_state =
                 ic_interfaces_state_manager::Labeled::new(Height::new(6), Arc::new(state));
 
-            // Count the total pre-signatures in and above the state
+            // The entire blockchain should now contain pre-signatures for different keys as follows:
+            // [ C ]--[ B1 ]--[ B2 ]--[ B3 ]--[ B4 ]--[   B5   ]---[   B6   ]---[   B7   ]---[   B8   ]
+            //                                        [key0 x 3]   [key0 x 3]   [key0 x 3]   [key0 x 3]
+            //                                        [key1 x 1]   [key1 x 1]   [key1 x 1]   [key1 x 1]
+            //                                                         ||
+            //                                            {State; key0 x 2; key3 x 1}
+
+            // Count the total pre-signatures in and above the state for each key
             let count = count_pre_signatures_total(&certified_state, &block_reader);
             assert_eq!(count.len(), 3);
+            // key0: 2 in the stash + 3 at height seven + 3 at height eight = 8
             assert_eq!(count[&key_ids[0]], 8);
+            // key1: 0 in the stash + 1 at height seven + 1 at height eight = 2
             assert_eq!(count[&key_ids[1]], 2);
+            // key2: No pre-signatures in the stash or the blockchain
+            assert!(!count.contains_key(&key_ids[2]));
+            // key3: 1 in the stash + 0 at height seven + 0 at height eight = 1
             assert_eq!(count[&new_key_id], 1);
         });
     }
