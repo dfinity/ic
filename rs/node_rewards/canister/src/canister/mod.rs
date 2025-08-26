@@ -252,8 +252,8 @@ impl NodeRewardsCanister {
                     )
                 })?;
             NodeRewardsCanister::schedule_metrics_sync(canister).await;
-            let result = canister
-                .with_borrow(|canister| canister.calculate_rewards::<S>(request.clone()))?;
+            let result =
+                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
             let rewards_xdr_permyriad = result
                 .provider_results
                 .iter()

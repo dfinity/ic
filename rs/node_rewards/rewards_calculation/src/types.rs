@@ -16,7 +16,7 @@ const NANOS_PER_DAY: UnixTsNanos = 24 * 60 * 60 * 1_000_000_000;
 
 #[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, Deserialize, Serialize)]
 pub struct DayUtc {
-    pub value: UnixTsNanos,
+    value: UnixTsNanos,
 }
 
 impl From<UnixTsNanos> for DayUtc {
@@ -165,13 +165,10 @@ impl fmt::Display for RewardPeriodError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RewardPeriodError::FromDayUtcLaterThanToDayUtc => {
-                write!(
-                    f,
-                    "unaligned_start_ts must be earlier than unaligned_end_ts."
-                )
+                write!(f, "FromDayUtc must be earlier or equal ToDayUtc.")
             }
             RewardPeriodError::ToDayUtcLaterThanToday => {
-                write!(f, "unaligned_end_ts must be earlier than today")
+                write!(f, "ToDayUtc must be earlier than today")
             }
         }
     }
@@ -248,7 +245,7 @@ mod tests {
     #[test]
     fn test_error_unaligned_start_ts_greater_unaligned_end_ts() {
         let to_ts = 0;
-        let from_ts = 1;
+        let from_ts = 86499999999999;
 
         let rp = RewardPeriod::new(DayUtc::from(from_ts), DayUtc::from(to_ts));
 

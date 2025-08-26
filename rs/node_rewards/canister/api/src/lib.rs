@@ -27,6 +27,6 @@ impl From<DayUtc> for rewards_calculation::types::DayUtc {
 
 impl From<rewards_calculation::types::DayUtc> for DayUtc {
     fn from(value: rewards_calculation::types::DayUtc) -> Self {
-        Self::from(value.value)
+        Self::from(value.unix_ts_at_day_end())
     }
 }
