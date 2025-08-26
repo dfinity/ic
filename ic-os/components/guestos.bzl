@@ -71,6 +71,7 @@ component_files = {
     Label("guestos/misc/hsm/pcscd"): "/etc/default/pcscd",
     Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
+    Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
 
     # monitoring
     Label("monitoring/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
@@ -162,7 +163,4 @@ component_files = {
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
     Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
-
-    # fstrim
-    Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
 }
