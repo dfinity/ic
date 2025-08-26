@@ -35,7 +35,7 @@ pub fn generate_ic_config(
         .guestos_dev_settings
         .generate_ic_boundary_tls_cert
     {
-        if !domain_name.is_empty() && domain_name != "null" {
+        if !domain_name.is_empty() {
             generate_tls_certificate(domain_name)?;
         }
     }
@@ -117,7 +117,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
 
     let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
 
-    // Helper function to set default value if empty or "null"
+    // Helper function to set default value if empty
     fn with_default(value: String, default: &str) -> String {
         if value.is_empty() {
             default.to_string()
