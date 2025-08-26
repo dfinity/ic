@@ -419,9 +419,30 @@ mod tests {
 
         // Parse the generated result as ConfigOptional and check that it succeeds
         let config_source = ConfigSource::Literal(output_content);
-        let _parsed_config: ConfigOptional = config_source
+        let parsed_config: ConfigOptional = config_source
             .load()
             .expect("Failed to parse generated config");
+
+        assert_eq!(parsed_config.domain, Some("".to_string()));
+        assert_eq!(parsed_config.malicious_behavior, None);
+
+        let registration_config = parsed_config.registration.as_ref().unwrap();
+        assert_eq!(
+            registration_config.nns_url,
+            Some("http://[::1]:8080".to_string())
+        );
+        assert_eq!(registration_config.node_reward_type, Some("".to_string()));
+
+        let artifact_pool_config = parsed_config.artifact_pool.as_ref().unwrap();
+        let backup_config = artifact_pool_config.backup.as_ref().unwrap();
+        assert_eq!(backup_config.retention_time_secs, 86400);
+        assert_eq!(backup_config.purging_interval_secs, 3600);
+
+        let hypervisor_config = parsed_config.hypervisor.as_ref().unwrap();
+        assert_eq!(hypervisor_config.query_stats_epoch_length, 600);
+
+        let tracing_config = parsed_config.tracing.as_ref().unwrap();
+        assert_eq!(tracing_config.jaeger_addr, Some("".to_string()));
     }
 
     fn create_test_guestos_config() -> GuestOSConfig {
