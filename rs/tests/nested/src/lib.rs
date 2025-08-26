@@ -541,7 +541,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let working_version = get_guestos_update_img_version();
 
     let recovery_dir = get_dependency_path("rs/tests");
-    let output_dir = recovery_dir.join("output");
+    let output_dir = env.get_path("recovery_output");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
