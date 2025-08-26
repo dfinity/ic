@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use config_types::{GuestOSConfig, Ipv6Config};
 use serde_json;
 use std::fs::{read_to_string, write};
@@ -348,9 +348,10 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         .status()
         .context("Failed to set permissions of TLS files")?;
 
-    if !status.success() {
-        anyhow::bail!("chmod command failed with status: {}", status);
-    }
+    ensure!(
+        status.success(),
+        "chmod command failed with status: {status}"
+    );
 
     Ok(())
 }
