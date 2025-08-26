@@ -104,12 +104,6 @@ impl ResourceSaturation {
         }
     }
 
-    /// Creates a new `ResourceSaturation` like the `new()` constructor, but also
-    /// divides `usage`, `threshold`, and `capacity` by the given `scaling` factor.
-    pub fn new_scaled(usage: u64, threshold: u64, capacity: u64, scaling: u64) -> Self {
-        Self::new(usage / scaling, threshold / scaling, capacity / scaling)
-    }
-
     /// Returns the part of the usage that is above the threshold.
     pub fn usage_above_threshold(&self) -> u64 {
         self.usage.saturating_sub(self.threshold)

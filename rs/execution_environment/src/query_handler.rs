@@ -8,7 +8,7 @@ mod query_scheduler;
 #[cfg(test)]
 mod tests;
 
-use crate::execution_environment::subnet_memory_capacity;
+use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
@@ -251,7 +251,7 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
         // We apply the (rather high) subnet soft limit for callbacks because the
         // instruction limit for the whole composite query tree imposes a much lower
         // implicit bound anyway.

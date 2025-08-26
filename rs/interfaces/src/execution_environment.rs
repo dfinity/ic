@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
-    fmt, ops,
+    fmt,
     sync::Arc,
     time::Duration,
 };
@@ -339,25 +339,36 @@ pub struct SubnetAvailableMemory {
     guaranteed_response_message_memory: i64,
     /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
-    /// Specifies the factor by which the subnet available memory was scaled
-    /// using the division operator. It is useful for approximating the global
-    /// available memory from the per-thread available memory.
-    scaling_factor: i64,
 }
 
 impl SubnetAvailableMemory {
-    pub fn new(
+    /// This function should only be used in tests.
+    #[doc(hidden)]
+    pub fn new_for_testing(
         execution_memory: i64,
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
     ) -> Self {
-        SubnetAvailableMemory {
+        // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
+        let scaling_factor = 1;
+        SubnetAvailableMemory::new_scaled(
             execution_memory,
             guaranteed_response_message_memory,
             wasm_custom_sections_memory,
-            // The newly created value is not scaled (divided), which
-            // corresponds to the scaling factor of 1.
-            scaling_factor: 1,
+            scaling_factor,
+        )
+    }
+
+    pub fn new_scaled(
+        execution_memory: i64,
+        guaranteed_response_message_memory: i64,
+        wasm_custom_sections_memory: i64,
+        scaling_factor: i64,
+    ) -> Self {
+        SubnetAvailableMemory {
+            execution_memory: execution_memory / scaling_factor,
+            guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
+            wasm_custom_sections_memory: wasm_custom_sections_memory / scaling_factor,
         }
     }
 
@@ -375,17 +386,6 @@ impl SubnetAvailableMemory {
     /// execution available memory.
     pub fn get_wasm_custom_sections_memory(&self) -> i64 {
         self.wasm_custom_sections_memory
-    }
-
-    /// Returns the scaling factor that specifies by how much the initial
-    /// available memory was scaled using the division operator.
-    ///
-    /// It is useful for approximating the global available memory from the
-    /// per-thread available memory. Note that the approximation may be off in
-    /// both directions because there is no way to deterministically know how
-    /// much other threads have allocated.
-    pub fn get_scaling_factor(&self) -> i64 {
-        self.scaling_factor
     }
 
     /// Returns `Ok(())` if the subnet has enough available room for allocating
@@ -487,19 +487,6 @@ impl SubnetAvailableMemory {
         self.execution_memory -= execution_amount.get() as i64;
         self.guaranteed_response_message_memory -= guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_amount.get() as i64;
-    }
-}
-
-impl ops::Div<i64> for SubnetAvailableMemory {
-    type Output = Self;
-
-    fn div(self, rhs: i64) -> Self::Output {
-        Self {
-            execution_memory: self.execution_memory / rhs,
-            guaranteed_response_message_memory: self.guaranteed_response_message_memory / rhs,
-            wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
-            scaling_factor: self.scaling_factor * rhs,
-        }
     }
 }
 
@@ -1502,12 +1489,12 @@ mod tests {
 
     #[test]
     fn test_available_memory() {
-        let available = SubnetAvailableMemory::new(20, 10, 4);
+        let available = SubnetAvailableMemory::new_for_testing(20, 10, 4);
         assert_eq!(available.get_execution_memory(), 20);
         assert_eq!(available.get_guaranteed_response_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
 
-        let available = available / 2;
+        let available = SubnetAvailableMemory::new_scaled(20, 10, 4, 2);
         assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_guaranteed_response_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);
@@ -1516,7 +1503,7 @@ mod tests {
     #[test]
     fn test_subnet_available_memory() {
         let mut available: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20);
+            SubnetAvailableMemory::new_for_testing(1 << 30, (1 << 30) - 5, 1 << 20);
         assert!(available
             .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
             .is_ok());
@@ -1535,7 +1522,7 @@ mod tests {
             .is_err());
 
         let mut available: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20);
+            SubnetAvailableMemory::new_for_testing(1 << 30, (1 << 30) - 5, 1 << 20);
         assert!(available
             .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
             .is_ok());
@@ -1553,7 +1540,8 @@ mod tests {
             .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
             .is_ok());
 
-        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(1 << 30, -1, -1);
+        let mut available: SubnetAvailableMemory =
+            SubnetAvailableMemory::new_for_testing(1 << 30, -1, -1);
         assert!(available
             .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
             .is_err());
@@ -1600,7 +1588,7 @@ mod tests {
             )
             .is_err());
 
-        let mut available = SubnetAvailableMemory::new(44, 45, 30);
+        let mut available = SubnetAvailableMemory::new_for_testing(44, 45, 30);
         assert_eq!(available.get_execution_memory(), 44);
         assert_eq!(available.get_guaranteed_response_message_memory(), 45);
         assert_eq!(available.get_wasm_custom_sections_memory(), 30);
