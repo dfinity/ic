@@ -844,37 +844,37 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 name = "attestation"
 version = "0.0.0"
 dependencies = [
-    "anyhow",
-    "attestation_testing",
-    "candid",
-    "config_types",
-    "der 0.7.9",
-    "ic-interfaces-registry",
-    "ic-protobuf",
-    "ic-registry-client-helpers",
-    "ic-types",
-    "ic_sev",
-    "itertools 0.12.1",
-    "pem 1.1.1",
-    "prost 0.13.4",
-    "prost-build 0.13.4",
-    "ring 0.17.14",
-    "serde",
-    "sev",
-    "thiserror 2.0.12",
-    "tonic",
+ "anyhow",
+ "attestation_testing",
+ "candid",
+ "config_types",
+ "der 0.7.9",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-types",
+ "ic_sev",
+ "itertools 0.12.1",
+ "pem 1.1.1",
+ "prost 0.13.4",
+ "prost-build 0.13.4",
+ "ring 0.17.14",
+ "serde",
+ "sev",
+ "thiserror 2.0.12",
+ "tonic",
 ]
 
 [[package]]
 name = "attestation_testing"
 version = "0.0.0"
 dependencies = [
-    "ic-interfaces-registry-mocks",
-    "ic-protobuf",
-    "ic-registry-keys",
-    "ic-types",
-    "mockall",
-    "prost 0.13.4",
+ "ic-interfaces-registry-mocks",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-types",
+ "mockall",
+ "prost 0.13.4",
 ]
 
 [[package]]
