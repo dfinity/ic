@@ -1008,6 +1008,27 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn arb_invalid_stream_header(
+        min_signal_count: usize,
+        max_signal_count: usize,
+    )(
+        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count),
+        reason in proptest::sample::select(RejectReason::all()),
+    ) -> StreamHeader {
+        let begin = valid_stream_header.begin();
+        let end = valid_stream_header.end();
+        let signals_end = valid_stream_header.signals_end();
+        let mut reject_signals = valid_stream_header.reject_signals().clone();
+        let flags = valid_stream_header.flags().clone();
+
+        // `reject_signals` may not contain the `signals_end`.
+        reject_signals.push_back(RejectSignal::new(reason, signals_end));
+
+        StreamHeader::new(begin, end, signals_end, reject_signals, flags)
+    }
+}
+
+prop_compose! {
     /// Strategy that generates an arbitrary number (of receivers) between 1 and the
     /// provided value, if `Some`; or else `usize::MAX` (standing for unlimited
     /// receivers).

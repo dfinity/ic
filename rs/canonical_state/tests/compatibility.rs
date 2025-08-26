@@ -12,13 +12,10 @@ use ic_canonical_state::{
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
-use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
+use ic_test_utilities_state::{arb_invalid_stream_header, arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
-    crypto::CryptoHash,
-    messages::RequestOrResponse,
-    xnet::{RejectReason, StreamHeader},
-    CryptoHashOfPartialState,
+    crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,
 };
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -88,20 +85,8 @@ pub(crate) fn arb_invalid_versioned_stream_header(
         // Encoding a stream header with reject signal flavors other than `CanisterMigrating`
         // before certification version 19 should panic.
         (
-            arb_stream_header(
-                /* min_signal_count */ 1,
-                max_signal_count,
-                /* with_reject_reasons */
-                vec![
-                    RejectReason::CanisterNotFound,
-                    RejectReason::CanisterStopped,
-                    RejectReason::CanisterStopping,
-                    RejectReason::QueueFull,
-                    RejectReason::OutOfMemory,
-                    RejectReason::Unknown,
-                ],
-            ),
-            Just(CertificationVersion::V18..=CertificationVersion::V18)
+            arb_invalid_stream_header(/* min_signal_count */ 1, max_signal_count),
+            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION),
         ),
     ]
 }
@@ -112,16 +97,16 @@ lazy_static! {
     static ref STREAM_HEADER_ENCODINGS: Vec<VersionedEncoding<StreamHeader>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V18,
-            "StreamHeaderV18",
-            |v| StreamHeaderV18::proxy_encode(v),
-            |v| StreamHeaderV18::proxy_decode(v),
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V19,
+            "StreamHeaderV19",
+            |v| StreamHeaderV19::proxy_encode(v),
+            |v| StreamHeaderV19::proxy_decode(v),
         ),
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
-            |v| StreamHeaderV19::proxy_encode(v),
-            |v| StreamHeaderV19::proxy_decode(v),
+            |v| StreamHeaderV21::proxy_encode(v),
+            |v| StreamHeaderV21::proxy_decode(v),
         ),
     ];
 }
@@ -232,18 +217,11 @@ fn stream_header_encoding_panic_on_invalid(
 /// Produces a `RequestOrResponse` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![
-        (
-            // No `deadline` before version 18.
-            arbitrary::request_or_response_with_config(false),
-            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
-        (
-            // Optionally populate `deadline` from version 18 on.
-            arbitrary::request_or_response_with_config(true),
-            Just(CertificationVersion::V18..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
-    ]
+    prop_oneof![(
+        // Optionally populate `deadline` from version 18 on.
+        arbitrary::request_or_response_with_config(true),
+        Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    ),]
 }
 
 lazy_static! {
@@ -252,16 +230,16 @@ lazy_static! {
     static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<RequestOrResponse>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V17,
-            "RequestOrResponseV17",
-            |v| RequestOrResponseV17::proxy_encode(v),
-            |v| RequestOrResponseV17::proxy_decode(v),
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V19,
+            "RequestOrResponseV19",
+            |v| RequestOrResponseV19::proxy_encode(v),
+            |v| RequestOrResponseV19::proxy_decode(v),
         ),
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "RequestOrResponse",
-            |v| RequestOrResponseV18::proxy_encode(v),
-            |v| RequestOrResponseV18::proxy_decode(v),
+            |v| RequestOrResponseV21::proxy_encode(v),
+            |v| RequestOrResponseV21::proxy_decode(v),
         ),
     ];
 }
@@ -345,8 +323,8 @@ lazy_static! {
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
-            "SystemMetadataV10",
-            |v| SystemMetadataV10::proxy_encode(v),
+            "SystemMetadataV21",
+            |v| SystemMetadataV21::proxy_encode(v),
             |_v| unimplemented!(),
         ),
     ];
@@ -434,7 +412,7 @@ lazy_static! {
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "SubnetMetricsV15",
-            |v| SubnetMetricsV15::proxy_encode(v),
+            |v| SubnetMetricsV21::proxy_encode(v),
             |_v| unimplemented!(),
         ),
     ];
