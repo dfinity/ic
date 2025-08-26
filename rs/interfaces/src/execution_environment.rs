@@ -532,6 +532,7 @@ pub type QueryExecutionResponse =
     Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
 
 /// The input type to a `call()` request in [`QueryExecutionService`].
+#[derive(Debug)]
 pub struct QueryExecutionInput {
     pub query: Query,
     pub certificate_delegation_with_metadata:

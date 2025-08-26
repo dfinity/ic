@@ -404,11 +404,8 @@ mod tests {
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{Replication, Transform};
     use ic_types::{
-        canister_http::CanisterHttpMethod,
-        messages::{CallbackId, CertificateDelegation},
-        time::current_time,
-        time::UNIX_EPOCH,
-        Time,
+        canister_http::CanisterHttpMethod, messages::CallbackId, time::current_time,
+        time::UNIX_EPOCH, Time,
     };
     use std::convert::TryFrom;
     use std::time::Duration;
@@ -551,30 +548,25 @@ mod tests {
 
     fn setup_system_query_mock() -> (
         QueryExecutionService,
-        Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>,
+        Handle<QueryExecutionInput, QueryExecutionResponse>,
     ) {
-        let (service, handle) = tower_test::mock::pair::<
-            (Query, Option<CertificateDelegation>),
-            QueryExecutionResponse,
-        >();
+        let (service, handle) =
+            tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
 
-        let infallible_service =
-            tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
-                let mut service_clone = service.clone();
-                async move {
-                    Ok::<QueryExecutionResponse, std::convert::Infallible>({
-                        service_clone
-                            .ready()
-                            .await
-                            .expect("Mocking Infallible service. Waiting for readiness failed.")
-                            .call(request)
-                            .await
-                            .expect(
-                                "Mocking Infallible service and can therefore not return an error.",
-                            )
-                    })
-                }
-            });
+        let infallible_service = tower::service_fn(move |request: QueryExecutionInput| {
+            let mut service_clone = service.clone();
+            async move {
+                Ok::<QueryExecutionResponse, std::convert::Infallible>({
+                    service_clone
+                        .ready()
+                        .await
+                        .expect("Mocking Infallible service. Waiting for readiness failed.")
+                        .call(request)
+                        .await
+                        .expect("Mocking Infallible service and can therefore not return an error.")
+                })
+            }
+        });
         (BoxCloneService::new(infallible_service), handle)
     }
 
