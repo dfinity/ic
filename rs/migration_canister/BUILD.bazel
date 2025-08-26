@@ -41,11 +41,3 @@ rust_canister(
     service_file = ":migration_canister.did",
     deps = DEPENDENCIES,
 )
-
-rust_test(
-    name = "migration_canister_test",
-    aliases = ALIASES,
-    crate = ":migration_canister",
-    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
