@@ -363,6 +363,7 @@ mod tests {
         FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings, GuestOSUpgradeConfig,
         GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings, CONFIG_VERSION,
     };
+    use ic_config::{config_parser::ConfigSource, ConfigOptional};
 
     const IC_JSON5_TEMPLATE_BYTES: &[u8] =
         include_bytes!("../../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
@@ -383,34 +384,40 @@ mod tests {
         let config_vars = get_config_vars(&guestos_config).unwrap();
 
         let template_content = String::from_utf8_lossy(IC_JSON5_TEMPLATE_BYTES);
-        let result = substitute_template(&template_content, &config_vars);
+        let output_content = substitute_template(&template_content, &config_vars);
 
         // Verify that all placeholders were replaced
-        assert!(!result.contains("{{ ipv6_address }}"));
-        assert!(!result.contains("{{ ipv6_prefix }}"));
-        assert!(!result.contains("{{ ipv4_address }}"));
-        assert!(!result.contains("{{ ipv4_gateway }}"));
-        assert!(!result.contains("{{ domain_name }}"));
-        assert!(!result.contains("{{ nns_urls }}"));
-        assert!(!result.contains("{{ backup_retention_time_secs }}"));
-        assert!(!result.contains("{{ backup_purging_interval_secs }}"));
-        assert!(!result.contains("{{ malicious_behavior }}"));
-        assert!(!result.contains("{{ query_stats_epoch_length }}"));
-        assert!(!result.contains("{{ node_reward_type }}"));
-        assert!(!result.contains("{{ jaeger_addr }}"));
+        assert!(!output_content.contains("{{ ipv6_address }}"));
+        assert!(!output_content.contains("{{ ipv6_prefix }}"));
+        assert!(!output_content.contains("{{ ipv4_address }}"));
+        assert!(!output_content.contains("{{ ipv4_gateway }}"));
+        assert!(!output_content.contains("{{ domain_name }}"));
+        assert!(!output_content.contains("{{ nns_urls }}"));
+        assert!(!output_content.contains("{{ backup_retention_time_secs }}"));
+        assert!(!output_content.contains("{{ backup_purging_interval_secs }}"));
+        assert!(!output_content.contains("{{ malicious_behavior }}"));
+        assert!(!output_content.contains("{{ query_stats_epoch_length }}"));
+        assert!(!output_content.contains("{{ node_reward_type }}"));
+        assert!(!output_content.contains("{{ jaeger_addr }}"));
 
         // Verify that the expected values were substituted
-        assert!(result.contains("node_ip: \"2001:db8::1\""));
-        assert!(result.contains("public_address: \"\""));
-        assert!(result.contains("public_gateway: \"\""));
-        assert!(result.contains("domain: \"\""));
-        assert!(result.contains("nns_url: \"http://[::1]:8080\""));
-        assert!(result.contains("retention_time_secs: 86400"));
-        assert!(result.contains("purging_interval_secs: 3600"));
-        assert!(result.contains("malicious_behavior: null"));
-        assert!(result.contains("query_stats_epoch_length: 600"));
-        assert!(result.contains("node_reward_type: \"\""));
-        assert!(result.contains("jaeger_addr: \"\""));
+        assert!(output_content.contains("node_ip: \"2001:db8::1\""));
+        assert!(output_content.contains("public_address: \"\""));
+        assert!(output_content.contains("public_gateway: \"\""));
+        assert!(output_content.contains("domain: \"\""));
+        assert!(output_content.contains("nns_url: \"http://[::1]:8080\""));
+        assert!(output_content.contains("retention_time_secs: 86400"));
+        assert!(output_content.contains("purging_interval_secs: 3600"));
+        assert!(output_content.contains("malicious_behavior: null"));
+        assert!(output_content.contains("query_stats_epoch_length: 600"));
+        assert!(output_content.contains("node_reward_type: \"\""));
+        assert!(output_content.contains("jaeger_addr: \"\""));
+
+        // Parse the generated result as ConfigOptional and check that it succeeds
+        let config_source = ConfigSource::Literal(output_content);
+        let _parsed_config: ConfigOptional = config_source
+            .load()
+            .expect("Failed to parse generated config");
     }
 
     fn create_test_guestos_config() -> GuestOSConfig {

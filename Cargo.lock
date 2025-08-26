@@ -2655,6 +2655,7 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "fs_extra",
+ "ic-config",
  "ic-types",
  "ic_sev",
  "macaddr",
