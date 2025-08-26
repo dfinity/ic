@@ -116,7 +116,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
 
     // Helper function to set default value if empty or "null"
     fn with_default(value: String, default: &str) -> String {
-        if value.is_empty() || value == "null" {
+        if value.is_empty() {
             default.to_string()
         } else {
             value
