@@ -15,8 +15,7 @@ use crate::CertificationVersion;
 
 use super::types;
 use crate::encoding::types::{
-    Bytes, Cycles, Funds, Payload as PayloadV19, RejectSignals as RejectSignalsV19,
-    StreamFlagBits as StreamFlagBitsV17, STREAM_SUPPORTED_FLAGS as STREAM_SUPPORTED_FLAGS_V17,
+    Bytes, Cycles, Funds, Payload, RejectSignals, StreamFlagBits, STREAM_SUPPORTED_FLAGS,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::time::CoarseTime;
@@ -34,7 +33,7 @@ pub struct StreamHeaderV19 {
     #[serde(default, skip_serializing_if = "types::is_zero")]
     pub flags: u64,
     #[serde(default, skip_serializing_if = "types::RejectSignals::is_empty")]
-    pub reject_signals: RejectSignalsV19,
+    pub reject_signals: RejectSignals,
 }
 
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV19 {
@@ -46,7 +45,7 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
             deprecated_responses_only,
         } = *header.flags();
         if deprecated_responses_only {
-            flags |= StreamFlagBitsV17::DeprecatedResponsesOnly as u64;
+            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
         }
 
         // Generate deltas representation based on `certification_version` to ensure unique
@@ -78,15 +77,15 @@ impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
                 header.deprecated_reject_signal_deltas,
             )));
         }
-        if header.flags & !STREAM_SUPPORTED_FLAGS_V17 != 0 {
+        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
             return Err(ProxyDecodeError::Other(format!(
                 "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
-                header.flags, STREAM_SUPPORTED_FLAGS_V17,
+                header.flags, STREAM_SUPPORTED_FLAGS,
             )));
         }
         let flags = ic_types::xnet::StreamFlags {
             deprecated_responses_only: header.flags
-                & StreamFlagBitsV17::DeprecatedResponsesOnly as u64
+                & StreamFlagBits::DeprecatedResponsesOnly as u64
                 != 0,
         };
 
@@ -235,7 +234,7 @@ pub struct ResponseV19 {
     pub respondent: Bytes,
     pub originator_reply_callback: u64,
     pub refund: Funds,
-    pub response_payload: PayloadV19,
+    pub response_payload: Payload,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_refund: Option<Cycles>,
     #[serde(skip_serializing_if = "types::is_zero", default)]

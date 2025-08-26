@@ -1019,7 +1019,7 @@ prop_compose! {
         let end = valid_stream_header.end();
         let signals_end = valid_stream_header.signals_end();
         let mut reject_signals = valid_stream_header.reject_signals().clone();
-        let flags = valid_stream_header.flags().clone();
+        let flags = *valid_stream_header.flags();
 
         // `reject_signals` may not contain the `signals_end`.
         reject_signals.push_back(RejectSignal::new(reason, signals_end));
