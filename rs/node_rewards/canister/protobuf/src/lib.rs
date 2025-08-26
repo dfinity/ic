@@ -20,20 +20,6 @@ pub const MAX_PRINCIPAL_ID: PrincipalId = PrincipalId(Principal::from_slice(
     &[0xFF_u8; PRINCIPAL_MAX_LENGTH_IN_BYTES],
 ));
 
-impl Serialize for pb::rewards_calculator::v1::DayUtc {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if let Some(v) = self.value {
-            let date_str = DayUtc::from(v).to_string();
-            serializer.serialize_str(&date_str)
-        } else {
-            serializer.serialize_none()
-        }
-    }
-}
-
 pub trait KeyRange {
     fn min_key() -> Self;
     fn max_key() -> Self;

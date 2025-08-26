@@ -1,6 +1,5 @@
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
-use std::fmt::Display;
 
 pub mod monthly_rewards;
 pub mod provider_rewards_calculation;
