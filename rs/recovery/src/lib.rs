@@ -889,7 +889,9 @@ impl Recovery {
         CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
             work_dir: self.work_dir.clone(),
-            output_dir,
+            // If no output directory is not specified, save the files in a directory that will
+            // not be deleted by the cleanup step (i.e., not `self.work_dir`).
+            output_dir: output_dir.unwrap_or(PathBuf::from("/tmp/recovery_artifacts")),
         }
     }
 

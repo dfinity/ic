@@ -1051,49 +1051,50 @@ impl Step for UploadCUPAndTarStep {
 pub struct CreateNNSRecoveryTarStep {
     pub logger: Logger,
     pub work_dir: PathBuf,
-    pub output_dir: Option<PathBuf>,
+    pub output_dir: PathBuf,
 }
 
 impl CreateNNSRecoveryTarStep {
-    fn get_create_commands(&self) -> String {
-        let mut commands = match &self.output_dir {
-            Some(dir) => {
-                format!("output_dir=\"{dir}\"\n", dir = dir.display())
-            }
-            None => {
-                // If no output directory is not specified, save the files in a directory that will
-                // not be deleted by the cleanup step (i.e., not `self.work_dir`).
-                String::from("output_dir=\"/tmp/recovery_artifacts\"\n")
-            }
-        };
-
-        commands.push_str(&format!(
-            r#"
-
-mkdir -p "$output_dir"
-tar --zstd -cvf "$output_dir"/recovery.tar.zst -C {work_dir} cup.proto {IC_REGISTRY_LOCAL_STORE}.tar.zst
-
-artifacts_hash="$(sha256sum "$output_dir"/recovery.tar.zst | cut -d ' ' -f1)"
-echo "$artifacts_hash" > "$output_dir"/recovery.tar.zst.sha256
-            "#,
-            work_dir = self.work_dir.display(),
-        ));
-
-        commands
+    fn get_tar_name(&self) -> String {
+        "recovery.tar.zst".to_string()
     }
 
-    fn get_next_steps_commands() -> String {
-        r#"
-echo "Recovery artifacts with checksum $artifacts_hash were successfully created in $output_dir."
-echo "Now please:"
-echo "  - Upload $output_dir/recovery.tar.zst to:"
-echo "    - https://download.dfinity.systems/recovery/$artifacts_hash/recovery.tar.zst"
-echo "    - https://download.dfinity.network/recovery/$artifacts_hash/recovery.tar.zst"
-echo "  - Run the following command and commit + push to a branch of dfinity/ic:"
-echo "    echo $artifacts_hash > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash"
-echo "  - Build a recovery image from that branch."
-echo "  - Provide other Node Providers with the commit hash as version and the image hash. Ask them to reboot and follow the recovery instructions."
-        "#.to_string()
+    fn get_sha_name(&self) -> String {
+        self.get_tar_name() + ".sha256"
+    }
+
+    fn get_create_commands(&self) -> String {
+        format!(
+            r#"
+mkdir -p {output_dir}
+tar --zstd -cvf {output_dir}/{tar_name} -C {work_dir} cup.proto {IC_REGISTRY_LOCAL_STORE}.tar.zst
+
+artifacts_hash="$(sha256sum {output_dir}/{tar_name} | cut -d ' ' -f1)"
+echo "$artifacts_hash" > {output_dir}/{sha_name}
+            "#,
+            output_dir = self.output_dir.display(),
+            tar_name = self.get_tar_name(),
+            sha_name = self.get_sha_name(),
+            work_dir = self.work_dir.display(),
+        )
+    }
+
+    fn get_next_steps(&self, artifacts_hash: &str) -> String {
+        format!(
+            r#"
+Recovery artifacts with checksum {artifacts_hash} were successfully created in {output_dir}.
+Now please:
+  - Upload {output_dir}/{tar_name} to:
+    - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
+    - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
+  - Run the following command and commit + push to a branch of dfinity/ic:
+    echo {artifacts_hash} > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash
+  - Build a recovery image from that branch.
+  - Provide other Node Providers with the commit hash as version and the image hash. Ask them to reboot and follow the recovery instructions.
+            "#,
+            output_dir = self.output_dir.display(),
+            tar_name = self.get_tar_name(),
+        )
     }
 }
 
@@ -1106,16 +1107,26 @@ impl Step for CreateNNSRecoveryTarStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let script = format!(
-            "{}\n{}\n",
-            self.get_create_commands(),
-            Self::get_next_steps_commands()
-        );
-        let mut bash = Command::new("bash");
-        bash.arg("-c").arg(&script);
-        if let Some(res) = exec_cmd(&mut bash)? {
+        if let Some(res) = exec_cmd(
+            Command::new("bash")
+                .arg("-c")
+                .arg(&self.get_create_commands()),
+        )? {
             info!(self.logger, "{}", res);
         }
+
+        if let Some(sha256) =
+            exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))?
+        {
+            info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
+        } else {
+            return Err(RecoveryError::invalid_output_error(format!(
+                "Could not read {}/{}",
+                self.output_dir.display(),
+                self.get_sha_name()
+            )));
+        }
+
         Ok(())
     }
 }
