@@ -19,7 +19,6 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
-    environment: Nightly Tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,7 +63,6 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 720 # 12 hours
-    environment: Nightly Tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,7 +101,6 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 30
-    environment: Nightly Tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
