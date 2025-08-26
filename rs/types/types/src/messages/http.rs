@@ -714,15 +714,18 @@ pub struct Certificate {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum CertificateDelegationFormat {
-    Full,
+    /// Delegation with the canister ranges in the `/subnet/{subnet_id}/canister_ranges` path.
     Flat,
+    /// Delegation with the canister ranges in the `/canister_ranges/{subnet_id}` path.
     Tree,
+    /// Delegation with the canister ranges pruned out.
     Pruned,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct CertificateDelegationMetadata {
-    pub format: CertificateDelegationFormat
+    // TODO(kpop): additionally include the time from the certification
+    pub format: CertificateDelegationFormat,
 }
 
 /// A `CertificateDelegation` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`

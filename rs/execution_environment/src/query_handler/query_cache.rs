@@ -138,7 +138,7 @@ pub(crate) struct EntryKey {
     pub method_name: String,
     /// Receiving canister method payload (argument).
     pub method_payload: Vec<u8>,
-    /// Format of the nns delegation.
+    /// Format of the certificate delegation.
     pub certificate_delegation_format: Option<CertificateDelegationFormat>,
 }
 

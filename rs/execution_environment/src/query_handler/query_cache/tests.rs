@@ -15,7 +15,10 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CanisterTask, Query, QuerySource},
+    messages::{
+        CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
+        QuerySource,
+    },
     time, MemoryDiskBytes,
 };
 use ic_types_test_utils::ids::subnet_test_id;
@@ -217,6 +220,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         receiver: a_id,
         method_name: "method".into(),
         method_payload: vec![],
+        certificate_delegation_format: None,
     };
 
     // Assert initial cache state.
@@ -333,6 +337,7 @@ fn query_cache_returns_different_results_for_different_sources() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         );
         assert_eq!(query_cache_metrics(&test).misses.get(), 1);
         let caller = if a_id == b_id {
@@ -357,6 +362,7 @@ fn query_cache_returns_different_results_for_different_sources() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         );
         assert_eq!(query_cache_metrics(&test).misses.get(), 2);
         let caller = if a_id == b_id {
@@ -398,6 +404,46 @@ fn query_cache_returns_different_results_for_different_method_names() {
     let res_2 = test.non_replicated_query(id, "f2", vec![]);
     assert_eq!(query_cache_metrics(&test).misses.get(), 2);
     assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_returns_different_results_for_different_certificate_delegation_formats() {
+    let mut test = builder_with_query_caching().build();
+    let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
+    let method_name = "method_name";
+    let method_payload = vec![];
+
+    let res_1 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        None,
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+    assert_eq!(res_1, Ok(WasmResult::Reply(b"42".to_vec())));
+
+    let res_2 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        Some(CertificateDelegationMetadata {
+            format: CertificateDelegationFormat::Flat,
+        }),
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+
+    let res_3 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        Some(CertificateDelegationMetadata {
+            format: CertificateDelegationFormat::Tree,
+        }),
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 3);
+
+    assert_eq!(res_1, res_2);
+    assert_eq!(res_2, res_3);
 }
 
 #[test]

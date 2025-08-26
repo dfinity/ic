@@ -121,7 +121,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let metrics = self.metrics.clone();
         let delegation_from_nns = self
             .nns_delegation_reader
-            .get_delegation(CanisterRangesFilter::Flat);
+            .get_delegation_with_metadata(CanisterRangesFilter::Flat);
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -329,7 +329,7 @@ async fn transform_adapter_response(
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     let transform_args = TransformArgs {
         response: canister_http_response,
@@ -355,14 +355,7 @@ async fn transform_adapter_response(
 
     let query_execution_input = QueryExecutionInput {
         query,
-        certificate_delegation_with_metadata: delegation_from_nns.map(|delegation| {
-            (
-                delegation,
-                CertificateDelegationMetadata {
-                    format: ic_types::messages::CertificateDelegationFormat::Flat,
-                },
-            )
-        }),
+        certificate_delegation_with_metadata: delegation_from_nns,
     };
 
     match Oneshot::new(query_handler, query_execution_input).await {

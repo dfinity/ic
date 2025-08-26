@@ -29,9 +29,9 @@ use ic_types::{
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CertificateDelegationFormat, CertificateDelegationMetadata, HasCanisterId,
-        HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpRequest,
-        HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query, QueryResponseHash,
+        Blob, HasCanisterId, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply,
+        HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query,
+        QueryResponseHash,
     },
     CanisterId, NodeId,
 };
@@ -218,12 +218,11 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
-    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
-    let format = CertificateDelegationFormat::Flat;
+    let delegation_from_nns =
+        nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat);
     let query_execution_input = QueryExecutionInput {
         query: user_query.clone(),
-        certificate_delegation_with_metadata: delegation_from_nns
-            .map(|delegation| (delegation, CertificateDelegationMetadata { format })),
+        certificate_delegation_with_metadata: delegation_from_nns,
     };
     let query_execution_response = query_execution_service
         .oneshot(query_execution_input)

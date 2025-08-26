@@ -78,6 +78,7 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
@@ -3018,7 +3019,16 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let delegation = pic
+                    .get_nns_delegation_for_subnet(subnet.get_subnet_id())
+                    .map(|delegation| {
+                        (
+                            delegation,
+                            CertificateDelegationMetadata {
+                                format: CertificateDelegationFormat::Flat,
+                            },
+                        )
+                    });
                 match subnet.query_as_with_delegation(
                     self.0.sender,
                     self.0.canister_id,

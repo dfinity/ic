@@ -59,6 +59,7 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -1179,6 +1180,7 @@ impl ExecutionTest {
             query,
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
+            /*certification_delegation_metadata=*/ None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1192,6 +1194,22 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        self.non_replicated_query_with_certificate_delegation_metadata(
+            canister_id,
+            method_name,
+            method_payload,
+            /*certificate_delegation_metadata=*/ None,
+        )
+    }
+
+    /// Executes a non-replicated query on the latest state.
+    pub fn non_replicated_query_with_certificate_delegation_metadata<S: ToString>(
+        &mut self,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+    ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
         let query = Query {
@@ -1204,7 +1222,12 @@ impl ExecutionTest {
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result = self.query(query, Arc::clone(&state), vec![]);
+        let result = self.query(
+            query,
+            Arc::clone(&state),
+            vec![],
+            certificate_delegation_metadata,
+        );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
         result
@@ -1671,6 +1694,7 @@ impl ExecutionTest {
         query: Query,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
     ) -> Result<WasmResult, UserError> {
         // We always pass 0 as the height to the query handler, because we don't run consensus
         // in these tests and therefore there isn't any height.
@@ -1682,6 +1706,7 @@ impl ExecutionTest {
             query,
             Labeled::new(Height::from(0), state),
             data_certificate,
+            certificate_delegation_metadata,
         )
     }
 
