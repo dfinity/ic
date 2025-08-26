@@ -30,6 +30,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:futures",
     "@crate_index//:prost",
+    "@crate_index//:rand",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:sha2",

@@ -26,6 +26,7 @@ sha2 = { workspace = true }
 slog = { workspace = true }
 url = { workspace = true }
 prost = { workspace = true }
+rand = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
 

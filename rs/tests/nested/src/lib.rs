@@ -40,8 +40,8 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::Height;
+use rand::seq::SliceRandom;
 use reqwest::Client;
-
 use sha2::{Digest, Sha256};
 use slog::{info, Logger};
 
@@ -449,13 +449,19 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Success: Original single node has been removed from the NNS subnet"
     );
 
+    // Define faulty and healthy nodes, pick a DFINITY-owned node that is healthy
+    let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
+    nns_nodes.shuffle(&mut rand::thread_rng());
+    let f = (SUBNET_SIZE - 1) / 3;
+    let faulty_nodes = &nns_nodes[..(f + 1)];
+    let healthy_nodes = &nns_nodes[(f + 1)..];
+    let dfinity_owned_node = healthy_nodes.first().unwrap();
+
     // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
     info!(
         logger,
         "Waiting for NNS subnet to become healthy and make progress after membership changes..."
     );
-    let mut nns_nodes = nns_subnet.nodes();
-    let dfinity_owned_node = nns_nodes.next().unwrap();
     info!(
         logger,
         "Selected DFINITY-owned NNS node: {} ({:?})",
@@ -559,13 +565,11 @@ pub fn nns_recovery_test(env: TestEnv) {
     let subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     // Break f+1 nodes by SSHing into them and breaking the replica binary.
-    let f = (SUBNET_SIZE - 1) / 3;
     info!(
         logger,
         "Breaking the NNS subnet by breaking the replica binary on f+1={} nodes",
         f + 1
     );
-    let faulty_nodes = nns_nodes.take(f + 1);
     let ssh_command =
         "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
     for node in faulty_nodes {
@@ -585,13 +589,15 @@ pub fn nns_recovery_test(env: TestEnv) {
         });
     }
 
-    info!(logger, "Ensure a healthy node still works in read mode");
-    assert!(can_read_msg(
-        &logger,
-        &dfinity_owned_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
+    if let Some(healthy) = healthy_nodes.first() {
+        info!(logger, "Ensure a healthy node still works in read mode");
+        assert!(can_read_msg(
+            &logger,
+            &healthy.get_public_url(),
+            app_can_id,
+            msg
+        ));
+    }
     info!(
         logger,
         "Ensure the subnet does not work in write mode anymore"
