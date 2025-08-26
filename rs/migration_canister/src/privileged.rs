@@ -3,13 +3,13 @@
 //!
 
 use candid::CandidType;
-use ic_cdk::{caller, update};
+use ic_cdk::{api::msg_caller, update};
 use serde::Deserialize;
 
 use crate::canister_state::privileged::{set_disabled_flag, set_max_active_requests};
 
 fn check_caller() -> Result<(), MigrationCanisterError> {
-    match ic_cdk::api::is_controller(&caller()) {
+    match ic_cdk::api::is_controller(&msg_caller()) {
         true => Ok(()),
         false => Err(MigrationCanisterError::CallerNotController),
     }

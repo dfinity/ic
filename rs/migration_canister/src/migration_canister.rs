@@ -60,7 +60,7 @@ enum MigrationStatus {
 // TODO: if a request is repeated, we don't know which one is meant... because the MigrateCanisterArgs
 // will be identical even though the actual `Request` will be different. So should we use IDs after all?
 #[update]
-fn migration_status(args: MigrateCanisterArgs) -> MigrationStatus {
+fn migration_status(_args: MigrateCanisterArgs) -> MigrationStatus {
     // TODO
     MigrationStatus::Unknown
 }

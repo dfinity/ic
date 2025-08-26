@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::{processing::ProcessingResult, ValidationError};
 
-const REGISTRY_CANISTER_ID: &'static str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
+const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct GetSubnetForCanisterArgs {

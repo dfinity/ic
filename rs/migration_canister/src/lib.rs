@@ -212,6 +212,7 @@ impl Storable for Event {
     const BOUND: Bound = Bound::Unbounded;
 }
 
+#[allow(clippy::disallowed_methods)]
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
     set_timer_interval(interval, || {
