@@ -256,6 +256,26 @@ fn get_network_interface() -> Result<String> {
 }
 
 fn get_interface_ipv6_address(interface: &str) -> Result<String> {
+    let parse_ipv6_address = |output_str: &str| -> Result<String> {
+        output_str
+            .lines()
+            .next()
+            .context("No output lines found")?
+            .split_whitespace()
+            .nth(3)
+            .context("No IPv6 address found in output")?
+            .split('/')
+            .next()
+            .context("Invalid address format (missing /)")
+            .and_then(|addr| {
+                if addr.is_empty() {
+                    anyhow::bail!("Empty IPv6 address found")
+                } else {
+                    Ok(addr.to_string())
+                }
+            })
+    };
+
     // Try to get IPv6 address with retries
     for retry in 0..12 {
         let output = Command::new("ip")
@@ -266,20 +286,20 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
             .context("Failed to get IPv6 address")?;
 
         let output_str = String::from_utf8_lossy(&output.stdout);
-        if let Some(ipv6_address) = output_str
-            .lines()
-            .next()
-            .and_then(|line| line.split_whitespace().nth(3))
-            .and_then(|addr_part| addr_part.split('/').next())
-            .map(|addr| addr.to_string())
-            .filter(|addr| !addr.is_empty())
-        {
-            return Ok(ipv6_address);
-        }
-
-        if retry < 11 {
-            eprintln!("Retrying {} ...", 11 - retry);
-            std::thread::sleep(std::time::Duration::from_secs(10));
+        match parse_ipv6_address(&output_str) {
+            Ok(ipv6_address) => return Ok(ipv6_address),
+            Err(e) => {
+                if retry < 11 {
+                    eprintln!(
+                        "Retrying {} ... (Failed to parse IPv6 address: {})",
+                        11 - retry,
+                        e
+                    );
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                } else {
+                    return Err(e.context("Failed to parse IPv6 address after all retries"));
+                }
+            }
         }
     }
 
