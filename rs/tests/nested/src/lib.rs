@@ -565,7 +565,8 @@ pub fn nns_recovery_test(env: TestEnv) {
         next_step: None,
     };
 
-    let mut subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
+    let mut subnet_recovery_tool =
+        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     // Break f+1 nodes by SSHing into them and breaking the replica binary.
     info!(
@@ -638,14 +639,17 @@ pub fn nns_recovery_test(env: TestEnv) {
     );
 
     // go over all steps of the NNS recovery
-    for (step_type, step) in subnet_recovery {
+    for (step_type, step) in subnet_recovery_tool {
         info!(logger, "Next step: {:?}", step_type);
 
         info!(logger, "{}", step.descr());
         step.exec()
             .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
     }
-    info!(logger, "NNS recovery has finished");
+    info!(
+        logger,
+        "Recovery coordinator successfully went through all steps of the recovery tool"
+    );
 
     info!(logger, "Setup UVM to serve recovery artifacts");
     let artifacts = std::fs::read(output_dir.join("recovery.tar.zst")).unwrap();
