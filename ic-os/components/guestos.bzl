@@ -4,7 +4,7 @@ Enumerate every component file dependency for GuestOS
 
 component_files = {
     # early-boot
-    Label("early-boot/relabel-machine-id/guestos/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
+    Label("early-boot/relabel-machine-id/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
     Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
     Label("early-boot/setup-hostname/guestos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
@@ -44,8 +44,8 @@ component_files = {
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
-    Label("init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
-    Label("init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
+    Label("guestos/init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
+    Label("guestos/init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
     Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
     Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
