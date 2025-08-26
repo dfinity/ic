@@ -94,10 +94,10 @@ component_files = {
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
     Label("monitoring/nft-exporter/nft-exporter.service"): "/etc/systemd/system/nft-exporter.service",
     Label("monitoring/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
-    Label("monitoring/custom-metrics/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
-    Label("monitoring/custom-metrics/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("guestos/monitoring/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
     Label("guestos/monitoring/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
+    Label("guestos/monitoring/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
+    Label("guestos/monitoring/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
 
