@@ -377,6 +377,7 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => "",
             TargetCanister::CyclesLedger
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
