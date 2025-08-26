@@ -508,8 +508,14 @@ impl ExecutionTest {
         self.subnet_available_memory
     }
 
-    pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
-        self.subnet_available_memory = memory
+    pub fn set_available_execution_memory(&mut self, execution_memory: i64) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            execution_memory,
+            self.subnet_available_memory
+                .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
     }
 
     pub fn subnet_available_callbacks(&self) -> i64 {
@@ -2515,7 +2521,7 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 self.execution_config.subnet_memory_capacity.get() as i64
                     - self.execution_config.subnet_memory_reservation.get() as i64,
                 self.execution_config

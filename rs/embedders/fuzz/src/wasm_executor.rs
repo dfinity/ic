@@ -40,7 +40,7 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 lazy_static! {
     pub(crate) static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY
