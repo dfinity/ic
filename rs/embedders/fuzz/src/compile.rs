@@ -18,7 +18,8 @@ const MAX_PARALLEL_EXECUTIONS: usize = 4;
 impl<'a> Arbitrary<'a> for MaybeInvalidModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         let mut config = if u.ratio(1, 2)? {
-            let mut config = ic_wasm_config(EmbeddersConfig::default());
+            let is_wasm64 = u.arbitrary()?;
+            let mut config = ic_wasm_config(EmbeddersConfig::default(), is_wasm64);
             config.exports = generate_exports(EmbeddersConfig::default(), u)?;
             config.min_data_segments = 2;
             config.max_data_segments = 10;

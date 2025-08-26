@@ -49,7 +49,8 @@ impl<'a> Arbitrary<'a> for ICWasmModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         let embedder_config = EmbeddersConfig::default();
         let exports = generate_exports(embedder_config.clone(), u)?;
-        let mut config = ic_wasm_config(embedder_config);
+        let is_wasm64 = u.arbitrary()?;
+        let mut config = ic_wasm_config(embedder_config, is_wasm64);
         config.exports = exports;
         Ok(ICWasmModule::new(config.clone(), Module::new(config, u)?))
     }
@@ -58,7 +59,7 @@ impl<'a> Arbitrary<'a> for ICWasmModule {
 #[derive(Debug)]
 pub struct SystemApiModule {
     pub module: Vec<u8>,
-    pub memory64_enabled: bool,
+    pub is_wasm64: bool,
     pub exported_functions: BTreeSet<WasmMethod>,
 }
 
@@ -70,9 +71,9 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         // memory pages are bound to 100
         let memory_minimum = u.int_in_range(0..=50)?;
         let memory_maximum = u.int_in_range(memory_minimum..=100)?;
-        let memory64_enabled = u.ratio(2, 3)?;
+        let is_wasm64 = u.arbitrary()?;
 
-        let store: &'static SystemApiImportStore = if memory64_enabled {
+        let store: &'static SystemApiImportStore = if is_wasm64 {
             &SYSTEM_API_IMPORTS_WASM64
         } else {
             &SYSTEM_API_IMPORTS_WASM32
@@ -93,7 +94,7 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         memories.memory(MemoryType {
             minimum: memory_minimum,
             maximum: Some(memory_maximum),
-            memory64: memory64_enabled,
+            memory64: is_wasm64,
             shared: false,
             page_size_log2: None,
         });
@@ -152,7 +153,7 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
 
         Ok(SystemApiModule {
             module: wasm_bytes,
-            memory64_enabled,
+            is_wasm64,
             exported_functions: BTreeSet::from([wasm_method]),
         })
     }
@@ -246,7 +247,7 @@ impl ICWasmModule {
     }
 }
 
-pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
+pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Config {
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -270,7 +271,11 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(SYSTEM_API_IMPORTS_WASM64.module.to_vec()),
+        available_imports: Some(if is_wasm64 {
+            SYSTEM_API_IMPORTS_WASM64.module.to_vec()
+        } else {
+            SYSTEM_API_IMPORTS_WASM32.module.to_vec()
+        }),
         ..Default::default()
     }
 }
