@@ -204,6 +204,9 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
                 fee: Some(Nat::from(fee)),
                 from_subaccount,
                 created_at_time: None,
+                // If the expected_allowance field is set, the ledger
+                // MUST ensure that the current allowance for the spender
+                // from the caller's account is equal to the given value.
                 expected_allowance: Some(Nat::from(0_u64)),
                 memo: None,
             },),

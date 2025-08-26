@@ -114,6 +114,9 @@ impl ICRC1Ledger for LedgerCanister {
             from_subaccount,
             memo: None,
             created_at_time: None,
+            // If the expected_allowance field is set, the ledger
+            // MUST ensure that the current allowance for the spender
+            // from the caller's account is equal to the given value.
             expected_allowance: Some(Nat::from(0_u64)),
         };
 
