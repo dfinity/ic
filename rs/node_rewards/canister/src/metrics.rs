@@ -9,8 +9,7 @@ use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
 use ic_node_rewards_canister_protobuf::KeyRange;
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
+use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 

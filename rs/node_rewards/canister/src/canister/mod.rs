@@ -7,11 +7,14 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
 };
+use ic_node_rewards_canister_api::provider_rewards::{
+    GetNodeProviderRewardsRequest, GetNodeProviderRewardsResponse,
+};
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
 };
 use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
-    NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
+    NodeProviderRewards, NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -121,15 +124,12 @@ impl NodeRewardsCanister {
         &self,
         request: GetNodeProvidersRewardsRequest,
     ) -> Result<RewardsCalculatorResults, String> {
-        let reward_period = RewardPeriod::new(
-            request.from_timestamp_nanoseconds,
-            request.to_timestamp_nanoseconds,
-        )
-        .map_err(|e| e.to_string())?;
+        let reward_period =
+            RewardPeriod::new(request.from.into(), request.to.into()).map_err(|e| e.to_string())?;
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
-            .version_for_timestamp(reward_period.to.unix_ts_at_day_end())
+            .version_for_timestamp(reward_period.from.unix_ts_at_day_end())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         let rewards_table = registry_querier.get_rewards_table(version);
         let daily_metrics_by_subnet = self
@@ -255,8 +255,8 @@ impl NodeRewardsCanister {
                     )
                 })?;
             NodeRewardsCanister::schedule_metrics_sync(canister).await;
-            let result =
-                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
+            let result = canister
+                .with_borrow(|canister| canister.calculate_rewards::<S>(request.clone()))?;
             let rewards_xdr_permyriad = result
                 .provider_results
                 .iter()
@@ -292,6 +292,42 @@ impl NodeRewardsCanister {
             Ok(NodeProvidersRewards {
                 rewards_xdr_permyriad,
             })
+        }
+    }
+
+    pub fn get_node_provider_rewards<S: RegistryDataStableMemory>(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+        request: GetNodeProviderRewardsRequest,
+    ) -> GetNodeProviderRewardsResponse {
+        return match inner_get_node_provider_rewards::<S>(canister, request) {
+            Ok(rewards) => GetNodeProviderRewardsResponse {
+                rewards: Some(rewards),
+                error: None,
+            },
+            Err(e) => GetNodeProviderRewardsResponse {
+                rewards: None,
+                error: Some(e),
+            },
+        };
+
+        fn inner_get_node_provider_rewards<S: RegistryDataStableMemory>(
+            canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+            request: GetNodeProviderRewardsRequest,
+        ) -> Result<NodeProviderRewards, String> {
+            let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
+            let request_inner = GetNodeProvidersRewardsRequest {
+                from: request.from,
+                to: request.to,
+            };
+            let result =
+                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
+            let node_provider_rewards = result
+                .provider_results
+                .get(&provider_id)
+                .cloned()
+                .ok_or_else(|| format!("No rewards found for node provider {}", provider_id))?;
+
+            Ok(node_provider_rewards.into())
         }
     }
 }

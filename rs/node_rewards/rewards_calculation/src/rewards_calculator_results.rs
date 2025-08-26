@@ -1,108 +1,13 @@
-use crate::types::{Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
-use chrono::{DateTime, NaiveDate};
+use crate::types::{DayUtc, Region, RewardPeriod, RewardPeriodError};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
-use std::fmt::Display;
 
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
-
-#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy)]
-pub struct DayUtc(UnixTsNanos);
-
-impl From<UnixTsNanos> for DayUtc {
-    fn from(value: UnixTsNanos) -> Self {
-        let day_end = ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1;
-        Self(day_end)
-    }
-}
-
-impl Serialize for DayUtc {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for DayUtc {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let date = NaiveDate::parse_from_str(&s, "%d-%m-%Y").map_err(serde::de::Error::custom)?;
-        let unix_days = date
-            .and_hms_opt(0, 0, 0)
-            .ok_or_else(|| serde::de::Error::custom("Invalid time"))?
-            .and_utc()
-            .timestamp_nanos_opt()
-            .unwrap();
-
-        Ok(DayUtc::from(unix_days as u64))
-    }
-}
-
-impl Default for DayUtc {
-    fn default() -> Self {
-        DayUtc::from(0)
-    }
-}
-
-impl Display for DayUtc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let dd_mm_yyyy = DateTime::from_timestamp_nanos(self.unix_ts_at_day_end() as i64)
-            .naive_utc()
-            .format("%d-%m-%Y")
-            .to_string();
-
-        write!(f, "{}", dd_mm_yyyy)
-    }
-}
-
-impl DayUtc {
-    pub fn unix_ts_at_day_end(&self) -> UnixTsNanos {
-        self.0
-    }
-
-    pub fn get(&self) -> UnixTsNanos {
-        self.0
-    }
-
-    pub fn unix_ts_at_day_start(&self) -> UnixTsNanos {
-        (self.0 / NANOS_PER_DAY) * NANOS_PER_DAY
-    }
-
-    pub fn next_day(&self) -> DayUtc {
-        DayUtc(self.0 + NANOS_PER_DAY)
-    }
-
-    pub fn previous_day(&self) -> DayUtc {
-        let ts_previous_day = self.0.checked_sub(NANOS_PER_DAY).unwrap_or_default();
-        DayUtc(ts_previous_day)
-    }
-
-    pub fn days_until(&self, other: &DayUtc) -> Result<Vec<DayUtc>, String> {
-        if self > other {
-            return Err(format!(
-                "Cannot compute days_until: {} > {}",
-                self.0, other.0
-            ));
-        }
-
-        let num_days = (other.0 - self.0) / NANOS_PER_DAY;
-        let days_until = (0..=num_days)
-            .map(|i| DayUtc(self.0 + i * NANOS_PER_DAY))
-            .collect();
-
-        Ok(days_until)
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NodeMetricsDaily {
@@ -213,7 +118,9 @@ impl fmt::Display for RewardCalculatorError {
                 write!(
                     f,
                     "Node {} has metrics outside the reward period: timestamp: {} not in {}",
-                    subnet_id, day.0, reward_period
+                    subnet_id,
+                    day.get(),
+                    reward_period
                 )
             }
             RewardCalculatorError::DuplicateMetrics(subnet_id, day) => {

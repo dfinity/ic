@@ -2,10 +2,10 @@ use crate::pb;
 use ic_base_types::SubnetId;
 use ic_management_canister_types::NodeMetrics;
 use rewards_calculation::rewards_calculator_results::{
-    BaseRewards, DailyBaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily,
-    NodeProviderRewards, NodeResults, NodeStatus,
+    BaseRewards, DailyBaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
+    NodeResults, NodeStatus,
 };
-use rewards_calculation::types::SubnetMetricsDailyKey;
+use rewards_calculation::types::{DayUtc, SubnetMetricsDailyKey};
 
 impl From<SubnetId> for pb::ic_node_rewards::v1::SubnetIdKey {
     fn from(subnet_id: SubnetId) -> Self {
