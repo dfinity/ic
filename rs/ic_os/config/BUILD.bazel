@@ -72,7 +72,7 @@ rust_library(
 rust_test(
     name = "config_lib_test",
     compile_data = [
-        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
+        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
     ],
     crate = ":config_lib_dev",
     crate_features = ["dev"],
@@ -107,7 +107,7 @@ rust_binary(
 rust_test(
     name = "config_test",
     compile_data = [
-        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
+        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
     ],
     crate = ":config_dev",
     crate_features = ["dev"],
