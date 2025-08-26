@@ -4,10 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/node_rewards/canister/protobuf",
+    "//rs/nervous_system/proto",
     "//rs/node_rewards/rewards_calculation",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:prost",
     "@crate_index//:serde",
 ]
 
@@ -23,9 +27,9 @@ LIB_SRCS = glob(
 )
 
 rust_library(
-    name = "api",
+    name = "protobuf",
     srcs = LIB_SRCS,
-    crate_name = "ic_node_rewards_canister_api",
+    crate_name = "ic_node_rewards_canister_protobuf",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,

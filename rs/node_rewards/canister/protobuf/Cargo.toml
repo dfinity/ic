@@ -1,5 +1,5 @@
 [package]
-name = "ic-node-rewards-canister-api"
+name = "ic-node-rewards-canister-protobuf"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -11,6 +11,10 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-node-rewards-canister-protobuf = { path = "../protobuf" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-management-canister-types = { workspace = true }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-stable-structures = { workspace = true }
+prost = { workspace = true }
 rewards-calculation = { path = "../../rewards_calculation" }
 serde = { workspace = true }
