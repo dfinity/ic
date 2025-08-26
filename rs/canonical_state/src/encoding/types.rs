@@ -226,7 +226,7 @@ pub const STREAM_SUPPORTED_FLAGS: u64 = (1 << StreamFlagBits::COUNT) - 1;
 
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
     fn from(
-        (header, _certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
         let mut flags = 0;
         let ic_types::xnet::StreamFlags {
@@ -238,7 +238,12 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
 
         // Generate deltas representation based on `certification_version` to ensure unique
         // encoding.
-        let reject_signals = into_deltas(header.reject_signals(), header.signals_end());
+        let reject_signals = (
+            header.reject_signals(),
+            header.signals_end(),
+            certification_version,
+        )
+            .into();
 
         Self {
             begin: header.begin().get(),
@@ -272,118 +277,117 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
                 != 0,
         };
 
-        let reject_signals = try_from_deltas(&header.reject_signals, header.signals_end)?;
+        let reject_signals: RejectSignalsProd =
+            (&header.reject_signals, header.signals_end).try_into()?;
 
         Ok(Self::new(
             header.begin.into(),
             header.end.into(),
             header.signals_end.into(),
-            reject_signals,
+            reject_signals.0,
             flags,
         ))
     }
 }
 
-/// Converts reject signals into delta representation.
-pub(crate) fn into_deltas(
-    reject_signals: &VecDeque<RejectSignal>,
-    signals_end: StreamIndex,
-) -> RejectSignals {
-    // Demux `reject_signals` into vectors of `StreamIndex`.
-    let mut demuxed = HashMap::<RejectReason, Vec<StreamIndex>>::new();
-    for RejectSignal { reason, index } in reject_signals.iter() {
-        demuxed.entry(*reason).or_default().push(*index)
-    }
-    let mut deltas_for = |reason| -> Vec<u64> {
-        demuxed
-            .remove(&reason)
-            .map(|signals| {
-                let mut next_index = signals_end;
-                let mut reject_signal_deltas = vec![0; signals.len()];
-                for (i, stream_index) in signals.iter().enumerate().rev() {
-                    assert!(next_index > *stream_index);
-                    reject_signal_deltas[i] = next_index.get() - stream_index.get();
-                    next_index = *stream_index;
-                }
-                reject_signal_deltas
-            })
-            .unwrap_or_default()
-    };
+impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for RejectSignals {
+    fn from(
+        (reject_signals, signals_end, _certification_version): (
+            &VecDeque<RejectSignal>,
+            StreamIndex,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        // Demux `reject_signals` into vectors of `StreamIndex`.
+        let mut demuxed = HashMap::<RejectReason, Vec<StreamIndex>>::new();
+        for RejectSignal { reason, index } in reject_signals.iter() {
+            demuxed.entry(*reason).or_default().push(*index)
+        }
+        let mut deltas_for = |reason| -> Vec<u64> {
+            demuxed
+                .remove(&reason)
+                .map(|signals| {
+                    let mut next_index = signals_end;
+                    let mut reject_signal_deltas = vec![0; signals.len()];
+                    for (i, stream_index) in signals.iter().enumerate().rev() {
+                        assert!(next_index > *stream_index);
+                        reject_signal_deltas[i] = next_index.get() - stream_index.get();
+                        next_index = *stream_index;
+                    }
+                    reject_signal_deltas
+                })
+                .unwrap_or_default()
+        };
 
-    RejectSignals {
-        canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
-        canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
-        canister_stopped_deltas: deltas_for(RejectReason::CanisterStopped),
-        canister_stopping_deltas: deltas_for(RejectReason::CanisterStopping),
-        queue_full_deltas: deltas_for(RejectReason::QueueFull),
-        out_of_memory_deltas: deltas_for(RejectReason::OutOfMemory),
-        unknown_deltas: deltas_for(RejectReason::Unknown),
+        RejectSignals {
+            canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
+            canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
+            canister_stopped_deltas: deltas_for(RejectReason::CanisterStopped),
+            canister_stopping_deltas: deltas_for(RejectReason::CanisterStopping),
+            queue_full_deltas: deltas_for(RejectReason::QueueFull),
+            out_of_memory_deltas: deltas_for(RejectReason::OutOfMemory),
+            unknown_deltas: deltas_for(RejectReason::Unknown),
+        }
     }
 }
 
-/// Converts delta representation into reject signals.
-pub(crate) fn try_from_deltas(
-    reject_signals: &RejectSignals,
-    signals_end: u64,
-) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
-    use RejectReason::*;
+/// Wrapper for reject signals used in production code such that `TryFrom` can be implemented.
+/// The trait is required for certain compatibility tests.
+pub(crate) struct RejectSignalsProd(pub VecDeque<RejectSignal>);
 
-    let mut reject_signals_map = BTreeMap::<StreamIndex, RejectReason>::new();
-    for (reason, deltas) in [
-        (CanisterMigrating, &reject_signals.canister_migrating_deltas),
-        (CanisterNotFound, &reject_signals.canister_not_found_deltas),
-        (CanisterStopped, &reject_signals.canister_stopped_deltas),
-        (CanisterStopping, &reject_signals.canister_stopping_deltas),
-        (QueueFull, &reject_signals.queue_full_deltas),
-        (OutOfMemory, &reject_signals.out_of_memory_deltas),
-        (Unknown, &reject_signals.unknown_deltas),
-    ] {
-        for RejectSignal { reason, index } in try_from_deltas_for(deltas, signals_end, reason)? {
-            if reject_signals_map.insert(index, reason).is_some() {
-                return Err(ProxyDecodeError::Other(
-                    "StreamHeader: reject signals are invalid, got duplicates".to_string(),
-                ));
+impl TryFrom<(&RejectSignals, u64)> for RejectSignalsProd {
+    type Error = ProxyDecodeError;
+
+    fn try_from((reject_signals, signals_end): (&RejectSignals, u64)) -> Result<Self, Self::Error> {
+        use RejectReason::*;
+
+        let mut reject_signals_map = BTreeMap::<StreamIndex, RejectReason>::new();
+        for (reason, deltas) in [
+            (CanisterMigrating, &reject_signals.canister_migrating_deltas),
+            (CanisterNotFound, &reject_signals.canister_not_found_deltas),
+            (CanisterStopped, &reject_signals.canister_stopped_deltas),
+            (CanisterStopping, &reject_signals.canister_stopping_deltas),
+            (QueueFull, &reject_signals.queue_full_deltas),
+            (OutOfMemory, &reject_signals.out_of_memory_deltas),
+            (Unknown, &reject_signals.unknown_deltas),
+        ] {
+            let mut stream_index = StreamIndex::new(signals_end);
+            for delta in deltas.iter().rev() {
+                if *delta == 0 {
+                    // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
+                    // lead to duplicates or a stream_index of `signals_end`.
+                    return Err(ProxyDecodeError::Other(format!(
+                        "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
+                        reason,
+                        deltas,
+                    )));
+                }
+                if stream_index < StreamIndex::new(*delta) {
+                    // Reject signal deltas are invalid.
+                    return Err(ProxyDecodeError::Other(format!(
+                        "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
+                        reason,
+                        signals_end,
+                        deltas,
+                    )));
+                }
+                stream_index -= StreamIndex::new(*delta);
+
+                if reject_signals_map.insert(stream_index, reason).is_some() {
+                    return Err(ProxyDecodeError::Other(
+                        "StreamHeader: reject signals are invalid, got duplicates".to_string(),
+                    ));
+                }
             }
         }
-    }
 
-    Ok(reject_signals_map
-        .iter()
-        .map(|(index, reason)| RejectSignal::new(*reason, *index))
-        .collect())
-}
-
-/// Converts delta representation into reject signals for a specific `RejectReason`.
-fn try_from_deltas_for(
-    reject_signal_deltas: &Vec<u64>,
-    signals_end: u64,
-    reason: RejectReason,
-) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
-    let mut reject_signals = VecDeque::with_capacity(reject_signal_deltas.len());
-    let mut stream_index = StreamIndex::new(signals_end);
-    for delta in reject_signal_deltas.iter().rev() {
-        if *delta == 0 {
-            // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
-            // lead to duplicates or a stream_index of `signals_end`.
-            return Err(ProxyDecodeError::Other(format!(
-                "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
-                reason,
-                reject_signal_deltas,
-            )));
-        }
-        if stream_index < StreamIndex::new(*delta) {
-            // Reject signal deltas are invalid.
-            return Err(ProxyDecodeError::Other(format!(
-                "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                reason,
-                signals_end,
-                reject_signal_deltas,
-            )));
-        }
-        stream_index -= StreamIndex::new(*delta);
-        reject_signals.push_front(RejectSignal::new(reason, stream_index));
+        Ok(Self(
+            reject_signals_map
+                .iter()
+                .map(|(index, reason)| RejectSignal::new(*reason, *index))
+                .collect(),
+        ))
     }
-    Ok(reject_signals)
 }
 
 impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponse {

@@ -885,7 +885,6 @@ prop_compose! {
     pub fn arb_stream_signals(
         signal_start_range: RangeInclusive<u64>,
         signal_count_range: RangeInclusive<usize>,
-        with_reject_reasons: Vec<RejectReason>
     )(
         signal_start in signal_start_range,
         (signal_count, reject_signals_map) in signal_count_range
@@ -895,7 +894,7 @@ prop_compose! {
                     Just(signal_count),
                     prop::collection::btree_map(
                         0..=signal_count,
-                        proptest::sample::select(with_reject_reasons.clone()),
+                        proptest::sample::select(RejectReason::all()),
                         reject_signals_count,
                     ),
                 )
@@ -920,7 +919,6 @@ prop_compose! {
         size_range: RangeInclusive<usize>,
         signal_start_range: RangeInclusive<u64>,
         signal_count_range: RangeInclusive<usize>,
-        with_reject_reasons: Vec<RejectReason>,
     )(
         msg_start in msg_start_range,
         msgs in prop::collection::vec(
@@ -930,7 +928,6 @@ prop_compose! {
         (signals_end, reject_signals) in arb_stream_signals(
             signal_start_range,
             signal_count_range,
-            with_reject_reasons,
         ),
         responses_only_flag in any::<bool>(),
     ) -> Stream {
@@ -957,7 +954,6 @@ prop_compose! {
             min_size..=max_size,
             0..=10000,
             min_signal_count..=max_signal_count,
-            RejectReason::all(),
         )
     ) -> Stream {
         stream
@@ -987,14 +983,12 @@ prop_compose! {
     pub fn arb_stream_header(
         min_signal_count: usize,
         max_signal_count: usize,
-        with_reject_reasons: Vec<RejectReason>,
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
         (signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
-            with_reject_reasons
         ),
         responses_only in any::<bool>(),
     ) -> StreamHeader {

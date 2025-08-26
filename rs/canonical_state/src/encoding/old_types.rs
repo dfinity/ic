@@ -22,7 +22,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::time::CoarseTime;
 use serde::{Deserialize, Serialize};
 
-/// Canonical representation of `ic_types::xnet::StreamHeader` at certification version V20..
+/// Canonical representation of `ic_types::xnet::StreamHeader` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamHeaderV19 {
@@ -39,7 +39,7 @@ pub struct StreamHeaderV19 {
 
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV19 {
     fn from(
-        (header, _certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
         let mut flags = 0;
         let ic_types::xnet::StreamFlags {
@@ -51,7 +51,12 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
 
         // Generate deltas representation based on `certification_version` to ensure unique
         // encoding.
-        let reject_signals = types::into_deltas(header.reject_signals(), header.signals_end());
+        let reject_signals = (
+            header.reject_signals(),
+            header.signals_end(),
+            certification_version,
+        )
+            .into();
 
         Self {
             begin: header.begin().get(),
@@ -85,19 +90,20 @@ impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
                 != 0,
         };
 
-        let reject_signals = types::try_from_deltas(&header.reject_signals, header.signals_end)?;
+        let reject_signals: types::RejectSignalsProd =
+            (&header.reject_signals, header.signals_end).try_into()?;
 
         Ok(Self::new(
             header.begin.into(),
             header.end.into(),
             header.signals_end.into(),
-            reject_signals,
+            reject_signals.0,
             flags,
         ))
     }
 }
 
-/// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V20.
+/// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestOrResponseV19 {
@@ -149,7 +155,7 @@ impl TryFrom<RequestOrResponseV19> for ic_types::messages::RequestOrResponse {
     }
 }
 
-/// Canonical representation of `ic_types::messages::Request` at certification version V20.
+/// Canonical representation of `ic_types::messages::Request` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestV19 {
@@ -220,7 +226,7 @@ impl TryFrom<RequestV19> for ic_types::messages::Request {
     }
 }
 
-/// Canonical representation of `ic_types::messages::Response` at certification version V20.
+/// Canonical representation of `ic_types::messages::Response` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResponseV19 {

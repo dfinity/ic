@@ -1,10 +1,10 @@
 use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
-        old_types::{RequestOrResponseV20, StreamHeaderV20},
+        old_types::{RequestOrResponseV19, StreamHeaderV19},
         types::{
-            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV19,
-            SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
+            RequestOrResponse as RequestOrResponseV21, StreamHeader as StreamHeaderV21,
+            SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
         CborProxyDecoder, CborProxyEncoder,
     },
@@ -71,33 +71,10 @@ pub(crate) fn arb_valid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
-        // Stream headers up to version 18 may have reject signals for responses
-        // (`CanisterMigrating` only) and the `DeprecatedResponsesOnly` flag set.
-        (
-            arb_stream_header(
-                /* min_signal_count */ 0,
-                max_signal_count,
-                /* with_reject_reasons */ vec![RejectReason::CanisterMigrating],
-            ),
-            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V18)
-        ),
         // Stream headers may have flavours of reject signals other than `CanisterMigrating`
         // starting from certification version 19.
         (
-            arb_stream_header(
-                /* min_signal_count */ 0,
-                max_signal_count,
-                /* with_reject_reasons */
-                vec![
-                    RejectReason::CanisterMigrating,
-                    RejectReason::CanisterNotFound,
-                    RejectReason::CanisterStopped,
-                    RejectReason::CanisterStopping,
-                    RejectReason::QueueFull,
-                    RejectReason::OutOfMemory,
-                    RejectReason::Unknown
-                ],
-            ),
+            arb_stream_header(/* min_signal_count */ 0, max_signal_count,),
             Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         )
     ]

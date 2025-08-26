@@ -281,7 +281,7 @@ fn canonical_encoding_request_no_deadline() {
     }
 }
 
-/// Canonical CBOR encoding (with certification versions 18 and up) of:
+/// Canonical CBOR encoding of:
 ///
 /// ```no_run
 /// RequestOrResponse::Request(
