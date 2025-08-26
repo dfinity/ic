@@ -9,7 +9,7 @@
 # Input:
 # - `release_type`:  Type of release, either `icrc` or `icp`
 # - `release_date`:  Date of the release in YYYY-MM-DD format
-# - `commit_or_tag`: Optional commit hash or tag to create the release from (defaults to current HEAD).
+# - `commit`:        The commit hash to create the release from.
 #                    Should be set to a commit for which the FI nightly job passed.
 name: Ledger Suite Create Release
 
@@ -28,9 +28,9 @@ on:
         description: 'Release date (YYYY-MM-DD)'
         required: true
         type: string
-      commit_or_tag:
-        description: 'Commit hash or tag to create release from (leave empty for current HEAD)'
-        required: false
+      commit:
+        description: 'Commit hash to create release from'
+        required: true
         type: string
 
 jobs:
@@ -43,8 +43,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch full history for git log
-          ref: ${{ github.event.inputs.commit_or_tag || github.sha }}
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.commit }}
 
       - name: Validate inputs
         run: |
@@ -58,135 +58,293 @@ jobs:
             exit 1
           fi
 
-      - name: Set environment variables
+      - name: Set variables
+        id: variables
         run: |
           TAG_NAME="ledger-suite-${{ github.event.inputs.release_type }}-${{ github.event.inputs.release_date }}"
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "RELEASE_TITLE=$TAG_NAME" >> $GITHUB_ENV
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "release_title=$TAG_NAME" >> $GITHUB_OUTPUT
 
           # Set paths, upgrade requirements, and human-readable title for different release types
           if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
-            echo "LOG_PATHS=rs/ledger_suite/common rs/ledger_suite/icrc1 packages/icrc-ledger-types" >> $GITHUB_ENV
-            echo "DID_FILES=rs/ledger_suite/icrc1/ledger/ledger.did rs/ledger_suite/icrc1/archive/archive.did rs/ledger_suite/icrc1/index-ng/index-ng.did" >> $GITHUB_ENV
-            echo "UPGRADE_FROM=ledger-suite-icrc-2024-10-17" >> $GITHUB_ENV
-            echo "HUMAN_TITLE=ICRC Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_ENV
+            echo "log_paths=rs/ledger_suite/common rs/ledger_suite/icrc1 packages/icrc-ledger-types" >> $GITHUB_OUTPUT
+            echo "wasm_files=ic-icrc1-archive-u256.wasm.gz ic-icrc1-archive.wasm.gz ic-icrc1-index-ng-u256.wasm.gz ic-icrc1-index-ng.wasm.gz ic-icrc1-ledger-u256.wasm.gz ic-icrc1-ledger.wasm.gz" >> $GITHUB_OUTPUT
+            echo "upgrade_from=ledger-suite-icrc-2024-10-17" >> $GITHUB_OUTPUT
+            echo "human_title=ICRC Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_OUTPUT
           else
-            echo "LOG_PATHS=rs/ledger_suite/common rs/ledger_suite/icp packages/icrc-ledger-types" >> $GITHUB_ENV
-            echo "DID_FILES=rs/ledger_suite/icp/ledger.did rs/ledger_suite/icp/ledger_archive.did rs/ledger_suite/icp/index/index.did" >> $GITHUB_ENV
-            echo "UPGRADE_FROM=ledger-suite-icp-2024-10-17" >> $GITHUB_ENV
-            echo "HUMAN_TITLE=ICP Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_ENV
-          fi
-
-      - name: Check if tag exists
-        id: tag_check
-        run: |
-          echo "Checking if tag '${{ env.TAG_NAME }}' already exists..."
-          if git rev-parse "${{ env.TAG_NAME }}" >/dev/null 2>&1; then
-            echo "✅ Tag ${{ env.TAG_NAME }} already exists - skipping tag creation"
-            echo "tag_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "🏷️  Tag ${{ env.TAG_NAME }} does not exist - will create new tag"
-            echo "tag_exists=false" >> $GITHUB_OUTPUT
+            echo "log_paths=rs/ledger_suite/common rs/ledger_suite/icp packages/icrc-ledger-types" >> $GITHUB_OUTPUT
+            echo "wasm_files=ledger-canister_notify-method.wasm.gz ledger-archive-node-canister.wasm.gz ic-icp-index-canister.wasm.gz" >> $GITHUB_OUTPUT
+            echo "human_title=ICP Ledger Suite release ${{ github.event.inputs.release_date }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Create git tag
-        if: steps.tag_check.outputs.tag_exists == 'false'
         run: |
-          echo "Creating new tag: ${{ env.TAG_NAME }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ env.TAG_NAME }}" -m "Release ${{ env.TAG_NAME }}"
-          git push origin "${{ env.TAG_NAME }}"
-          echo "✅ Successfully created and pushed tag: ${{ env.TAG_NAME }}"
+          echo "Checking if tag '${{ steps.variables.outputs.tag_name }}' already exists..."
 
-      - name: Tag creation summary
-        run: |
-          if [[ "${{ steps.tag_check.outputs.tag_exists }}" == "true" ]]; then
-            echo "📋 Using existing tag: ${{ env.TAG_NAME }}"
-          else
-            echo "📋 Created new tag: ${{ env.TAG_NAME }}"
+          if git rev-parse "${{ steps.variables.outputs.tag_name }}" >/dev/null 2>&1; then
+            echo "Error: Tag ${{ steps.variables.outputs.tag_name }} already exists!"
+            echo "This release tag has already been created. Please use a different release date or delete the existing tag first."
+            exit 1
           fi
 
-      - name: Verify we're on the correct commit/tag
+          echo "Tag does not exist - proceeding with tag creation"
+
+          # Determine which commit to tag
+          TARGET_COMMIT="${{ github.event.inputs.commit }}"
+          echo "Creating new tag: ${{ steps.variables.outputs.tag_name }}"
+          echo "Target commit: $TARGET_COMMIT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.variables.outputs.tag_name }}" -m "Release ${{ steps.variables.outputs.tag_name }}" "$TARGET_COMMIT"
+          git push origin "${{ steps.variables.outputs.tag_name }}"
+
+          echo "Successfully created and pushed tag: ${{ steps.variables.outputs.tag_name }}"
+
+      - name: Verify commit
         run: |
           CURRENT_SHA=$(git rev-parse HEAD)
-          echo "📍 Current commit: $CURRENT_SHA"
+          echo "Current commit: $CURRENT_SHA"
 
-          if [[ -n "${{ github.event.inputs.commit_or_tag }}" ]]; then
-            echo "🎯 Requested commit/tag: ${{ github.event.inputs.commit_or_tag }}"
-            REQUESTED_SHA=$(git rev-parse "${{ github.event.inputs.commit_or_tag }}")
-            echo "🎯 Requested SHA: $REQUESTED_SHA"
+          if [[ -n "${{ github.event.inputs.commit }}" ]]; then
+            echo "Requested commit: ${{ github.event.inputs.commit }}"
+            REQUESTED_SHA=$(git rev-parse "${{ github.event.inputs.commit }}")
+            echo "Requested SHA: $REQUESTED_SHA"
 
             if [[ "$REQUESTED_SHA" == "$CURRENT_SHA" ]]; then
-              echo "✅ Successfully checked out the requested commit/tag"
-              echo "🚀 Building release from: ${{ github.event.inputs.commit_or_tag }} ($CURRENT_SHA)"
+              echo "Successfully checked out the requested commit"
+              echo "Building release from: ${{ github.event.inputs.commit }} ($CURRENT_SHA)"
             else
-              echo "❌ Current HEAD ($CURRENT_SHA) doesn't match requested commit/tag ($REQUESTED_SHA)"
+              echo "Current HEAD ($CURRENT_SHA) doesn't match requested commit ($REQUESTED_SHA)"
               exit 1
             fi
           else
-            echo "🚀 Building release from current HEAD: $CURRENT_SHA"
+            echo "Building release from current HEAD: $CURRENT_SHA"
           fi
 
-      - name: Build artifacts
+      - name: Download artifacts and SHA256SUMS
+        id: download
         run: |
-          chmod +x ci/container/build-ic.sh
-          ./ci/container/build-ic.sh -c
+          # Create temporary directory for downloaded artifacts
+          TEMP_DIR=$(mktemp -d)
+          echo "Created temporary directory: $TEMP_DIR"
+          echo "temp_dir=$TEMP_DIR" >> $GITHUB_OUTPUT
 
-      - name: Generate SHA256SUMS
-        run: |
-          # Initialize SHA256SUMS file
-          > SHA256SUMS
+          MAINNET_COMMIT="${{ github.event.inputs.commit }}"
+          BASE_URL="https://download.dfinity.systems/ic/$MAINNET_COMMIT/canisters"
+          SHA256SUMS_URL="https://download.dfinity.systems/ic/$MAINNET_COMMIT/canisters/SHA256SUMS"
 
-          # Generate checksums for WASM files
-          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
-            sha256sum artifacts/canisters/ic-icrc1-archive-u256.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ic-icrc1-archive.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ic-icrc1-index-ng.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ic-icrc1-ledger.wasm.gz >> SHA256SUMS
-          else
-            sha256sum artifacts/canisters/ledger-canister_notify-method.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ledger-archive-node-canister.wasm.gz >> SHA256SUMS
-            sha256sum artifacts/canisters/ic-icp-index-canister.wasm.gz >> SHA256SUMS
-          fi
+          echo "Downloading artifacts from: $BASE_URL"
+          echo "Mainnet commit: $MAINNET_COMMIT"
+          echo "Release type: ${{ github.event.inputs.release_type }}"
 
-          # Generate checksums for DID files
-          for file in ${{ env.DID_FILES }}; do
-            if [[ -f "$file" ]]; then
-              sha256sum "$file" >> SHA256SUMS
+          # Get WASM files from variables
+          WASM_FILES_STRING="${{ steps.variables.outputs.wasm_files }}"
+          read -ra WASM_FILES <<< "$WASM_FILES_STRING"
+
+          # Download WASM files and their corresponding DID files
+          echo "Downloading WASM and DID files..."
+          DOWNLOAD_FILES=()
+          for wasm_file in "${WASM_FILES[@]}"; do
+            # Add WASM file
+            DOWNLOAD_FILES+=("$wasm_file")
+            # Add corresponding DID file
+            DOWNLOAD_FILES+=("${wasm_file}.did")
+          done
+
+          for file in "${DOWNLOAD_FILES[@]}"; do
+            echo "  Downloading $file..."
+            if curl -f -L -o "$TEMP_DIR/$file" "$BASE_URL/$file"; then
+              echo "  Downloaded: $file"
+            else
+              echo "  Failed to download: $file"
+              exit 1
             fi
           done
 
-          # Add checksum of SHA256SUMS itself
-          sha256sum SHA256SUMS >> SHA256SUMS.tmp
-          cat SHA256SUMS >> SHA256SUMS.tmp
-          mv SHA256SUMS.tmp SHA256SUMS
+          # Download official SHA256SUMS file
+          echo "Downloading official SHA256SUMS from: $SHA256SUMS_URL"
+          if curl -f -L -o "$TEMP_DIR/SHA256SUMS.full" "$SHA256SUMS_URL"; then
+            echo "Downloaded official SHA256SUMS"
+          else
+            echo "Failed to download SHA256SUMS from $SHA256SUMS_URL"
+            exit 1
+          fi
+
+          echo "Pruning SHA256SUMS to include only downloaded files..."
+
+          # Extract checksums for our downloaded files (exact match only)
+          FOUND_COUNT=0
+          for file in "${DOWNLOAD_FILES[@]}"; do
+            # Look for exact match only - ensure line ends with exactly our filename
+            # SHA256SUMS format is: <checksum><whitespace><filename>
+            CHECKSUM_LINE=$(grep "[[:space:]]${file}$" "$TEMP_DIR/SHA256SUMS.full" 2>/dev/null || true)
+
+            if [[ -n "$CHECKSUM_LINE" ]]; then
+              echo "  Found checksum for: $file"
+              echo "$CHECKSUM_LINE" >> "$TEMP_DIR/SHA256SUMS"
+              FOUND_COUNT=$((FOUND_COUNT + 1))
+            else
+              echo "  Error: No checksum found for required file: $file"
+              echo "  Available checksums in SHA256SUMS:"
+              cat "$TEMP_DIR/SHA256SUMS.full"
+              exit 1
+            fi
+          done
+
+          echo "Pruned SHA256SUMS contains $FOUND_COUNT checksums:"
+          cat "$TEMP_DIR/SHA256SUMS" | sed 's/^/  /'
+
+          # Verify checksum count
+          TOTAL_DOWNLOAD_FILES=${#DOWNLOAD_FILES[@]}
+          WASM_FILE_COUNT=${#WASM_FILES[@]}
+          echo "Verification: Found $FOUND_COUNT checksums for $TOTAL_DOWNLOAD_FILES total files"
+
+          if [[ $FOUND_COUNT -eq 0 ]]; then
+            echo "Error: No checksums found for any release files"
+            exit 1
+          fi
+
+          # Require exact match - both WASM and DID files must have checksums
+          if [[ $FOUND_COUNT -ne $TOTAL_DOWNLOAD_FILES ]]; then
+            echo "Error: Checksum count mismatch!"
+            echo "  Expected: $TOTAL_DOWNLOAD_FILES checksums"
+            echo "  Found: $FOUND_COUNT checksums"
+            echo "  All files (WASM and DID) must have checksums in SHA256SUMS"
+            exit 1
+          fi
+          echo "Checksum verification passed: Found checksums for all $TOTAL_DOWNLOAD_FILES files"
+
+          # List downloaded files
+          echo "Downloaded files:"
+          ls -la "$TEMP_DIR" | sed 's/^/  /'
+
+          # Clean up the full SHA256SUMS file
+          rm -f "$TEMP_DIR/SHA256SUMS.full"
 
       - name: Get previous release tag
         id: prev_tag
         run: |
-          # Find the previous release tag for the same type
-          PREV_TAG=$(git tag -l "ledger-suite-${{ github.event.inputs.release_type }}-*" | grep -v "${{ env.TAG_NAME }}" | sort -V | tail -1)
+          # Initialize variables for pagination
+          CURRENT_TAG="${{ steps.variables.outputs.tag_name }}"
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          PAGE=1
+          PER_PAGE=100
+          MAX_PAGES=50
+          PREV_TAG=""
+
+          echo "Searching for previous ledger-suite-$RELEASE_TYPE release (excluding $CURRENT_TAG)..."
+
+          # Paginate through all releases to find ledger-suite releases
+          # If there are no ledger-suite releases for a while, but e.g., replica releases keep being
+          # created on a weekly basis, we may need to go through multiple pages.
+          while true; do
+            echo "Fetching page $PAGE (up to $PER_PAGE releases per page)..."
+
+            # Get releases for current page with headers to check pagination
+            RESPONSE=$(curl -s -D headers.tmp -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases?page=$PAGE&per_page=$PER_PAGE")
+
+            # Check if API call was successful
+            if echo "$RESPONSE" | grep -q '"message":'; then
+              echo "Warning: GitHub API call may have failed or returned an error on page $PAGE"
+              echo "$RESPONSE"
+              break
+            fi
+
+            # Check if response is empty array (no more results)
+            if [[ "$RESPONSE" == "[]" ]]; then
+              echo "Reached end of releases (empty page $PAGE)"
+              break
+            fi
+
+            # Extract matching release tags from current page
+            MATCHING_TAGS=$(echo "$RESPONSE" | jq -r --arg release_type "$RELEASE_TYPE" --arg current_tag "$CURRENT_TAG" \
+              '.[] | select(.tag_name | startswith("ledger-suite-" + $release_type + "-")) |
+               select(.tag_name != $current_tag) | .tag_name')
+
+            if [[ -n "$MATCHING_TAGS" ]]; then
+              echo "Found matching releases on page $PAGE:"
+              echo "$MATCHING_TAGS" | sed 's/^/  - /'
+
+              # Since releases are returned in reverse chronological order (newest first),
+              # the first matching release we find is the latest one
+              PREV_TAG=$(echo "$MATCHING_TAGS" | head -1)
+              echo "Found latest previous release: $PREV_TAG (stopping search - releases are ordered by recency)"
+              rm -f headers.tmp
+              break
+            fi
+
+            # Check if there's a next page using Link header
+            if [[ -f headers.tmp ]]; then
+              LINK_HEADER=$(grep -i "^link:" headers.tmp || true)
+              if [[ ! "$LINK_HEADER" =~ rel=\"next\" ]]; then
+                echo "No more pages available (reached end of pagination)"
+                rm -f headers.tmp
+                break
+              fi
+            fi
+
+            # Clean up headers file
+            rm -f headers.tmp
+
+            # Move to next page
+            ((PAGE++))
+
+            # Safety check to prevent infinite loops
+            if [[ $PAGE -gt $MAX_PAGES ]]; then
+              echo "Warning: Reached maximum page limit ($MAX_PAGES) - stopping pagination"
+              break
+            fi
+          done
+
+          # Check if we found a previous release
+          if [[ -z "$PREV_TAG" ]]; then
+            echo "No previous release found for type: $RELEASE_TYPE"
+          fi
+
+          # Validate the latest release reference if found
+          if [[ -n "$PREV_TAG" && "$PREV_TAG" != "null" ]]; then
+            echo "Validating previous release: $PREV_TAG"
+
+            # Verify the release reference exists and is accessible
+            RELEASE_CHECK=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/$PREV_TAG")
+
+            if echo "$RELEASE_CHECK" | grep -q '"message": "Not Found"'; then
+              echo "Warning: Previous release tag $PREV_TAG exists but release not found"
+              echo "prev_tag=" >> $GITHUB_OUTPUT
+              echo "prev_tag_valid=false" >> $GITHUB_OUTPUT
+            else
+              echo "Previous release validated: $PREV_TAG"
           echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+              echo "prev_tag_valid=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No valid previous release found for type: $RELEASE_TYPE"
+            echo "prev_tag=" >> $GITHUB_OUTPUT
+            echo "prev_tag_valid=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate git log
         id: git_log
         run: |
-          if [[ -n "${{ steps.prev_tag.outputs.prev_tag }}" ]]; then
-            LOG_RANGE="${{ steps.prev_tag.outputs.prev_tag }}..${{ env.TAG_NAME }}"
-            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" $LOG_RANGE -- ${{ env.LOG_PATHS }}"
+          # Only use previous tag if it exists and is valid
+          if [[ -n "${{ steps.prev_tag.outputs.prev_tag }}" && "${{ steps.prev_tag.outputs.prev_tag_valid }}" == "true" ]]; then
+            LOG_RANGE="${{ steps.prev_tag.outputs.prev_tag }}..${{ steps.variables.outputs.tag_name }}"
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" $LOG_RANGE -- ${{ steps.variables.outputs.log_paths }}"
+            echo "Generating git log from ${{ steps.prev_tag.outputs.prev_tag }} to ${{ steps.variables.outputs.tag_name }}"
           else
-            # If no previous tag, get all commits
+            # If no previous tag or invalid previous tag, get all commits
             LOG_RANGE=""
-            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" -- ${{ env.LOG_PATHS }}"
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" -- ${{ steps.variables.outputs.log_paths }}"
+            echo "Generating git log for all commits (no valid previous release found)"
           fi
 
           if [[ -n "$LOG_RANGE" ]]; then
-            GIT_LOG=$(git log --format="%C(auto) %h %s" $LOG_RANGE -- ${{ env.LOG_PATHS }} | head -20)
+            GIT_LOG=$(git log --format="%C(auto) %h %s" $LOG_RANGE -- ${{ steps.variables.outputs.log_paths }} | head -20)
           else
-            GIT_LOG=$(git log --format="%C(auto) %h %s" -- ${{ env.LOG_PATHS }} | head -20)
+            GIT_LOG=$(git log --format="%C(auto) %h %s" -- ${{ steps.variables.outputs.log_paths }} | head -20)
           fi
 
           # Store git log and command in files to handle multiline output
@@ -199,7 +357,7 @@ jobs:
         id: release_body
         run: |
           cat > release_body.md << 'EOF'
-          ### ${{ env.HUMAN_TITLE }}
+          ### ${{ steps.variables.outputs.human_title }}
 
           #### Features
           **⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**
@@ -210,41 +368,33 @@ jobs:
           # Add release-type specific upgrade notes
           if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
             cat >> release_body.md << EOF
-          - For upgrading the ledger to this release, the installed ledger shall be running [${{ env.UPGRADE_FROM }}](https://github.com/${{ github.repository }}/releases/tag/${{ env.UPGRADE_FROM }}) or later
+          - For upgrading the ledger to this release, the installed ledger shall be running [${{ steps.variables.outputs.upgrade_from }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.variables.outputs.upgrade_from }}) or later.
           EOF
           fi
 
           cat >> release_body.md << 'EOF'
-          - It is recommended to have all ledger suite canisters running at the same version
+          - It is recommended to have all ledger suite canisters running at the same version.
           - Upgrading the ledger suite canisters shall be done in the following order:
-            1. The index first
-            2. The ledger second
-            3. Any archives third
+            1. The index first.
+            2. The ledger second.
+            3. Any archives third.
 
           #### WASM Verification
           ```
           git fetch
-          git checkout ${{ env.TAG_NAME }}
+          git checkout ${{ steps.variables.outputs.tag_name }}
           ./ci/container/build-ic.sh -c
           EOF
 
-          # Add sha256sum commands for verification
-          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
-            cat >> release_body.md << 'EOF'
-          sha256sum ./artifacts/canisters/ic-icrc1-archive.wasm.gz
-          sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
-          sha256sum ./artifacts/canisters/ic-icrc1-index-ng.wasm.gz
-          sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
-          sha256sum ./artifacts/canisters/ic-icrc1-ledger.wasm.gz
-          sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
+          # Add sha256sum commands for each WASM file dynamically
+          WASM_FILES_STRING="${{ steps.variables.outputs.wasm_files }}"
+          read -ra WASM_FILES <<< "$WASM_FILES_STRING"
+          for wasm_file in "${WASM_FILES[@]}"; do
+            echo "sha256sum ./artifacts/canisters/$wasm_file" >> release_body.md
+          done
+
+          cat >> release_body.md << 'EOF'
           EOF
-          else
-            cat >> release_body.md << 'EOF'
-          sha256sum ./artifacts/canisters/ledger-canister_notify-method.wasm.gz
-          sha256sum ./artifacts/canisters/ledger-archive-node-canister.wasm.gz
-          sha256sum ./artifacts/canisters/ic-icp-index-canister.wasm.gz
-          EOF
-          fi
 
           cat >> release_body.md << 'EOF'
           ```
@@ -284,47 +434,51 @@ jobs:
 
             # Skip the SHA256SUMS file itself in the table
             if [[ "$filename" != "SHA256SUMS" ]]; then
-              echo "| [$filename](https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/$filename) | \`$hash\` |" >> release_body.md
+              echo "| [$filename](https://github.com/${{ github.repository }}/releases/download/${{ steps.variables.outputs.tag_name }}/$filename) | \`$hash\` |" >> release_body.md
             fi
-          done < SHA256SUMS
+          done < "${{ steps.download.outputs.temp_dir }}/SHA256SUMS"
 
           echo "release_body_file=release_body.md" >> $GITHUB_OUTPUT
 
-      - name: Prepare release files
+      - name: Verify release files
         run: |
-          mkdir -p release_files
+          TEMP_DIR="${{ steps.download.outputs.temp_dir }}"
 
-          # Copy WASM files based on release type
-          if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
-            cp artifacts/canisters/ic-icrc1-archive-u256.wasm.gz release_files/
-            cp artifacts/canisters/ic-icrc1-archive.wasm.gz release_files/
-            cp artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz release_files/
-            cp artifacts/canisters/ic-icrc1-index-ng.wasm.gz release_files/
-            cp artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz release_files/
-            cp artifacts/canisters/ic-icrc1-ledger.wasm.gz release_files/
-          else
-            cp artifacts/canisters/ledger-canister_notify-method.wasm.gz release_files/
-            cp artifacts/canisters/ledger-archive-node-canister.wasm.gz release_files/
-            cp artifacts/canisters/ic-icp-index-canister.wasm.gz release_files/
-          fi
+          echo "📋 Verifying all required files are present in $TEMP_DIR..."
 
-          # Copy DID files
-          for file in ${{ env.DID_FILES }}; do
-            if [[ -f "$file" ]]; then
-              cp "$file" "release_files/$(basename "$file")"
+          # Get WASM files from variables
+          WASM_FILES_STRING="${{ steps.variables.outputs.wasm_files }}"
+          read -ra REQUIRED_WASM_FILES <<< "$WASM_FILES_STRING"
+
+          # Verify WASM files exist
+          for wasm_file in "${REQUIRED_WASM_FILES[@]}"; do
+            if [[ -f "$TEMP_DIR/$wasm_file" ]]; then
+              echo "  Found: $wasm_file"
+            else
+              echo "  Missing: $wasm_file"
+              exit 1
             fi
           done
 
-          # Copy SHA256SUMS
-          cp SHA256SUMS release_files/
+          # Verify SHA256SUMS exists
+          if [[ -f "$TEMP_DIR/SHA256SUMS" ]]; then
+            echo "  Found: SHA256SUMS"
+          else
+            echo "  Missing: SHA256SUMS"
+            exit 1
+          fi
+
+          echo "All required files verified. Ready for release!"
+          echo "Final file list:"
+          ls -la "$TEMP_DIR" | sed 's/^/  /'
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: ${{ env.RELEASE_TITLE }}
+          tag_name: ${{ steps.variables.outputs.tag_name }}
+          name: ${{ steps.variables.outputs.release_title }}
           body_path: ${{ steps.release_body.outputs.release_body_file }}
-          files: release_files/*
+          files: ${{ steps.download.outputs.temp_dir }}/*
           draft: true
           prerelease: true
           make_latest: false
