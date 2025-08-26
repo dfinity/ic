@@ -1578,6 +1578,12 @@ async fn validate_and_render_upgrade_extension(
     let validated_upgrade_extension =
         validate_upgrade_extension(governance, upgrade_extension.clone()).await?;
 
+    let validated = validated_upgrade_extension;
+
+    Ok(render_upgrade_extension(validated))
+}
+
+fn render_upgrade_extension(validated: ValidatedUpgradeExtension) -> String {
     let ValidatedUpgradeExtension {
         extension_canister_id,
         wasm,
@@ -1585,11 +1591,11 @@ async fn validate_and_render_upgrade_extension(
         current_version,
         new_version,
         upgrade_arg: _,
-    } = validated_upgrade_extension;
+    } = validated;
 
     let wasm_info = wasm.description();
 
-    Ok(format!(
+    format!(
         r"# Proposal to Upgrade {spec}
 
 ## Extension canister: {extension_canister_id}
@@ -1608,7 +1614,7 @@ The extension canister will be upgraded to the new version with the specified WA
         spec = spec.name,
         current_version = current_version.0,
         new_version = new_version.0,
-    ))
+    )
 }
 
 fn validate_and_render_register_dapp_canisters(
@@ -5604,6 +5610,53 @@ Payload rendering here"#
                 "Proposal render:\n{}\n does not contain expected keyword {}",
                 render,
                 keyword
+            );
+        }
+    }
+
+    #[test]
+    fn test_render_upgrade_extension() {
+        use crate::{
+            extensions::{
+                ExtensionSpec, ExtensionType, ExtensionVersion, ValidatedExtensionUpgradeArg,
+                ValidatedUpgradeExtension,
+            },
+            pb::v1::Topic,
+            types::Wasm,
+        };
+        use ic_base_types::CanisterId;
+
+        let extension_canister_id = CanisterId::from_u64(2000);
+        let validated = ValidatedUpgradeExtension {
+            extension_canister_id,
+            wasm: Wasm::Bytes(vec![1, 2, 3, 4]), // Simple test WASM
+            spec: ExtensionSpec {
+                name: "KongSwap Treasury Manager".to_string(),
+                version: ExtensionVersion(2),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+            current_version: ExtensionVersion(1),
+            new_version: ExtensionVersion(2),
+            upgrade_arg: ValidatedExtensionUpgradeArg::TreasuryManager,
+        };
+
+        let rendered = render_upgrade_extension(validated);
+
+        // Check that the rendered output contains expected elements
+        for expected_content in [
+            "# Proposal to Upgrade KongSwap Treasury Manager",
+            "Extension canister: txegi-kaaaa-aaaaa-aa7ia-cai",
+            "Current version: 1",
+            "New version: 2",
+            "Embedded module with 4 bytes",
+            "The extension canister will be upgraded to the new version",
+        ] {
+            assert!(
+                rendered.contains(expected_content),
+                "Rendered proposal:\n{}\n\ndoes not contain expected content: {}",
+                rendered,
+                expected_content
             );
         }
     }
