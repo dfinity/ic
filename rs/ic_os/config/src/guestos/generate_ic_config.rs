@@ -79,8 +79,8 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
                 .address
                 .split('/')
                 .next()
-                .unwrap_or(&fixed_config.address);
-            let ipv6_address = ipv6_address.to_string();
+                .unwrap_or(&fixed_config.address)
+                .to_string();
 
             let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
             Ok((ipv6_address, ipv6_prefix))
@@ -88,10 +88,6 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
         Ipv6Config::RouterAdvertisement => {
             let interface = get_network_interface()?;
             let ipv6_address = get_interface_ipv6_address(&interface)?;
-
-            if ipv6_address.is_empty() {
-                anyhow::bail!("Cannot determine an IPv6 address, aborting");
-            }
 
             let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
             Ok((ipv6_address, ipv6_prefix))
@@ -285,12 +281,15 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
             .context("Failed to get IPv6 address")?;
 
         let output_str = String::from_utf8_lossy(&output.stdout);
-        if let Some(line) = output_str.lines().next() {
-            if let Some(addr_part) = line.split_whitespace().nth(3) {
-                if let Some(addr) = addr_part.split('/').next() {
-                    return Ok(addr.to_string());
-                }
-            }
+        if let Some(ipv6_address) = output_str
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(3))
+            .and_then(|addr_part| addr_part.split('/').next())
+            .map(|addr| addr.to_string())
+            .filter(|addr| !addr.is_empty())
+        {
+            return Ok(ipv6_address);
         }
 
         if retry < 11 {
@@ -299,7 +298,7 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
         }
     }
 
-    Ok(String::new())
+    anyhow::bail!("Cannot determine an IPv6 address, aborting");
 }
 
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
