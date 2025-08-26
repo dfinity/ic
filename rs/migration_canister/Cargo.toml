@@ -7,14 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [lib]
-path = "src/lib.rs"
-
-[[bin]]
-name = "migration-canister"
-path = "src/lib.rs"
+crate-type = ["cdylib"]
 
 [dependencies]
-build-info = { workspace = true }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
@@ -23,6 +18,3 @@ ic-stable-structures = "0.7.0"
 serde_cbor = { workspace = true }
 serde = { workspace =true }
 serde_bytes = { workspace =true }
-
-[build-dependencies]
-build-info-build = { workspace = true }

@@ -11,22 +11,6 @@ use crate::{
     rate_limited, start_timers, validate_request, RequestState, ValidationError,
 };
 
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
-pub struct MigrationCanisterInitPayload {}
-
-pub struct MigrationCanisterInitPayloadBuilder {}
-
-#[allow(clippy::new_without_default)]
-impl MigrationCanisterInitPayloadBuilder {
-    pub fn new() -> Self {
-        MigrationCanisterInitPayloadBuilder {}
-    }
-
-    pub fn build(&self) -> MigrationCanisterInitPayload {
-        MigrationCanisterInitPayload {}
-    }
-}
-
 #[init]
 fn init() {
     start_timers();

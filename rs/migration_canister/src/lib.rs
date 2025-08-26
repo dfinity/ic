@@ -25,8 +25,6 @@ mod migration_canister;
 mod privileged;
 mod processing;
 
-pub use migration_canister::{MigrationCanisterInitPayloadBuilder, MigrationCanisterInitPayload};
-
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
