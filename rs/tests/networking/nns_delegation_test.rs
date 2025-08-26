@@ -403,6 +403,14 @@ fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
     );
 }
 
+/// Run query tests several times sequentially to check that we don't return incorrect cached response.
+fn multiple_query_requests(env: TestEnv) {
+    for _ in 0..10 {
+        query_v2_passes_correct_delegation_to_canister(env.clone());
+        query_v3_passes_correct_delegation_to_canister(env.clone());
+    }
+}
+
 fn read_state_content() -> EnvelopeContent {
     let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
     EnvelopeContent::ReadState {
@@ -638,5 +646,6 @@ fn main() -> Result<()> {
         .add_test(systest!(call_v4_returns_correct_delegation))
         .add_test(systest!(query_v2_passes_correct_delegation_to_canister))
         .add_test(systest!(query_v3_passes_correct_delegation_to_canister))
+        .add_test(systest!(multiple_query_requests))
         .execute_from_args()
 }
