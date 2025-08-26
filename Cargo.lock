@@ -10802,8 +10802,6 @@ dependencies = [
 name = "ic-migration-canister"
 version = "0.9.0"
 dependencies = [
- "build-info",
- "build-info-build",
  "candid",
  "futures",
  "ic-cdk",
