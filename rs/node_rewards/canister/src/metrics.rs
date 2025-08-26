@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::{NodeId, SubnetId};
