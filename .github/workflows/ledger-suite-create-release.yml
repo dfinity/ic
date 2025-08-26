@@ -93,8 +93,8 @@ jobs:
           echo "Creating new tag: ${{ steps.variables.outputs.tag_name }}"
           echo "Target commit: $TARGET_COMMIT"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "IDX GitHub Automation"
+          git config --global user.email "<>"
           git tag -a "${{ steps.variables.outputs.tag_name }}" -m "Release ${{ steps.variables.outputs.tag_name }}" "$TARGET_COMMIT"
           git push origin "${{ steps.variables.outputs.tag_name }}"
 
