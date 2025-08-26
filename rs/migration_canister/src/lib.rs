@@ -25,6 +25,8 @@ mod migration_canister;
 mod privileged;
 mod processing;
 
+pub use migration_canister::{MigrationCanisterInitPayloadBuilder, MigrationCanisterInitPayload};
+
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -306,4 +308,8 @@ pub async fn validate_request(
         target_original_controllers,
         caller,
     })
+}
+
+fn main() {
+    // This block is intentionally left blank.
 }

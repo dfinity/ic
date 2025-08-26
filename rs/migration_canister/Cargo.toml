@@ -1,13 +1,20 @@
 [package]
-name = "migration_canister"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
+name = "ic-migration-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
-crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "migration-canister"
+path = "src/lib.rs"
 
 [dependencies]
+build-info = { workspace = true }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
@@ -16,3 +23,6 @@ ic-stable-structures = "0.7.0"
 serde_cbor = { workspace = true }
 serde = { workspace =true }
 serde_bytes = { workspace =true }
+
+[build-dependencies]
+build-info-build = { workspace = true }
