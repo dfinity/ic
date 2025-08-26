@@ -213,6 +213,11 @@ async fn test_treasury_manager() {
         .await
         .unwrap();
 
+        for _ in 0..100 {
+            pocket_ic.tick().await;
+            pocket_ic.advance_time(Duration::from_secs(1)).await;
+        }
+
         let proposal_id = proposal_id.unwrap();
 
         let _proposal_data = sns::governance::wait_for_proposal_execution(
@@ -271,15 +276,15 @@ async fn test_treasury_manager() {
 
     for _ in 0..100 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(100)).await;
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
     }
 
     validate_treasury_balances(
         "After registering KongSwapAdaptor",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s - ICP_FEE,
-        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s - SNS_FEE,
+        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s,
+        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s,
     )
     .await
     .unwrap();
@@ -296,10 +301,10 @@ async fn test_treasury_manager() {
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token.clone() => empty_sns_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_sns_e8s - 2 * SNS_FEE)
+                    .external_custodian(initial_treasury_allocation_sns_e8s - 4 * SNS_FEE)
                     .fee_collector(2 * SNS_FEE),
                 icp_token.clone() => empty_icp_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_icp_e8s - 2 * ICP_FEE)
+                    .external_custodian(initial_treasury_allocation_icp_e8s - 4 * ICP_FEE)
                     .fee_collector(2 * ICP_FEE),
             }),
         );
@@ -308,9 +313,9 @@ async fn test_treasury_manager() {
     // Wait for the KongSwap Adaptor to be ready for the next operation.
     //
     // This should be less than 1 hour to avoid hitting the next periodic task.
-    for _ in 0..100 {
+    for _ in 0..150 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(35)).await;
+        pocket_ic.advance_time(Duration::from_secs(20)).await;
     }
 
     // Testing the top-up deposit operation.
@@ -332,12 +337,13 @@ async fn test_treasury_manager() {
                 },
             )),
         };
+
         let proposal_data = propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
             sender,
             neuron_id.clone(),
-            proposal,
+            proposal.clone(),
         )
         .await
         .unwrap();
@@ -368,12 +374,13 @@ async fn test_treasury_manager() {
                 },
             )),
         };
+
         let proposal_data = propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
             sender,
-            neuron_id,
-            proposal,
+            neuron_id.clone(),
+            proposal.clone(),
         )
         .await
         .unwrap();
@@ -391,8 +398,14 @@ async fn test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        let expected_fees_sns_e8s = 6 * SNS_FEE;
-        let expected_fees_icp_e8s = 7 * ICP_FEE;
+        let expected_sns_fee_collector = 6 * SNS_FEE;
+        let expected_icp_fee_collector = 7 * ICP_FEE;
+
+        // As during deposits and intialisation, an approval and a transfer fee is also paid.
+        // Hence, the value reached the treasury manager is 2 * FEE less than the value in the proposal.
+        let num_deposits = 2;
+        let expected_fees_sns_e8s = expected_sns_fee_collector + num_deposits * 2 * SNS_FEE;
+        let expected_fees_icp_e8s = expected_icp_fee_collector + num_deposits * 2 * ICP_FEE;
 
         let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
             + topup_treasury_allocation_sns_e8s
@@ -413,11 +426,11 @@ async fn test_treasury_manager() {
                 sns_token => empty_sns_balance_book
                     .clone()
                     .treasury_owner(treasury_allocation_sns_e8s)
-                    .fee_collector(expected_fees_sns_e8s),
+                    .fee_collector(expected_sns_fee_collector),
                 icp_token => empty_icp_balance_book
                     .clone()
                     .treasury_owner(treasury_allocation_icp_e8s)
-                    .fee_collector(expected_fees_icp_e8s),
+                    .fee_collector(expected_icp_fee_collector),
             }),
         );
     };
@@ -426,8 +439,8 @@ async fn test_treasury_manager() {
         "After withdrawing.",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - 9 * ICP_FEE,
-        initial_sns_balance_e8s - 8 * SNS_FEE,
+        initial_icp_balance_e8s - 11 * ICP_FEE,
+        initial_sns_balance_e8s - 10 * SNS_FEE,
     )
     .await
     .unwrap();
@@ -445,13 +458,8 @@ async fn test_treasury_manager() {
 }
 
 #[allow(unused)]
-async fn dbg_print_block(
-    pocket_ic: &PocketIc,
-    sns_ledger_canister_id: PrincipalId,
-    block_index: u64,
-) {
-    let block =
-        sns::ledger::get_all_blocks(pocket_ic, sns_ledger_canister_id, block_index, 1).await;
+async fn dbg_print_block(pocket_ic: &PocketIc, ledger_canister_id: PrincipalId, block_index: u64) {
+    let block = sns::ledger::get_all_blocks(pocket_ic, ledger_canister_id, block_index, 1).await;
 
     let Value::Map(block_details) = block.blocks[0].clone() else {
         panic!("Expected a block with details, got: {:?}", block.blocks[0]);
