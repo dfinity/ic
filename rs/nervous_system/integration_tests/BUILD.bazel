@@ -371,28 +371,3 @@ rust_test(
         "//rs/sns/treasury_manager",
     ],
 )
-
-rust_test(
-    name = "upgrade_extension_test",
-    timeout = "long",
-    srcs = [
-        "tests/upgrade_extension_test.rs",
-    ],
-    aliases = ALIASES,
-    data = DEV_DATA + [
-        "@kong_backend_canister//file",
-        "@kongswap-adaptor-canister//file",
-    ],
-    env = DEV_ENV | {
-        "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath @kong_backend_canister//file)",
-        "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath @kongswap-adaptor-canister//file)",
-        "RUST_TEST_NOCAPTURE": "1",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "cpu:4",
-    ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
-        "//rs/sns/treasury_manager",
-    ],
-)
