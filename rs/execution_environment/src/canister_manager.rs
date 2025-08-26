@@ -1284,12 +1284,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
-        if state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(specified_id)
-            == Some(state.metadata.own_subnet_id)
+        if state.metadata.network_topology.route(specified_id) == Some(state.metadata.own_subnet_id)
         {
             Ok(new_canister_id)
         } else {
@@ -2419,7 +2414,7 @@ impl CanisterManager {
                     Err(e) => Err(e.into()),
                 }
             }
-            CanisterSnapshotDataKind::MainMemory { offset, size } => {
+            CanisterSnapshotDataKind::WasmMemory { offset, size } => {
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -2669,7 +2664,7 @@ impl CanisterManager {
                     });
                 }
             }
-            CanisterSnapshotDataOffset::MainMemory { offset } => {
+            CanisterSnapshotDataOffset::WasmMemory { offset } => {
                 let max_size_bytes =
                     snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
@@ -2796,7 +2791,7 @@ impl CanisterManager {
                 args.chunk.len() as u64,
                 NumInstructions::new(args.chunk.len() as u64),
             ),
-            CanisterSnapshotDataOffset::MainMemory { .. } => (
+            CanisterSnapshotDataOffset::WasmMemory { .. } => (
                 args.chunk.len() as u64,
                 NumInstructions::new(args.chunk.len() as u64),
             ),
@@ -2883,7 +2878,7 @@ impl CanisterManager {
 fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterManagerError> {
     let size = match kind {
         CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
-        CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::WasmMemory { size, .. } => *size,
         CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
         CanisterSnapshotDataKind::WasmChunk { .. } => return Ok(CHUNK_SIZE),
     };

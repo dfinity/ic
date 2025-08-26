@@ -1,5 +1,5 @@
 {
-  "checksum": "2f544248e66d7a3b36a82813fae1dcfea2aec99052de9f7444387d235c228479",
+  "checksum": "ddc118fb052f995c36235210f4baa34b288eaf1ebab256bb7652152bf03ebf8c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22067,6 +22067,10 @@
               "target": "ratelimit"
             },
             {
+              "id": "raw-cpuid 11.5.0",
+              "target": "raw_cpuid"
+            },
+            {
               "id": "rayon 1.10.0",
               "target": "rayon"
             },
@@ -22486,6 +22490,10 @@
             {
               "id": "walkdir 2.5.0",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.23.3",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -60622,13 +60630,13 @@
             ],
             "cfg(target_arch = \"x86\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
             "cfg(target_arch = \"x86_64\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
@@ -62843,14 +62851,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "raw-cpuid 11.1.0": {
+    "raw-cpuid 11.5.0": {
       "name": "raw-cpuid",
-      "version": "11.1.0",
+      "version": "11.5.0",
       "package_url": "https://github.com/gz/rust-cpuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/raw-cpuid/11.1.0/download",
-          "sha256": "cb9ee317cfe3fbd54b36a511efc1edd42e216903c9cd575e686dd68a2ba90d8d"
+          "url": "https://static.crates.io/crates/raw-cpuid/11.5.0/download",
+          "sha256": "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
         }
       },
       "targets": [
@@ -62882,7 +62890,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "11.1.0"
+        "version": "11.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -95765,6 +95773,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
+    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
@@ -95874,6 +95883,7 @@
     "virt 0.4.2",
     "vsock 0.4.0",
     "walkdir 2.5.0",
+    "walrus 0.23.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
     "wasm-encoder 0.228.0",

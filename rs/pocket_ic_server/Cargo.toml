@@ -101,6 +101,8 @@ wat = { workspace = true }
 
 [dev-dependencies]
 bitcoincore-rpc = { workspace = true }
+candid_parser = { workspace = true }
+flate2 = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
@@ -111,3 +113,4 @@ reqwest = { workspace = true }
 rustls = { workspace = true }
 serde_json = { workspace = true }
 spec-compliance = { path = "../tests/research/spec_compliance" }
+walrus = { workspace = true }

@@ -242,6 +242,25 @@ impl NetworkTopology {
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
+
+    /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
+    pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
+        let as_subnet_id = SubnetId::from(principal_id);
+        if self.subnets.contains_key(&as_subnet_id) {
+            return Some(as_subnet_id);
+        }
+
+        // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
+        // we can't route to it).
+        match CanisterId::try_from(principal_id) {
+            Ok(canister_id) => self
+                .routing_table
+                .lookup_entry(canister_id)
+                .map(|(_range, subnet_id)| subnet_id),
+            // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
+            Err(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]

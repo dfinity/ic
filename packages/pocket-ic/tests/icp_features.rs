@@ -6,10 +6,12 @@ use pocket_ic::{
     start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
     StartServerParams,
 };
+use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tempfile::TempDir;
 #[cfg(windows)]
@@ -21,8 +23,55 @@ fn test_canister_wasm() -> Vec<u8> {
 }
 
 #[test]
-fn with_all_icp_features() {
-    let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+fn test_no_canister_http_without_auto_progress() {
+    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    // No canister http outcalls should be made
+    // (because we did not enable auto progress when creating the PocketIC instance
+    // and the system canisters should be configured to make no canister http outcalls
+    // in this case).
+    // We advance time and execute a few more rounds in case they were only made on timers.
+    for _ in 0..10 {
+        pic.advance_time(Duration::from_secs(1));
+        pic.tick();
+    }
+    assert!(pic.get_canister_http().is_empty());
+}
+
+fn resolving_client(pic: &PocketIc, host: String) -> Client {
+    // Windows doesn't automatically resolve localhost subdomains.
+    if cfg!(windows) {
+        Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap()
+    } else {
+        Client::new()
+    }
+}
+
+#[test]
+fn test_ii() {
+    let mut pic = PocketIcBuilder::new().with_all_icp_features().build();
+
+    // Start HTTP gateway and derive an endpoint to request II via the HTTP gateway.
+    let mut endpoint = pic.make_live(Some(8080));
+    assert_eq!(endpoint.host_str().unwrap(), "localhost");
+    let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+    let host = format!("{}.localhost", ii_canister_id);
+    endpoint.set_host(Some(&host)).unwrap();
+
+    // A basic smoke test.
+    let client = resolving_client(&pic, host);
+    let resp = client.get(endpoint).send().unwrap();
+    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(body.contains("<title>Internet Identity</title>"));
 }
 
 #[test]
@@ -445,53 +494,91 @@ fn test_nns_governance() {
 
 #[test]
 fn test_icp_ledger() {
-    #[derive(CandidType)]
-    struct AccountBalanceArgs {
-        account: Vec<u8>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct Tokens {
-        e8s: u64,
+    #[derive(CandidType, Clone)]
+    struct Icrc1BalanceArgs {
+        owner: Principal,
+        subaccount: Option<Vec<u8>>,
     }
 
     let pic = PocketIcBuilder::new().with_all_icp_features().build();
+    let user_id = Principal::from_slice(&[42; 29]); // arbitrary test user id
 
-    let test_account_hex = "5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087";
-    let test_account = hex::decode(test_account_hex).unwrap();
-
-    // Check balance via ICP ledger.
     let icp_ledger_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
-    let account_balance_args = AccountBalanceArgs {
-        account: test_account,
-    };
-    let balance = update_candid::<_, (Tokens,)>(
-        &pic,
-        icp_ledger_id,
-        "account_balance",
-        (account_balance_args,),
-    )
-    .unwrap()
-    .0
-    .e8s;
-    const E8S_PER_ICP: u64 = 100_000_000;
-    assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
-
-    // The ICP index only syncs with the ICP ledger after 1s from its deployment.
-    pic.advance_time(Duration::from_secs(1));
-    pic.tick();
-
-    // Check balance via ICP index.
     let icp_index_id = Principal::from_text("qhbym-qaaaa-aaaaa-aaafq-cai").unwrap();
-    let balance = update_candid::<_, (u64,)>(
-        &pic,
-        icp_index_id,
-        "get_account_identifier_balance",
-        (test_account_hex,),
-    )
-    .unwrap()
-    .0;
-    assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
+
+    let check_balance = |owner: Principal, expected_balance| {
+        // Check balance via ICP ledger.
+        let icrc1_balance_args = Icrc1BalanceArgs {
+            owner,
+            subaccount: None,
+        };
+        let balance = update_candid::<_, (Nat,)>(
+            &pic,
+            icp_ledger_id,
+            "icrc1_balance_of",
+            (icrc1_balance_args.clone(),),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(balance, expected_balance);
+
+        // The ICP index only syncs with the ICP ledger at least every two seconds.
+        pic.advance_time(Duration::from_secs(2));
+        pic.tick();
+
+        // Check balance via ICP index.
+        let balance = update_candid::<_, (u64,)>(
+            &pic,
+            icp_index_id,
+            "icrc1_balance_of",
+            (icrc1_balance_args.clone(),),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(balance, expected_balance);
+    };
+
+    // The following fixed principal has a high ICP balance in test environments.
+    let rich_principal =
+        Principal::from_text("hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe")
+            .unwrap();
+
+    let mut user_balance = 0;
+    for owner in [Principal::anonymous(), rich_principal] {
+        const E8S_PER_ICP: u64 = 100_000_000;
+        let expected_balance = 1_000_000_000 * E8S_PER_ICP;
+        check_balance(owner, expected_balance);
+
+        // transfer 1 ICP to an account controlled by `user_id`
+        let user_account = Account {
+            owner: user_id,
+            subaccount: None,
+        };
+        let fee_e8s = 10_000_u64;
+        let amount_e8s = 100_000_000_u64; // 1 ICP
+        let transfer_arg = TransferArg {
+            from_subaccount: None,
+            to: user_account,
+            fee: Some(fee_e8s.into()),
+            created_at_time: None,
+            memo: None,
+            amount: amount_e8s.into(),
+        };
+        update_candid_as::<_, (Result<Nat, TransferError>,)>(
+            &pic,
+            icp_ledger_id,
+            owner,
+            "icrc1_transfer",
+            (transfer_arg,),
+        )
+        .unwrap()
+        .0
+        .unwrap();
+
+        check_balance(owner, expected_balance - amount_e8s - fee_e8s);
+        user_balance += amount_e8s;
+        check_balance(user_id, user_balance);
+    }
 }
 
 #[test]

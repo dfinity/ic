@@ -3414,7 +3414,7 @@ impl StateMachine {
         self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
-            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+            |offset, size| CanisterSnapshotDataKind::WasmMemory { offset, size },
         )
     }
 
@@ -3540,7 +3540,7 @@ impl StateMachine {
             data,
             start_chunk,
             end_chunk,
-            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+            |x| CanisterSnapshotDataOffset::WasmMemory { offset: x },
         )
     }
 
