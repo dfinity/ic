@@ -1110,7 +1110,7 @@ impl Step for CreateNNSRecoveryTarStep {
         if let Some(res) = exec_cmd(
             Command::new("bash")
                 .arg("-c")
-                .arg(&self.get_create_commands()),
+                .arg(self.get_create_commands()),
         )? {
             info!(self.logger, "{}", res);
         }
