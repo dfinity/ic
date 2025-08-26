@@ -7,9 +7,6 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
 };
-use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
-};
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
 };
@@ -292,42 +289,6 @@ impl NodeRewardsCanister {
             Ok(NodeProvidersRewards {
                 rewards_xdr_permyriad,
             })
-        }
-    }
-
-    pub fn get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
-        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-        request: GetNodeProviderRewardsCalculationRequest,
-    ) -> GetNodeProviderRewardsCalculationResponse {
-        return match inner_get_node_provider_rewards_calculation::<S>(canister, request) {
-            Ok(rewards) => GetNodeProviderRewardsCalculationResponse {
-                rewards: Some(rewards),
-                error: None,
-            },
-            Err(e) => GetNodeProviderRewardsCalculationResponse {
-                rewards: None,
-                error: Some(e),
-            },
-        };
-
-        fn inner_get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
-            canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-            request: GetNodeProviderRewardsCalculationRequest,
-        ) -> Result<NodeProviderRewards, String> {
-            let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
-            let request_inner = GetNodeProvidersRewardsRequest {
-                from: request.from,
-                to: request.to,
-            };
-            let result =
-                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
-            let node_provider_rewards = result
-                .provider_results
-                .get(&provider_id)
-                .cloned()
-                .ok_or_else(|| format!("No rewards found for node provider {}", provider_id))?;
-
-            Ok(node_provider_rewards.into())
         }
     }
 }
