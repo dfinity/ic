@@ -56,27 +56,23 @@ impl TokenDef {
 
         let mut icrc1_symbol: Option<String> = None;
         let mut icrc1_decimals: Option<u8> = None;
-        let mut symbol_seen = false;
-        let mut decimals_seen = false;
 
         for part in parts.iter().skip(1) {
             if let Some(symbol) = part.strip_prefix("s=") {
-                if symbol_seen {
+                if icrc1_symbol.is_some() {
                     return Err(anyhow::Error::msg(format!(
                         "Invalid token description: {}. Symbol (s=) can only be specified once",
                         token_description
                     )));
                 }
-                symbol_seen = true;
                 icrc1_symbol = Some(symbol.to_string());
             } else if let Some(decimals) = part.strip_prefix("d=") {
-                if decimals_seen {
+                if icrc1_decimals.is_some() {
                     return Err(anyhow::Error::msg(format!(
                         "Invalid token description: {}. Decimals (d=) can only be specified once",
                         token_description
                     )));
                 }
-                decimals_seen = true;
                 icrc1_decimals = Some(
                     decimals
                         .parse()
