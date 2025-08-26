@@ -619,7 +619,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Success: Subnet is broken - cannot store new messages"
     );
 
-    // Replay until highest certification height across all healthy nodes
+    // Replay until highest certification share height across all healthy nodes
     // In a real recovery, this will be determined by the recovery coordinator
     subnet_recovery_tool.params.replay_until_height = Some(
         healthy_nodes
@@ -627,7 +627,7 @@ pub fn nns_recovery_test(env: TestEnv) {
             .map(|n| {
                 block_on(get_node_metrics(&logger, &n.get_ip_addr()))
                     .expect("Missing metrics for node")
-                    .certification_height
+                    .certification_share_height
             })
             .max()
             .unwrap()
