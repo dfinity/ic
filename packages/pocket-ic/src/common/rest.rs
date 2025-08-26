@@ -545,13 +545,14 @@ pub struct EmptyConfig {}
 /// Specifies nonmainnet features enabled in this instance.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct NonmainnetFeatures {
-    /// Enables features disabled by a feature flag on the ICP mainnet.
-    pub beta_features: Option<EmptyConfig>,
+    /// Enables (beta) features (disabled on the ICP mainnet).
+    pub enable_beta_features: Option<EmptyConfig>,
     /// Disables canister backtraces (enabled on the ICP mainnet).
     pub disable_canister_backtrace: Option<EmptyConfig>,
-    /// Effectively disable limits on function name length in canister WASM.
+    /// Disables limits on function name length in canister WASM (enabled on the ICP mainnet).
     pub disable_function_name_length_limits: Option<EmptyConfig>,
-    /// Disables rate-limiting of canister execution (instruction and memory writes).
+    /// Disables rate-limiting of canister execution (enabled on the ICP mainnet).
+    /// Canister execution refers to instructions and memory writes here.
     pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
 }
 

@@ -554,14 +554,14 @@ impl PocketIcSubnets {
         // using `let NonmainnetFeatures { }` with explicit field names
         // to force an update after adding a new field to `NonmainnetFeatures`
         let NonmainnetFeatures {
-            beta_features,
+            enable_beta_features,
             disable_canister_backtrace,
             disable_function_name_length_limits,
             disable_canister_execution_rate_limiting,
         } = nonmainnet_features;
         // using `EmptyConfig { }` explicitly
         // to force an update after adding a new field to `EmptyConfig`
-        let mut hypervisor_config = if let Some(EmptyConfig {}) = beta_features {
+        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
             crate::beta_features::hypervisor_config()
         } else {
             execution_environment::Config::default()
