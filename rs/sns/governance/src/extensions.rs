@@ -30,7 +30,8 @@ use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use sns_treasury_manager::{
-    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
+    Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit,
+    TreasuryManagerUpgrade, WithdrawRequest,
 };
 use std::{
     collections::BTreeMap,
@@ -888,17 +889,20 @@ fn construct_treasury_manager_deposit_allowances(
 }
 
 /// Returns `arg_blob` in the Ok result.
-pub fn construct_treasury_manager_init_payload(
+fn construct_treasury_manager_init_payload(
     context: TreasuryManagerDepositContext,
     value: Precise,
 ) -> Result<Vec<u8>, String> {
     let allowances = construct_treasury_manager_deposit_allowances(context, value)?;
 
     let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
-    let arg = candid::encode_one(&arg)
-        .map_err(|err| format!("Error encoding TreasuryManagerArg: {}", err))?;
+    candid::encode_one(&arg).map_err(|err| format!("Error encoding TreasuryManagerArg: {}", err))
+}
 
-    Ok(arg)
+fn construct_treasury_manager_upgrade_payload() -> Result<Vec<u8>, String> {
+    let arg = TreasuryManagerArg::Upgrade(TreasuryManagerUpgrade {});
+
+    candid::encode_one(&arg).map_err(|err| format!("Error encoding TreasuryManagerArg: {}", err))
 }
 
 /// Returns `arg_blob` in the Ok result.
@@ -987,19 +991,6 @@ pub enum ValidatedExtensionUpgradeArg {
                      // Future: other extension type upgrade arguments would go here
 }
 
-impl ValidatedExtensionUpgradeArg {
-    /// Serialize the upgrade argument to bytes for canister upgrade
-    pub fn to_bytes(&self) -> Vec<u8> {
-        match self {
-            Self::TreasuryManager => {
-                // Treasury manager currently has no upgrade arguments
-                // Return empty bytes (empty candid encoding)
-                candid::encode_one(()).unwrap_or_default()
-            } // Future: other extension types would serialize their specific arguments here
-        }
-    }
-}
-
 pub struct ValidatedUpgradeExtension {
     pub extension_canister_id: CanisterId,
     pub wasm: Wasm,
@@ -1019,11 +1010,20 @@ impl ValidatedUpgradeExtension {
             ..
         } = self;
 
+        let arg_bytes = match &upgrade_arg {
+            ValidatedExtensionUpgradeArg::TreasuryManager => {
+                construct_treasury_manager_upgrade_payload().map_err(|err| {
+                    // This should not be possible, and it's not clear that it falls in another category of error.
+                    GovernanceError::new_with_message(ErrorType::Unspecified, err)
+                })?
+            }
+        };
+
         governance
             .upgrade_non_root_canister(
                 extension_canister_id,
                 wasm,
-                upgrade_arg.to_bytes(),
+                arg_bytes,
                 CanisterInstallMode::Upgrade,
             )
             .await?;
@@ -1084,7 +1084,13 @@ pub async fn validate_upgrade_extension(
         .map_err(|err| format!("Invalid upgrade argument: {}", err))?;
 
     // Generate bytes from the validated upgrade arg for WASM validation
-    let upgrade_arg_bytes = upgrade_arg.to_bytes();
+    let upgrade_arg_bytes = match &upgrade_arg {
+        ValidatedExtensionUpgradeArg::TreasuryManager => {
+            // Treasury manager currently has no upgrade arguments
+            // Return empty bytes (empty candid encoding)
+            candid::encode_one(()).unwrap_or_default()
+        } // Future: other extension types would serialize their specific arguments here
+    };
 
     // Validate WASM structure and size constraints with the upgrade arg bytes
     wasm.validate(&*governance.env, &Some(upgrade_arg_bytes))
@@ -1516,11 +1522,17 @@ pub async fn get_sns_token_symbol(
 /// Helper function to create test allowed extensions map
 fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
     // KongSwap v1 hash from integration test
-    let kongswap_v1_hash: [u8; 32] = [190, 217, 161, 147, 21, 131, 72, 132, 60, 134, 97, 97, 108, 101, 177, 82, 245, 127, 135, 88, 99, 247, 93, 173, 59, 117, 98, 122, 214, 162, 180, 252];
-    
+    let kongswap_v1_hash: [u8; 32] = [
+        103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167, 144, 31, 212,
+        229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
+    ];
+
     // KongSwap v2 hash from integration test
-    let kongswap_v2_hash: [u8; 32] = [18, 59, 212, 110, 3, 250, 78, 235, 212, 162, 46, 1, 246, 157, 143, 79, 242, 96, 102, 35, 37, 17, 61, 145, 152, 124, 46, 145, 237, 173, 68, 112];
-    
+    let kongswap_v2_hash: [u8; 32] = [
+        128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171, 203, 196, 247, 243,
+        160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
+    ];
+
     btreemap! {
         kongswap_v1_hash => ExtensionSpec {
             name: "KongSwap Treasury Manager".to_string(),

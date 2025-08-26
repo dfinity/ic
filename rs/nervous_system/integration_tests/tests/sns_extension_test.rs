@@ -1,68 +1,70 @@
 use candid::Nat;
 use canister_test::Wasm;
-use ic_base_types::CanisterId;
-use ic_base_types::PrincipalId;
-use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
-use ic_nervous_system_common::E8;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
-use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::add_wasms_to_sns_wasm;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::cycles_ledger;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::propose_and_wait;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_crypto_sha2::Sha256;
+use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
+use ic_nervous_system_common::{
+    ledger::compute_distribution_subaccount_bytes, E8, ONE_MONTH_SECONDS,
+};
+use ic_nervous_system_integration_tests::{
+    create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers::{
+        add_wasms_to_sns_wasm, cycles_ledger, install_canister_with_controllers,
+        load_registry_mutations, nns, sns, sns::governance::propose_and_wait, NnsInstaller,
+    },
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
-use ic_sns_cli::register_extension;
-use ic_sns_cli::register_extension::RegisterExtensionArgs;
-use ic_sns_cli::register_extension::RegisterExtensionInfo;
+use ic_nns_test_utils::common::modify_wasm_bytes;
+use ic_sns_cli::{
+    neuron_id_to_candid_subaccount::ParsedSnsNeuron,
+    register_extension,
+    register_extension::{RegisterExtensionArgs, RegisterExtensionInfo},
+};
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance_api::pb::v1::proposal::Action;
-use ic_sns_governance_api::pb::v1::ExecuteExtensionOperation;
-use ic_sns_governance_api::pb::v1::ExtensionOperationArg;
-use ic_sns_governance_api::pb::v1::PreciseValue;
-use ic_sns_governance_api::pb::v1::Proposal;
+use ic_sns_governance_api::pb::v1::{
+    proposal::Action, ExecuteExtensionOperation, ExtensionOperationArg, ExtensionUpgradeArg,
+    PreciseValue, Proposal, UpgradeExtension, Wasm as ApiWasm,
+};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
 use maplit::btreemap;
-use pocket_ic::nonblocking::PocketIc;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use pretty_assertions::assert_eq;
-use sns_treasury_manager::Asset;
-use sns_treasury_manager::AuditTrailRequest;
-use sns_treasury_manager::BalanceBook;
-use sns_treasury_manager::BalancesRequest;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
+use sns_treasury_manager::{Asset, AuditTrailRequest, BalanceBook, BalancesRequest};
+use std::{path::PathBuf, str::FromStr, time::Duration};
 use tempfile::TempDir;
 use url::Url;
 
 mod src {
-    pub use ic_nns_governance_api::create_service_nervous_system::initial_token_distribution::{
-        developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-        TreasuryDistribution,
+    pub use ic_nns_governance_api::create_service_nervous_system::{
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
+        },
+        InitialTokenDistribution,
     };
-    pub use ic_nns_governance_api::create_service_nervous_system::InitialTokenDistribution;
 } // end mod src
 
 const ICP_FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
 const SNS_FEE: u64 = 11143;
 
-#[tokio::test]
-async fn test() {
-    test_treasury_manager().await
+fn make_deposit_allowances(
+    treasury_allocation_icp_e8s: u64,
+    treasury_allocation_sns_e8s: u64,
+) -> Option<PreciseValue> {
+    Some(PreciseValue::Map(btreemap! {
+        "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
+        "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
+    }))
 }
 
+#[tokio::test]
 async fn test_treasury_manager() {
+    do_test_treasury_manager().await
+}
+
+async fn do_test_treasury_manager() {
     let state_dir = TempDir::new().unwrap();
     let state_dir = state_dir.path().to_path_buf();
 
@@ -167,16 +169,6 @@ async fn test_treasury_manager() {
     // This cannot be 100, b/c there will be slightly less than 200 left in the treasury at the point where this is called.
     let topup_treasury_allocation_sns_e8s = 99 * E8;
 
-    fn make_deposit_allowances(
-        treasury_allocation_icp_e8s: u64,
-        treasury_allocation_sns_e8s: u64,
-    ) -> Option<PreciseValue> {
-        Some(PreciseValue::Map(btreemap! {
-            "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
-            "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
-        }))
-    }
-
     let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
         &pocket_ic,
         sns.governance.canister_id,
@@ -191,6 +183,9 @@ async fn test_treasury_manager() {
             .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
 
         let wasm_path = PathBuf::from(wasm_path);
+        let blah = Wasm::from_file(&wasm_path);
+        println!("Kong V1 hash?: {:?}", blah.sha256_hash());
+        println!("Kong V1 hex: {}", hex::encode(&blah.sha256_hash()));
 
         let icp = Tokens::from_tokens(10).unwrap();
         cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
@@ -580,4 +575,201 @@ async fn validate_treasury_balances(
     }
 
     Ok(())
+}
+
+#[tokio::test]
+async fn test_upgrade_extension() {
+    println!("🚀 Starting UpgradeExtension integration test...");
+
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
+    let pocket_ic = PocketIcBuilder::new()
+        .with_state_dir(state_dir.clone())
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_ii_subnet()
+        .with_fiduciary_subnet()
+        .build_async()
+        .await;
+
+    let topology = pocket_ic.topology().await;
+    let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
+
+    // Step 1: Install NNS
+    {
+        let registry_proto_path = state_dir.join("registry.proto");
+        let initial_mutations = load_registry_mutations(registry_proto_path);
+
+        let mut nns_installer = NnsInstaller::default();
+        nns_installer
+            .with_current_nns_canister_versions()
+            .with_test_governance_canister()
+            .with_cycles_minting_canister()
+            .with_cycles_ledger()
+            .with_custom_registry_mutations(vec![initial_mutations]);
+        nns_installer.install(&pocket_ic).await;
+    }
+
+    // Step 2: Deploy SNS
+    let sns = deploy_sns(&pocket_ic, false).await;
+
+    let sns_ledger_canister_id = CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
+    let sns_root_canister_id = CanisterId::try_from_principal_id(sns.root.canister_id).unwrap();
+
+    println!("📦 Installing KongSwap v1 extension...");
+
+    // Install KongSwap
+    let _kong_backend_canister_id = {
+        let wasm_path = std::env::var("KONG_BACKEND_CANISTER_WASM_PATH")
+            .expect("KONG_BACKEND_CANISTER_WASM_PATH must be set.");
+
+        let kong_backend_wasm = Wasm::from_file(wasm_path);
+
+        let controllers = vec![PrincipalId::new_user_test_id(42)];
+
+        // Canister ID from the mainnet.
+        // See https://dashboard.internetcomputer.org/canister/2ipq2-uqaaa-aaaar-qailq-cai
+        let canister_id = CanisterId::try_from_principal_id(
+            PrincipalId::from_str("2ipq2-uqaaa-aaaar-qailq-cai").unwrap(),
+        )
+        .unwrap();
+
+        install_canister_with_controllers(
+            &pocket_ic,
+            "KongSwap Backend Canister",
+            canister_id,
+            vec![],
+            kong_backend_wasm,
+            controllers,
+        )
+        .await;
+
+        canister_id
+    };
+
+    // Step 5: Get a neuron with voting power for proposals
+    let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
+        &pocket_ic,
+        sns.governance.canister_id,
+    )
+    .await
+    .unwrap();
+
+    let initial_treasury_allocation_icp_e8s = 100 * E8;
+    let initial_treasury_allocation_sns_e8s = 200 * E8;
+
+    let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
+        .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
+
+    let wasm_path = PathBuf::from(wasm_path);
+    let adaptor_v1 = Wasm::from_file(&wasm_path);
+    println!("Kong V1 hash?: {:?}", adaptor_v1.sha256_hash());
+
+    // Step 6: Register the extension via RegisterExtension proposal
+    let extension_canister_id = {
+        let agent = PocketIcAgent::new(&pocket_ic, sender);
+
+        let icp = Tokens::from_tokens(10).unwrap();
+        cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
+
+        let RegisterExtensionInfo {
+            proposal_id,
+            extension_canister_id,
+            wasm_module_hash: _,
+        } = register_extension::exec(
+            RegisterExtensionArgs {
+                sns_neuron_id: Some(ParsedSnsNeuron(neuron_id.clone())),
+                sns_root_canister_id,
+                subnet_id: Some(PrincipalId(fiduciary_subnet_id)),
+                wasm_path: wasm_path.clone(),
+                proposal_url: Url::try_from("https://example.com").unwrap(),
+                summary: "Register KongSwap Adaptor".to_string(),
+                extension_init: make_deposit_allowances(
+                    initial_treasury_allocation_icp_e8s,
+                    initial_treasury_allocation_sns_e8s,
+                ),
+            },
+            &agent,
+        )
+        .await
+        .unwrap();
+
+        let proposal_id = proposal_id.unwrap();
+
+        let _proposal_data = sns::governance::wait_for_proposal_execution(
+            &pocket_ic,
+            sns.governance.canister_id,
+            proposal_id,
+        )
+        .await
+        .unwrap();
+
+        extension_canister_id.get()
+    };
+    // Wait for install and registration
+    for _ in 0..100 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(100)).await;
+    }
+
+    let extension_canister_status = pocket_ic
+        .canister_status(extension_canister_id.0, Some(sns_root_canister_id.get().0))
+        .await
+        .unwrap();
+    assert_eq!(
+        extension_canister_status.module_hash,
+        Some(adaptor_v1.sha256_hash().to_vec())
+    );
+
+    // Step 7: Create v2 KongSwap WASM with modified metadata
+    let adaptor_v2 = {
+        let wasm_bytes = std::fs::read(&wasm_path).expect("Failed to read WASM file");
+
+        let wasm_bytes = modify_wasm_bytes(&wasm_bytes, 1);
+
+        Wasm::from_bytes(wasm_bytes)
+    };
+
+    println!("🗳️  Submitting UpgradeExtension proposal...");
+
+    // Step 8: Create UpgradeExtension proposal
+
+    let upgrade_extension_proposal = Proposal {
+        title: "Upgrade KongSwap Extension to v2".to_string(),
+        url: "https://example.com/upgrade-kongswap".to_string(),
+        summary: "Upgrading KongSwap extension to version 2 with enhanced features".to_string(),
+        action: Some(Action::UpgradeExtension(UpgradeExtension {
+            extension_canister_id: Some(extension_canister_id),
+            canister_upgrade_arg: Some(ExtensionUpgradeArg {
+                value: None, // Treasury manager currently has no upgrade args
+            }),
+            wasm: Some(ApiWasm::Bytes(adaptor_v2.clone().bytes())),
+        })),
+    };
+
+    let proposal_data = propose_and_wait(
+        &pocket_ic,
+        sns.governance.canister_id,
+        sender,
+        neuron_id,
+        upgrade_extension_proposal,
+    )
+    .await
+    .expect("Failed to propose UpgradeExtension");
+
+    // Wait a bit for the upgrade to complete
+    for _ in 0..10 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+    }
+
+    let extension_canister_status = pocket_ic
+        .canister_status(extension_canister_id.0, Some(sns_root_canister_id.get().0))
+        .await
+        .unwrap();
+    assert_eq!(
+        extension_canister_status.module_hash,
+        Some(adaptor_v2.sha256_hash().to_vec())
+    );
 }
