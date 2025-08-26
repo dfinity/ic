@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v3/canister/.../call.
+//! Module that deals with requests to /api/{v3,v4}/canister/.../call.
 
 use super::{
     ingress_watcher::{IngressWatcherHandle, SubscriptionError},
@@ -184,7 +184,7 @@ pub fn new_service(
     BoxCloneService::new(router.into_service())
 }
 
-/// Handles a call to /api/v3/canister/../call
+/// Handles a call to /api/{v3,v4}/canister/../call
 async fn call_sync(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SynchronousCallHandlerState {
