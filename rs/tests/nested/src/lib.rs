@@ -204,8 +204,12 @@ pub fn registration(env: TestEnv) {
 }
 
 /// nns_recovery_test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
+/// nns_recovery_test's RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual
+/// version of the recovery GuestOS image, that Node Providers would use as input to
+/// guestos-recovery-upgrader
 pub const SUBNET_SIZE: usize = 4;
 pub const DKG_INTERVAL: u64 = 9;
+pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
 async fn overwrite_expected_recovery_hash<T>(node: &T, artifacts_hash: &str) -> Result<String>
 where
@@ -314,8 +318,6 @@ pub fn nns_recovery_test(env: TestEnv) {
             .expect("RECOVERY_GUESTOS_IMG_PATH environment variable not found"),
     ))
     .expect("Failed to read recovery GuestOS image");
-    let recovery_img_version = std::env::var("RECOVERY_GUESTOS_IMG_VERSION")
-        .expect("RECOVERY_GUESTOS_IMG_VERSION environment variable not found");
     let recovery_img_hash = Sha256::digest(&recovery_img)
         .iter()
         .map(|b| format!("{:02x}", b))
@@ -655,8 +657,12 @@ pub fn nns_recovery_test(env: TestEnv) {
         .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
-    impersonate_upstreams::uvm_serve_guestos_image(&env, recovery_img, &recovery_img_version)
-        .unwrap();
+    impersonate_upstreams::uvm_serve_guestos_image(
+        &env,
+        recovery_img,
+        RECOVERY_GUESTOS_IMG_VERSION,
+    )
+    .unwrap();
 
     info!(logger, "Simulate node provider action on 2f+1 nodes");
     block_on(join_all(
@@ -668,7 +674,7 @@ pub fn nns_recovery_test(env: TestEnv) {
                     &logger,
                     &env,
                     vm_name,
-                    &recovery_img_version,
+                    RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash[..6],
                     &artifacts_hash,
                 )
