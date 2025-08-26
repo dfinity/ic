@@ -12,11 +12,15 @@ base64 = { workspace = true }
 der = { workspace = true }
 hkdf = { workspace = true }
 mockall = { workspace = true }
+p384 = { workspace = true }
 raw-cpuid = { workspace = true }
+rand = { workspace = true }
+rsa = { workspace = true }
 reqwest = { workspace = true }
 sev = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
+x509-cert = { workspace = true }
 
 [dev-dependencies]
 pem = { workspace = true }
