@@ -43,16 +43,16 @@ component_files = {
     Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
 
     # init
-    Label("init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
+    Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
     Label("init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
     Label("init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
-    Label("init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
-    Label("init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
-    Label("init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
-    Label("init/setup-encryption/setup-data-encryption.service"): "/etc/systemd/system/setup-data-encryption.service",
-    Label("init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
-    Label("init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
-    Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
+    Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
+    Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
+    Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
+    Label("guestos/init/setup-encryption/setup-data-encryption.service"): "/etc/systemd/system/setup-data-encryption.service",
+    Label("guestos/init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
+    Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
+    Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
     Label("misc/config/guestos/config.sh"): "/opt/ic/bin/config.sh",
