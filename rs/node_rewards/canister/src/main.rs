@@ -9,6 +9,9 @@ use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
+use ic_node_rewards_canister_api::provider_rewards_calculation::{
+    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+};
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
@@ -115,6 +118,21 @@ async fn get_node_providers_rewards(
         &CANISTER, request,
     )
     .await
+}
+
+#[query]
+fn get_node_provider_rewards_calculation(
+    _request: GetNodeProviderRewardsCalculationRequest,
+) -> GetNodeProviderRewardsCalculationResponse {
+    // TODO: Add rate limiting and restrictions on reward period before enabling it.
+    // NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
+    //     &CANISTER, request,
+    // );
+
+    GetNodeProviderRewardsCalculationResponse {
+        rewards: None,
+        error: Some("Not yet active.".to_string()),
+    }
 }
 
 #[cfg(test)]
