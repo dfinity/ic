@@ -18,6 +18,7 @@ use ic_consensus_system_test_utils::{
     upgrade::assert_assigned_replica_version,
 };
 use ic_recovery::{
+    get_node_metrics,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     util::DataLocation,
     RecoveryArgs,
@@ -552,7 +553,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topology_after_removal.root_subnet_id(),
         upgrade_version: Some(working_version.clone()),
-        replay_until_height: None,
+        replay_until_height: None, // We will set this after breaking the subnet, see below
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         download_node: Some(dfinity_owned_node.get_ip_addr()),
@@ -562,7 +563,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         next_step: None,
     };
 
-    let subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
+    let mut subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     // Break f+1 nodes by SSHing into them and breaking the replica binary.
     info!(
@@ -611,6 +612,21 @@ pub fn nns_recovery_test(env: TestEnv) {
     info!(
         logger,
         "Success: Subnet is broken - cannot store new messages"
+    );
+
+    // Replay until highest certification height across all healthy nodes
+    // In a real recovery, this will be determined by the recovery coordinator
+    subnet_recovery_tool.params.replay_until_height = Some(
+        healthy_nodes
+            .iter()
+            .map(|n| {
+                block_on(get_node_metrics(&logger, &n.get_ip_addr()))
+                    .expect("Missing metrics for node")
+                    .certification_height
+            })
+            .max()
+            .unwrap()
+            .get(),
     );
 
     info!(

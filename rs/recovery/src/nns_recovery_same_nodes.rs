@@ -8,11 +8,8 @@ use crate::{
     RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
-use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::SubnetId;
-use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_metrics::MetricsRegistry;
-use ic_types::{NodeId, PrincipalId, ReplicaVersion};
+use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
 use std::{iter::Peekable, net::IpAddr, net::Ipv6Addr, path::PathBuf};
@@ -222,29 +219,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::ICReplay => {
-                // If the replay height is not specified, replay until the highest certification
-                // height
-                let replay_until_height = self.params.replay_until_height.unwrap_or(
-                    CertificationPoolImpl::new(
-                        NodeId::from(PrincipalId::new_anonymous()),
-                        ArtifactPoolConfig::new(
-                            self.recovery.work_dir.join("data/ic_consensus_pool"),
-                        ),
-                        self.logger.clone().into(),
-                        MetricsRegistry::new(),
-                    )
-                    .validated
-                    .certifications()
-                    .get_highest()
-                    .map_err(|_| {
-                        RecoveryError::UnexpectedError(
-                            "Failed to get highest certification from the pool".into(),
-                        )
-                    })?
-                    .height
-                    .get(),
-                );
-
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {
                     let params = self.params.clone();
                     let (url, hash) = params
@@ -259,7 +233,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         upgrade_version,
                         url,
                         hash,
-                        Some(replay_until_height),
+                        self.params.replay_until_height,
                         !self.interactive(),
                     )?))
                 } else {
@@ -267,7 +241,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         self.params.subnet_id,
                         None,
                         None,
-                        Some(replay_until_height),
+                        self.params.replay_until_height,
                         !self.interactive(),
                     )))
                 }
