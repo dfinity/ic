@@ -1,13 +1,3 @@
-/// Known Security Risks:
-/// Some liquidity pools do not implement slippage protection
-/// for deposits. As a result, the treasury manager’s deposit
-/// operation can be front-run: an attacker may observe the
-/// proposal, trade in the pool before the deposit executes,
-/// and thus alter the market ratio.
-///
-/// In other words, the price ratio at the time of execution
-/// may differ from the ratio at the time the proposal was
-/// approved.
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
     logs::INFO,
