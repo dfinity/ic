@@ -1,5 +1,5 @@
 {
-  "checksum": "4e786aff693eef578cf8cd99c58bfb3d136b36154fd7f455115e49355aff337a",
+  "checksum": "54fd4c2816af09e6e73a1890aa6a13da9fffb2968b390285747536dde0e00b6c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8196,7 +8196,6 @@
             "actual-serde",
             "default",
             "rand",
-            "rand-std",
             "secp-recovery",
             "serde",
             "std"
@@ -8615,138 +8614,6 @@
         "CC0-1.0"
       ],
       "license_file": null
-    },
-    "bitcoincore-rpc 0.19.0": {
-      "name": "bitcoincore-rpc",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.19.0/download",
-          "sha256": "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoincore_rpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoincore_rpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoincore-rpc-json 0.19.0",
-              "target": "bitcoincore_rpc_json"
-            },
-            {
-              "id": "jsonrpc 0.18.0",
-              "target": "jsonrpc"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.19.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "bitcoincore-rpc-json 0.19.0": {
-      "name": "bitcoincore-rpc-json",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.19.0/download",
-          "sha256": "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoincore_rpc_json",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoincore_rpc_json",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.32.99",
-              "target": "bitcoin"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.19.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
     },
     "bitfield 0.19.1": {
       "name": "bitfield",
@@ -20779,10 +20646,6 @@
             {
               "id": "bitcoin 0.32.99",
               "target": "bitcoin"
-            },
-            {
-              "id": "bitcoincore-rpc 0.19.0",
-              "target": "bitcoincore_rpc"
             },
             {
               "id": "bitflags 1.3.2",
@@ -69006,7 +68869,6 @@
             "alloc",
             "hashes",
             "rand",
-            "rand-std",
             "recovery",
             "serde",
             "std"
@@ -94842,7 +94704,6 @@
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoin 0.32.99",
-    "bitcoincore-rpc 0.19.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
