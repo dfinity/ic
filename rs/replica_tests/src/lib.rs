@@ -5,7 +5,7 @@ use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
-    IngressHistoryReader, QueryExecutionError, QueryExecutionService,
+    IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -601,8 +601,12 @@ impl LocalTestRuntime {
             thread::sleep(Duration::from_millis(100));
         }
         let query_svc = self.query_handler.lock().unwrap().clone();
-
-        let result = match query_svc.oneshot((query, None)).await.unwrap() {
+        let input = QueryExecutionInput {
+            query,
+            nns_delegation: None,
+            nns_delegation_format: ic_types::messages::CertificateDelegationFormat::Full,
+        };
+        let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")

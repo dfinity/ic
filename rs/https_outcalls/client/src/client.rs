@@ -6,7 +6,7 @@ use ic_https_outcalls_service::{
     https_outcalls_service_client::HttpsOutcallsServiceClient, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
-use ic_interfaces::execution_environment::QueryExecutionService;
+use ic_interfaces::execution_environment::{QueryExecutionInput, QueryExecutionService};
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
@@ -19,7 +19,7 @@ use ic_types::{
         CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, Query, QuerySource, Request},
+    messages::{CertificateDelegation, CertificateDelegationFormat, Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
 use std::time::Instant;
@@ -353,7 +353,13 @@ async fn transform_adapter_response(
         method_payload,
     };
 
-    match Oneshot::new(query_handler, (query, delegation_from_nns)).await {
+    let input = QueryExecutionInput {
+        query,
+        nns_delegation: delegation_from_nns,
+        nns_delegation_format: CertificateDelegationFormat::Flat,
+    };
+
+    match Oneshot::new(query_handler, input).await {
         Ok(query_response) => match query_response {
             Ok((res, _time)) => match res {
                 Ok(wasm_result) => match wasm_result {

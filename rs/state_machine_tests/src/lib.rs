@@ -35,7 +35,9 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
+    },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
@@ -144,9 +146,10 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        extract_effective_canister_id, Blob, Certificate, CertificateDelegation, HttpCallContent,
-        HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, Payload as MsgPayload, Query,
-        QuerySource, RejectContext, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        extract_effective_canister_id, Blob, Certificate, CertificateDelegation,
+        CertificateDelegationFormat, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
+        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -3739,11 +3742,12 @@ impl StateMachine {
             method_payload,
         };
         let query_svc = self.query_handler.lock().unwrap().clone();
-        if let Ok((result, _)) = self
-            .runtime
-            .block_on(query_svc.oneshot((user_query, delegation)))
-            .unwrap()
-        {
+        let input = QueryExecutionInput {
+            query: user_query,
+            nns_delegation: delegation,
+            nns_delegation_format: CertificateDelegationFormat::Flat,
+        };
+        if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result
         } else {
             unreachable!()

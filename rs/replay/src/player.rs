@@ -23,7 +23,9 @@ use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
-    execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionService},
+    execution_environment::{
+        IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
+    },
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
 };
@@ -909,9 +911,14 @@ impl Player {
             method_payload: Vec::new(),
         };
         self.certify_state_with_dummy_certification();
+        let input = QueryExecutionInput {
+            query,
+            nns_delegation: None,
+            nns_delegation_format: ic_types::messages::CertificateDelegationFormat::Full,
+        };
         match self
             .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
+            .block_on(self.query_handler.clone().oneshot(input))
             .unwrap()
         {
             Ok((Ok(wasm_result), _)) => match wasm_result {
@@ -1216,8 +1223,12 @@ impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
             // In case of Mutex poisoning (as per usual).
             .unwrap()
             .clone();
-
-        query_execution_service.oneshot((query, None)).await
+        let input = QueryExecutionInput {
+            query,
+            nns_delegation: None,
+            nns_delegation_format: ic_types::messages::CertificateDelegationFormat::Full,
+        };
+        query_execution_service.oneshot(input).await
     }
 }
 
