@@ -410,7 +410,7 @@ fn query_cache_returns_different_results_for_different_method_names() {
 fn query_cache_returns_different_results_for_different_certificate_delegation_formats() {
     let mut test = builder_with_query_caching().build();
     let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
-    let method_name = "method_name";
+    let method_name = "f1";
     let method_payload = vec![];
 
     let res_1 = test.non_replicated_query_with_certificate_delegation_metadata(
