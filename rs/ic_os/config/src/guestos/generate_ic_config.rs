@@ -30,7 +30,11 @@ pub fn generate_ic_config(
 
     // Generate and inject a self-signed TLS certificate and key for ic-boundary
     // for the given domain name. To be used in system tests only.
-    if let Some(domain_name) = &config_vars.generate_ic_boundary_tls_cert {
+    if let Some(domain_name) = &guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .generate_ic_boundary_tls_cert
+    {
         if !domain_name.is_empty() && domain_name != "null" {
             generate_tls_certificate(domain_name)?;
         }
@@ -53,7 +57,6 @@ struct ConfigVariables {
     domain_name: String,
     node_reward_type: String,
     malicious_behavior: String,
-    generate_ic_boundary_tls_cert: Option<String>,
 }
 
 fn generate_ipv6_prefix(ipv6_address: &str) -> String {
@@ -188,12 +191,6 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
-    let generate_ic_boundary_tls_cert = guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .generate_ic_boundary_tls_cert
-        .clone();
-
     Ok(ConfigVariables {
         ipv6_address,
         ipv6_prefix,
@@ -207,7 +204,6 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
         domain_name: with_empty_default(domain_name),
         node_reward_type: with_empty_default(node_reward_type),
         malicious_behavior: with_default(malicious_behavior, "null"),
-        generate_ic_boundary_tls_cert,
     })
 }
 
