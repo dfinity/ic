@@ -2642,15 +2642,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_validated_register_extension_execute_caches_extension() {
-        use crate::storage::{
-            clear_registered_extension_cache, get_registered_extension_from_cache,
-        };
+        use crate::storage::get_registered_extension_from_cache;
 
         // Create a simplified test that just verifies the caching functionality
         let extension_canister_id = CanisterId::from_u64(2000);
-
-        // Clear any existing cache for this canister ID
-        clear_registered_extension_cache(extension_canister_id);
 
         // Verify cache is initially empty
         assert_eq!(
@@ -2681,15 +2676,10 @@ mod tests {
         assert_eq!(cached_spec.version, test_spec.version);
         assert_eq!(cached_spec.topic, test_spec.topic);
         assert_eq!(cached_spec.extension_type, test_spec.extension_type);
-
-        // Clean up
-        clear_registered_extension_cache(extension_canister_id);
     }
 
     #[tokio::test]
     async fn test_validate_upgrade_extension_comprehensive() {
-        use crate::storage::clear_registered_extension_cache;
-
         let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
 
         // Set up a registered extension in cache for testing
