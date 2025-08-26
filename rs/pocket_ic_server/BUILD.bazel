@@ -247,7 +247,7 @@ rust_test(
     # this test is manual to not block automatic PR merge
     # bumping mainnet canister versions
     # from which the external types are derived
-    tags = ["manual"],
+    tags = ["pocketic_tests_nightly"],
     deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
 )
 
