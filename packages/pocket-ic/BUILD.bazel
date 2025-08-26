@@ -44,7 +44,6 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-vetkeys",
     "@crate_index//:k256",
-    "@crate_index//:lazy_static",
     "@crate_index//:wat",
 ]
 

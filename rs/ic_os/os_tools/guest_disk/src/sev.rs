@@ -2,13 +2,14 @@ use crate::crypt::{activate_crypt_device, destroy_key_slots_except, format_crypt
 use crate::{activate_flags, DiskEncryption, Partition};
 use anyhow::{Context, Result};
 use config_types::GuestVMType;
-use ic_sev::guest::key_deriver::{Key, SevKeyDeriver};
+use ic_sev::guest::firmware::SevGuestFirmware;
+use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
 use std::path::Path;
 
 pub const PREVIOUS_KEY_PATH: &str = "/var/alternative_store.keyfile";
 
 pub struct SevDiskEncryption<'a> {
-    pub sev_key_deriver: SevKeyDeriver,
+    pub sev_firmware: Box<dyn SevGuestFirmware>,
     pub previous_key_path: &'a Path,
     pub guest_vm_type: GuestVMType,
 }
@@ -73,10 +74,11 @@ impl SevDiskEncryption<'_> {
 
 impl DiskEncryption for SevDiskEncryption<'_> {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
-        let key = self
-            .sev_key_deriver
-            .derive_key(Key::DiskEncryptionKey { device_path })
-            .context("Failed to derive SEV key for disk encryption")?;
+        let key = derive_key_from_sev_measurement(
+            self.sev_firmware.as_mut(),
+            Key::DiskEncryptionKey { device_path },
+        )
+        .context("Failed to derive SEV key for disk encryption")?;
 
         match partition {
             Partition::Var => {
@@ -128,10 +130,11 @@ impl DiskEncryption for SevDiskEncryption<'_> {
     }
 
     fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
-        let key = self
-            .sev_key_deriver
-            .derive_key(Key::DiskEncryptionKey { device_path })
-            .context("Failed to derive SEV key for disk encryption")?;
+        let key = derive_key_from_sev_measurement(
+            self.sev_firmware.as_mut(),
+            Key::DiskEncryptionKey { device_path },
+        )
+        .context("Failed to derive SEV key for disk encryption")?;
 
         format_crypt_device(device_path, key.as_bytes()).context("Failed to format partition")?;
 

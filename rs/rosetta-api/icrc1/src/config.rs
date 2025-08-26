@@ -59,8 +59,20 @@ impl TokenDef {
 
         for part in parts.iter().skip(1) {
             if let Some(symbol) = part.strip_prefix("s=") {
+                if icrc1_symbol.is_some() {
+                    return Err(anyhow::Error::msg(format!(
+                        "Invalid token description: {}. Symbol (s=) can only be specified once",
+                        token_description
+                    )));
+                }
                 icrc1_symbol = Some(symbol.to_string());
             } else if let Some(decimals) = part.strip_prefix("d=") {
+                if icrc1_decimals.is_some() {
+                    return Err(anyhow::Error::msg(format!(
+                        "Invalid token description: {}. Decimals (d=) can only be specified once",
+                        token_description
+                    )));
+                }
                 icrc1_decimals = Some(
                     decimals
                         .parse()
@@ -384,6 +396,28 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Failed to parse u8"));
+    }
+
+    #[test]
+    fn test_token_def_from_string_duplicate_symbol() {
+        let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP:s=ckBTC";
+        let result = TokenDef::from_string(token_desc);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Symbol (s=) can only be specified once"));
+    }
+
+    #[test]
+    fn test_token_def_from_string_duplicate_decimals() {
+        let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:d=8:d=12";
+        let result = TokenDef::from_string(token_desc);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Decimals (d=) can only be specified once"));
     }
 
     #[test]
