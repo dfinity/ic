@@ -1,57 +1,46 @@
-use candid::Nat;
+use candid::{Encode, Nat};
 use canister_test::Wasm;
-use ic_base_types::CanisterId;
-use ic_base_types::PrincipalId;
-use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
-use ic_nervous_system_common::E8;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
-use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::add_wasms_to_sns_wasm;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::cycles_ledger;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::propose_and_wait;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
-use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
-use ic_sns_cli::register_extension;
-use ic_sns_cli::register_extension::RegisterExtensionArgs;
-use ic_sns_cli::register_extension::RegisterExtensionInfo;
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
+use ic_nervous_system_common::{
+    ledger::compute_distribution_subaccount_bytes, E8, ONE_MONTH_SECONDS,
+};
+use ic_nervous_system_integration_tests::{
+    create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers::{
+        add_wasms_to_sns_wasm, cycles_ledger, install_canister_with_controllers,
+        load_registry_mutations, nns, sns, sns::governance::propose_and_wait, NnsInstaller,
+    },
+};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_sns_cli::{
+    neuron_id_to_candid_subaccount::ParsedSnsNeuron,
+    register_extension,
+    register_extension::{RegisterExtensionArgs, RegisterExtensionInfo},
+};
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance_api::pb::v1::proposal::Action;
-use ic_sns_governance_api::pb::v1::ExecuteExtensionOperation;
-use ic_sns_governance_api::pb::v1::ExtensionOperationArg;
-use ic_sns_governance_api::pb::v1::PreciseValue;
-use ic_sns_governance_api::pb::v1::Proposal;
+use ic_sns_governance_api::pb::v1::{
+    proposal::Action, ExecuteExtensionOperation, ExtensionOperationArg, PreciseValue, Proposal,
+};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
 use maplit::btreemap;
-use pocket_ic::nonblocking::PocketIc;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use pretty_assertions::assert_eq;
-use sns_treasury_manager::Asset;
-use sns_treasury_manager::AuditTrailRequest;
-use sns_treasury_manager::BalanceBook;
-use sns_treasury_manager::BalancesRequest;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
+use sns_treasury_manager::{Asset, AuditTrailRequest, BalanceBook, BalancesRequest};
+use std::{path::PathBuf, str::FromStr, time::Duration};
 use tempfile::TempDir;
 use url::Url;
 
 mod src {
-    pub use ic_nns_governance_api::create_service_nervous_system::initial_token_distribution::{
-        developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-        TreasuryDistribution,
+    pub use ic_nns_governance_api::create_service_nervous_system::{
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
+        },
+        InitialTokenDistribution,
     };
-    pub use ic_nns_governance_api::create_service_nervous_system::InitialTokenDistribution;
 } // end mod src
 
 const ICP_FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
@@ -98,6 +87,13 @@ async fn test_treasury_manager() {
             .with_custom_registry_mutations(vec![initial_mutations]);
         nns_installer.install(&pocket_ic).await;
     }
+
+    add_fiduciary_subnet_type(&pocket_ic).await;
+    add_fiduciary_subnet_to_cmc(
+        &pocket_ic,
+        SubnetId::from(PrincipalId::from(fiduciary_subnet_id)),
+    )
+    .await;
 
     let sns = deploy_sns(&pocket_ic, false).await;
 
@@ -217,6 +213,11 @@ async fn test_treasury_manager() {
         .await
         .unwrap();
 
+        for _ in 0..100 {
+            pocket_ic.tick().await;
+            pocket_ic.advance_time(Duration::from_secs(1)).await;
+        }
+
         let proposal_id = proposal_id.unwrap();
 
         let _proposal_data = sns::governance::wait_for_proposal_execution(
@@ -275,15 +276,15 @@ async fn test_treasury_manager() {
 
     for _ in 0..100 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(100)).await;
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
     }
 
     validate_treasury_balances(
         "After registering KongSwapAdaptor",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s - ICP_FEE,
-        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s - SNS_FEE,
+        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s,
+        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s,
     )
     .await
     .unwrap();
@@ -300,10 +301,10 @@ async fn test_treasury_manager() {
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token.clone() => empty_sns_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_sns_e8s - 2 * SNS_FEE)
+                    .external_custodian(initial_treasury_allocation_sns_e8s - 4 * SNS_FEE)
                     .fee_collector(2 * SNS_FEE),
                 icp_token.clone() => empty_icp_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_icp_e8s - 2 * ICP_FEE)
+                    .external_custodian(initial_treasury_allocation_icp_e8s - 4 * ICP_FEE)
                     .fee_collector(2 * ICP_FEE),
             }),
         );
@@ -312,9 +313,9 @@ async fn test_treasury_manager() {
     // Wait for the KongSwap Adaptor to be ready for the next operation.
     //
     // This should be less than 1 hour to avoid hitting the next periodic task.
-    for _ in 0..100 {
+    for _ in 0..150 {
         pocket_ic.tick().await;
-        pocket_ic.advance_time(Duration::from_secs(35)).await;
+        pocket_ic.advance_time(Duration::from_secs(20)).await;
     }
 
     // Testing the top-up deposit operation.
@@ -336,12 +337,13 @@ async fn test_treasury_manager() {
                 },
             )),
         };
+
         let proposal_data = propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
             sender,
             neuron_id.clone(),
-            proposal,
+            proposal.clone(),
         )
         .await
         .unwrap();
@@ -372,12 +374,13 @@ async fn test_treasury_manager() {
                 },
             )),
         };
+
         let proposal_data = propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
             sender,
-            neuron_id,
-            proposal,
+            neuron_id.clone(),
+            proposal.clone(),
         )
         .await
         .unwrap();
@@ -395,8 +398,14 @@ async fn test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        let expected_fees_sns_e8s = 6 * SNS_FEE;
-        let expected_fees_icp_e8s = 7 * ICP_FEE;
+        let expected_sns_fee_collector = 6 * SNS_FEE;
+        let expected_icp_fee_collector = 7 * ICP_FEE;
+
+        // As during deposits and intialisation, an approval and a transfer fee is also paid.
+        // Hence, the value reached the treasury manager is 2 * FEE less than the value in the proposal.
+        let num_deposits = 2;
+        let expected_fees_sns_e8s = expected_sns_fee_collector + num_deposits * 2 * SNS_FEE;
+        let expected_fees_icp_e8s = expected_icp_fee_collector + num_deposits * 2 * ICP_FEE;
 
         let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
             + topup_treasury_allocation_sns_e8s
@@ -417,11 +426,11 @@ async fn test_treasury_manager() {
                 sns_token => empty_sns_balance_book
                     .clone()
                     .treasury_owner(treasury_allocation_sns_e8s)
-                    .fee_collector(expected_fees_sns_e8s),
+                    .fee_collector(expected_sns_fee_collector),
                 icp_token => empty_icp_balance_book
                     .clone()
                     .treasury_owner(treasury_allocation_icp_e8s)
-                    .fee_collector(expected_fees_icp_e8s),
+                    .fee_collector(expected_icp_fee_collector),
             }),
         );
     };
@@ -430,8 +439,8 @@ async fn test_treasury_manager() {
         "After withdrawing.",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - 9 * ICP_FEE,
-        initial_sns_balance_e8s - 8 * SNS_FEE,
+        initial_icp_balance_e8s - 11 * ICP_FEE,
+        initial_sns_balance_e8s - 10 * SNS_FEE,
     )
     .await
     .unwrap();
@@ -449,13 +458,8 @@ async fn test_treasury_manager() {
 }
 
 #[allow(unused)]
-async fn dbg_print_block(
-    pocket_ic: &PocketIc,
-    sns_ledger_canister_id: PrincipalId,
-    block_index: u64,
-) {
-    let block =
-        sns::ledger::get_all_blocks(pocket_ic, sns_ledger_canister_id, block_index, 1).await;
+async fn dbg_print_block(pocket_ic: &PocketIc, ledger_canister_id: PrincipalId, block_index: u64) {
+    let block = sns::ledger::get_all_blocks(pocket_ic, ledger_canister_id, block_index, 1).await;
 
     let Value::Map(block_details) = block.blocks[0].clone() else {
         panic!("Expected a block with details, got: {:?}", block.blocks[0]);
@@ -580,4 +584,67 @@ async fn validate_treasury_balances(
     }
 
     Ok(())
+}
+
+/// Add the "fiduciary" subnet type to CMC by impersonating Governance
+async fn add_fiduciary_subnet_type(pocket_ic: &PocketIc) {
+    #[derive(candid::CandidType)]
+    enum UpdateSubnetTypeArgs {
+        Add(String),
+    }
+
+    let args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
+    let payload = Encode!(&args).expect("Failed to encode UpdateSubnetTypeArgs");
+
+    let result = pocket_ic
+        .update_call(
+            CYCLES_MINTING_CANISTER_ID.get().into(),
+            GOVERNANCE_CANISTER_ID.get().into(),
+            "update_subnet_type",
+            payload,
+        )
+        .await;
+
+    match result {
+        Ok(_) => println!("Successfully added fiduciary subnet type to CMC"),
+        Err(e) => panic!("Failed to add fiduciary subnet type to CMC: {:?}", e),
+    }
+}
+
+/// Register the fiduciary subnet with the "fiduciary" type in CMC by impersonating Governance  
+async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: SubnetId) {
+    #[derive(candid::CandidType)]
+    struct SubnetListWithType {
+        subnets: Vec<SubnetId>,
+        subnet_type: String,
+    }
+
+    #[derive(candid::CandidType)]
+    enum ChangeSubnetTypeAssignmentArgs {
+        Add(SubnetListWithType),
+    }
+
+    let args = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+        subnets: vec![fiduciary_subnet_id],
+        subnet_type: "fiduciary".to_string(),
+    });
+
+    let payload = Encode!(&args).expect("Failed to encode ChangeSubnetTypeAssignmentArgs");
+
+    let result = pocket_ic
+        .update_call(
+            CYCLES_MINTING_CANISTER_ID.get().into(),
+            GOVERNANCE_CANISTER_ID.get().into(),
+            "change_subnet_type_assignment",
+            payload,
+        )
+        .await;
+
+    match result {
+        Ok(_) => println!(
+            "Successfully registered fiduciary subnet {} with CMC",
+            fiduciary_subnet_id
+        ),
+        Err(e) => panic!("Failed to register fiduciary subnet with CMC: {:?}", e),
+    }
 }

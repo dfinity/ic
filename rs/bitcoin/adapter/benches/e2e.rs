@@ -96,7 +96,7 @@ fn e2e(criterion: &mut Criterion) {
             .iter()
             .map(|h| h[..].to_vec())
             .collect::<Vec<Vec<u8>>>(),
-        network: ic_btc_replica_types::Network::Regtest,
+        network: ic_btc_replica_types::Network::BitcoinRegtest,
     };
 
     let wrapped = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(get_successors_request);

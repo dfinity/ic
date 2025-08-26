@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Environment presets to configure ICP Rosetta API with `--environment` flag ([#5982](https://github.com/dfinity/ic/pull/5982))
 - New endpoint `get_minimum_dissolve_delay` to retrieve the minimum dissolve delay of a neuron that allows voting ([#5863](https://github.com/dfinity/ic/pull/5863))
+- Support for `DISBURSE_MATURITY` neuron operation. Allows to disburse neuron's maturity directly to an account ([#5994](https://github.com/dfinity/ic/pull/5994))
 
 ### Changed
 - Grouped Rosetta CLI parameters for better organization and readability ([#5981](https://github.com/dfinity/ic/pull/5981))
