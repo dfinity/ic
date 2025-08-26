@@ -24,6 +24,7 @@ component_files = {
     Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos/misc/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id-hostos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -67,7 +68,6 @@ component_files = {
     Label("monitoring/metrics-proxy/hostos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
-    Label("monitoring/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
