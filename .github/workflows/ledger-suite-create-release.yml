@@ -63,7 +63,6 @@ jobs:
         run: |
           TAG_NAME="ledger-suite-${{ github.event.inputs.release_type }}-${{ github.event.inputs.release_date }}"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "release_title=$TAG_NAME" >> $GITHUB_OUTPUT
 
           # Set paths, upgrade requirements, and human-readable title for different release types
           if [[ "${{ github.event.inputs.release_type }}" == "icrc" ]]; then
@@ -476,7 +475,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.variables.outputs.tag_name }}
-          name: ${{ steps.variables.outputs.release_title }}
+          name: ${{ steps.variables.outputs.tag_name }}
           body_path: ${{ steps.release_body.outputs.release_body_file }}
           files: ${{ steps.download.outputs.temp_dir }}/*
           draft: true
