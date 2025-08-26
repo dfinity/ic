@@ -32,6 +32,7 @@ use std::{
 };
 
 use anyhow::Result;
+use candid::{CandidType, Encode};
 use ic_agent::{
     agent::{Envelope, EnvelopeContent},
     Agent, Identity,
@@ -65,7 +66,7 @@ use ic_types::{
         Blob, Certificate, CertificateDelegation, HttpQueryResponseReply, HttpReadStateResponse,
         NodeSignature,
     },
-    Height, PrincipalId, SubnetId,
+    CanisterId, Height, PrincipalId, SubnetId,
 };
 use ic_universal_canister::wasm;
 use reqwest::StatusCode;
@@ -301,6 +302,26 @@ fn canister_read_state_v3_returns_correct_delegation(env: TestEnv) {
     );
 }
 
+/// Responses to `api/v3/canister/aaaaa-aa/read_state` have valid delegations without canister ranges.
+fn canister_read_state_v3_management_canister_returns_correct_delegation(env: TestEnv) {
+    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+    let response: HttpReadStateResponse = block_on(send(
+        &node,
+        format!("api/v3/canister/{}/read_state", CanisterId::ic_00()),
+        sign_envelope(&read_state_content()),
+    ));
+    let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
+
+    validate_delegation(
+        &env,
+        &certificate
+            .delegation
+            .expect("Should have an NNS delegation attached"),
+        subnet.subnet_id,
+        None,
+    );
+}
+
 #[derive(Deserialize)]
 struct SyncCallResponse {
     #[allow(dead_code)]
@@ -347,6 +368,47 @@ fn call_v4_returns_correct_delegation(env: TestEnv) {
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
         Some(CanisterRangesFormat::Tree),
+    );
+}
+
+/// Responses to `api/v4/canister/{canister_id}/call` targeting the management canister
+/// have valid delegations without canister ranges.
+fn call_v4_management_canister_returns_correct_delegation(env: TestEnv) {
+    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+    let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
+
+    #[derive(CandidType)]
+    struct Arg {
+        canister_id: PrincipalId,
+    }
+    // This update call is a no-op because the canister is already started, but at least
+    // the call doesn't fail.
+    let call_content = EnvelopeContent::Call {
+        ingress_expiry: expiration.unix_timestamp_nanos() as u64,
+        sender: get_identity().sender().unwrap(),
+        canister_id: CanisterId::ic_00().into(),
+        method_name: String::from("start_canister"),
+        arg: Encode!(&Arg {
+            canister_id: node.effective_canister_id()
+        })
+        .unwrap(),
+        nonce: None,
+    };
+
+    let response: SyncCallResponse = block_on(send(
+        &node,
+        format!("api/v4/canister/{}/call", node.effective_canister_id()),
+        sign_envelope(&call_content),
+    ));
+    let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
+
+    validate_delegation(
+        &env,
+        &certificate
+            .delegation
+            .expect("Should have an NNS delegation attached"),
+        subnet.subnet_id,
+        None,
     );
 }
 
@@ -404,7 +466,7 @@ fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
 }
 
 /// Run query tests several times sequentially to check that we don't return incorrect cached response.
-fn multiple_query_requests(env: TestEnv) {
+fn interlaced_v2_and_v3_query_requests(env: TestEnv) {
     for _ in 0..10 {
         query_v2_passes_correct_delegation_to_canister(env.clone());
         query_v3_passes_correct_delegation_to_canister(env.clone());
@@ -639,13 +701,19 @@ fn main() -> Result<()> {
         .add_test(systest!(nns_delegation_on_app_subnet_test))
         .add_test(systest!(canister_read_state_v2_returns_correct_delegation))
         .add_test(systest!(canister_read_state_v3_returns_correct_delegation))
+        .add_test(systest!(
+            canister_read_state_v3_management_canister_returns_correct_delegation
+        ))
         .add_test(systest!(subnet_read_state_v2_returns_correct_delegation))
         .add_test(systest!(subnet_read_state_v3_returns_correct_delegation))
         // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
         .add_test(systest!(call_v3_returns_correct_delegation))
         .add_test(systest!(call_v4_returns_correct_delegation))
+        .add_test(systest!(
+            call_v4_management_canister_returns_correct_delegation
+        ))
         .add_test(systest!(query_v2_passes_correct_delegation_to_canister))
         .add_test(systest!(query_v3_passes_correct_delegation_to_canister))
-        .add_test(systest!(multiple_query_requests))
+        .add_test(systest!(interlaced_v2_and_v3_query_requests))
         .execute_from_args()
 }
