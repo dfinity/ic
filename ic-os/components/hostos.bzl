@@ -74,7 +74,7 @@ component_files = {
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
 
     # networking
-    Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
+    Label("networking/generate-network-config/generate-network-config-hostos.service"): "/etc/systemd/system/generate-network-config.service",
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",

@@ -102,7 +102,7 @@ component_files = {
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
 
     # networking
-    Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
+    Label("networking/generate-network-config/generate-network-config-guestos.service"): "/etc/systemd/system/generate-network-config.service",
     Label("networking/nftables/reload_nftables.path"): "/etc/systemd/system/reload_nftables.path",
     Label("networking/nftables/reload_nftables.service"): "/etc/systemd/system/reload_nftables.service",
     Label("networking/nftables/nftables-empty.conf"): "/etc/nftables.conf",

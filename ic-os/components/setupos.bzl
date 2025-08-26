@@ -40,7 +40,7 @@ component_files = {
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
 
     # networking
-    Label("networking/generate-network-config/setupos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
+    Label("networking/generate-network-config/generate-network-config-setupos.service"): "/etc/systemd/system/generate-network-config.service",
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/hosts"): "/etc/hosts",
