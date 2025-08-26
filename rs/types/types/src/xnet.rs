@@ -211,6 +211,9 @@ pub enum RejectReason {
     /// `StateError` variants that shouldn't be possible to occur for requests.
     /// It is not expected that this reason will ever be used.
     Unknown = 7,
+
+    /// According to the receiver, the sender subnet doesn't have the sender canister ID.
+    SenderSubnetMismatch = 8,
 }
 
 impl RejectReason {
@@ -231,6 +234,7 @@ impl From<RejectReason> for pb_queues::RejectReason {
             RejectReason::QueueFull => Self::QueueFull,
             RejectReason::OutOfMemory => Self::OutOfMemory,
             RejectReason::Unknown => Self::Unknown,
+            RejectReason::SenderSubnetMismatch => Self::SenderSubnetMismatch,
         }
     }
 }
@@ -250,6 +254,7 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
             pb_queues::RejectReason::QueueFull => Ok(Self::QueueFull),
             pb_queues::RejectReason::OutOfMemory => Ok(Self::OutOfMemory),
             pb_queues::RejectReason::Unknown => Ok(Self::Unknown),
+            pb_queues::RejectReason::SenderSubnetMismatch => Ok(Self::SenderSubnetMismatch),
         }
     }
 }

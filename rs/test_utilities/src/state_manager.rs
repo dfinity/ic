@@ -387,6 +387,7 @@ pub enum SerializableRejectReason {
     QueueFull = 5,
     OutOfMemory = 6,
     Unknown = 7,
+    SenderSubnetMismatch = 8,
 }
 
 impl From<&RejectReason> for SerializableRejectReason {
@@ -399,6 +400,7 @@ impl From<&RejectReason> for SerializableRejectReason {
             RejectReason::QueueFull => Self::QueueFull,
             RejectReason::OutOfMemory => Self::OutOfMemory,
             RejectReason::Unknown => Self::Unknown,
+            RejectReason::SenderSubnetMismatch => Self::SenderSubnetMismatch,
         }
     }
 }
@@ -413,6 +415,7 @@ impl From<SerializableRejectReason> for RejectReason {
             SerializableRejectReason::QueueFull => RejectReason::QueueFull,
             SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
             SerializableRejectReason::Unknown => RejectReason::Unknown,
+            SerializableRejectReason::SenderSubnetMismatch => RejectReason::SenderSubnetMismatch,
         }
     }
 }

@@ -1138,6 +1138,13 @@ fn generate_reject_response_for(reason: RejectReason, request: &Request) -> Requ
             RejectCode::SysFatal,
             "Inducting request failed due to an unknown error".to_string(),
         ),
+        RejectReason::SenderSubnetMismatch => (
+            RejectCode::SysTransient,
+            format!(
+                "Canister {} is not in the sender canister range according to the receiver subnet",
+                request.sender
+            ),
+        ),
     };
     generate_reject_response(request, code, message)
 }
