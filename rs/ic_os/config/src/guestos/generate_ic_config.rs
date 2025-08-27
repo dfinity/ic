@@ -325,7 +325,6 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
     let tls_key_path = "/var/lib/ic/data/ic-boundary-tls.key";
     let tls_cert_path = "/var/lib/ic/data/ic-boundary-tls.crt";
 
-    // Generate certificate using openssl
     let status = Command::new("openssl")
         .args([
             "req",
@@ -352,7 +351,6 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         anyhow::bail!("openssl command failed with status: {}", status);
     }
 
-    // Set ownership and permissions
     let status = Command::new("chown")
         .args(["ic-replica:nogroup", tls_key_path, tls_cert_path])
         .status()
