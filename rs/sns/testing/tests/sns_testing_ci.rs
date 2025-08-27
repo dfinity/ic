@@ -66,7 +66,7 @@ async fn prepare_network_for_test(
     let treasury_principal_id = *TREASURY_PRINCIPAL_ID;
 
     // Installing NNS canisters
-    let dev_neuron_id = bootstrap_nns(
+    let dev_nns_neuron_id = bootstrap_nns(
         &pocket_ic,
         vec![(
             treasury_principal_id,
@@ -76,7 +76,7 @@ async fn prepare_network_for_test(
     )
     .await;
     assert!(validate_network(&pocket_ic).await.is_empty());
-    (pocket_ic, dev_neuron_id)
+    (pocket_ic, dev_nns_neuron_id)
 }
 
 async fn test_canister_query(pocket_ic: &PocketIc, test_canister_id: CanisterId, greeting: String) {
@@ -120,7 +120,8 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
 
     let dev_participant_id = DEV_PARTICIPANT_ID;
 
-    let (pocket_ic, dev_neuron_id) = prepare_network_for_test(dev_participant_id, state_dir).await;
+    let (pocket_ic, dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
 
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
@@ -128,7 +129,7 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     let (sns, dev_sns_neuron_id) = create_sns(
         &pocket_ic,
         dev_participant_id,
-        dev_neuron_id,
+        dev_nns_neuron_id,
         vec![test_canister_id],
         true,
     )
@@ -164,7 +165,8 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
 
     let dev_participant_id = DEV_PARTICIPANT_ID;
 
-    let (pocket_ic, dev_neuron_id) = prepare_network_for_test(dev_participant_id, state_dir).await;
+    let (pocket_ic, dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
 
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
@@ -172,7 +174,7 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let (sns, dev_sns_neuron_id) = create_sns(
         &pocket_ic,
         dev_participant_id,
-        dev_neuron_id,
+        dev_nns_neuron_id,
         vec![test_canister_id],
         false,
     )
