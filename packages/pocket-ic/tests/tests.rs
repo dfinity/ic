@@ -1,4 +1,5 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_certification::Label;
 use ic_management_canister_types::CanisterIdRecord;
 use ic_management_canister_types::{
@@ -7,6 +8,9 @@ use ic_management_canister_types::{
     ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
@@ -2747,7 +2751,14 @@ fn test_reject_response_type() {
 fn test_custom_blockmaker_metrics() {
     const HOURS_IN_SECONDS: u64 = 60 * 60;
 
-    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+    // Create a temporary state directory from which the test can retrieve the registry.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    let pocket_ic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_application_subnet()
+        .build();
     let topology = pocket_ic.topology();
     let application_subnet = topology.get_app_subnets()[0];
 
@@ -2756,19 +2767,29 @@ fn test_custom_blockmaker_metrics() {
     pocket_ic.add_cycles(canister, INIT_CYCLES);
     pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    let nodes = topology
-        .subnet_configs
-        .get(&application_subnet)
+    // Retrieve node ids from the registry
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::load_from_file(
+        registry_proto_path,
+    ));
+    let latest_version = registry_data_provider.latest_version();
+    let registry_client = RegistryClientImpl::new(registry_data_provider.clone(), None);
+    registry_client.poll_once().unwrap();
+    let node_ids = registry_client
+        .get_node_ids_on_subnet(
+            SubnetId::new(PrincipalId(application_subnet)),
+            latest_version,
+        )
         .unwrap()
-        .clone();
+        .unwrap();
 
-    let blockmaker_1 = nodes.node_ids[0].clone();
-    let blockmaker_2 = nodes.node_ids[1].clone();
+    let blockmaker_1 = node_ids[0].get().0;
+    let blockmaker_2 = node_ids[1].get().0;
 
     let subnets_blockmakers = vec![RawSubnetBlockmaker {
         subnet: application_subnet.into(),
-        blockmaker: blockmaker_1.clone(),
-        failed_blockmakers: vec![blockmaker_2.clone()],
+        blockmaker: blockmaker_1.into(),
+        failed_blockmakers: vec![blockmaker_2.into()],
     }];
 
     let tick_configs = TickConfigs {
@@ -2807,12 +2828,12 @@ fn test_custom_blockmaker_metrics() {
 
     let blockmaker_1_metrics = first_node_metrics
         .iter()
-        .find(|x| x.node_id == Principal::from(blockmaker_1.clone()))
+        .find(|x| x.node_id == blockmaker_1)
         .unwrap()
         .clone();
     let blockmaker_2_metrics = first_node_metrics
         .into_iter()
-        .find(|x| x.node_id == Principal::from(blockmaker_2.clone()))
+        .find(|x| x.node_id == blockmaker_2)
         .unwrap();
 
     assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);

@@ -1984,14 +1984,6 @@ impl PocketIc {
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_seed,
-                node_ids: self
-                    .subnets
-                    .get(config.subnet_id)
-                    .unwrap()
-                    .nodes
-                    .iter()
-                    .map(|n| n.node_id.get().0.into())
-                    .collect(),
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
             };
