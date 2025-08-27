@@ -1543,7 +1543,7 @@ impl ExecutionEnvironment {
                         response: Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,
                             format!(
-                                "{} API is only accessible BLA2 in non-replicated mode",
+                                "{} API is only accessible to end users in non-replicated mode",
                                 Ic00Method::FetchCanisterLogs
                             ),
                         )),
