@@ -1608,9 +1608,15 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
             };
+            // The SNS-W canister requires cycles to deploy SNS
+            // and thus we have to top it up with cycles:
+            // - the canister should have enough cycles to never run out of cycles;
+            // - it should still be possible top up the canister with further cycles without overflowing 64-bit integer range
+            //   (the SNS-W canister uses 64-bit cycles API).
+            // The initial amount of ICP cycles equal to `u64::MAX / 2` satisfies both requirements.
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_WASM_CANISTER_ID.get()),
-                Cycles::zero(),
+                Cycles::from(u64::MAX / 2),
                 Some(settings),
             );
             assert_eq!(canister_id, SNS_WASM_CANISTER_ID);

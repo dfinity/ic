@@ -49,12 +49,15 @@ pub async fn create_sns<
     dev_participant_agent: &C,
     dapp_canister_ids: Vec<CanisterId>,
     follow_dev_neuron: bool,
-) -> Sns {
+) -> (Sns, SnsNeuronId) {
     let mut create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .neurons_fund_participation(true)
         .with_dapp_canisters(dapp_canister_ids)
         .build();
     let governance_parameters = create_service_nervous_system.governance_parameters.clone();
+
+    let minimum_dissolve_delay =
+        governance_parameters.and_then(|p| p.neuron_minimum_dissolve_delay_to_vote);
 
     // Set developer identity to have initial neuron eligible for voting
     create_service_nervous_system.initial_token_distribution = create_service_nervous_system
@@ -65,8 +68,7 @@ pub async fn create_sns<
                 .map(|mut developer_distribution| {
                     developer_distribution.developer_neurons = vec![NeuronDistribution {
                         controller: Some(dev_participant_agent.caller().unwrap().into()),
-                        dissolve_delay: governance_parameters
-                            .and_then(|p| p.neuron_minimum_dissolve_delay_to_vote),
+                        dissolve_delay: minimum_dissolve_delay,
                         memo: Some(400000),
                         stake: Some(ic_nervous_system_proto::pb::v1::Tokens { e8s: Some(400000) }),
                         vesting_period: Some(ic_nervous_system_proto::pb::v1::Duration::from_secs(
@@ -110,7 +112,7 @@ pub async fn create_sns<
         sns_swap,
         sns_governance,
         if follow_dev_neuron {
-            vec![dev_participant_neuron_id]
+            vec![dev_participant_neuron_id.clone()]
         } else {
             vec![]
         },
@@ -118,7 +120,21 @@ pub async fn create_sns<
     .await
     .unwrap();
 
-    sns
+    sns_governance
+        .increase_dissolve_delay(
+            dev_participant_agent,
+            dev_participant_neuron_id.clone(),
+            minimum_dissolve_delay.unwrap().seconds.unwrap() as u32,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to increase dissolve delay for neuron {:?}: {}",
+                dev_participant_neuron_id, e
+            )
+        });
+
+    (sns, dev_participant_neuron_id)
 }
 
 // Find all SNSes with the given name.
@@ -455,6 +471,7 @@ pub async fn sns_proposal_upvote<
 /// 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
 pub async fn propose_sns_controlled_canister_upgrade<C: CallCanisters + ProgressNetwork>(
     dev_participant_agent: &C,
+    dev_neuron_id: SnsNeuronId,
     sns: Sns,
     canister_id: CanisterId,
     upgrade_wasm: Vec<u8>,
@@ -498,13 +515,9 @@ pub async fn propose_sns_controlled_canister_upgrade<C: CallCanisters + Progress
     //         .expect("Failed to upgrade the canister");
     // let proposal_id = proposal_id.unwrap();
 
-    let neuron_id = get_caller_neuron(dev_participant_agent, sns.governance)
-        .await
-        .unwrap()
-        .expect("Expecting the identity to have a Neuron");
     propose(
         dev_participant_agent,
-        neuron_id,
+        dev_neuron_id,
         sns.governance,
         Proposal {
             title: "Upgrade SNS controlled canister.".to_string(),
@@ -565,6 +578,7 @@ pub async fn await_sns_controlled_canister_upgrade<
 
 // Module with PocketIC-specific functions, mainly used in the tests.
 pub mod pocket_ic {
+    use crate::sns::SnsNeuronId;
     use ::pocket_ic::nonblocking::PocketIc;
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns};
@@ -590,7 +604,7 @@ pub mod pocket_ic {
         dev_neuron_id: NeuronId,
         dapp_canister_ids: Vec<CanisterId>,
         follow_dev_neuron: bool,
-    ) -> Sns {
+    ) -> (Sns, SnsNeuronId) {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
         super::create_sns(
@@ -615,6 +629,7 @@ pub mod pocket_ic {
     pub async fn propose_sns_controlled_canister_upgrade(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
+        dev_neuron_id: SnsNeuronId,
         sns: Sns,
         canister_id: CanisterId,
         upgrade_wasm: Vec<u8>,
@@ -633,6 +648,7 @@ pub mod pocket_ic {
 
         super::propose_sns_controlled_canister_upgrade(
             &dev_participant_agent,
+            dev_neuron_id,
             sns,
             canister_id,
             upgrade_wasm,

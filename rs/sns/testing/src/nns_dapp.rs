@@ -1,21 +1,25 @@
-use candid::{CandidType, Encode};
+use candid::{CandidType, Encode, Nat, Principal};
 use canister_test::Wasm;
 use futures::future::join_all;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_with_controllers, NnsInstaller, SnsWasmCanistersInstaller,
-};
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
     LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{
+    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
+    neuron::DissolveState, ClaimOrRefreshNeuronFromAccount,
+    ClaimOrRefreshNeuronFromAccountResponse, GovernanceError, Neuron,
+};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use icp_ledger::{AccountIdentifier, Tokens};
-use pocket_ic::nonblocking::PocketIc;
-use std::time::SystemTime;
+use icp_ledger::Tokens;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use pocket_ic::nonblocking::{update_candid_as, PocketIc};
 
 use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
 
@@ -30,11 +34,12 @@ async fn validate_subnet_setup(pocket_ic: &PocketIc) {
 
 pub async fn bootstrap_nns(
     pocket_ic: &PocketIc,
-    initial_mutations: Vec<RegistryAtomicMutateRequest>,
-    ledger_balances: Vec<(AccountIdentifier, Tokens)>,
+    _initial_mutations: Vec<RegistryAtomicMutateRequest>,
+    ledger_balances: Vec<(PrincipalId, Tokens)>,
     neuron_controller: PrincipalId,
-    deciding_neuron_id: NeuronId,
-) {
+) -> NeuronId {
+    const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
+
     // Ensure that all required subnets are present before proceeding to install NNS canisters
     // At the moment this check doesn't make a lot of sense since we are always creating the new PocketIC instance
     // with all the required subnets. However, in the future, we might want to be able to check externally provided
@@ -48,52 +53,126 @@ pub async fn bootstrap_nns(
     )
     .await;
 
-    if !canisters_installed.iter().any(|installed| *installed) {
-        const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
-
-        let voting_power_refreshed_timestamp_seconds = Some(
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        );
-
-        let deciding_neuron = Neuron {
-            id: Some(deciding_neuron_id),
-            account: [0u8; 32].to_vec(),
-            controller: Some(neuron_controller),
-            cached_neuron_stake_e8s: 1_000_000_000,
-            maturity_e8s_equivalent: 1_500_000 * 1_00000000,
-            auto_stake_maturity: Some(true),
-            joined_community_fund_timestamp_seconds: Some(1),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
-            not_for_profit: true,
-            hot_keys: vec![],
-            voting_power_refreshed_timestamp_seconds,
-            ..Default::default()
-        };
-
-        let mut nns_installer = NnsInstaller::default();
-        nns_installer.with_current_nns_canister_versions();
-        nns_installer.with_test_governance_canister();
-        nns_installer.with_cycles_minting_canister();
-        nns_installer.with_cycles_ledger();
-        nns_installer.with_index_canister();
-        nns_installer.with_custom_registry_mutations(initial_mutations);
-        nns_installer.with_ledger_balances(ledger_balances);
-        nns_installer.with_neurons(vec![deciding_neuron]);
-        nns_installer.install(pocket_ic).await;
-        SnsWasmCanistersInstaller::default()
-            .with_current_sns_canister_versions()
-            .with_nns_neuron(deciding_neuron_id, neuron_controller)
-            .add_wasms_to_sns_wasm(pocket_ic)
-            .await
-            .unwrap();
-    } else if !canisters_installed.iter().all(|exists| *exists) {
+    if !canisters_installed.iter().all(|exists| *exists) {
         panic!("Some NNS canisters are missing, we cannot fix this automatically at the moment");
     }
 
+    let governance_id = GOVERNANCE_CANISTER_ID.get().0;
+    let icp_ledger_id = LEDGER_CANISTER_ID.get().0;
+
+    // Set up initial ICP ledger balances.
+    for (owner, amount) in ledger_balances {
+        let fee: Nat = 10_000_u64.into();
+        let to = Account {
+            owner: owner.into(),
+            subaccount: None,
+        };
+        let transfer_arg = TransferArg {
+            from_subaccount: None,
+            to,
+            fee: Some(fee),
+            created_at_time: None,
+            memo: None,
+            amount: amount.get_e8s().into(),
+        };
+        update_candid_as::<_, (Result<Nat, TransferError>,)>(
+            pocket_ic,
+            icp_ledger_id,
+            Principal::anonymous(),
+            "icrc1_transfer",
+            (transfer_arg,),
+        )
+        .await
+        .unwrap()
+        .0
+        .unwrap();
+    }
+
+    // Transfer the neuron stake of 1,000,000 ICP to the corresponding NNS governance subaccount.
+    let nonce = 42_u64;
+    let neuron_subaccount = compute_neuron_staking_subaccount_bytes(neuron_controller, nonce);
+    let neuron_account = Account {
+        owner: governance_id,
+        subaccount: Some(neuron_subaccount),
+    };
+    let fee: Nat = 10_000_u64.into();
+    let memo: Memo = nonce.into();
+    let neuron_stake_e8s = Tokens::from_tokens(1_000_000).unwrap().get_e8s();
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to: neuron_account,
+        fee: Some(fee),
+        created_at_time: None,
+        memo: Some(memo),
+        amount: neuron_stake_e8s.into(),
+    };
+    update_candid_as::<_, (Result<Nat, TransferError>,)>(
+        pocket_ic,
+        icp_ledger_id,
+        Principal::anonymous(),
+        "icrc1_transfer",
+        (transfer_arg,),
+    )
+    .await
+    .unwrap()
+    .0
+    .unwrap();
+
+    // Claim the neuron.
+    let claim_neuron_arg = ClaimOrRefreshNeuronFromAccount {
+        controller: Some(neuron_controller),
+        memo: nonce,
+    };
+    let res = update_candid_as::<_, (ClaimOrRefreshNeuronFromAccountResponse,)>(
+        pocket_ic,
+        governance_id,
+        neuron_controller.into(),
+        "claim_or_refresh_neuron_from_account",
+        (claim_neuron_arg,),
+    )
+    .await
+    .unwrap()
+    .0
+    .result
+    .unwrap();
+    let deciding_neuron_id = match res {
+        ClaimOrRefreshNeuronFromAccountResponseResult::NeuronId(neuron_id) => neuron_id,
+        _ => panic!("Unexpected result of claiming NNS neuron: {:?}", res),
+    };
+
+    // And finally update the neuron.
+    let voting_power_refreshed_timestamp_seconds =
+        Some(pocket_ic.get_time().await.as_nanos_since_unix_epoch() / 1_000_000_000);
+    let deciding_neuron = Neuron {
+        id: Some(deciding_neuron_id),
+        account: neuron_subaccount.into(),
+        controller: Some(neuron_controller),
+        cached_neuron_stake_e8s: neuron_stake_e8s,
+        maturity_e8s_equivalent: 1_500_000 * 1_00000000,
+        auto_stake_maturity: Some(true),
+        joined_community_fund_timestamp_seconds: Some(1),
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+        not_for_profit: true,
+        hot_keys: vec![],
+        voting_power_refreshed_timestamp_seconds,
+        ..Default::default()
+    };
+    let res = update_candid_as::<_, (Option<GovernanceError>,)>(
+        pocket_ic,
+        governance_id,
+        neuron_controller.into(),
+        "update_neuron",
+        (deciding_neuron,),
+    )
+    .await
+    .unwrap()
+    .0;
+    println!("res: {:?}", res);
+    assert!(res.is_none());
+
     install_frontend_nns_canisters(pocket_ic).await;
+
+    deciding_neuron_id
 }
 
 #[derive(CandidType)]
@@ -110,43 +189,7 @@ struct NnsDappPayload {
 async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
     let features = &[];
 
-    let sns_aggregator_wasm =
-        Wasm::from_location_specified_by_env_var("sns_aggregator", features).unwrap();
     let nns_dapp_wasm = Wasm::from_location_specified_by_env_var("nns_dapp", features).unwrap();
-    let internet_identity_wasm =
-        Wasm::from_location_specified_by_env_var("internet_identity", features).unwrap();
-
-    if !check_canister_installed(pocket_ic, &SNS_AGGREGATOR_CANISTER_ID).await {
-        // Refresh every second so that the NNS dapp is as up-to-date as possible
-        let sns_aggregator_payload = SnsAggregatorPayload {
-            update_interval_ms: 1000,
-            fast_interval_ms: 100,
-        };
-
-        install_canister_with_controllers(
-            pocket_ic,
-            "sns_aggregator",
-            SNS_AGGREGATOR_CANISTER_ID,
-            Encode!(&sns_aggregator_payload).unwrap(),
-            sns_aggregator_wasm,
-            vec![ROOT_CANISTER_ID.get(), SNS_WASM_CANISTER_ID.get()],
-        )
-        .await;
-    }
-
-    if !check_canister_installed(pocket_ic, &IDENTITY_CANISTER_ID).await {
-        let internet_identity_payload: Option<()> = None;
-
-        install_canister_with_controllers(
-            pocket_ic,
-            "internet-identity",
-            IDENTITY_CANISTER_ID,
-            Encode!(&internet_identity_payload).unwrap(),
-            internet_identity_wasm,
-            vec![ROOT_CANISTER_ID.get()],
-        )
-        .await;
-    }
 
     if !check_canister_installed(pocket_ic, &NNS_UI_CANISTER_ID).await {
         // TODO @rvem: perhaps, we may start using configurable endpoint for the IC http interface

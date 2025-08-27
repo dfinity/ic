@@ -6,11 +6,13 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted
+    "//packages/icrc-ledger-types",
     "//packages/pocket-ic",
     "//rs/canister_client/sender",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nervous_system/proto",

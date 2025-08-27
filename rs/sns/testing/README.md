@@ -51,8 +51,7 @@ To launch the network:
    by `bazel run`.
    ```
    bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" \
-       --dev-identity sns-testing \
-       --deciding-nns-neuron-id 1
+       --dev-identity sns-testing
    ```
 
 Once these steps are completed, the PocketIC will expose the IC network HTTP endpoint on "http://127.0.0.1:8080".
