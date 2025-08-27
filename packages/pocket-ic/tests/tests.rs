@@ -1,18 +1,24 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+#[cfg(not(windows))]
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_certification::Label;
-use ic_management_canister_types::CanisterIdRecord;
 use ic_management_canister_types::{
-    Bip341, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
-    NodeMetricsHistoryArgs, NodeMetricsHistoryRecord as NodeMetricsHistoryResultItem,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
+    Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
+    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
+#[cfg(not(windows))]
+use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+#[cfg(not(windows))]
 use ic_registry_client::client::RegistryClientImpl;
+#[cfg(not(windows))]
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+#[cfg(not(windows))]
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+#[cfg(not(windows))]
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
+#[cfg(not(windows))]
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
@@ -2747,6 +2753,7 @@ fn test_reject_response_type() {
     }
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_custom_blockmaker_metrics() {
     const HOURS_IN_SECONDS: u64 = 60 * 60;
@@ -2821,7 +2828,7 @@ fn test_custom_blockmaker_metrics() {
         )
         .unwrap();
 
-    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryResultItem>)
+    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryRecord>)
         .unwrap()
         .remove(0)
         .node_metrics;
