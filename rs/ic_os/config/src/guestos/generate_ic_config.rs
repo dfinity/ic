@@ -5,7 +5,6 @@ use serde_json;
 use std::fs::{read_to_string, write};
 use std::path::Path;
 use std::process::Command;
-use walkdir::WalkDir;
 
 /// Generate IC configuration from template and guestos config
 pub fn generate_ic_config(
@@ -257,13 +256,12 @@ fn get_router_advertisement_ipv6_address() -> Result<String> {
 }
 
 fn get_router_advertisement_ipv6_address_helper() -> Result<String> {
-    let valid_interfaces = get_valid_interfaces()?;
-
     let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
     let ipv6_address = ifaces
         .iter()
         .find_map(|iface| {
-            if !valid_interfaces.contains(&iface.name) {
+            // Filter out virtual interfaces
+            if is_virtual_interface(&iface.name) {
                 return None;
             }
 
@@ -284,38 +282,9 @@ fn get_router_advertisement_ipv6_address_helper() -> Result<String> {
     Ok(ipv6_address)
 }
 
-fn get_valid_interfaces() -> Result<Vec<String>> {
-    let net_dir = "/sys/class/net";
-
-    let valid_interfaces: Vec<String> = WalkDir::new(net_dir)
-        .max_depth(1)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|entry| entry.depth() > 0)
-        .filter_map(|entry| {
-            let path = entry.path();
-
-            // Check if it's a symbolic link
-            let metadata = std::fs::symlink_metadata(path).ok()?;
-            if !metadata.file_type().is_symlink() {
-                return None;
-            }
-
-            // Filter out virtual interfaces
-            let target = std::fs::read_link(path).ok()?;
-            if target.to_string_lossy().contains("virtual") {
-                return None;
-            }
-
-            Some(path.file_name()?.to_string_lossy().into_owned())
-        })
-        .collect();
-
-    if valid_interfaces.is_empty() {
-        anyhow::bail!("No valid network interfaces found");
-    }
-
-    Ok(valid_interfaces)
+fn is_virtual_interface(interface_name: &str) -> bool {
+    let device_path = format!("/sys/class/net/{interface_name}/device");
+    !Path::new(&device_path).exists()
 }
 
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
