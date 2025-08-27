@@ -9,6 +9,7 @@ on:
       - master-private
       - rc--*
       - ic-mainnet-revisions
+      - ic-nervous-system-wasms
     tags:
       - release-*
     workflows:

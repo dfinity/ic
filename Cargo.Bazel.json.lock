@@ -1,5 +1,5 @@
 {
-  "checksum": "d58f18063365e231dad77a7adc5cfc27e1b1bfdb7f9c17ef354e6447b8d87f81",
+  "checksum": "af4be329ddc15f6da99dbbf59deaca96afa9659ce5be7011f4c9da31d7db39e3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21938,6 +21938,10 @@
               "target": "p256"
             },
             {
+              "id": "p384 0.13.1",
+              "target": "p384"
+            },
+            {
               "id": "pairing 0.23.0",
               "target": "pairing"
             },
@@ -22490,6 +22494,10 @@
             {
               "id": "walkdir 2.5.0",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.23.3",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -65881,6 +65889,7 @@
         "crate_features": {
           "common": [
             "default",
+            "getrandom",
             "pem",
             "sha2",
             "std",
@@ -95735,6 +95744,7 @@
     "opentelemetry-prometheus 0.13.0",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
+    "p384 0.13.1",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
     "paste 1.0.15",
@@ -95879,6 +95889,7 @@
     "virt 0.4.2",
     "vsock 0.4.0",
     "walkdir 2.5.0",
+    "walrus 0.23.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
     "wasm-encoder 0.228.0",

@@ -1616,11 +1616,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
     config.wasm_gc(false);
-    if embedders_config.feature_flags.wasm64 == ic_config::flag_status::FlagStatus::Enabled {
-        config.wasm_memory64(true);
-    } else {
-        config.wasm_memory64(false);
-    }
+    config.wasm_memory64(true);
     // Wasm multi-memory feature is disabled during validation,
     // but enabled during execution for the Wasm-native stable memory
     // implementation.

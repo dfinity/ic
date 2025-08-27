@@ -233,7 +233,7 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = ReadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataKind::MainMemory { offset, size: 1 },
+                    CanisterSnapshotDataKind::WasmMemory { offset, size: 1 },
                 );
                 let _ = env
                     .read_canister_snapshot_data(&args)
@@ -252,7 +252,7 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = ReadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataKind::MainMemory { offset, size: 1 },
+                    CanisterSnapshotDataKind::WasmMemory { offset, size: 1 },
                 );
                 let _ = env
                     .read_canister_snapshot_data(&args)
@@ -279,7 +279,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = UploadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataOffset::MainMemory { offset },
+                    CanisterSnapshotDataOffset::WasmMemory { offset },
                     vec![42],
                 );
                 env.upload_canister_snapshot_data(&args)
@@ -298,7 +298,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = UploadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataOffset::MainMemory { offset },
+                    CanisterSnapshotDataOffset::WasmMemory { offset },
                     vec![42],
                 );
                 env.upload_canister_snapshot_data(&args)
