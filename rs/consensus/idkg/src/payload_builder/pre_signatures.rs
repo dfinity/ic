@@ -866,6 +866,34 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn test_zero_count_zero_max_has_lowest_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+        let id3 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1);
+
+        let zero = make_stash(0, 0, &id1, &transcript);
+        let nonzero = make_stash(2, 10, &id2, &transcript);
+        let empty_nonzero = make_stash(0, 10, &id3, &transcript);
+
+        // Stash with a max of zero has the lowest priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&nonzero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&zero), Ordering::Greater);
+
+        // switch the key_ids
+        let zero = make_stash(0, 0, &id2, &transcript);
+        let nonzero = make_stash(2, 10, &id3, &transcript);
+        let empty_nonzero = make_stash(0, 10, &id1, &transcript);
+        // Stash with a max of zero should still have the lower priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&nonzero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
     fn test_max_zero_has_lowest_priority() {
         let transcript = make_key_transcript();
         let id1 = fake_ecdsa_idkg_master_public_key_id();
@@ -878,6 +906,43 @@ pub(super) mod tests {
         // Stash with a max of zero has the lowest priority
         assert_eq!(zero.cmp(&nonzero), Ordering::Less);
         assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+
+        // switch the key_ids
+        let zero = make_stash(10, 0, &id2, &transcript);
+        let nonzero = make_stash(15, 5, &id1, &transcript);
+        // Stash with a max of zero should still have lower priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_stash_equality() {
+        let transcript = make_key_transcript();
+        // All stashes have the same id
+        let id = fake_ecdsa_idkg_master_public_key_id();
+
+        // Both stashes have the same ratio
+        let ratio1 = make_stash(1, 5, &id, &transcript);
+        let ratio2 = make_stash(2, 10, &id, &transcript);
+
+        // Both stashes have a count of 0
+        let zero_count1 = make_stash(0, 5, &id, &transcript);
+        let zero_count2 = make_stash(0, 10, &id, &transcript);
+
+        // Both stashes have a max of 0
+        let zero_max1 = make_stash(0, 0, &id, &transcript);
+        let zero_max2 = make_stash(10, 0, &id, &transcript);
+
+        for (a, b) in [
+            (ratio1, ratio2),
+            (zero_count1, zero_count2),
+            (zero_max1, zero_max2),
+        ] {
+            assert_eq!(a.cmp(&b), Ordering::Equal);
+            assert_eq!(b.cmp(&a), Ordering::Equal);
+            assert_eq!(a.cmp(&a), Ordering::Equal);
+            assert_eq!(b.cmp(&b), Ordering::Equal);
+        }
     }
 
     #[test]
