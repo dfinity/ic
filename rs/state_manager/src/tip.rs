@@ -45,9 +45,18 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-/// We merge starting from MAX_NUMBER_OF_FILES, we take up to 4 rounds to iterate over whole state,
-/// there are 2 overlays created each checkpoint.
-const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
+/// Maximum amount of files per shard. If we exceed this number we merge regardless whether
+/// we block checkpointing for the merge duration.
+/// If we don't reach the MERGE_SOFT_BUDGET_BYTES, the number of files should not exceed
+/// MAX_NUMBER_OF_FILES + 8, since we add at most 2 overlays per checkpoint and iterate over all
+/// shards in 4 checkpoints at most.
+const NUMBER_OF_FILES_HARD_LIMIT: usize = 20;
+
+const GIB: usize = 1024 * 1024 * 1024;
+
+/// Maximum amount of data we can safely write during merge without expecting blocking of
+/// checkpointing.
+const MERGE_SOFT_BUDGET_BYTES: usize = 250 * GIB;
 
 #[derive(Clone, Debug, Default)]
 struct CheckpointState {
@@ -873,9 +882,9 @@ fn merge_candidates_and_storage_info(
 /// merging the head of the sorted vector, which contains either all MergeCandidates with more than
 /// Storage::MAX_NUMBER_OF_FILES or top ones till accumulated write_size_bytes is more than one
 /// quarter of `sum(storage_size_bytes_before)`. This way we iterate through all page maps with more
-/// than MAX_NUMBER_OF_FILES at most in 4 checkpoint intervals. Since we produce at most 2 overlays
-/// per checkpoint per `PageMap`, we have a cap of `MAX_NUMBER_OF_FILES` + 2 * 4 files per `PageMap`
-/// at any checkpoint.
+/// than MAX_NUMBER_OF_FILES at most in 4 checkpoint intervals, provided we don't reach MERGE_SOFT_BUDGET_BYTES.
+/// Since we produce at most 2 overlays per checkpoint per `PageMap`, we have a cap of
+/// `MAX_NUMBER_OF_FILES` + 2 * 4 files per `PageMap` at any checkpoint.
 ///
 /// Then we need to take care of storage overhead. Storage overhead is the ratio
 /// `sum(storage_size_bytes_after)` / `sum(page_map_size_bytes)`. In other words, we need
@@ -890,7 +899,7 @@ fn merge_candidates_and_storage_info(
 /// (`storage_size_bytes_before` - `storage_size_bytes_after`) / `write_size_bytes`.
 ///
 /// Write size calculation.
-/// The merges for number of files are at most 1/4 of allowed state size.
+/// The merges for number of files are at most 1/4 of allowed state size, capped by MERGE_SOFT_LIMIT_BYTES.
 /// Merges for overhead have input with overhead >= 2.5 and output being == 1.0. Meaning by writing
 /// 1 MiB to disk during merge, we replace what used to be >= 2.5 MiB on disk with 1 MiB.
 /// In other words, 1 MiB of write during merge reduces storage by at least 1.5 MiB.
@@ -902,8 +911,9 @@ fn merge_candidates_and_storage_info(
 /// For a more general estimate, the data written to disk during checkpoint interval is at most
 /// max_dirty_pages, meaning we need to write max_dirty_pages / 1.5 + one canister size to reduce
 /// the overhead under 2.5 again.
-/// The total write is at most 1/4 state size + 2/3 * max_dirty_pages + the size of the last
-/// `PageMap`. Note that if canisters are removed, upgraded, or otherwise delete data, this can
+/// The total write is at most
+/// min(MERGE_SOFT_BUDGET_BYTES, 1/4 state size) + 2/3 * max_dirty_pages + the size of the last`PageMap`.
+/// Note that if canisters are removed, upgraded, or otherwise delete data, this can
 /// further increase the amount of data written in order to enforce the storage overhead.
 fn merge(
     tip_handler: &mut TipHandler,
@@ -934,7 +944,7 @@ fn merge(
     let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
 
     merge_candidates.sort_by_key(|m| -(m.num_files_before() as i64));
-    let storage_to_merge_for_filenum = storage_info.mem_size / 4;
+    let storage_to_merge_for_filenum = std::min(MERGE_SOFT_BUDGET_BYTEs, storage_info.mem_size / 4);
     let min_storage_to_merge = storage_info.mem_size / 50;
     let merges_by_filenum = merge_candidates
         .iter()
