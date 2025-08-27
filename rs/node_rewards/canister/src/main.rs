@@ -128,7 +128,7 @@ fn get_node_provider_rewards_calculation(
     //     &CANISTER, request,
     // );
 
-    GetNodeProviderRewardsCalculationResponse::Err("Not yet active.".to_string())
+    Err("Not yet active.".to_string())
 }
 
 #[cfg(test)]

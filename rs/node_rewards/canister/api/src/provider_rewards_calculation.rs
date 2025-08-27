@@ -8,8 +8,4 @@ pub struct GetNodeProviderRewardsCalculationRequest {
     pub provider_id: Principal,
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub enum GetNodeProviderRewardsCalculationResponse {
-    Ok(NodeProviderRewards),
-    Err(String),
-}
+pub type GetNodeProviderRewardsCalculationResponse = Result<NodeProviderRewards, String>;

@@ -6,12 +6,7 @@ pub struct GetNodeProvidersRewardsRequest {
     pub from_nanos: u64,
     pub to_nanos: u64,
 }
-
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub enum GetNodeProvidersRewardsResponse {
-    Ok(NodeProvidersRewards),
-    Err(String),
-}
+pub type GetNodeProvidersRewardsResponse = Result<NodeProvidersRewards, String>;
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct NodeProvidersRewards {

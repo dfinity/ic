@@ -7,7 +7,7 @@ use crate::storage::HISTORICAL_REWARDS;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::providers_rewards::{
-    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
+    GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
 use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
     NodeMetrics, SubnetMetricsKey, SubnetMetricsValue,
@@ -621,10 +621,7 @@ fn test_get_node_providers_rewards() {
             test_provider_id(2).0 => 10000,
         },
     };
-    assert_eq!(
-        result_endpoint,
-        GetNodeProvidersRewardsResponse::Ok(expected)
-    );
+    assert_eq!(result_endpoint, Ok(expected));
 
     HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
         let p1 = test_provider_id(1);

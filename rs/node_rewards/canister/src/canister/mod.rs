@@ -230,10 +230,7 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        return match inner_get_node_providers_rewards::<S>(canister, request).await {
-            Ok(rewards) => GetNodeProvidersRewardsResponse::Ok(rewards),
-            Err(e) => GetNodeProvidersRewardsResponse::Err(e),
-        };
+        return inner_get_node_providers_rewards::<S>(canister, request).await;
         async fn inner_get_node_providers_rewards<S: RegistryDataStableMemory>(
             canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
             request: GetNodeProvidersRewardsRequest,
@@ -292,10 +289,7 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
-        return match inner_get_node_provider_rewards_calculation::<S>(canister, request) {
-            Ok(rewards) => GetNodeProviderRewardsCalculationResponse::Ok(rewards),
-            Err(e) => GetNodeProviderRewardsCalculationResponse::Err(e),
-        };
+        return inner_get_node_provider_rewards_calculation::<S>(canister, request);
 
         fn inner_get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
             canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
