@@ -860,8 +860,7 @@ impl StreamHandlerImpl {
                         match msg {
                             RequestOrResponse::Request(ref request) => {
                                 let reason = match err {
-                                    // The canister belongs to the host subnet range, but doesn't exist;
-                                    // it cannot be migrating.
+                                    // Receiver should be hosted by this subnet, but does not exist.
                                     StateError::CanisterNotFound(_) => {
                                         RejectReason::CanisterNotFound
                                     }
@@ -936,7 +935,7 @@ impl StreamHandlerImpl {
                 Accept(msg_cycles)
             }
 
-            // A canister id doesn't belong to the canister ranges of host_subnet; it is only possible
+            // Receiver is not hosted by this subnet; it is only possible
             // that this message was sent by a subnet with a routing table claiming otherwise, so it is
             // migrating.
             Some(_) if matches!(msg, RequestOrResponse::Request(_)) => {
