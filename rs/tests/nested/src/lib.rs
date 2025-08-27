@@ -414,17 +414,23 @@ pub fn nns_recovery_test(env: TestEnv) {
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
-
-    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
-    info!(
-        logger,
-        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
-    );
     info!(
         logger,
         "Selected DFINITY-owned NNS node: {} ({:?})",
         dfinity_owned_node.node_id,
         dfinity_owned_node.get_ip_addr()
+    );
+    info!(
+        logger,
+        "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
+        faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+        healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+    );
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
+    info!(
+        logger,
+        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
     );
     cert_state_makes_progress_with_retries(
         &dfinity_owned_node.get_public_url(),
