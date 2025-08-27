@@ -1,10 +1,6 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
-
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -13,9 +9,9 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic_stable_structures_next",
-    "@crate_index//:serde_cbor",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
 ]
 
 DEV_DEPENDENCIES = [
@@ -36,8 +32,8 @@ rust_canister(
     name = "migration-canister",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     crate_root = "src/lib.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":migration_canister.did",
     deps = DEPENDENCIES,
 )
