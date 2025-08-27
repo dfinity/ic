@@ -29,7 +29,7 @@ type Decimal = record {
 };
 
 type NodeMetricsDaily = record {
-  subnet_assigned: opt PrincipalId;
+  subnet_assigned: opt principal;
   subnet_assigned_fr_percent: opt Decimal;
   num_blocks_proposed: opt nat64;
   num_blocks_failed: opt nat64;
@@ -68,7 +68,7 @@ type DailyResults = record {
 };
 
 type NodeResults = record {
-  node_id: opt PrincipalId;
+  node_id: opt principal;
   node_reward_type: opt text;
   region: opt text;
   dc_id: opt text;
