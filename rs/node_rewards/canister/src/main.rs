@@ -123,6 +123,11 @@ async fn get_node_providers_rewards(
 fn get_node_provider_rewards_calculation(
     request: GetNodeProviderRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
+    if !request.historical {
+        // TODO: Add rate limiting and restrictions on reward period before enabling it.
+        return Err("Not yet active.".to_string());
+    }
+
     NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
         &CANISTER, request,
     )

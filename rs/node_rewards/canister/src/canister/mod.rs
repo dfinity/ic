@@ -281,7 +281,7 @@ impl NodeRewardsCanister {
     }
 
     pub fn get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
-        _canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
         let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
@@ -302,20 +302,17 @@ impl NodeRewardsCanister {
                     provider_id
                 ))
         } else {
-            Err("Not yet active.".to_string())
-            // TODO: Add rate limiting and restrictions on reward period before enabling it.
-            //
-            // let request_inner = GetNodeProvidersRewardsRequest {
-            //     from_nanos: request.from_nanos,
-            //     to_nanos: request.to_nanos,
-            // };
-            // let mut result =
-            //     canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
-            // let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(
-            //     format!("No rewards found for node provider {}", provider_id),
-            // )?;
-            //
-            // node_provider_rewards.into()
+            let request_inner = GetNodeProvidersRewardsRequest {
+                from_nanos: request.from_nanos,
+                to_nanos: request.to_nanos,
+            };
+            let mut result =
+                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
+            let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(
+                format!("No rewards found for node provider {}", provider_id),
+            )?;
+
+            node_provider_rewards.into()
         }
     }
 
