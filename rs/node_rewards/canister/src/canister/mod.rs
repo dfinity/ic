@@ -297,7 +297,10 @@ impl NodeRewardsCanister {
             };
             HISTORICAL_REWARDS
                 .with_borrow(|historical_rewards| historical_rewards.get(&reward_key))
-                .ok_or("No historical rewards found for node provider".to_string())
+                .ok_or(format!(
+                    "No historical rewards found for node provider {}",
+                    provider_id
+                ))
         } else {
             Err("Not yet active.".to_string())
             // TODO: Add rate limiting and restrictions on reward period before enabling it.
