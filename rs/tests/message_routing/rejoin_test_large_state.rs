@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-const DKG_INTERVAL: u64 = 499;
+const DKG_INTERVAL: u64 = 24;
 
 #[derive(Clone, Debug)]
 pub struct Config {

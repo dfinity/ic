@@ -413,10 +413,10 @@ async fn modify_canister_heap(
     //     );
     // }
 
-    // TODO: Implement skip odd canisters
     let expansions = canisters
         .iter()
         .enumerate()
+        .filter(|(idx, _)| !(skip_odd_indexed_canister && idx % 2 == 1))
         .map(|(idx, canister)| {
             let logger_clone = logger.clone();
             async move {
