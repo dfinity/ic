@@ -30,7 +30,8 @@ use ic_tests_ckbtc::{
         get_btc_address, get_btc_client, update_balance, upgrade_canister_with_args,
         wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, RETRIEVE_BTC_MIN_AMOUNT, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, RETRIEVE_BTC_MIN_AMOUNT, TIMEOUT_PER_TEST,
+    TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -258,6 +259,8 @@ pub fn test_retrieve_btc(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_retrieve_btc))
         .execute_from_args()?;

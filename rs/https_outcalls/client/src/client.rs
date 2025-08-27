@@ -6,7 +6,7 @@ use ic_https_outcalls_service::{
     https_outcalls_service_client::HttpsOutcallsServiceClient, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
-use ic_interfaces::execution_environment::QueryExecutionService;
+use ic_interfaces::execution_environment::{QueryExecutionInput, QueryExecutionService};
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
@@ -19,7 +19,7 @@ use ic_types::{
         CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, Query, QuerySource, Request},
+    messages::{CertificateDelegation, CertificateDelegationMetadata, Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
 use std::time::Instant;
@@ -121,7 +121,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let metrics = self.metrics.clone();
         let delegation_from_nns = self
             .nns_delegation_reader
-            .get_delegation(CanisterRangesFilter::Flat);
+            .get_delegation_with_metadata(CanisterRangesFilter::Flat);
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -329,7 +329,7 @@ async fn transform_adapter_response(
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     let transform_args = TransformArgs {
         response: canister_http_response,
@@ -353,7 +353,12 @@ async fn transform_adapter_response(
         method_payload,
     };
 
-    match Oneshot::new(query_handler, (query, delegation_from_nns)).await {
+    let query_execution_input = QueryExecutionInput {
+        query,
+        certificate_delegation_with_metadata: delegation_from_nns,
+    };
+
+    match Oneshot::new(query_handler, query_execution_input).await {
         Ok(query_response) => match query_response {
             Ok((res, _time)) => match res {
                 Ok(wasm_result) => match wasm_result {
@@ -399,11 +404,8 @@ mod tests {
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{Replication, Transform};
     use ic_types::{
-        canister_http::CanisterHttpMethod,
-        messages::{CallbackId, CertificateDelegation},
-        time::current_time,
-        time::UNIX_EPOCH,
-        Time,
+        canister_http::CanisterHttpMethod, messages::CallbackId, time::current_time,
+        time::UNIX_EPOCH, Time,
     };
     use std::convert::TryFrom;
     use std::time::Duration;
@@ -546,30 +548,25 @@ mod tests {
 
     fn setup_system_query_mock() -> (
         QueryExecutionService,
-        Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>,
+        Handle<QueryExecutionInput, QueryExecutionResponse>,
     ) {
-        let (service, handle) = tower_test::mock::pair::<
-            (Query, Option<CertificateDelegation>),
-            QueryExecutionResponse,
-        >();
+        let (service, handle) =
+            tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
 
-        let infallible_service =
-            tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
-                let mut service_clone = service.clone();
-                async move {
-                    Ok::<QueryExecutionResponse, std::convert::Infallible>({
-                        service_clone
-                            .ready()
-                            .await
-                            .expect("Mocking Infallible service. Waiting for readiness failed.")
-                            .call(request)
-                            .await
-                            .expect(
-                                "Mocking Infallible service and can therefore not return an error.",
-                            )
-                    })
-                }
-            });
+        let infallible_service = tower::service_fn(move |request: QueryExecutionInput| {
+            let mut service_clone = service.clone();
+            async move {
+                Ok::<QueryExecutionResponse, std::convert::Infallible>({
+                    service_clone
+                        .ready()
+                        .await
+                        .expect("Mocking Infallible service. Waiting for readiness failed.")
+                        .call(request)
+                        .await
+                        .expect("Mocking Infallible service and can therefore not return an error.")
+                })
+            }
+        });
         (BoxCloneService::new(infallible_service), handle)
     }
 

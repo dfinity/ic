@@ -10,7 +10,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
-    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
+    messages::{
+        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query,
+        SignedIngressContent,
+    },
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
 };
@@ -515,9 +518,17 @@ pub enum QueryExecutionError {
 pub type QueryExecutionResponse =
     Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
 
+/// The input type to a `call()` request in [`QueryExecutionService`].
+#[derive(Debug)]
+pub struct QueryExecutionInput {
+    pub query: Query,
+    pub certificate_delegation_with_metadata:
+        Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+}
+
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
+    BoxCloneService<QueryExecutionInput, QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]

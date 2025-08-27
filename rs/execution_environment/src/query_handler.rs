@@ -20,7 +20,7 @@ use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    QueryExecutionError, QueryExecutionResponse, QueryExecutionService,
+    QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
@@ -29,6 +29,7 @@ use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::batch::QueryStats;
+use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
@@ -195,6 +196,7 @@ impl InternalHttpQueryHandler {
         query: Query,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -234,7 +236,7 @@ impl InternalHttpQueryHandler {
         // If a valid cache entry found, the result will be immediately returned.
         // Otherwise, the key will be kept for the `push` below.
         let cache_entry_key = if self.config.query_caching == FlagStatus::Enabled {
-            let key = query_cache::EntryKey::from(&query);
+            let key = query_cache::EntryKey::new(&query, certificate_delegation_metadata);
             let state = state.get_ref().as_ref();
             if let Some(result) =
                 self.query_cache
@@ -354,7 +356,7 @@ impl HttpQueryHandler {
     }
 }
 
-impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
+impl Service<QueryExecutionInput> for HttpQueryHandler {
     type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -366,7 +368,10 @@ impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
 
     fn call(
         &mut self,
-        (query, certificate_delegation): (Query, Option<CertificateDelegation>),
+        QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata,
+        }: QueryExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
@@ -384,6 +389,13 @@ impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
                 // Retrieving the state must be done here in the query handler, and should be immediately used.
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
                 // with a reference to older states which can cause out-of-memory crashes.
+
+                let (certificate_delegation, certificate_delegation_metadata) =
+                    match certificate_delegation_with_metadata {
+                        Some((delegation, metadata)) => (Some(delegation), Some(metadata)),
+                        None => (None, None),
+                    };
+
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
@@ -400,7 +412,8 @@ impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response = internal.query(query, state, cert);
+                        let response =
+                            internal.query(query, state, cert, certificate_delegation_metadata);
 
                         Ok((response, time))
                     }
