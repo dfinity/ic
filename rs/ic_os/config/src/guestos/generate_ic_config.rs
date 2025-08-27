@@ -91,7 +91,7 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
             Ok((ipv6_address, ipv6_prefix))
         }
         Ipv6Config::RouterAdvertisement => {
-            let ipv6_address = get_primary_ipv6_address()?;
+            let ipv6_address = get_router_advertisement_ipv6_address()?;
 
             let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
             Ok((ipv6_address, ipv6_prefix))
@@ -231,12 +231,12 @@ fn substitute_template(template_content: &str, config_vars: &ConfigVariables) ->
     content
 }
 
-fn get_primary_ipv6_address() -> Result<String> {
+fn get_router_advertisement_ipv6_address() -> Result<String> {
     const MAX_RETRIES: usize = 12;
     const RETRY_DELAY_SECS: u64 = 10;
 
     for attempt in 1..=MAX_RETRIES {
-        match get_primary_ipv6_address_internal() {
+        match get_router_advertisement_ipv6_address_helper() {
             Ok(ipv6_address) => return Ok(ipv6_address),
             Err(e) => {
                 if attempt < MAX_RETRIES {
@@ -256,20 +256,17 @@ fn get_primary_ipv6_address() -> Result<String> {
     anyhow::bail!("Cannot determine an IPv6 address, aborting");
 }
 
-fn get_primary_ipv6_address_internal() -> Result<String> {
+fn get_router_advertisement_ipv6_address_helper() -> Result<String> {
     let valid_interfaces = get_valid_interfaces()?;
 
     let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
-    // Find the first valid interface with an IPv6 address
     let ipv6_address = ifaces
         .iter()
         .find_map(|iface| {
-            // Only consider interfaces that are in our valid list
             if !valid_interfaces.contains(&iface.name) {
                 return None;
             }
 
-            // Get IPv6 address if available
             match &iface.addr {
                 get_if_addrs::IfAddr::V6(addr) => {
                     let ipv6_str = addr.ip.to_string();
