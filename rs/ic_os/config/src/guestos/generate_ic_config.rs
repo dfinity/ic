@@ -4,6 +4,7 @@ use serde_json;
 use std::fs::{read_to_string, write};
 use std::path::Path;
 use std::process::Command;
+use walkdir::WalkDir;
 
 /// Generate IC configuration from template and guestos config
 pub fn generate_ic_config(
@@ -231,28 +232,31 @@ fn substitute_template(template_content: &str, config_vars: &ConfigVariables) ->
 }
 
 fn get_network_interface() -> Result<String> {
-    String::from_utf8_lossy(
-        &Command::new("find")
-            .args([
-                "/sys/class/net",
-                "-type",
-                "l",
-                "-not",
-                "-lname",
-                "*virtual*",
-                "-exec",
-                "basename",
-                "{}",
-                ";",
-            ])
-            .output()
-            .context("Failed to find network interfaces")?
-            .stdout,
-    )
-    .lines()
-    .next()
-    .map(|s| s.to_string())
-    .ok_or_else(|| anyhow::anyhow!("No network interfaces found"))
+    let net_dir = "/sys/class/net";
+
+    WalkDir::new(net_dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|entry| entry.depth() > 0)
+        .find_map(|entry| {
+            let path = entry.path();
+
+            // Check if it's a symbolic link
+            let metadata = std::fs::symlink_metadata(path).ok()?;
+            if !metadata.file_type().is_symlink() {
+                return None;
+            }
+
+            // Filter out virtual interfaces
+            let target = std::fs::read_link(path).ok()?;
+            if target.to_string_lossy().contains("virtual") {
+                return None;
+            }
+
+            Some(path.file_name()?.to_string_lossy().into_owned())
+        })
+        .ok_or_else(|| anyhow::anyhow!("No network interfaces found"))
 }
 
 fn get_interface_ipv6_address(interface: &str) -> Result<String> {
