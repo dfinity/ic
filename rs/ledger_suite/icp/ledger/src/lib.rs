@@ -159,7 +159,6 @@ pub enum LedgerField {
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
 /// Downgrading to a lower ledger version is never suppported.
-/// Upgrading from version N to version N+1 should always be possible.
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
@@ -523,10 +522,8 @@ impl Ledger {
             .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
-    pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        // If we include more principals here, we need to update the trap message
-        // in `icrc1_transfer` and similar functions.
-        !principal_id.is_anonymous()
+    pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
+        true
     }
 
     /// Check if it's allowed to notify this canister.

@@ -18,19 +18,20 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
     crypto::BasicSigner,
-    execution_environment::{QueryExecutionError, QueryExecutionService},
+    execution_environment::{QueryExecutionError, QueryExecutionInput, QueryExecutionService},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpQueryResponse,
-        HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
-        NodeSignature, Query, QueryResponseHash,
+        Blob, HasCanisterId, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply,
+        HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query,
+        QueryResponseHash,
     },
     CanisterId, NodeId,
 };
@@ -40,7 +41,6 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
-use tokio::sync::watch;
 use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
@@ -49,7 +49,7 @@ pub struct QueryService {
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
@@ -62,7 +62,7 @@ pub struct QueryServiceBuilder {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -82,7 +82,7 @@ impl QueryServiceBuilder {
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
     ) -> Self {
         Self {
@@ -91,7 +91,7 @@ impl QueryServiceBuilder {
             signer,
             health_status: None,
             malicious_flags: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             time_source: None,
             ingress_verifier,
             registry_client,
@@ -126,7 +126,7 @@ impl QueryServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
@@ -156,7 +156,7 @@ pub(crate) async fn query(
         validator,
         health_status,
         signer,
-        delegation_from_nns,
+        nns_delegation_reader,
         query_execution_service,
     }): State<QueryService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
@@ -169,7 +169,6 @@ pub(crate) async fn query(
         );
         return (status, text).into_response();
     }
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
 
     let registry_version = registry_client.get_latest_version();
 
@@ -219,8 +218,14 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
+    let delegation_from_nns =
+        nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat);
+    let query_execution_input = QueryExecutionInput {
+        query: user_query.clone(),
+        certificate_delegation_with_metadata: delegation_from_nns,
+    };
     let query_execution_response = query_execution_service
-        .oneshot((user_query.clone(), delegation_from_nns))
+        .oneshot(query_execution_input)
         .await
         .unwrap();
 

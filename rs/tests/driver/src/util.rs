@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
@@ -90,7 +91,7 @@ pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;

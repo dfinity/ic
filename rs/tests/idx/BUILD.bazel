@@ -17,6 +17,7 @@ rust_binary(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:itertools",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:ssh2",

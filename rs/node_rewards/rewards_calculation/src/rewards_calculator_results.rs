@@ -1,85 +1,15 @@
-use crate::types::{Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
-use candid::CandidType;
-use chrono::DateTime;
+use crate::types::{DayUtc, Region, RewardPeriod, RewardPeriodError};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
-use std::fmt::Display;
 
 pub type XDRPermyriad = Decimal;
 pub type Percent = Decimal;
 
-#[derive(
-    Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy, CandidType, candid::Deserialize,
-)]
-pub struct DayUtc(UnixTsNanos);
-
-impl From<UnixTsNanos> for DayUtc {
-    fn from(value: UnixTsNanos) -> Self {
-        let day_end = ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1;
-        Self(day_end)
-    }
-}
-
-impl Default for DayUtc {
-    fn default() -> Self {
-        DayUtc::from(0)
-    }
-}
-
-impl Display for DayUtc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let dd_mm_yyyy = DateTime::from_timestamp_nanos(self.unix_ts_at_day_end() as i64)
-            .naive_utc()
-            .format("%d-%m-%Y")
-            .to_string();
-
-        write!(f, "{}", dd_mm_yyyy)
-    }
-}
-
-impl DayUtc {
-    pub fn unix_ts_at_day_end(&self) -> UnixTsNanos {
-        self.0
-    }
-
-    pub fn get(&self) -> UnixTsNanos {
-        self.0
-    }
-
-    pub fn unix_ts_at_day_start(&self) -> UnixTsNanos {
-        (self.0 / NANOS_PER_DAY) * NANOS_PER_DAY
-    }
-
-    pub fn next_day(&self) -> DayUtc {
-        DayUtc(self.0 + NANOS_PER_DAY)
-    }
-
-    pub fn previous_day(&self) -> DayUtc {
-        let ts_previous_day = self.0.checked_sub(NANOS_PER_DAY).unwrap_or_default();
-        DayUtc(ts_previous_day)
-    }
-
-    pub fn days_until(&self, other: &DayUtc) -> Result<Vec<DayUtc>, String> {
-        if self > other {
-            return Err(format!(
-                "Cannot compute days_until: {} > {}",
-                self.0, other.0
-            ));
-        }
-
-        let num_days = (other.0 - self.0) / NANOS_PER_DAY;
-        let days_until = (0..=num_days)
-            .map(|i| DayUtc(self.0 + i * NANOS_PER_DAY))
-            .collect();
-
-        Ok(days_until)
-    }
-}
-
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: SubnetId,
     pub subnet_assigned_fr: Percent,
@@ -93,11 +23,13 @@ pub struct NodeMetricsDaily {
     pub relative_fr: Percent,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum NodeStatus {
     Assigned { node_metrics: NodeMetricsDaily },
     Unassigned { extrapolated_fr: Percent },
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DailyResults {
     pub day: DayUtc,
     pub node_status: NodeStatus,
@@ -107,6 +39,7 @@ pub struct DailyResults {
     pub adjusted_rewards: XDRPermyriad,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NodeResults {
     pub node_id: NodeId,
     pub node_reward_type: NodeRewardType,
@@ -115,6 +48,7 @@ pub struct NodeResults {
     pub daily_results: Vec<DailyResults>,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct BaseRewards {
     pub node_reward_type: NodeRewardType,
     pub region: Region,
@@ -122,6 +56,7 @@ pub struct BaseRewards {
     pub daily: XDRPermyriad,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DailyBaseRewardsType3 {
     pub day: DayUtc,
     pub region: Region,
@@ -131,6 +66,7 @@ pub struct DailyBaseRewardsType3 {
     pub value: XDRPermyriad,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: u64,
     pub base_rewards: Vec<BaseRewards>,
@@ -139,6 +75,8 @@ pub struct NodeProviderRewards {
 }
 
 pub struct RewardsCalculatorResults {
+    pub start_day: DayUtc,
+    pub end_day: DayUtc,
     pub subnets_fr: BTreeMap<(DayUtc, SubnetId), Percent>,
     pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
@@ -180,7 +118,9 @@ impl fmt::Display for RewardCalculatorError {
                 write!(
                     f,
                     "Node {} has metrics outside the reward period: timestamp: {} not in {}",
-                    subnet_id, day.0, reward_period
+                    subnet_id,
+                    day.get(),
+                    reward_period
                 )
             }
             RewardCalculatorError::DuplicateMetrics(subnet_id, day) => {

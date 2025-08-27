@@ -761,6 +761,29 @@ pub struct ExecuteExtensionOperation {
     #[prost(message, optional, tag = "3")]
     pub operation_arg: ::core::option::Option<ExtensionOperationArg>,
 }
+/// Specification for an SNS extension
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionSpec {
+    /// The name of the extension
+    #[prost(string, optional, tag = "1")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// The version of the extension.
+    #[prost(uint64, optional, tag = "2")]
+    pub version: ::core::option::Option<u64>,
+    /// The topic that the extension's registration proposal will be under
+    #[prost(enumeration = "Topic", optional, tag = "3")]
+    pub topic: ::core::option::Option<i32>,
+    /// The type of the extension, which determines its standard operations.
+    #[prost(enumeration = "ExtensionType", optional, tag = "4")]
+    pub extension_type: ::core::option::Option<i32>,
+}
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(
     candid::CandidType,
@@ -4272,6 +4295,47 @@ impl Vote {
             "VOTE_UNSPECIFIED" => Some(Self::Unspecified),
             "VOTE_YES" => Some(Self::Yes),
             "VOTE_NO" => Some(Self::No),
+            _ => None,
+        }
+    }
+}
+/// Types of extensions that can be registered
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    strum_macros::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum ExtensionType {
+    Unspecified = 0,
+    TreasuryManager = 1,
+}
+impl ExtensionType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "EXTENSION_TYPE_UNSPECIFIED",
+            Self::TreasuryManager => "EXTENSION_TYPE_TREASURY_MANAGER",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "EXTENSION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "EXTENSION_TYPE_TREASURY_MANAGER" => Some(Self::TreasuryManager),
             _ => None,
         }
     }
