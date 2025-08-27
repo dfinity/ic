@@ -13696,7 +13696,6 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
- "ic-registry-transport",
  "ic-sns-cli",
  "ic-sns-governance-api",
  "ic-sns-swap",

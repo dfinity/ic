@@ -47,7 +47,6 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
-ic-registry-transport = { path = "../../registry/transport" }
 ic-sns-cli = { path = "../cli" }
 ic-sns-governance-api = { path = "../../sns/governance/api" }
 ic-sns-swap = { path = "../swap" }
