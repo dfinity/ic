@@ -37,7 +37,7 @@ use ic_agent::{
     agent::{Envelope, EnvelopeContent},
     Agent, Identity,
 };
-use ic_certification::validate_subnet_delegation_certificate;
+use ic_certification::verify_delegation_certificate;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     upgrade::{
@@ -63,8 +63,8 @@ use ic_system_test_driver::{
 };
 use ic_types::{
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpQueryResponseReply, HttpReadStateResponse,
-        NodeSignature,
+        Blob, Certificate, CertificateDelegation, CertificateDelegationFormat,
+        HttpQueryResponseReply, HttpReadStateResponse, NodeSignature,
     },
     CanisterId, Height, PrincipalId, SubnetId,
 };
@@ -229,7 +229,8 @@ fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Flat),
+        None,
+        CertificateDelegationFormat::Flat,
     );
 }
 
@@ -251,6 +252,7 @@ fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv) {
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
         None,
+        CertificateDelegationFormat::Pruned,
     );
 }
 
@@ -274,7 +276,8 @@ fn canister_read_state_v2_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Flat),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Flat,
     );
 }
 
@@ -298,7 +301,8 @@ fn canister_read_state_v3_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Tree),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Tree,
     );
 }
 
@@ -319,6 +323,7 @@ fn canister_read_state_v3_management_canister_returns_correct_delegation(env: Te
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
         None,
+        CertificateDelegationFormat::Pruned,
     );
 }
 
@@ -346,7 +351,8 @@ fn call_v3_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Flat),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Flat,
     );
 }
 
@@ -367,7 +373,8 @@ fn call_v4_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Tree),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Tree,
     );
 }
 
@@ -408,7 +415,8 @@ fn call_v4_management_canister_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Tree),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Tree,
     );
 }
 
@@ -438,7 +446,8 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Flat),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Flat,
     );
 }
 
@@ -461,7 +470,8 @@ fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        Some(CanisterRangesFormat::Tree),
+        Some(node.effective_canister_id()),
+        CertificateDelegationFormat::Tree,
     );
 }
 
@@ -533,13 +543,18 @@ fn validate_delegation(
     env: &TestEnv,
     delegation: &CertificateDelegation,
     subnet_id: SubnetId,
-    canister_ranges_format: Option<CanisterRangesFormat>,
+    effective_canister_id: Option<PrincipalId>,
+    expected_delegation_format: CertificateDelegationFormat,
 ) {
     let nns_public_key = env.prep_dir("").unwrap().root_public_key().unwrap();
-    validate_subnet_delegation_certificate(
+    verify_delegation_certificate(
         &delegation.certificate,
         &subnet_id,
         &parse_threshold_sig_key_from_der(&nns_public_key).unwrap(),
+        effective_canister_id
+            .map(CanisterId::unchecked_from_principal)
+            .as_ref(),
+        /*use_signature_cache=*/ false,
     )
     .expect("Should receive a valid delegation certificate: {err:?}");
 
@@ -571,21 +586,25 @@ fn validate_delegation(
         });
 
     match (
-        canister_ranges_format,
+        expected_delegation_format,
         flat_canister_ranges,
         tree_canister_ranges,
     ) {
-        (None, None, None) => (),
-        (Some(CanisterRangesFormat::Tree), None, Some(_)) => (),
-        (Some(CanisterRangesFormat::Flat), Some(_), None) => (),
-        (None, Some(_), _) => panic!("Should not have any canister ranges"),
-        (None, _, Some(_)) => panic!("Should not have any canister ranges"),
-        (Some(CanisterRangesFormat::Flat), None, _) => panic!("Flat canister ranges not found"),
-        (Some(CanisterRangesFormat::Tree), _, None) => panic!("Tree canister ranges not found"),
-        (Some(CanisterRangesFormat::Tree), Some(_), _) => {
+        (CertificateDelegationFormat::Pruned, None, None) => (),
+        (CertificateDelegationFormat::Tree, None, Some(_)) => (),
+        (CertificateDelegationFormat::Flat, Some(_), None) => (),
+        (CertificateDelegationFormat::Pruned, Some(_), _) => {
+            panic!("Should not have any canister ranges")
+        }
+        (CertificateDelegationFormat::Pruned, _, Some(_)) => {
+            panic!("Should not have any canister ranges")
+        }
+        (CertificateDelegationFormat::Flat, None, _) => panic!("Flat canister ranges not found"),
+        (CertificateDelegationFormat::Tree, _, None) => panic!("Tree canister ranges not found"),
+        (CertificateDelegationFormat::Tree, Some(_), _) => {
             panic!("Should not have the flat canister ranges")
         }
-        (Some(CanisterRangesFormat::Flat), _, Some(_)) => {
+        (CertificateDelegationFormat::Flat, _, Some(_)) => {
             panic!("Should not have the tree canister ranges")
         }
     }
