@@ -2,7 +2,6 @@ use crate::custom_data::EncodeSevCustomData;
 use crate::{SevAttestationPackage, SevCertificateChain, VerificationError};
 use sev::certs::snp::{ca, Certificate, Chain, Verifiable};
 use sev::firmware::guest::AttestationReport;
-use std::cell::Cell;
 use std::fmt::Debug;
 
 // Disable root certificate verification in tests by default so we can use fake certs but allow
@@ -10,12 +9,8 @@ use std::fmt::Debug;
 // Note that this is thread-local so the setting only affects the current thread where it's set.
 #[cfg(test)]
 thread_local! {
-    pub static VERIFY_AMD_ROOT_CERTIFICATE: Cell<bool> = const { Cell::new(false) };
+    pub static VERIFY_AMD_ROOT_CERTIFICATE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
-
-// In non-test code, always verify the root certificate.
-#[cfg(not(test))]
-const VERIFY_AMD_ROOT_CERTIFICATE: Cell<bool> = Cell::new(true);
 
 /// Verify an SEV attestation package. The verification includes:
 /// - Checking the certificate chain and the attestation report signature.
@@ -50,13 +45,13 @@ pub fn verify_attestation_package(
         }
     }
 
-    verify_sev_attestation_report_signature(
-        &parsed_attestation_report,
-        &attestation_package
-            .certificate_chain
-            .as_ref()
-            .unwrap_or(&SevCertificateChain::default()),
-    )?;
+    let certificate_chain = attestation_package
+        .certificate_chain
+        .as_ref()
+        .ok_or_else(|| {
+            VerificationError::invalid_certificate_chain("Certificate chain is missing")
+        })?;
+    verify_sev_attestation_report_signature(&parsed_attestation_report, certificate_chain)?;
 
     verify_measurement(
         &parsed_attestation_report,
@@ -156,7 +151,13 @@ fn verify_sev_attestation_report_signature(
         ));
     };
 
-    if VERIFY_AMD_ROOT_CERTIFICATE.get() {
+    #[cfg(test)]
+    let verify_amd_root_certificate = VERIFY_AMD_ROOT_CERTIFICATE.get();
+    #[cfg(not(test))]
+    // In non-test code, always verify the AMD root certificate.
+    let verify_amd_root_certificate = true;
+
+    if verify_amd_root_certificate {
         // TODO: Replace this with generation-specific ARK when the necessary changes in the SEV lib
         // land: https://github.com/virtee/sev/pull/322
         // (See commented out code below for guidance)
@@ -194,11 +195,11 @@ fn verify_sev_attestation_report_signature(
 
     let vcek = chain
         .verify()
-        .map_err(|e| VerificationError::invalid_certificate_chain(e))?;
+        .map_err(VerificationError::invalid_certificate_chain)?;
 
     (vcek, attestation_report)
         .verify()
-        .map_err(|e| VerificationError::invalid_signature(e))?;
+        .map_err(VerificationError::invalid_signature)?;
 
     Ok(())
 }

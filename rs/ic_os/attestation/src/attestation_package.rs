@@ -16,8 +16,15 @@ pub fn generate_attestation_package(
     let attestation_report = sev_firmware
         .get_report(None, Some(custom_data.encode_for_sev()?), None)
         .context("Failed to get attestation report from SEV firmware")?;
-    let _parsed_attestation_report = AttestationReport::from_bytes(&attestation_report)
-        .context("Failed to parse own SEV attestation report")?;
+    let parsed_attestation_report = AttestationReport::from_bytes(&attestation_report);
+    if let Err(err) = parsed_attestation_report {
+        // Fail in debug mode, but only print a warning in release mode.
+        debug_assert!(
+            false,
+            "Own generated attestation report could not be parsed: {err:?}"
+        );
+        eprintln!("Own generated attestation report could not be parsed: {err:?}",);
+    }
 
     Ok(SevAttestationPackage {
         attestation_report: Some(attestation_report),

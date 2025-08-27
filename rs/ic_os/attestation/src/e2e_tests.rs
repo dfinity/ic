@@ -81,6 +81,39 @@ fn test_valid_attestation_package() {
 }
 
 #[test]
+fn test_invalid_attestation_report() {
+    // Disable root certificate verification, otherwise the fake certs won't work.
+    verification::VERIFY_AMD_ROOT_CERTIFICATE.set(false);
+
+    let mut attestation_package = generate_valid_attestation_package();
+
+    // Truncate the attestation report to make it unparsable.
+    attestation_package
+        .attestation_report
+        .as_mut()
+        .unwrap()
+        .truncate(5);
+
+    let error = verify_attestation_package(
+        &attestation_package,
+        &[MEASUREMENT],
+        &CUSTOM_DATA,
+        Some(&CHIP_ID),
+    )
+    .expect_err("Verification should fail due to invalid attestation report")
+    .detail
+    .unwrap();
+
+    assert!(
+        matches!(
+            error,
+            VerificationErrorDetail::InvalidAttestationReport { .. }
+        ),
+        "Expected InvalidAttestationReport error, got {error:?}",
+    );
+}
+
+#[test]
 fn test_invalid_signature() {
     // Disable root certificate verification, otherwise the fake certs won't work.
     verification::VERIFY_AMD_ROOT_CERTIFICATE.set(false);
@@ -134,8 +167,7 @@ fn test_invalid_custom_data() {
 
     assert!(
         matches!(error, VerificationErrorDetail::InvalidCustomData { .. }),
-        "Expected InvalidCustomData error, got {:?}",
-        error
+        "Expected InvalidCustomData error, got {error:?}",
     );
 }
 
@@ -224,6 +256,8 @@ fn test_invalid_root_certificate() {
     // Enable root certificate verification, this will make the verification fail with fake certs.
     verification::VERIFY_AMD_ROOT_CERTIFICATE.set(true);
 
+    // generate_valid_attestation_package generates a valid package but with our own fake root cert
+    // which won't pass root cert verification.
     let attestation_package = generate_valid_attestation_package();
 
     let error = verify_attestation_package(
