@@ -875,7 +875,7 @@ pub async fn generate_dummy_schnorr_signature_with_logger(
         derivation_path_length,
         derivation_path_element_size,
         key_id: cast_schnorr_key_id(key_id.clone()),
-        aux: aux.map(|a| cast_schnorr_aux(a)),
+        aux: aux.map(cast_schnorr_aux),
     };
     info!(
         logger,
@@ -1326,7 +1326,7 @@ impl ChainSignatureRequest {
             derivation_path_length,
             derivation_path_element_size,
             key_id: cast_schnorr_key_id(key_id),
-            aux: aux.map(|a| cast_schnorr_aux(a)),
+            aux: aux.map(cast_schnorr_aux),
         };
 
         (String::from("gen_schnorr_sig"), Encode!(&params).unwrap())
