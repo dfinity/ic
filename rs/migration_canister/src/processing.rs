@@ -10,7 +10,7 @@ use crate::{
         requests::{insert_request, list_by, remove_request},
         MethodGuard,
     },
-    external_interfaces::management::set_exclusive_controller,
+    external_interfaces::management::{set_exclusive_controller, set_original_controllers},
     Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
@@ -96,23 +96,35 @@ pub async fn process_all_failed() {
 }
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
-async fn process_failed(request: RequestState) -> ProcessingResult<Event, ()> {
-    let RequestState::Failed {
-        request: _,
-        reason: _,
-    } = request
-    else {
+// TODO: Make sure this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
+async fn process_failed(request: RequestState) -> ProcessingResult<Event, () /* should be `!` */> {
+    let RequestState::Failed { request, reason } = request else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
     };
-    // 1. If source controllers are the original controllers, or we are NOT controllers of source any more,
-    //    then we continue. Otherwise, we set the source controllers to the original. If we fail, return NoProgress.
-    // TODO
 
-    // 2. Same for target
-    // TODO
+    let res1 = set_original_controllers(
+        request.source.clone(),
+        request.source_original_controllers.clone(),
+        request.source_subnet.clone(),
+    )
+    .await;
+    let res2 = set_original_controllers(
+        request.target.clone(),
+        request.target_original_controllers.clone(),
+        request.target_subnet.clone(),
+    )
+    .await;
 
-    ProcessingResult::NoProgress
+    if res1.is_fatal_failure() || res2.is_fatal_failure() {
+        println!("Error: Unreachable: `set_original_controllers` must not return Failure");
+    }
+    // If any did not succeed, we have to retry later.
+    if res1.is_no_progress() || res2.is_no_progress() {
+        return ProcessingResult::NoProgress;
+    }
+    // We successfully returned controllership.
+    ProcessingResult::Success(Event::Failed { request, reason })
 }
 
 #[must_use]
