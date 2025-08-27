@@ -2,19 +2,17 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:mockall",
-    "@crate_index//:prost",
-    "//rs/interfaces/registry/mocks",
-    "//rs/protobuf",
-    "//rs/registry/keys",
-    "//rs/types/types",
-]
-
 rust_library(
     name = "testing",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "attestation_testing",
-    deps = DEPENDENCIES,
+    deps = [
+        "//rs/interfaces/registry/mocks",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/types/types",
+        "@crate_index//:mockall",
+        "@crate_index//:prost",
+    ],
 )
