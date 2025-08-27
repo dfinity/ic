@@ -104,7 +104,7 @@ impl IDkgMasterPublicKeyId {
         match self.inner() {
             // Ecdsa pre-signatures require working on 2 transcripts in parallel
             MasterPublicKeyId::Ecdsa(_) => 2,
-            // Schnorr pre-signatures consist of only on 1 transcript
+            // Schnorr pre-signatures consist of only 1 transcript
             MasterPublicKeyId::Schnorr(_) => 1,
             MasterPublicKeyId::VetKd(_) => unreachable!("not an IDkg Key"),
         }
