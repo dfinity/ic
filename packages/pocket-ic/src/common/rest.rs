@@ -537,7 +537,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
-/// Extensible configuration type used instead of `bool` and `Option<bool>`:
+/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
 /// if provided, the corresponding feature is enabled.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct EmptyConfig {}
