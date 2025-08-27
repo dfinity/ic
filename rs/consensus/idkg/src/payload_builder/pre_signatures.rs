@@ -570,7 +570,7 @@ fn start_pre_signature_in_creation(
 /// Create new pre-signatures for the emptiest pre-signature stashes
 /// until all stashes are full, or the maximum number of pre-signatures
 /// in creation is reached for this payload.
-pub(super) fn make_new_pre_signatures_if_needed_new(
+pub(super) fn make_new_pre_signatures_by_priority(
     chain_key_config: &ChainKeyConfig,
     idkg_payload: &mut idkg::IDkgPayload,
     mut total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
@@ -1124,7 +1124,7 @@ pub(super) mod tests {
             /*should_create_key_transcript=*/ false,
         );
 
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(20), stash_capacity),
             &mut payload,
             BTreeMap::new(), // There are no pre-signatures in the stash
@@ -1159,7 +1159,7 @@ pub(super) mod tests {
         );
 
         let payload_capacity = 20;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity.clone()),
             &mut payload,
             BTreeMap::new(), // There are no pre-signatures in the stash
@@ -1181,7 +1181,7 @@ pub(super) mod tests {
         let reduced_capacity = 10;
         // No new pre-signatures should be created (consumed capacity exceeds available capacity)
         let mut payload_2 = payload.clone();
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(reduced_capacity), stash_capacity),
             &mut payload_2,
             BTreeMap::new(), // There are no pre-signatures in the stash
@@ -1203,7 +1203,7 @@ pub(super) mod tests {
         );
 
         let payload_capacity = 20;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity.clone()),
             &mut payload,
             stash_capacity, // All stashes are already filled to capacity
@@ -1228,7 +1228,7 @@ pub(super) mod tests {
         );
 
         let payload_capacity = 20;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity),
             &mut payload,
             stash_level,
@@ -1255,7 +1255,7 @@ pub(super) mod tests {
         );
 
         let payload_capacity = 20;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity.clone()),
             &mut payload,
             BTreeMap::new(), // There are no pre-signatures in the stash
@@ -1288,7 +1288,7 @@ pub(super) mod tests {
 
         // Step 1: ECDSA stash is full, we should start 19 schnorr pre-signatures in creation
         let payload_capacity = 19;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(
                 Some(payload_capacity),
                 BTreeMap::from_iter([(key_ids[0].clone(), 0), (key_ids[1].clone(), 100)]),
@@ -1307,7 +1307,7 @@ pub(super) mod tests {
 
         // Step 2: ECDSA stash has space (highest priority), but there is not enough capacity in the payload
         let payload_capacity = 20;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(
                 Some(payload_capacity),
                 key_ids.iter().cloned().map(|id| (id, 100)).collect(),
@@ -1342,7 +1342,7 @@ pub(super) mod tests {
             /*should_create_key_transcript=*/ true,
         );
 
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             // A capacity of `None` should default to 20
             &make_config(None, stash_capacity),
             &mut payload,
@@ -1380,7 +1380,7 @@ pub(super) mod tests {
         }
 
         let payload_capacity = 20;
-        make_new_pre_signatures_if_needed_new(
+        make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity),
             &mut payload,
             key_ids.iter().cloned().map(|id| (id, 50)).collect(),
