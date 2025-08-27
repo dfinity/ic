@@ -10799,6 +10799,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-migration-canister"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-cdk",
+ "ic-cdk-timers",
+ "ic-stable-structures 0.7.0",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+]
+
+[[package]]
 name = "ic-nervous-system-agent"
 version = "0.0.1"
 dependencies = [
@@ -17360,20 +17374,6 @@ dependencies = [
  "systest-message-routing-common",
  "tokio",
  "xnet-slo-test-lib",
-]
-
-[[package]]
-name = "migration_canister"
-version = "0.1.0"
-dependencies = [
- "candid",
- "futures",
- "ic-cdk",
- "ic-cdk-timers",
- "ic-stable-structures 0.7.0",
- "serde",
- "serde_bytes",
- "serde_cbor",
 ]
 
 [[package]]

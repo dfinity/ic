@@ -308,3 +308,8 @@ pub async fn validate_request(
         caller,
     })
 }
+
+#[allow(dead_code)]
+fn main() {
+    // This block is intentionally left blank.
+}
