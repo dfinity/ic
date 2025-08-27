@@ -1686,20 +1686,31 @@ pub async fn get_sns_token_symbol(
 
 fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
     // KongSwap v1 hash from integration test
+    let v1_hash: [u8; 32] = [
+        103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167, 144, 31, 212,
+        229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
+    ];
 
-    let unit_test_hash: [u8; 32] = [
-        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0,
+    // KongSwap v2 hash from integration test
+    let v2_hash: [u8; 32] = [
+        128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171, 203, 196, 247, 243,
+        160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
     ];
 
     btreemap! {
-        unit_test_hash => ExtensionSpec {
+
+        v1_hash => ExtensionSpec {
             name: "My Test Extension".to_string(),
             version: ExtensionVersion(1),
             topic: Topic::TreasuryAssetManagement,
             extension_type: ExtensionType::TreasuryManager,
         },
-
+        v2_hash => ExtensionSpec {
+            name: "My Test Extension".to_string(),
+            version: ExtensionVersion(2),
+            topic: Topic::TreasuryAssetManagement,
+            extension_type: ExtensionType::TreasuryManager,
+        }
     }
 }
 
@@ -1835,8 +1846,8 @@ mod tests {
         // Get the test hash from our test allowed extensions
         if extension_registered {
             let test_hash: Vec<u8> = vec![
-                1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0,
+                103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167, 144,
+                31, 212, 229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
             ];
             env.set_call_canister_response(
                 CanisterId::ic_00(),
@@ -1977,8 +1988,8 @@ mod tests {
         RegisterExtension {
             chunked_canister_wasm: Some(ChunkedCanisterWasm {
                 wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
+                    103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167,
+                    144, 31, 212, 229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
                 ], // Use whitelisted hash from other tests
                 store_canister_id: Some(store_canister_id.get()),
                 chunk_hashes_list: vec![], // Can be empty for tests
