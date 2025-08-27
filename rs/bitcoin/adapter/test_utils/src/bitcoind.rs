@@ -281,7 +281,7 @@ pub struct BitcoinD {
 
 impl Drop for BitcoinD {
     fn drop(&mut self) {
-        let _ = self.process.drop();
+        let _ = self.stop();
         let _ = self.process.kill();
         let _ = self.process.wait();
     }
@@ -353,8 +353,7 @@ impl BitcoinD {
             Some(Auth::UserPass(_, _)) => panic!("Auth::UserPass is not supported"),
             Some(auth) => auth,
         };
-        fs::write(conf_path.clone(), format!("{rpc_user}\n{rpc_pass}\n"))?;
-
+        fs::write(conf_path.clone(), "")?;
         let rpc_port = get_available_port()?;
         let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
         let rpc_url = format!("http://{}", rpc_socket);

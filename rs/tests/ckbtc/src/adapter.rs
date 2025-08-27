@@ -1,4 +1,3 @@
-use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
@@ -159,7 +158,7 @@ impl<'a> AdapterProxy<'a> {
                 }
 
                 tries += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             };
 
             let new_headers = new_blocks
@@ -171,7 +170,7 @@ impl<'a> AdapterProxy<'a> {
             blocks.extend(new_blocks);
 
             tries += 1;
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         Ok(blocks)
