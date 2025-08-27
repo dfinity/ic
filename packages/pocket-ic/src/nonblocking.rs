@@ -2,10 +2,11 @@ use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
-    InstanceId, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest,
-    RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
-    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    InstanceId, MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal,
+    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId,
+    TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -135,7 +136,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
@@ -201,7 +202,7 @@ impl PocketIc {
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features,
+            nonmainnet_features: Some(nonmainnet_features),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
