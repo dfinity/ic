@@ -27,7 +27,7 @@ use ic_tests_ckbtc::{
         stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
         BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -359,6 +359,8 @@ pub fn test_btc_checker(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_btc_checker))
         .execute_from_args()?;
