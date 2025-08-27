@@ -944,7 +944,8 @@ fn merge(
     let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
 
     merge_candidates.sort_by_key(|m| -(m.num_files_before() as i64));
-    let storage_to_merge_for_filenum = std::min(MERGE_SOFT_BUDGET_BYTEs, storage_info.mem_size / 4);
+    let storage_to_merge_for_filenum =
+        std::cmp::min(MERGE_SOFT_BUDGET_BYTES, storage_info.mem_size / 4);
     let min_storage_to_merge = storage_info.mem_size / 50;
     let merges_by_filenum = merge_candidates
         .iter()
