@@ -595,6 +595,7 @@ fn make_router(
                 .call_v2_router
                 .layer(service_builder(config.max_call_concurrent_requests)),
         )
+        // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
         .merge(http_handler.call_v3_router)
         .merge(http_handler.call_v4_router)
         .merge(
