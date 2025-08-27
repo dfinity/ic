@@ -52,11 +52,11 @@ use std::time::Instant;
 /// shards in 4 checkpoints at most.
 const NUMBER_OF_FILES_HARD_LIMIT: usize = 20;
 
-const GIB: usize = 1024 * 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
 
 /// Maximum amount of data we can safely write during merge without expecting blocking of
 /// checkpointing.
-const MERGE_SOFT_BUDGET_BYTES: usize = 250 * GIB;
+const MERGE_SOFT_BUDGET_BYTES: u64 = 250 * GIB;
 
 #[derive(Clone, Debug, Default)]
 struct CheckpointState {
