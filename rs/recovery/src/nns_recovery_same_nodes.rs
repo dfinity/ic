@@ -63,9 +63,12 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
-    /// IP address of the node to download the subnet state from. Should be different to node used in nns-url.
-    #[clap(long)]
-    pub download_node: Option<IpAddr>,
+    /// The method of downloading state. Possible values are either `local` (for a
+    /// local recovery on the admin node) or the ipv6 address of the target node.
+    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    /// Should be different to node used in nns-url.
+    #[clap(long, value_parser=crate::util::data_location_from_str)]
+    pub download_method: Option<DataLocation>,
 
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
@@ -153,8 +156,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     self.params.subnet_id,
                 );
 
-                if self.params.download_node.is_none() {
-                    self.params.download_node = read_optional(&self.logger, "Enter download IP:");
+                if self.params.download_method.is_none() {
+                    self.params.download_method = read_optional_data_location(
+                        &self.logger,
+                        "Enter download location [local/<ipv6>]:",
+                    );
                 }
             }
 
@@ -185,7 +191,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::StopReplica => {
-                if let Some(node_ip) = self.params.download_node {
+                if let Some(method) = self.params.download_method {
+                    let node_ip = match method {
+                        DataLocation::Remote(ip) => ip,
+                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    };
                     Ok(Box::new(self.recovery.get_stop_replica_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -206,15 +216,19 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadState => {
-                if let Some(node_ip) = self.params.download_node {
-                    Ok(Box::new(self.recovery.get_download_state_step(
-                        node_ip,
-                        /*try_readonly=*/ false,
-                        /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/ vec![CUPS_DIR],
-                    )))
-                } else {
-                    Err(RecoveryError::StepSkipped)
+                match self.params.download_method {
+                    Some(DataLocation::Local) => {
+                        Ok(Box::new(self.recovery.get_copy_local_state_step()))
+                    }
+                    Some(DataLocation::Remote(node_ip)) => {
+                        Ok(Box::new(self.recovery.get_download_state_step(
+                            node_ip,
+                            /*try_readonly=*/ false,
+                            /*keep_downloaded_state=*/ false,
+                            /*additional_excludes=*/ vec![CUPS_DIR],
+                        )))
+                    }
+                    None => Err(RecoveryError::StepSkipped),
                 }
             }
 

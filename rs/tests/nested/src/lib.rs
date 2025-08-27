@@ -517,7 +517,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         replay_until_height: None, // We will set this after breaking the subnet, see below
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
-        download_node: Some(dfinity_owned_node.get_ip_addr()),
+        download_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         backup_key_file: Some(ssh_priv_key_path),
         output_dir: Some(output_dir.clone()),
