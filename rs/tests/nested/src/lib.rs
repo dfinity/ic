@@ -5,7 +5,7 @@ use anyhow::Result;
 use canister_test::PrincipalId;
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
-    assert_node_is_making_progress, impersonate_upstreams,
+    impersonate_upstreams,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
@@ -36,7 +36,7 @@ use ic_system_test_driver::{
         test_env_api::*,
         vector_vm::HasVectorTargets,
     },
-    nns::{add_nodes_to_subnet, remove_nodes_via_endpoint},
+    nns::change_subnet_membership,
     retry_with_msg, retry_with_msg_async,
     util::block_on,
 };
@@ -374,15 +374,19 @@ pub fn nns_recovery_test(env: TestEnv) {
     let nns_subnet = new_topology.root_subnet();
     let original_node = nns_subnet.nodes().next().unwrap();
 
-    let node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
-    block_on(add_nodes_to_subnet(
+    let new_node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
+    block_on(change_subnet_membership(
         original_node.get_public_url(),
         nns_subnet.subnet_id,
-        &node_ids,
+        &new_node_ids,
+        &[original_node.node_id],
     ))
-    .expect("Failed to add nodes to the NNS subnet");
+    .expect("Failed to change subnet membership");
 
-    info!(logger, "Waiting for nodes to be assigned to the subnet...");
+    info!(
+        logger,
+        "Waiting for new nodes to take over the NNS subnet..."
+    );
     let new_topology = block_on(
         new_topology.block_for_newer_registry_version_within_duration(
             Duration::from_secs(60),
@@ -394,65 +398,14 @@ pub fn nns_recovery_test(env: TestEnv) {
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
-        num_nns_nodes,
-        SUBNET_SIZE + 1,
-        "NNS subnet should have {} nodes (1 original + {} new), but found {} nodes",
-        SUBNET_SIZE + 1,
-        SUBNET_SIZE,
-        num_nns_nodes
-    );
-
-    // Need to wait for 3 * DKG_INTERVAL for the new nodes to be fully integrated before removing
-    // the original one
-    assert_node_is_making_progress(
-        &nns_subnet
-            .nodes()
-            .find(|n| n.node_id != original_node.node_id)
-            .unwrap(),
-        &logger,
-        Height::from(3 * (DKG_INTERVAL + 1)),
-    );
-
-    info!(
-        logger,
-        "Success: All nodes have been added to the NNS subnet"
-    );
-
-    info!(
-        logger,
-        "Removing original node {:?} from the NNS subnet", original_node.node_id
-    );
-
-    block_on(remove_nodes_via_endpoint(
-        original_node.get_public_url(),
-        &[original_node.node_id],
-    ))
-    .unwrap();
-
-    info!(
-        logger,
-        "Waiting for the original node to be removed from the subnet..."
-    );
-    let topology_after_removal = block_on(
-        new_topology.block_for_newer_registry_version_within_duration(
-            Duration::from_secs(60),
-            Duration::from_secs(2),
-        ),
-    )
-    .unwrap();
-
-    let nns_subnet = topology_after_removal.root_subnet();
-    let num_nns_nodes = nns_subnet.nodes().count();
-    assert_eq!(
         num_nns_nodes, SUBNET_SIZE,
         "NNS subnet should have {} nodes after removing the original node, but found {} nodes",
         SUBNET_SIZE, num_nns_nodes
     );
-
-    info!(
-        logger,
-        "Success: Original single node has been removed from the NNS subnet"
-    );
+    for node in nns_subnet.nodes() {
+        node.await_status_is_healthy().unwrap();
+    }
+    info!(logger, "Success: New nodes have taken over the NNS subnet");
 
     // Define faulty and healthy nodes, pick a DFINITY-owned node that is healthy
     let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
@@ -473,9 +426,6 @@ pub fn nns_recovery_test(env: TestEnv) {
         dfinity_owned_node.node_id,
         dfinity_owned_node.get_ip_addr()
     );
-    for node in nns_subnet.nodes() {
-        node.await_status_is_healthy().unwrap();
-    }
     cert_state_makes_progress_with_retries(
         &dfinity_owned_node.get_public_url(),
         dfinity_owned_node.effective_canister_id(),
@@ -496,11 +446,8 @@ pub fn nns_recovery_test(env: TestEnv) {
     let ssh_pub_key_path = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME);
     let ssh_pub_key =
         std::fs::read_to_string(&ssh_pub_key_path).expect("Failed to read SSH public key");
-    let payload = get_updatesubnetpayload_with_keys(
-        topology_after_removal.root_subnet_id(),
-        None,
-        Some(vec![ssh_pub_key]),
-    );
+    let payload =
+        get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
     block_on(update_subnet_record(
         dfinity_owned_node.get_public_url(),
         payload,
@@ -557,7 +504,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     // unlike during a production recovery using the CLI, here we already know all of parameters
     // ahead of time.
     let subnet_args = NNSRecoverySameNodesArgs {
-        subnet_id: topology_after_removal.root_subnet_id(),
+        subnet_id: nns_subnet.subnet_id,
         upgrade_version: Some(working_version.clone()),
         replay_until_height: None, // We will set this after breaking the subnet, see below
         upgrade_image_url: Some(get_guestos_update_img_url()),
@@ -636,11 +583,7 @@ pub fn nns_recovery_test(env: TestEnv) {
             .get(),
     );
 
-    info!(
-        logger,
-        "Starting recovery of the NNS subnet {}",
-        topology_after_removal.root_subnet_id().to_string()
-    );
+    info!(logger, "Starting recovery tool",);
 
     // go over all steps of the NNS recovery
     for (step_type, step) in subnet_recovery_tool {
@@ -707,7 +650,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     ));
 
     info!(logger, "Ensure the subnet uses the new replica version");
-    let final_topology = block_on(topology_after_removal.block_for_newer_registry_version())
+    let final_topology = block_on(new_topology.block_for_newer_registry_version())
         .expect("Could not obtain updated registry.");
     let dfinity_owned_node = final_topology
         .subnets()
