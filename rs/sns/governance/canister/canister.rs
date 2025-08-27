@@ -6,7 +6,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_cdk::{
-    api::stable::stable_read, caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update,
+    api::stable::stable_read, caller as cdk_caller, init, post_upgrade, pre_upgrade, println,
+    query, update,
 };
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -27,6 +28,10 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_sns_governance::extensions::add_allowed_extension_spec;
+#[cfg(feature = "test")]
+use ic_sns_governance::pb::v1::AddAllowedExtensionRequest;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
@@ -822,6 +827,19 @@ async fn refresh_cached_upgrade_steps(
         .refresh_cached_upgrade_steps(deployed_version)
         .await;
     RefreshCachedUpgradeStepsResponse {}
+}
+
+#[cfg(feature = "test")]
+#[update(hidden = true)]
+async fn add_allowed_extension(request: AddAllowedExtensionRequest) {
+    log!(INFO, "Adding an allowed extension!");
+    let hash = <[u8; 32]>::try_from(request.wasm_hash).expect("Hash must be valid 32-bytes");
+    let extension = request
+        .spec
+        .expect("ExtensionSpec is required")
+        .try_into()
+        .unwrap();
+    add_allowed_extension_spec(hash, extension);
 }
 
 fn main() {

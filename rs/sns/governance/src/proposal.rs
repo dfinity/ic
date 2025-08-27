@@ -3,7 +3,8 @@ use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     extensions::{
         validate_execute_extension_operation, validate_register_extension,
-        ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+        validate_upgrade_extension, ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+        ValidatedUpgradeExtension,
     },
     governance::{
         bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
@@ -27,8 +28,8 @@ use crate::{
         Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
         ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
         RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
-        TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
-        Valuation as ValuationPb, Vote,
+        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     treasury::assess_treasury_balance,
@@ -398,14 +399,14 @@ pub(crate) async fn validate_and_render_action(
     let proposals = governance_proto.proposals.values();
 
     match action {
-        proposal::Action::Unspecified(_unspecified) => {
+        Action::Unspecified(_unspecified) => {
             Err("`unspecified` was used, but is not a valid Proposal action.".into())
         }
-        proposal::Action::Motion(motion) => validate_and_render_motion(motion),
-        proposal::Action::ManageNervousSystemParameters(manage) => {
+        Action::Motion(motion) => validate_and_render_motion(motion),
+        Action::ManageNervousSystemParameters(manage) => {
             validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
-        proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+        Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade, env, root_canister_id)
                 .await
         }
@@ -423,45 +424,48 @@ pub(crate) async fn validate_and_render_action(
                 Err(err) => Err(err),
             }
         }
-        proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
+        Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
                 &disallowed_target_canister_ids,
                 function_to_add,
                 existing_functions,
             )
         }
-        proposal::Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
+        Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
             validate_and_render_remove_nervous_generic_system_function(
                 *id_to_remove,
                 existing_functions,
             )
         }
-        proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
+        Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
         }
-        proposal::Action::ExecuteExtensionOperation(execute) => {
+        Action::ExecuteExtensionOperation(execute) => {
             validate_and_render_execute_extension_operation(governance, execute).await
         }
-        proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
+        Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
                 register_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::RegisterExtension(register_extension) => {
+        Action::RegisterExtension(register_extension) => {
             validate_and_render_register_extension(governance, register_extension).await
         }
-        proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
+        Action::UpgradeExtension(upgrade_extension) => {
+            validate_and_render_upgrade_extension(governance, upgrade_extension).await
+        }
+        Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
+        Action::ManageSnsMetadata(manage_sns_metadata) => {
             validate_and_render_manage_sns_metadata(manage_sns_metadata)
         }
-        proposal::Action::TransferSnsTreasuryFunds(transfer) => {
+        Action::TransferSnsTreasuryFunds(transfer) => {
             return validate_and_render_transfer_sns_treasury_funds(
                 transfer,
                 sns_transfer_fee_e8s,
@@ -472,7 +476,7 @@ pub(crate) async fn validate_and_render_action(
             )
             .await;
         }
-        proposal::Action::MintSnsTokens(mint_sns_tokens) => {
+        Action::MintSnsTokens(mint_sns_tokens) => {
             return validate_and_render_mint_sns_tokens(
                 mint_sns_tokens,
                 sns_transfer_fee_e8s,
@@ -483,20 +487,20 @@ pub(crate) async fn validate_and_render_action(
             )
             .await;
         }
-        proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
+        Action::ManageLedgerParameters(manage_ledger_parameters) => {
             validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
         }
-        proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+        Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
-        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+        Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
             return validate_and_render_advance_sns_target_version_proposal(
                 env.canister_id(),
                 governance_proto,
                 advance_sns_target_version,
             );
         }
-        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+        Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
             validate_and_render_set_topics_for_custom_proposals(
                 set_topics_for_custom_proposals,
                 &governance_proto.custom_functions_to_topics(),
@@ -1565,6 +1569,52 @@ or sandwich attacks. However, any undeposited tokens are automatically returned 
 
 The extension will be deployed and configured according to the provided parameters.",
     ))
+}
+
+async fn validate_and_render_upgrade_extension(
+    governance: &crate::governance::Governance,
+    upgrade_extension: &UpgradeExtension,
+) -> Result<String, String> {
+    let validated_upgrade_extension =
+        validate_upgrade_extension(governance, upgrade_extension.clone()).await?;
+
+    let validated = validated_upgrade_extension;
+
+    Ok(render_upgrade_extension(validated))
+}
+
+fn render_upgrade_extension(validated: ValidatedUpgradeExtension) -> String {
+    let ValidatedUpgradeExtension {
+        extension_canister_id,
+        wasm,
+        spec,
+        current_version,
+        new_version,
+        upgrade_arg: _,
+    } = validated;
+
+    let wasm_info = wasm.description();
+
+    format!(
+        r"# Proposal to Upgrade {spec}
+
+## Extension canister: {extension_canister_id}
+
+## Version Upgrade
+* Current version: {current_version}
+* New version: {new_version}
+
+## Wasm Details
+
+{wasm_info}
+
+## Upgrade Configuration
+
+The extension canister will be upgraded to the new version with the specified WASM.",
+        spec = spec.name,
+        current_version = current_version.0,
+        new_version = new_version.0,
+    )
 }
 
 fn validate_and_render_register_dapp_canisters(
@@ -5560,6 +5610,53 @@ Payload rendering here"#
                 "Proposal render:\n{}\n does not contain expected keyword {}",
                 render,
                 keyword
+            );
+        }
+    }
+
+    #[test]
+    fn test_render_upgrade_extension() {
+        use crate::{
+            extensions::{
+                ExtensionSpec, ExtensionType, ExtensionVersion, ValidatedExtensionUpgradeArg,
+                ValidatedUpgradeExtension,
+            },
+            pb::v1::Topic,
+            types::Wasm,
+        };
+        use ic_base_types::CanisterId;
+
+        let extension_canister_id = CanisterId::from_u64(2000);
+        let validated = ValidatedUpgradeExtension {
+            extension_canister_id,
+            wasm: Wasm::Bytes(vec![1, 2, 3, 4]), // Simple test WASM
+            spec: ExtensionSpec {
+                name: "KongSwap Treasury Manager".to_string(),
+                version: ExtensionVersion(2),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+            current_version: ExtensionVersion(1),
+            new_version: ExtensionVersion(2),
+            upgrade_arg: ValidatedExtensionUpgradeArg::TreasuryManager,
+        };
+
+        let rendered = render_upgrade_extension(validated);
+
+        // Check that the rendered output contains expected elements
+        for expected_content in [
+            "# Proposal to Upgrade KongSwap Treasury Manager",
+            "Extension canister: txegi-kaaaa-aaaaa-aa7ia-cai",
+            "Current version: 1",
+            "New version: 2",
+            "Embedded module with 4 bytes",
+            "The extension canister will be upgraded to the new version",
+        ] {
+            assert!(
+                rendered.contains(expected_content),
+                "Rendered proposal:\n{}\n\ndoes not contain expected content: {}",
+                rendered,
+                expected_content
             );
         }
     }

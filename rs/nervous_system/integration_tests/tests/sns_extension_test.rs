@@ -1,9 +1,14 @@
-use candid::Principal;
-use candid::{Encode, Nat};
+use candid::{Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_nervous_system_agent::sns::governance::{ProposalSubmissionError, SubmittedProposal};
-use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns, CallCanisters};
+use ic_nervous_system_agent::{
+    pocketic_impl::PocketIcAgent,
+    sns::{
+        governance::{ProposalSubmissionError, SubmittedProposal},
+        Sns,
+    },
+    CallCanisters,
+};
 use ic_nervous_system_common::{
     ledger::compute_distribution_subaccount_bytes, E8, ONE_MONTH_SECONDS,
 };
@@ -15,22 +20,25 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_cli::{
     neuron_id_to_candid_subaccount::ParsedSnsNeuron,
     register_extension,
     register_extension::{RegisterExtensionArgs, RegisterExtensionInfo},
 };
-use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance_api::pb::v1::{
-    governance_error, ChunkedCanisterWasm, ExtensionInit, GovernanceError, NeuronId,
-    RegisterExtension,
+use ic_sns_governance::{
+    governance::TREASURY_SUBACCOUNT_NONCE,
+    pb::v1::{AddAllowedExtensionRequest, ExtensionSpec},
 };
 use ic_sns_governance_api::pb::v1::{
-    proposal::Action, ExecuteExtensionOperation, ExtensionOperationArg, PreciseValue, Proposal,
+    governance_error, proposal::Action, ChunkedCanisterWasm, ExecuteExtensionOperation,
+    ExtensionInit, ExtensionOperationArg, ExtensionUpgradeArg, GovernanceError, NeuronId,
+    PreciseValue, Proposal, RegisterExtension, UpgradeExtension, Wasm as ApiWasm,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
-use ic_test_utilities::universal_canister::get_universal_canister_wasm;
-use ic_test_utilities::universal_canister::get_universal_canister_wasm_sha256;
+use ic_test_utilities::universal_canister::{
+    get_universal_canister_wasm, get_universal_canister_wasm_sha256,
+};
 use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
 use maplit::btreemap;
@@ -55,8 +63,8 @@ const ICP_FEE: u64 = DEFAULT_TRANSFER_FEE.get_e8s();
 const SNS_FEE: u64 = 11143;
 
 #[tokio::test]
-async fn test() {
-    test_treasury_manager().await
+async fn test_treasury_manager() {
+    do_test_treasury_manager().await
 }
 
 #[tokio::test]
@@ -64,7 +72,7 @@ async fn test_existing_extension_wasm_rejected() {
     run_existing_extension_wasm_rejected_test().await
 }
 
-async fn test_treasury_manager() {
+async fn do_test_treasury_manager() {
     let state_dir = TempDir::new().unwrap().path().to_path_buf();
 
     let World {
@@ -611,6 +619,141 @@ async fn validate_treasury_balances(
     Ok(())
 }
 
+#[tokio::test]
+async fn test_upgrade_extension() {
+    let state_dir = TempDir::new().unwrap().path().to_path_buf();
+
+    let World {
+        pocket_ic,
+        fiduciary_subnet_id,
+        sns,
+        sns_root_canister_id,
+        initial_treasury_allocation_icp_e8s,
+        initial_treasury_allocation_sns_e8s,
+        neuron_id,
+        sender,
+
+        // Unused in this scenario
+        sns_ledger_canister_id: _,
+        initial_icp_balance_e8s: _,
+        initial_sns_balance_e8s: _,
+    } = prepare_the_world(state_dir).await;
+
+    let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
+        .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
+
+    let wasm_path = PathBuf::from(wasm_path);
+    let adaptor_v1 = Wasm::from_file(&wasm_path);
+    println!("Kong V1 hash?: {:?}", adaptor_v1.sha256_hash());
+
+    // Step 6: Register the extension via RegisterExtension proposal
+    let extension_canister_id = {
+        let agent = PocketIcAgent::new(&pocket_ic, sender);
+
+        let icp = Tokens::from_tokens(10).unwrap();
+        cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
+
+        let RegisterExtensionInfo {
+            proposal_id,
+            extension_canister_id,
+            wasm_module_hash: _,
+        } = register_extension::exec(
+            RegisterExtensionArgs {
+                sns_neuron_id: Some(ParsedSnsNeuron(neuron_id.clone())),
+                sns_root_canister_id,
+                subnet_id: Some(PrincipalId(fiduciary_subnet_id)),
+                wasm_path: wasm_path.clone(),
+                proposal_url: Url::try_from("https://example.com").unwrap(),
+                summary: "Register KongSwap Adaptor".to_string(),
+                extension_init: make_deposit_allowances(
+                    initial_treasury_allocation_icp_e8s,
+                    initial_treasury_allocation_sns_e8s,
+                ),
+            },
+            &agent,
+        )
+        .await
+        .unwrap();
+
+        let proposal_id = proposal_id.unwrap();
+
+        let _proposal_data = sns::governance::wait_for_proposal_execution(
+            &pocket_ic,
+            sns.governance.canister_id,
+            proposal_id,
+        )
+        .await
+        .unwrap();
+
+        extension_canister_id.get()
+    };
+    // Wait for install and registration
+    for _ in 0..100 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(100)).await;
+    }
+
+    let extension_canister_status = pocket_ic
+        .canister_status(extension_canister_id.0, Some(sns_root_canister_id.get().0))
+        .await
+        .unwrap();
+    assert_eq!(
+        extension_canister_status.module_hash,
+        Some(adaptor_v1.sha256_hash().to_vec())
+    );
+
+    // Step 7: Create v2 KongSwap WASM with modified metadata
+    let adaptor_v2 = {
+        let wasm_bytes = std::fs::read(&wasm_path).expect("Failed to read WASM file");
+
+        let wasm_bytes = modify_wasm_bytes(&wasm_bytes, 1);
+
+        Wasm::from_bytes(wasm_bytes)
+    };
+
+    println!("🗳️  Submitting UpgradeExtension proposal...");
+
+    // Step 8: Create UpgradeExtension proposal
+
+    let upgrade_extension_proposal = Proposal {
+        title: "Upgrade KongSwap Extension to v2".to_string(),
+        url: "https://example.com/upgrade-kongswap".to_string(),
+        summary: "Upgrading KongSwap extension to version 2 with enhanced features".to_string(),
+        action: Some(Action::UpgradeExtension(UpgradeExtension {
+            extension_canister_id: Some(extension_canister_id),
+            canister_upgrade_arg: Some(ExtensionUpgradeArg {
+                value: None, // Treasury manager currently has no upgrade args
+            }),
+            wasm: Some(ApiWasm::Bytes(adaptor_v2.clone().bytes())),
+        })),
+    };
+
+    let _proposal_data = propose_and_wait(
+        &pocket_ic,
+        sns.governance.canister_id,
+        sender,
+        neuron_id,
+        upgrade_extension_proposal,
+    )
+    .await
+    .expect("Failed to propose UpgradeExtension");
+
+    // Wait a bit for the upgrade to complete
+    for _ in 0..10 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+    }
+
+    let extension_canister_status = pocket_ic
+        .canister_status(extension_canister_id.0, Some(sns_root_canister_id.get().0))
+        .await
+        .unwrap();
+    assert_eq!(
+        extension_canister_status.module_hash,
+        Some(adaptor_v2.sha256_hash().to_vec())
+    );
+}
+
 fn make_deposit_allowances(
     treasury_allocation_icp_e8s: u64,
     treasury_allocation_sns_e8s: u64,
@@ -677,6 +820,8 @@ async fn prepare_the_world(state_dir: PathBuf) -> World {
     .await;
 
     let sns = deploy_sns(&pocket_ic, false).await;
+
+    setup_allowed_extension_specs(&pocket_ic, sns.governance.canister_id).await;
 
     // Install KongSwap
     let _kong_backend_canister_id = {
@@ -775,7 +920,7 @@ async fn add_fiduciary_subnet_type(pocket_ic: &PocketIc) {
     }
 }
 
-/// Register the fiduciary subnet with the "fiduciary" type in CMC by impersonating Governance  
+/// Register the fiduciary subnet with the "fiduciary" type in CMC by impersonating Governance
 async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: SubnetId) {
     #[derive(candid::CandidType)]
     struct SubnetListWithType {
@@ -811,4 +956,58 @@ async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: 
         ),
         Err(e) => panic!("Failed to register fiduciary subnet with CMC: {:?}", e),
     }
+}
+
+async fn add_allowed_extension(
+    pocket_ic: &PocketIc,
+    sns_governance_canister_id: PrincipalId,
+    hash: [u8; 32],
+    pb_extension: ExtensionSpec,
+) {
+    println!("We are making the add_allowed_extension call...");
+    let payload = Encode!(&AddAllowedExtensionRequest {
+        wasm_hash: hash.to_vec(),
+        spec: Some(pb_extension)
+    })
+    .unwrap();
+
+    pocket_ic
+        .update_call(
+            sns_governance_canister_id.0,
+            PrincipalId::new_anonymous().0,
+            "add_allowed_extension",
+            payload,
+        )
+        .await
+        .unwrap();
+}
+
+async fn setup_allowed_extension_specs(
+    pocket_ic: &PocketIc,
+    sns_governance_canister_id: PrincipalId,
+) {
+    let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
+        .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
+
+    let kong_backend_wasm = Wasm::from_file(wasm_path);
+
+    let v1_hash = kong_backend_wasm.sha256_hash();
+
+    let v2_hash = Wasm::from_bytes(modify_wasm_bytes(&kong_backend_wasm.bytes(), 1)).sha256_hash();
+
+    let spec_v1 = ExtensionSpec {
+        name: Some("KongSwap Treasury Manager".to_string()),
+        version: Some(1),
+        topic: Some(6),          // TreasuryAssetManagement
+        extension_type: Some(1), // TreasuryManager
+    };
+    let spec_v2 = ExtensionSpec {
+        name: Some("KongSwap Treasury Manager".to_string()),
+        version: Some(2),        // Version Bump
+        topic: Some(6),          // TreasuryAssetManagement
+        extension_type: Some(1), // TreasuryManager
+    };
+
+    add_allowed_extension(pocket_ic, sns_governance_canister_id, v1_hash, spec_v1).await;
+    add_allowed_extension(pocket_ic, sns_governance_canister_id, v2_hash, spec_v2).await;
 }
