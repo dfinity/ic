@@ -60,8 +60,8 @@ enum MigrationStatus {
 }
 
 #[update]
-/// we return a vector.
 /// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
+/// we return a vector.
 fn migration_status(_args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
     // TODO
     vec![MigrationStatus::Unknown]

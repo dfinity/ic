@@ -127,11 +127,11 @@ pub async fn process_controllers_changed(
     // TODO: target has enough cycles
 
     // Determine history length of source
-    let ProcessingResult::Success(canister_info) = canister_info(CanisterInfoArgs {
-        canister_id: request.source,
-    }) else {
-        return todo!();
-    };
+    // let ProcessingResult::Success(canister_info) = canister_info(CanisterInfoArgs {
+    //     canister_id: request.source,
+    // }) else {
+    //     return todo!();
+    // };
 
     todo!()
 }
