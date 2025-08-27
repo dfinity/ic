@@ -7,7 +7,13 @@ use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
+use ic_node_rewards_canister_api::provider_historical_rewards::{
+    GetNodeProviderHistoricalRewardsCalculationRequest,
+    GetNodeProviderHistoricalRewardsCalculationResponse,
+    GetNodeProvidersHistoricalRewardsTsResponse,
+};
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
+    GetHistoricalRewardPeriods, GetNodeProviderLatestRewardsCalculationRequest,
     GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
@@ -120,14 +126,16 @@ async fn get_node_providers_rewards(
 
 #[query]
 fn get_node_provider_rewards_calculation(
-    _request: GetNodeProviderRewardsCalculationRequest,
+    request: GetNodeProviderRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
-    // TODO: Add rate limiting and restrictions on reward period before enabling it.
-    // NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
-    //     &CANISTER, request,
-    // );
+    NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
+        &CANISTER, request,
+    )
+}
 
-    Err("Not yet active.".to_string())
+#[query]
+fn get_historical_reward_periods() -> GetHistoricalRewardPeriods {
+    NodeRewardsCanister::get_historical_reward_periods()
 }
 
 #[cfg(test)]
