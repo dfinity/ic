@@ -46,7 +46,6 @@ use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
-use ic_system_test_driver::driver::vector_vm::VectorVm;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -56,7 +55,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
-    set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
+    set_authorized_subnets, set_sns_subnet,
 };
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
@@ -75,9 +74,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    let mut vector_vm = VectorVm::new();
-    vector_vm.start(&env).expect("Failed to start Vector VM");
-
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
@@ -103,10 +99,6 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
 
-    // sets the exchange rate to 12 XDR per 1 ICP
-    set_icp_xdr_exchange_rate(&env, 12_0000);
-
-    // sets the exchange rate to 12 XDR per 1 ICP
     set_authorized_subnets(&env);
 
     // deploys the ic-gateway/s
@@ -120,9 +112,6 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
-    vector_vm
-        .sync_targets(&env)
-        .expect("Failed to sync Vector targets");
 
     // pick an SNS subnet among the application subnets
     let topology = env.topology_snapshot();

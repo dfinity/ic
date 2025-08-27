@@ -21,6 +21,7 @@ use ic_execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
@@ -72,6 +73,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                 network_topology,
                 &mut round_limits,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
             );
             // We do not validate the number of executed instructions.
             let _executed_instructions =

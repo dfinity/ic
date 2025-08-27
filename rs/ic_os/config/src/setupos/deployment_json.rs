@@ -25,11 +25,9 @@ pub struct Deployment {
     pub mgmt_mac: Option<String>,
 }
 
+// NODE-1681: Leftover from push-based logging. Remove in NODE-1681
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct Logging {
-    pub elasticsearch_hosts: Option<String>,
-    pub elasticsearch_tags: Option<String>,
-}
+pub struct Logging {}
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
@@ -65,10 +63,7 @@ mod test {
                 "deployment_environment": "mainnet",
                 "mgmt_mac": null
               },
-              "logging": {
-                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
-                "elasticsearch_tags": null
-              },
+              "logging": {},
               "nns": {
                 "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
@@ -86,10 +81,7 @@ mod test {
     "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
-  "logging": {
-    "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
-    "elasticsearch_tags": null
-  },
+  "logging": {},
   "nns": {
     "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
@@ -100,30 +92,24 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = ["elasticsearch.ch1-obsdev1.dfinity.network:443"].join(" ");
-        DeploymentSettings {
-            deployment: Deployment {
-                deployment_environment: DeploymentEnvironment::Mainnet,
-                mgmt_mac: None,
-            },
-            logging: Logging {
-                elasticsearch_hosts: Some(hosts),
-                elasticsearch_tags: None,
-            },
-            nns: Nns {
-                urls: vec![
-                    Url::parse("https://icp-api.io").unwrap(),
-                    Url::parse("https://icp0.io").unwrap(),
-                    Url::parse("https://ic0.app").unwrap(),
-                ],
-            },
-            vm_resources: VmResources {
-                memory: 490,
-                cpu: "kvm".to_string(),
-                nr_of_vcpus: 64,
-            },
-        }
+    static DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| DeploymentSettings {
+        deployment: Deployment {
+            deployment_environment: DeploymentEnvironment::Mainnet,
+            mgmt_mac: None,
+        },
+        logging: Logging {},
+        nns: Nns {
+            urls: vec![
+                Url::parse("https://icp-api.io").unwrap(),
+                Url::parse("https://icp0.io").unwrap(),
+                Url::parse("https://ic0.app").unwrap(),
+            ],
+        },
+        vm_resources: VmResources {
+            memory: 490,
+            cpu: "kvm".to_string(),
+            nr_of_vcpus: 64,
+        },
     });
 
     #[test]

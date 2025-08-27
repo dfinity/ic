@@ -11,6 +11,31 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-22: Proposal 138164
+
+http://dashboard.internetcomputer.org/proposal/138164
+
+## Removed
+
+* The single entry routing table is no longer updated when there are changes to the routing table.
+
+
+# 2025-08-15: Proposal 137917
+
+http://dashboard.internetcomputer.org/proposal/137917
+
+## Added
+
+- Added AMD SEV launch measurements to ReplicaVersionRecord, replacing the previous
+  `guest_launch_measurement_sha256_hex` field with a new `guest_launch_measurements` field that can contain multiple
+  measurements with metadata.
+
+## Removed
+
+- Removed the `guest_launch_measurement_sha256_hex` field from ReplicaVersionRecord in favor of the
+  `guest_launch_measurements` field.
+
+
 # 2025-07-18: Proposal 137500
 
 https://dashboard.internetcomputer.org/proposal/137500

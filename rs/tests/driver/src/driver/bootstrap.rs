@@ -1,3 +1,4 @@
+use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
@@ -14,11 +15,10 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path_from_env, get_elasticsearch_hosts, get_guestos_img_version,
-            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
-            get_setupos_img_sha256, get_setupos_img_url, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+            get_build_setupos_config_image_tool, get_create_setupos_config_tool,
+            get_guestos_img_version, get_guestos_initial_update_img_sha256,
+            get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
+            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -39,8 +39,7 @@ use ic_prep_lib::{
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::ReplicaVersion;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -96,12 +95,7 @@ pub fn init_ic(
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
-    let replica_version = get_guestos_img_version()?;
-    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
-    let initial_replica_version = InitialReplicaVersion {
-        version: replica_version.clone(),
-    };
-    initial_replica_version.write_attribute(test_env);
+    let replica_version = get_guestos_img_version();
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -182,23 +176,11 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) = {
-        if ic.has_malicious_behaviours() {
-            warn!(
-                logger,
-                "Using malicious guestos update image for IC config."
-            );
-            (
-                get_malicious_ic_os_update_img_sha256()?,
-                get_malicious_ic_os_update_img_url()?,
-            )
-        } else {
-            (
-                get_guestos_initial_update_img_sha256(test_env)?,
-                get_guestos_initial_update_img_url()?,
-            )
-        }
-    };
+    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
+        get_guestos_initial_update_img_sha256(),
+        get_guestos_initial_update_img_url(),
+        get_guestos_initial_launch_measurements(),
+    );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
@@ -212,6 +194,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
+        ic_os_launch_measurements,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -258,11 +241,11 @@ pub fn setup_and_start_vms(
         let t_farm = farm.clone();
         let t_env = env.clone();
         let ic_name = ic.name();
-        let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let malicious_behavior = ic.get_malicious_behavior_of_node(node.node_id);
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
-        nodes_info.insert(node.node_id, malicious_behaviour.clone());
+        nodes_info.insert(node.node_id, malicious_behavior.clone());
         let tnet_node = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => tnet
                 .nodes
@@ -276,12 +259,11 @@ pub fn setup_and_start_vms(
             create_config_disk_image(
                 &ic_name,
                 &node,
-                malicious_behaviour,
+                malicious_behavior,
                 query_stats_epoch_length,
                 ipv4_config,
                 domain,
                 &t_env,
-                &group_name,
             )?;
 
             let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
@@ -367,12 +349,11 @@ pub fn upload_config_disk_image(
 fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
-    malicious_behavior: Option<MaliciousBehaviour>,
+    malicious_behavior: Option<MaliciousBehavior>,
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
     test_env: &TestEnv,
-    group_name: &str,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
     let mut config = GenerateTestnetConfigArgs {
@@ -389,8 +370,6 @@ fn create_config_disk_image(
         node_reward_type: None,
         mgmt_mac: None,
         deployment_environment: Some(DeploymentEnvironment::Testnet),
-        elasticsearch_hosts: None,
-        elasticsearch_tags: Some(format!("system_test {}", group_name)),
         use_nns_public_key: Some(true),
         nns_urls: None,
         enable_trusted_execution_environment: None,
@@ -486,15 +465,6 @@ fn create_config_disk_image(
         config.domain_name = Some(domain_name.to_string());
     }
 
-    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
-    info!(
-        test_env.logger(),
-        "ElasticSearch hosts are {:?}", elasticsearch_hosts
-    );
-    if !elasticsearch_hosts.is_empty() {
-        config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
-    }
-
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         config.bitcoind_addr = Some(bitcoind_addr.clone());
@@ -572,17 +542,23 @@ pub fn setup_nested_vms(
 ) -> anyhow::Result<()> {
     let mut result = Ok(());
 
+    info!(
+        farm.logger,
+        "Starting setup_nested_vms for {} node(s)",
+        nodes.len()
+    );
+
     thread::scope(|s| {
         let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
         for node in nodes {
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
-                let url = get_setupos_img_url()?;
-                let hash = get_setupos_img_sha256()?;
+                let url = get_setupos_img_url();
+                let hash = get_setupos_img_sha256();
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =
-                    create_setupos_config_image(env, group_name, vm_name, nns_url, nns_public_key)?;
+                    create_setupos_config_image(env, vm_name, nns_url, nns_public_key)?;
                 let config_image_spec = AttachImageSpec::new(farm.upload_file(
                     group_name,
                     config_image,
@@ -600,6 +576,11 @@ pub fn setup_nested_vms(
         }
 
         // Wait for all threads to finish and return an error if any of them fails.
+        info!(
+            farm.logger,
+            "Waiting for {} VM setup threads to complete",
+            join_handles.len()
+        );
         for jh in join_handles {
             if let Err(e) = jh.join().expect("Waiting for a thread failed") {
                 warn!(farm.logger, "Setting up VM failed with: {:?}", e);
@@ -621,16 +602,21 @@ pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow:
 
 fn create_setupos_config_image(
     env: &TestEnv,
-    group_name: &str,
     name: &str,
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let tmp_dir = env.get_path("setupos");
+    info!(
+        env.logger(),
+        "[{}] Starting create_setupos_config_image", name
+    );
+
+    // Create a unique temporary directory for this thread to avoid conflicts
+    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
     fs::create_dir_all(&tmp_dir)?;
 
-    let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
-    let create_setupos_config = get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG");
+    let build_setupos_config_image = get_build_setupos_config_image_tool();
+    let create_setupos_config = get_create_setupos_config_tool();
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -642,6 +628,7 @@ fn create_setupos_config_image(
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
     let old_ip = nested_vm.get_vm()?.ipv6;
+    info!(env.logger(), "[{}] Got VM with IPv6: {}", name, old_ip);
     let segments = old_ip.segments();
     let prefix = format!(
         "{:04x}:{:04x}:{:04x}:{:04x}",
@@ -658,7 +645,7 @@ fn create_setupos_config_image(
 
     // Prep data dir
     let data_dir = tmp_dir.join("data");
-    std::fs::create_dir(&data_dir)?;
+    std::fs::create_dir_all(&data_dir)?;
 
     // Prep config contents
     let mut cmd = Command::new(create_setupos_config);
@@ -687,15 +674,7 @@ fn create_setupos_config_image(
         .arg("--node-reward-type")
         .arg("type3.1")
         .arg("--admin-keys")
-        .arg(ssh_authorized_pub_keys_dir.join("admin"))
-        .arg("--elasticsearch-tags")
-        .arg(format!("system_test {}", group_name));
-
-    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
-    if !elasticsearch_hosts.is_empty() {
-        cmd.arg("--elasticsearch-hosts")
-            .arg(elasticsearch_hosts.join(" "));
-    }
+        .arg(ssh_authorized_pub_keys_dir.join("admin"));
 
     if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
         if !node_key.trim().is_empty() {
@@ -722,5 +701,9 @@ fn create_setupos_config_image(
         bail!("Could not inject configs into image");
     }
 
+    info!(
+        env.logger(),
+        "[{}] Successfully created config image at: {:?}", name, config_image
+    );
     Ok(config_image)
 }

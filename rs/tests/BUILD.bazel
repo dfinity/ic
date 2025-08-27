@@ -23,6 +23,7 @@ PACKAGES = [
     "@noble//bash/amd64",
     "@noble//ca-certificates/amd64",
     "@noble//coreutils/amd64",
+    "@noble//libcryptsetup-dev/amd64",
     "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
     "@noble//gawk/amd64",
@@ -222,6 +223,21 @@ uvm_config_image(
     remap_paths = {
         "canister_http_test_ca.cert": "cert.pem",
         "canister_http_test_ca.key": "key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+uvm_config_image(
+    name = "impersonate_upstreams_uvm_config_image",
+    srcs = [
+        ":minica.tar",
+        ":static-file-server.tar",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
+    ],
+    remap_paths = {
+        "canister_http_test_ca.cert": "minica.pem",
+        "canister_http_test_ca.key": "minica-key.pem",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

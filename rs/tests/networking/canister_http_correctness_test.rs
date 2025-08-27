@@ -14,6 +14,7 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -42,6 +43,7 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
@@ -2428,6 +2430,11 @@ fn expected_cycle_cost(
     )
     .unwrap();
     let req_size = dummy_context.variable_parts_size();
-    let cycle_fee = cm.http_request_fee(req_size, Some(NumBytes::from(response_size)), subnet_size);
+    let cycle_fee = cm.http_request_fee(
+        req_size,
+        Some(NumBytes::from(response_size)),
+        subnet_size,
+        CanisterCyclesCostSchedule::Normal,
+    );
     cycle_fee.get().try_into().unwrap()
 }

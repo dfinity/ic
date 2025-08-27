@@ -46,7 +46,6 @@ import IC.Test.Agent.Calls (httpbin_proto)
 import IC.Test.Agent.SafeCalls
 import IC.Test.Agent.UnsafeCalls
 import IC.Test.Agent.UserCalls
-import IC.Test.Spec.Timer
 import IC.Test.Spec.Utils
 import IC.Test.Universal
 import IC.Types (EntityId (..), SubnetType (..), TestSubnetConfig)
@@ -116,45 +115,6 @@ icTests my_sub other_sub conf =
                                                                             testCase "create_canister necessary" $
                                                                               ic_install'' defaultUser (enum #install) doesn'tExist trivialWasmModule ""
                                                                                 >>= isErrOrReject [3, 5],
-                                                                            testGroup
-                                                                              "calls to a subnet ID"
-                                                                              [ let ic_install_subnet'' user subnet_id canister_id wasm_module arg =
-                                                                                      callICWithSubnet'' subnet_id user canister_id #install_code tmp
-                                                                                      where
-                                                                                        tmp :: InstallCodeArgs
-                                                                                        tmp =
-                                                                                          empty
-                                                                                            .+ #mode
-                                                                                            .== enum #install
-                                                                                            .+ #canister_id
-                                                                                            .== Principal canister_id
-                                                                                            .+ #wasm_module
-                                                                                            .== wasm_module
-                                                                                            .+ #arg
-                                                                                            .== arg
-                                                                                            .+ #sender_canister_version
-                                                                                            .== Nothing
-                                                                                 in testCase "as user" $ do
-                                                                                      cid <- create ecid
-                                                                                      ic_install_subnet'' defaultUser my_subnet_id cid trivialWasmModule "" >>= isErrOrReject []
-                                                                                      ic_install_subnet'' defaultUser other_subnet_id cid trivialWasmModule "" >>= isErrOrReject [],
-                                                                                simpleTestCase "as canister to own subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg my_sub my_subnet_id other_subnet_id cid
-                                                                                    else test_subnet_msg' my_sub my_subnet_id cid,
-                                                                                simpleTestCase "canister http outcalls to own subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg_canister_http my_sub my_subnet_id cid
-                                                                                    else test_subnet_msg_canister_http' my_sub my_subnet_id cid,
-                                                                                simpleTestCase "as canister to other subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg other_sub other_subnet_id my_subnet_id cid
-                                                                                    else test_subnet_msg' other_sub other_subnet_id cid,
-                                                                                simpleTestCase "canister http outcalls to other subnet" ecid $ \cid -> do
-                                                                                  if my_is_root
-                                                                                    then test_subnet_msg_canister_http other_sub other_subnet_id cid
-                                                                                    else test_subnet_msg_canister_http' other_sub other_subnet_id cid
-                                                                              ],
                                                                             testGroup
                                                                               "provisional_create_canister_with_cycles"
                                                                               [ testCase "specified_id does not belong to the subnet's canister ranges" $ do
@@ -820,55 +780,7 @@ icTests my_sub other_sub conf =
                                                                               ],
                                                                             testGroup
                                                                               "wrong effective canister id"
-                                                                              [ simpleTestCase "in call" ecid $ \cid1 -> do
-                                                                                  cid2 <- create ecid
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid1,
-                                                                                            "method_name" =: GText "update",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postCallCBOR cid2 >>= code4xx,
-                                                                                simpleTestCase "in query" ecid $ \cid1 -> do
-                                                                                  cid2 <- create ecid
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "query",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid1,
-                                                                                            "method_name" =: GText "query",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postQueryCBOR cid2 >>= code4xx,
-                                                                                simpleTestCase "in read_state" ecid $ \cid -> do
-                                                                                  cid2 <- install ecid noop
-                                                                                  getStateCert' defaultUser cid2 [["canisters", cid, "controllers"]] >>= isErr4xx,
-                                                                                -- read_state tested in read_state group
-                                                                                --
-                                                                                simpleTestCase "in management call" ecid $ \cid1 -> do
-                                                                                  cid2 <- create ecid
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob "",
-                                                                                            "method_name" =: GText "canister_status",
-                                                                                            "arg" =: GBlob (Candid.encode (#canister_id .== Principal cid1))
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postCallCBOR cid2 >>= code4xx,
-                                                                                simpleTestCase "non-existing (and likely invalid)" ecid $ \cid1 -> do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid1,
-                                                                                            "method_name" =: GText "update",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postCallCBOR "foobar" >>= code4xx,
-                                                                                simpleTestCase "invalid textual representation" ecid $ \cid1 -> do
+                                                                              [ simpleTestCase "invalid textual representation" ecid $ \cid1 -> do
                                                                                   let req =
                                                                                         rec
                                                                                           [ "request_type" =: GText "call",
@@ -878,35 +790,7 @@ icTests my_sub other_sub conf =
                                                                                             "arg" =: GBlob (run reply)
                                                                                           ]
                                                                                   let path = "/api/v2/canister/" ++ filter (/= '-') (textual cid1) ++ "/call"
-                                                                                  addNonceExpiryEnv req >>= postCBOR path >>= code4xx,
-                                                                                testCase "using management canister as effective canister id in update" $ do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob "",
-                                                                                            "method_name" =: GText "raw_rand",
-                                                                                            "arg" =: GBlob (Candid.encode ())
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postCallCBOR "" >>= code4xx,
-                                                                                testCase "using management canister as effective canister id in query" $ do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "query",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob "",
-                                                                                            "method_name" =: GText "raw_rand",
-                                                                                            "arg" =: GBlob (Candid.encode ())
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postQueryCBOR "" >>= code4xx,
-                                                                                testCase "using management canister as effective canister id in read_state" $ do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "read_state",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "paths" =: GList [GList [GBlob "time"]]
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postReadStateCBOR "" >>= code4xx
+                                                                                  addNonceExpiryEnv req >>= postCBOR path >>= code4xx
                                                                               ],
                                                                             testGroup
                                                                               "inter-canister calls"
@@ -1212,7 +1096,6 @@ icTests my_sub other_sub conf =
                                                                                       upgrade cid $ setGlobal getTimeTwice
                                                                                       query cid (replyData getGlobal) >>= as2Word64 >>= bothSame
                                                                                   ],
-                                                                            testGroup "canister global timer" $ canister_timer_tests ecid,
                                                                             testGroup "is_controller system API" $
                                                                               [ simpleTestCase "argument is controller" ecid $ \cid -> do
                                                                                   res <- query cid (replyData $ i2b $ isController (bytes defaultUser)) >>= asWord32
@@ -1554,32 +1437,6 @@ icTests my_sub other_sub conf =
                                                                                     getRequestStatus user cid (requestId req) >>= is (Responded (Reply "\xff\xff"))
 
                                                                                     return (requestId req)
-                                                                                  ensure_provisional_create_canister_request_exists ecid user = do
-                                                                                    let arg :: ProvisionalCreateCanisterArgs =
-                                                                                          empty
-                                                                                            .+ #amount
-                                                                                            .== Just initial_cycles
-                                                                                            .+ #settings
-                                                                                            .== Nothing
-                                                                                            .+ #specified_id
-                                                                                            .== Nothing
-                                                                                            .+ #sender_canister_version
-                                                                                            .== Nothing
-                                                                                    req <-
-                                                                                      addNonce >=> addExpiry $
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob user,
-                                                                                            "canister_id" =: GBlob "",
-                                                                                            "method_name" =: GText "provisional_create_canister_with_cycles",
-                                                                                            "arg" =: GBlob (Candid.encode arg)
-                                                                                          ]
-                                                                                    _ <- awaitCall ecid req >>= isReply
-
-                                                                                    -- check that the request is there
-                                                                                    getRequestStatus user ecid (requestId req) >>= isResponded
-
-                                                                                    return (requestId req)
                                                                                in [ testGroup "required fields" $
                                                                                       omitFields readStateEmpty $ \req -> do
                                                                                         cid <- create ecid
@@ -1591,154 +1448,7 @@ icTests my_sub other_sub conf =
                                                                                       unless my_is_root $ do
                                                                                         cert <- getStateCert defaultUser cid []
                                                                                         result <- try (validateStateCert other_ecid cert) :: IO (Either DelegationCanisterRangeCheck ())
-                                                                                        assertBool "certificate should not validate" $ isLeft result,
-                                                                                    testCaseSteps "time is present" $ \step -> do
-                                                                                      cid <- create ecid
-                                                                                      cert <- getStateCert defaultUser cid []
-                                                                                      time <- certValue @Natural cert ["time"]
-                                                                                      step $ "Reported time: " ++ show time,
-                                                                                    testCase "time can be asked for" $ do
-                                                                                      cid <- create ecid
-                                                                                      cert <- getStateCert defaultUser cid [["time"]]
-                                                                                      void $ certValue @Natural cert ["time"],
-                                                                                    testCase "can ask for /subnet" $ do
-                                                                                      cert <- getStateCert defaultUser ecid [["subnet"]]
-                                                                                      void $ certValue @Blob cert ["subnet", my_subnet_id, "public_key"]
-                                                                                      void $ certValue @Blob cert ["subnet", my_subnet_id, "canister_ranges"]
-                                                                                      void $ certValue @Blob cert ["subnet", other_subnet_id, "public_key"]
-                                                                                      void $ certValue @Blob cert ["subnet", other_subnet_id, "canister_ranges"]
-                                                                                      void $ forM my_nodes $ \nid -> do
-                                                                                        void $ certValue @Blob cert ["subnet", my_subnet_id, "node", rawEntityId nid, "public_key"]
-                                                                                      void $ forM other_nodes $ \nid -> do
-                                                                                        certValueAbsent cert ["subnet", other_subnet_id, "node", rawEntityId nid, "public_key"],
-                                                                                    testCase "controller of empty canister" $ do
-                                                                                      cid <- create ecid
-                                                                                      cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
-                                                                                      certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [defaultUser],
-                                                                                    testCase "module_hash of empty canister" $ do
-                                                                                      cid <- create ecid
-                                                                                      cert <- getStateCert defaultUser cid [["canister", cid, "module_hash"]]
-                                                                                      lookupPath (cert_tree cert) ["canister", cid, "module_hash"] @?= Absent,
-                                                                                    simpleTestCase "single controller of installed canister" ecid $ \cid -> do
-                                                                                      -- also vary user, just for good measure
-                                                                                      cert <- getStateCert anonymousUser cid [["canister", cid, "controllers"]]
-                                                                                      certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [defaultUser],
-                                                                                    testCase "multiple controllers of installed canister" $ do
-                                                                                      cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
-                                                                                      ic_set_controllers ic00 cid [defaultUser, otherUser]
-                                                                                      cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
-                                                                                      certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [defaultUser, otherUser],
-                                                                                    testCase "zero controllers of installed canister" $ do
-                                                                                      cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
-                                                                                      ic_set_controllers ic00 cid []
-                                                                                      cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
-                                                                                      certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [],
-                                                                                    simpleTestCase "module_hash of universal canister" ecid $ \cid -> do
-                                                                                      cert <- getStateCert anonymousUser cid [["canister", cid, "module_hash"]]
-                                                                                      certValue @Blob cert ["canister", cid, "module_hash"] >>= is ucan_chunk_hash,
-                                                                                    testGroup
-                                                                                      "malformed request id"
-                                                                                      [ simpleTestCase ("rid \"" ++ shorten 8 (asHex rid) ++ "\"") ecid $ \cid -> do
-                                                                                          getStateCert' defaultUser cid [["request_status", rid]] >>= isErr4xx
-                                                                                        | rid <- ["", "foo"]
-                                                                                      ],
-                                                                                    testGroup
-                                                                                      "non-existence proofs for non-existing request id"
-                                                                                      [ simpleTestCase ("rid \"" ++ shorten 8 (asHex rid) ++ "\"") ecid $ \cid -> do
-                                                                                          cert <- getStateCert defaultUser cid [["request_status", rid]]
-                                                                                          certValueAbsent cert ["request_status", rid, "status"]
-                                                                                        | rid <- [BS.replicate 32 0, BS.replicate 32 8, BS.replicate 32 255]
-                                                                                      ],
-                                                                                    simpleTestCase "can ask for portion of request status" ecid $ \cid -> do
-                                                                                      rid <- ensure_request_exists cid defaultUser
-                                                                                      cert <- getStateCert defaultUser cid [["request_status", rid, "status"], ["request_status", rid, "reply"]]
-                                                                                      void $ certValue @T.Text cert ["request_status", rid, "status"]
-                                                                                      void $ certValue @Blob cert ["request_status", rid, "reply"],
-                                                                                    simpleTestCase "access denied for other users request" ecid $ \cid -> do
-                                                                                      rid <- ensure_request_exists cid defaultUser
-                                                                                      getStateCert' otherUser cid [["request_status", rid]] >>= isErr4xx,
-                                                                                    simpleTestCase "reading two statuses to same canister in one go" ecid $ \cid -> do
-                                                                                      rid1 <- ensure_request_exists cid defaultUser
-                                                                                      rid2 <- ensure_request_exists cid defaultUser
-                                                                                      getStateCert' defaultUser cid [["request_status", rid1], ["request_status", rid2]] >>= isErr4xx,
-                                                                                    simpleTestCase "access denied for other users request (mixed request)" ecid $ \cid -> do
-                                                                                      rid1 <- ensure_request_exists cid defaultUser
-                                                                                      rid2 <- ensure_request_exists cid otherUser
-                                                                                      getStateCert' defaultUser cid [["request_status", rid1], ["request_status", rid2]] >>= isErr4xx,
-                                                                                    simpleTestCase "access denied for two statuses to different canisters" ecid $ \cid -> do
-                                                                                      cid2 <- install ecid noop
-                                                                                      rid1 <- ensure_request_exists cid defaultUser
-                                                                                      rid2 <- ensure_request_exists cid2 defaultUser
-                                                                                      getStateCert' defaultUser cid [["request_status", rid1], ["request_status", rid2]] >>= isErr4xx,
-                                                                                    simpleTestCase "access denied with different effective canister id" ecid $ \cid -> do
-                                                                                      cid2 <- install ecid noop
-                                                                                      rid <- ensure_provisional_create_canister_request_exists cid defaultUser
-                                                                                      getStateCert' defaultUser cid2 [["request_status", rid]] >>= isErr4xx,
-                                                                                    simpleTestCase "access denied for bogus path" ecid $ \cid -> do
-                                                                                      getStateCert' otherUser cid [["hello", "world"]] >>= isErr4xx,
-                                                                                    simpleTestCase "access denied for fetching full state tree" ecid $ \cid -> do
-                                                                                      getStateCert' otherUser cid [[]] >>= isErr4xx,
-                                                                                    testGroup "metadata" $
-                                                                                      let withCustomSection mod (name, content) = mod <> BS.singleton 0 <> sized (sized name <> content)
-                                                                                            where
-                                                                                              sized x = BS.fromStrict (toLEB128 @Natural (fromIntegral (BS.length x))) <> x
-                                                                                          withSections xs = foldl withCustomSection trivialWasmModule xs
-                                                                                       in [ simpleTestCase "absent" ecid $ \cid -> do
-                                                                                              cert <- getStateCert defaultUser cid [["canister", cid, "metadata", "foo"]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", "foo"] @?= Absent,
-                                                                                            testCase "public" $ do
-                                                                                              let mod = withSections [("icp:public test", "bar")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install ic00 (enum #install) cid mod ""
-                                                                                              cert <- getStateCert otherUser cid [["canister", cid, "metadata", "test"]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", "test"] @?= Found "bar"
-                                                                                              cert <- getStateCert anonymousUser cid [["canister", cid, "metadata", "test"]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", "test"] @?= Found "bar",
-                                                                                            testCase "private" $ do
-                                                                                              let mod = withSections [("icp:private test", "bar")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install ic00 (enum #install) cid mod ""
-                                                                                              getStateCert' otherUser cid [["canister", cid, "metadata", "test"]] >>= isErr4xx
-                                                                                              getStateCert' anonymousUser cid [["canister", cid, "metadata", "test"]] >>= isErr4xx
-                                                                                              cert <- getStateCert defaultUser cid [["canister", cid, "metadata", "test"]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", "test"] @?= Found "bar",
-                                                                                            testCase "duplicate public" $ do
-                                                                                              let mod = withSections [("icp:public test", "bar"), ("icp:public test", "baz")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install' ic00 (enum #install) cid mod "" >>= isReject [5],
-                                                                                            testCase "duplicate private" $ do
-                                                                                              let mod = withSections [("icp:private test", "bar"), ("icp:private test", "baz")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install' ic00 (enum #install) cid mod "" >>= isReject [5],
-                                                                                            testCase "duplicate mixed" $ do
-                                                                                              let mod = withSections [("icp:private test", "bar"), ("icp:public test", "baz")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install' ic00 (enum #install) cid mod "" >>= isReject [5],
-                                                                                            testCase "invalid utf8 in module" $ do
-                                                                                              let mod = withSections [("icp:public \xe2\x28\xa1", "baz")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install' ic00 (enum #install) cid mod "" >>= isReject [5],
-                                                                                            simpleTestCase "invalid utf8 in read_state" ecid $ \cid -> do
-                                                                                              getStateCert' defaultUser cid [["canister", cid, "metadata", "\xe2\x28\xa1"]] >>= isErr4xx,
-                                                                                            testCase "unicode metadata name" $ do
-                                                                                              let mod = withSections [("icp:public ☃️", "bar")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install ic00 (enum #install) cid mod ""
-                                                                                              cert <- getStateCert anonymousUser cid [["canister", cid, "metadata", "☃️"]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", "☃️"] @?= Found "bar",
-                                                                                            testCase "zero-length metadata name" $ do
-                                                                                              let mod = withSections [("icp:public ", "bar")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install ic00 (enum #install) cid mod ""
-                                                                                              cert <- getStateCert anonymousUser cid [["canister", cid, "metadata", ""]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", ""] @?= Found "bar",
-                                                                                            testCase "metadata section name with spaces" $ do
-                                                                                              let mod = withSections [("icp:public metadata section name with spaces", "bar")]
-                                                                                              cid <- create ecid
-                                                                                              ic_install ic00 (enum #install) cid mod ""
-                                                                                              cert <- getStateCert anonymousUser cid [["canister", cid, "metadata", "metadata section name with spaces"]]
-                                                                                              lookupPath (cert_tree cert) ["canister", cid, "metadata", "metadata section name with spaces"] @?= Found "bar"
-                                                                                          ]
+                                                                                        assertBool "certificate should not validate" $ isLeft result
                                                                                   ],
                                                                             testGroup
                                                                               "certified variables"

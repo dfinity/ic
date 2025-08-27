@@ -91,7 +91,7 @@ async fn get_sns_canisters_summary_impl(
         &ledger_client,
         &canister_env,
         false,
-        PrincipalId(ic_cdk::api::id()),
+        PrincipalId(ic_cdk::api::canister_self()),
     )
     .await
 }

@@ -1,6 +1,6 @@
 [package]
 name = "icrc-ledger-client-cdk"
-version = "0.1.2"
+version = "0.1.3"
 description = "ICRC-1 compliant client library."
 license = "Apache-2.0"
 readme = "README.md"
@@ -16,4 +16,4 @@ documentation.workspace = true
 async-trait = { workspace = true }
 candid = { workspace = true }
 ic-cdk = { workspace = true }
-icrc-ledger-client = { path = "../icrc-ledger-client" }
+icrc-ledger-client = { path = "../icrc-ledger-client", version = "0.1.4" }

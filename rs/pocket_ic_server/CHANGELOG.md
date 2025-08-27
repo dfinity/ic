@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to fix a performance regression when using the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status` in a loop.
 - The argument of the endpoint `/instances/` takes an additional optional field `icp_features` specifying ICP features (implemented by system canisters) to be enabled in the newly created PocketIC instance.
 - The argument of the endpoint `/instances/` takes an additional optional field `allow_incomplete_state` specifying if incomplete state (e.g., resulting from not deleting a PocketIC instance gracefully) is allowed.
+- The argument of the endpoint `/instances/` takes an additional optional field `initial_time` specifying the initial timestamp of the newly created instance or
+  if the new instance should make progress automatically, i.e., if PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
+- The argument of the endpoint `/instances/` takes an optional field `nonmainnet_features` specifying which features not available on the ICP mainnet should be available
+  in the newly created PocketIC instance (the field `nonmainnet_features` used to be a simple Boolean before).
 
 
 

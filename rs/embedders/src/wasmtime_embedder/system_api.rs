@@ -21,12 +21,13 @@ use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
     NumWasmPages,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
@@ -1243,6 +1244,10 @@ impl SystemApiImpl {
             instructions_executed_before_current_slice: 0,
             call_counters: SystemApiCallCounters::default(),
         }
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.sandbox_safe_system_state.cost_schedule
     }
 
     /// Refunds any cycles used for an outgoing request that doesn't get sent
@@ -3366,6 +3371,7 @@ impl SystemApi for SystemApiImpl {
         &mut self,
         current_size: u64,
         additional_pages: u64,
+        max_size: u64,
         stable_memory_api: ic_interfaces::execution_environment::StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome> {
         let resulting_size = current_size.saturating_add(additional_pages);
@@ -3380,14 +3386,16 @@ impl SystemApi for SystemApiImpl {
                 return Ok(StableGrowOutcome::Failure);
             }
         }
-        if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
+        if resulting_size > max_size {
             return Ok(StableGrowOutcome::Failure);
         }
-        match self.memory_usage.allocate_execution_memory(
-            // From the checks above we know that converting `additional_pages`
-            // to bytes will not overflow, so the `unwrap()` will succeed.
+        let Ok(execution_bytes) =
             ic_replicated_state::num_bytes_try_from(NumWasmPages::new(additional_pages as usize))
-                .unwrap(),
+        else {
+            return Ok(StableGrowOutcome::Failure);
+        };
+        match self.memory_usage.allocate_execution_memory(
+            execution_bytes,
             &self.api_type,
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
@@ -4179,6 +4187,7 @@ impl SystemApi for SystemApiImpl {
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
                 execution_mode,
+                self.get_cost_schedule(),
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
@@ -4190,7 +4199,7 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .canister_creation_fee(subnet_size);
+            .canister_creation_fee(subnet_size, self.get_cost_schedule());
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
@@ -4207,7 +4216,12 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+            .http_request_fee(
+                request_size.into(),
+                Some(max_res_bytes.into()),
+                subnet_size,
+                self.get_cost_schedule(),
+            );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
@@ -4239,16 +4253,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
-        let Some(subnet_size) = self
-            .sandbox_safe_system_state
-            .get_key_replication_factor(key)
+        let Some((subnet_size, cost_schedule, _)) =
+            self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .ecdsa_signature_fee(subnet_size);
+            .ecdsa_signature_fee(subnet_size, cost_schedule);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4280,16 +4293,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
-        let Some(subnet_size) = self
-            .sandbox_safe_system_state
-            .get_key_replication_factor(key)
+        let Some((subnet_size, cost_schedule, _)) =
+            self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .schnorr_signature_fee(subnet_size);
+            .schnorr_signature_fee(subnet_size, cost_schedule);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4321,16 +4333,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
-        let Some(subnet_size) = self
-            .sandbox_safe_system_state
-            .get_key_replication_factor(key)
+        let Some((subnet_size, cost_schedule, _)) =
+            self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .vetkd_fee(subnet_size);
+            .vetkd_fee(subnet_size, cost_schedule);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)

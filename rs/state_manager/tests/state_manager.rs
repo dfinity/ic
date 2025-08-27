@@ -38,6 +38,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
+    testing::StateManagerTesting,
     StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
@@ -54,7 +55,8 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::batch::{
-    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
+    BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
+    RawQueryStats, TotalQueryStats,
 };
 use ic_types::state_manager::StateManagerError;
 use ic_types::{
@@ -4549,6 +4551,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
         );
 

@@ -59,7 +59,7 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 

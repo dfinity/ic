@@ -11,7 +11,7 @@ use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveErro
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_type::SubnetType;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_types::{
     canister_http::{
         validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
@@ -25,13 +25,10 @@ use ic_types::{
 use std::time::Instant;
 use tokio::{
     runtime::Handle,
-    sync::{
-        mpsc::{
-            channel,
-            error::{TryRecvError, TrySendError},
-            Receiver, Sender,
-        },
-        watch,
+    sync::mpsc::{
+        channel,
+        error::{TryRecvError, TrySendError},
+        Receiver, Sender,
     },
 };
 use tonic::{transport::Channel, Code};
@@ -63,8 +60,7 @@ pub struct CanisterHttpAdapterClientImpl {
     rx: Receiver<CanisterHttpResponse>,
     query_service: QueryExecutionService,
     metrics: Metrics,
-    subnet_type: SubnetType,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     log: ReplicaLogger,
 }
 
@@ -75,8 +71,7 @@ impl CanisterHttpAdapterClientImpl {
         query_service: QueryExecutionService,
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
-        subnet_type: SubnetType,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
         log: ReplicaLogger,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
@@ -88,8 +83,7 @@ impl CanisterHttpAdapterClientImpl {
             rx,
             query_service,
             metrics,
-            subnet_type,
-            delegation_from_nns,
+            nns_delegation_reader,
             log,
         }
     }
@@ -125,8 +119,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
-        let subnet_type = self.subnet_type;
-        let delegation_from_nns = self.delegation_from_nns.borrow().clone();
+        let delegation_from_nns = self
+            .nns_delegation_reader
+            .get_delegation(CanisterRangesFilter::Flat);
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -143,6 +138,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         request:
                             Request {
                                 sender: request_sender,
+                                sender_reply_callback: reply_callback_id,
                                 ..
                             },
                         url: request_url,
@@ -179,8 +175,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
-                    // Socks proxy is only enabled on system subnets.
-                    socks_proxy_allowed: matches!(subnet_type, SubnetType::System),
+                    // TODO(BOUN-1467): Remove this field once everything is done.
+                    socks_proxy_allowed: true,
                     socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {
@@ -201,11 +197,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                     info!(
                         log,
-                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, request_id {}, process_id: {}",
+                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, reply_callback_id {}, sender {}, process_id: {}",
                         request_size,
                         adapter_req_timer.elapsed().as_millis(),
                         body.len() + headers_size,
-                        request_id,
+                        reply_callback_id,
+                        request_sender,
                         std::process::id(),
                     );
 
@@ -254,14 +251,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             };
 
                             if transform_result_size as u64 > max_response_size_bytes {
-                                info!(
-                                    log,
-                                    "Canister http transform result size {} on canister {} \
-                                    exceeds the `max_response_size` of {}.",
-                                    transform_result_size,
-                                    request_sender,
-                                    max_response_size_bytes
-                                );
                                 let err_msg = format!(
                                     "Transformed http response exceeds limit: {}",
                                     max_response_size_bytes
@@ -418,6 +407,7 @@ mod tests {
     };
     use std::convert::TryFrom;
     use std::time::Duration;
+    use tokio::sync::watch;
     use tonic::{
         transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
@@ -471,10 +461,7 @@ mod tests {
                     if let Some(client) = client {
                         Ok(hyper_util::rt::TokioIo::new(client))
                     } else {
-                        Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "Client already taken",
-                        ))
+                        Err(std::io::Error::other("Client already taken"))
                     }
                 }
             }))
@@ -627,8 +614,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -683,8 +669,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -747,8 +732,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -809,8 +793,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -898,8 +881,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -974,8 +956,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -1032,8 +1013,7 @@ mod tests {
             svc,
             2,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 

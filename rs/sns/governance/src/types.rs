@@ -140,6 +140,9 @@ pub mod native_action_ids {
     /// RegisterExtension Action.
     pub const REGISTER_EXTENSION: u64 = 17;
 
+    /// ExecuteExtensionOperation Action.
+    pub const EXECUTE_EXTENSION_OPERATION: u64 = 18;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -160,6 +163,7 @@ pub mod native_action_ids {
             NervousSystemFunction::advance_sns_target_version(),
             NervousSystemFunction::set_topics_for_custom_proposals(),
             NervousSystemFunction::register_extension(),
+            NervousSystemFunction::execute_extension_operation(),
         ]
     }
 }
@@ -1077,11 +1081,17 @@ impl NervousSystemFunction {
         )
     }
 
-    /// The special case if for `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
-    /// proposals of this SNS. While technically being a native function, this one does not have
-    /// its own topic.
+    /// The special cases are for:
+    /// - `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
+    ///   proposals of this SNS While technically being a native function
+    /// - `EXECUTE_EXTENSION_OPERATION` which are custom functions for extensions
+    ///   which have their own topics defined on the extension operation spec
     pub fn needs_topic(&self) -> bool {
-        self.id != native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+        ![
+            native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            native_action_ids::EXECUTE_EXTENSION_OPERATION,
+        ]
+        .contains(&self.id)
     }
 
     fn unspecified() -> NervousSystemFunction {
@@ -1151,6 +1161,17 @@ impl NervousSystemFunction {
             id: native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
             name: "Execute nervous system function".to_string(),
             description: Some("Proposal to execute a user-defined nervous system function, previously added by an AddNervousSystemFunction proposal. A canister call will be made when executed.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn execute_extension_operation() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::EXECUTE_EXTENSION_OPERATION,
+            name: "Execute SNS extension operation".to_string(),
+            description: Some(
+                "Proposal to execute an operation on a registered SNS extension.".to_string(),
+            ),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
@@ -1287,6 +1308,10 @@ impl From<Action> for NervousSystemFunction {
 
             Action::ExecuteGenericNervousSystemFunction(_) => {
                 NervousSystemFunction::execute_generic_nervous_system_function()
+            }
+
+            Action::ExecuteExtensionOperation(_) => {
+                NervousSystemFunction::execute_extension_operation()
             }
 
             Action::UpgradeSnsToNextVersion(_) => {
@@ -1882,6 +1907,7 @@ impl From<&Action> for u64 {
                 native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
+            Action::ExecuteExtensionOperation(_) => native_action_ids::EXECUTE_EXTENSION_OPERATION,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
             Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
@@ -2062,7 +2088,7 @@ impl Drop for LedgerUpdateLock {
         // may be inconsistent with the internal state of governance.  In that case,
         // we want to prevent further operations with that neuron until the issue can be
         // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
+        if ic_cdk::futures::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
@@ -2588,6 +2614,7 @@ impl From<MintSnsTokens> for Action {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Wasm {
     Bytes(Vec<u8>),
     Chunked {
@@ -2595,6 +2622,35 @@ pub enum Wasm {
         store_canister_id: CanisterId,
         chunk_hashes_list: Vec<Vec<u8>>,
     },
+}
+
+impl TryFrom<ChunkedCanisterWasm> for Wasm {
+    type Error = String;
+
+    fn try_from(chunked_canister_wasm: ChunkedCanisterWasm) -> Result<Self, Self::Error> {
+        let ChunkedCanisterWasm {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = chunked_canister_wasm;
+
+        if wasm_module_hash.is_empty() {
+            return Err("ChunkedCanisterWasm.wasm_module_hash cannot be empty".to_string());
+        }
+
+        let Some(store_canister_id) = store_canister_id else {
+            return Err("ChunkedCanisterWasm.store_canister_id cannot be None".to_string());
+        };
+
+        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+            .map_err(|err| format!("Invalid store_canister_id: {err}"))?;
+
+        Ok(Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        })
+    }
 }
 
 /// Validates that the specified byte sequence meets the following requirements:
@@ -2756,23 +2812,33 @@ impl Wasm {
         }
     }
 
-    pub fn description(&self) -> String {
+    pub fn sha256sum(&self) -> Vec<u8> {
         match self {
             Self::Bytes(bytes) => {
-                let canister_wasm_sha256 = {
-                    let mut state = Sha256::new();
-                    state.write(&bytes[..]);
-                    let sha = state.finish();
-                    sha.to_vec()
-                };
+                let mut state = Sha256::new();
+                state.write(&bytes[..]);
+                state.finish().to_vec()
+            }
+            Self::Chunked {
+                wasm_module_hash, ..
+            } => wasm_module_hash.clone(),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        let wasm_module_hash = self.sha256sum();
+        let wasm_module_hash = format_full_hash(&wasm_module_hash);
+
+        match self {
+            Self::Bytes(bytes) => {
                 format!(
                     "Embedded module with {} bytes and SHA256 `{}`.",
                     bytes.len(),
-                    format_full_hash(&canister_wasm_sha256)
+                    wasm_module_hash,
                 )
             }
             Self::Chunked {
-                wasm_module_hash,
+                wasm_module_hash: _, // computed above
                 store_canister_id,
                 chunk_hashes_list,
             } => {
@@ -2780,7 +2846,7 @@ impl Wasm {
                     "Remote module stored on canister {} with SHA256 `{}`. \
                      Split into {} chunks:\n  - {}",
                     store_canister_id.get(),
-                    format_full_hash(wasm_module_hash),
+                    wasm_module_hash,
                     chunk_hashes_list.len(),
                     chunk_hashes_list
                         .iter()
@@ -3121,7 +3187,7 @@ pub mod test_helpers {
         /// circuit", i.e. return ResourceExhausted instead of doing the "real
         /// work". Most tests do not attempt exercise the special "running out of
         /// memory" condition; therefore, it makes sense for this to always
-        /// always return NoIssue.
+        /// return NoIssue.
         fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
             HeapGrowthPotential::NoIssue
         }

@@ -189,7 +189,7 @@ use crate::{
 };
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, RoundRobin};
 use ic_interfaces::{
-    consensus_pool::ConsensusBlockCache,
+    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
@@ -200,7 +200,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IDkgMessageId,
-    consensus::idkg::IDkgBlockReader,
+    consensus::{idkg::IDkgBlockReader, HasHeight},
     crypto::canister_threshold_sig::{error::IDkgRetainKeysError, idkg::IDkgTranscript},
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
@@ -278,7 +278,6 @@ impl IDkgImpl {
         ));
         let signer = Box::new(ThresholdSignerImpl::new(
             node_id,
-            consensus_block_cache.clone(),
             crypto.clone(),
             state_reader.clone(),
             metrics_registry.clone(),
@@ -401,13 +400,9 @@ fn get_active_transcripts(
 
     if let Some(snapshot) = state_reader.get_certified_state_snapshot() {
         let state = snapshot.get_state();
-        let pre_signature_stashes = &state
-            .metadata
-            .subnet_call_context_manager
-            .pre_signature_stashes;
 
         // Retain all stashed key transcripts
-        for stash in pre_signature_stashes.values() {
+        for stash in state.pre_signature_stashes().values() {
             active_transcripts.insert((*stash.key_transcript).clone());
         }
 
@@ -483,7 +478,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
 /// Implements the BouncerFactory interface for IDkg.
 pub struct IDkgBouncer {
     subnet_id: SubnetId,
-    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BouncerMetrics,
 }
@@ -493,14 +488,21 @@ impl IDkgBouncer {
     pub fn new(
         metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache,
             state_reader,
             metrics: BouncerMetrics::new(metrics_registry, "idkg_pool"),
+        }
+    }
+
+    fn compute_args(&self) -> IDkgBouncerArgs {
+        IDkgBouncerArgs {
+            finalized_height: self.consensus_pool_cache.finalized_block().height(),
+            certified_height: self.state_reader.latest_certified_height(),
         }
     }
 }
@@ -510,25 +512,12 @@ struct IDkgBouncerArgs {
     certified_height: Height,
 }
 
-impl IDkgBouncerArgs {
-    fn new(
-        block_reader: &dyn IDkgBlockReader,
-        state_reader: &dyn StateReader<State = ReplicatedState>,
-    ) -> Self {
-        Self {
-            finalized_height: block_reader.tip_height(),
-            certified_height: state_reader.latest_certified_height(),
-        }
-    }
-}
-
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
-        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
+        let args = self.compute_args();
         Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
 
@@ -615,6 +604,7 @@ mod tests {
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
@@ -632,7 +622,7 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
         messages::CallbackId,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{subnet_test_id, NODE_1, NODE_2, SUBNET_1, SUBNET_2};
 
     #[test]
     fn test_get_active_transcripts() {
@@ -685,7 +675,7 @@ mod tests {
         // Create some pre-signature stashes
         let mut stashes = BTreeMap::new();
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            stashes.insert(key_id.inner().clone(), fake_pre_signature_stash(&key_id, 5));
+            stashes.insert(key_id.clone(), fake_pre_signature_stash(&key_id, 5));
         }
         let stashed_transcripts = stashes.len() as u64;
         state
@@ -739,18 +729,31 @@ mod tests {
 
     #[test]
     fn test_idkg_priority_fn_args() {
-        let state_manager = Arc::new(RefMockStateManager::default());
-        let height = Height::from(100);
-        state_manager
-            .get_mut()
-            .expect_latest_certified_height()
-            .returning(move || height);
+        const EXPECTED_CERTIFIED_HEIGHT: u64 = 10;
+        const EXPECTED_FINALIZED_HEIGHT: u64 = 12;
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
 
-        let block_reader = TestIDkgBlockReader::for_signer_test(height.increment(), vec![]);
+            let state_manager = Arc::new(RefMockStateManager::default());
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .returning(move || EXPECTED_CERTIFIED_HEIGHT.into());
 
-        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
-        assert_eq!(args.certified_height, height);
-        assert_eq!(args.finalized_height, height.increment());
+            pool.advance_round_normal_operation_n(EXPECTED_FINALIZED_HEIGHT);
+
+            let bouncer_factory = IDkgBouncer::new(
+                &MetricsRegistry::new(),
+                subnet_test_id(1),
+                pool.get_cache(),
+                state_manager as Arc<_>,
+            );
+
+            let args = bouncer_factory.compute_args();
+
+            assert_eq!(args.certified_height.get(), EXPECTED_CERTIFIED_HEIGHT);
+            assert_eq!(args.finalized_height.get(), EXPECTED_FINALIZED_HEIGHT);
+        });
     }
 
     fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {

@@ -47,6 +47,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, StateLayout};
+use ic_sys::fs::Clobber;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
@@ -1096,7 +1097,7 @@ fn release_lock_and_persist_metadata(
 /// by threads computing manifests.
 ///
 /// An important principle is that any persisted metadata is not
-/// necessary for correct behaviour of `StateManager`, and the
+/// necessary for correct behavior of `StateManager`, and the
 /// checkpoints alone are sufficient. The metadata does however
 /// improve performance. For example, if the metadata is missing or
 /// corrupt, manifests will have to be recomputed for any checkpoints
@@ -1112,19 +1113,24 @@ fn persist_metadata_or_die(
     let started_at = Instant::now();
     let tmp = state_layout.tmp().join("tmp_states_metadata.pb");
 
-    ic_sys::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
-        let mut pb_meta = pb::StatesMetadata::default();
-        for (h, m) in metadata.iter() {
-            pb_meta.by_height.insert(h.get(), m.into());
-        }
+    ic_sys::fs::write_atomically_using_tmp_file(
+        state_layout.states_metadata(),
+        &tmp,
+        Clobber::Yes,
+        |w| {
+            let mut pb_meta = pb::StatesMetadata::default();
+            for (h, m) in metadata.iter() {
+                pb_meta.by_height.insert(h.get(), m.into());
+            }
 
-        let mut buf = vec![];
-        pb_meta.encode(&mut buf).unwrap_or_else(|e| {
-            fatal!(log, "Failed to encode states metadata to protobuf: {}", e);
-        });
-        metrics.states_metadata_pbuf_size.set(buf.len() as i64);
-        w.write_all(&buf[..])
-    })
+            let mut buf = vec![];
+            pb_meta.encode(&mut buf).unwrap_or_else(|e| {
+                fatal!(log, "Failed to encode states metadata to protobuf: {}", e);
+            });
+            metrics.states_metadata_pbuf_size.set(buf.len() as i64);
+            w.write_all(&buf[..])
+        },
+    )
     .unwrap_or_else(|err| {
         fatal!(
             log,
@@ -1660,18 +1666,6 @@ impl StateManagerImpl {
         Some((state, certification, hash_tree))
     }
 
-    /// Returns the state hash of the latest state, irrespective of whether that state was
-    /// certified or not. Primarily used for testing.
-    pub fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
-        let states = self.states.read();
-
-        states
-            .certifications_metadata
-            .iter()
-            .next_back()
-            .map(|(h, m)| (*h, m.certified_state_hash.clone()))
-    }
-
     /// Returns the manifest of the latest checkpoint on disk with its
     /// checkpoint layout.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
@@ -1962,11 +1956,6 @@ impl StateManagerImpl {
         // should touch.  Instead of pro-actively updating tip here, we let the
         // state machine discover a newer state the next time it calls
         // `take_tip()` and update the tip accordingly.
-    }
-
-    /// Wait till deallocation queue is empty.
-    pub fn flush_deallocation_channel(&self) {
-        self.deallocator_thread.flush_deallocation_channel();
     }
 
     /// Remove any inmemory state at height h with h < last_height_to_keep
@@ -2414,10 +2403,6 @@ impl StateManagerImpl {
             .with_label_values(&["create"])
             .observe(elapsed.as_secs_f64());
         result
-    }
-
-    pub fn test_only_send_wait_to_tip_channel(&self, sender: Sender<()>) {
-        self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
     }
 
     fn certified_state_reader(&self) -> Option<CertifiedStateSnapshotImpl> {
@@ -3654,8 +3639,8 @@ fn maliciously_return_wrong_hash(
     malicious_flags: &MaliciousFlags,
     height: Height,
 ) -> CryptoHashOfState {
-    use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+    use ic_protobuf::log::malicious_behavior_log_entry::v1::{
+        MaliciousBehavior, MaliciousBehaviorLogEntry,
     };
 
     if malicious_flags
@@ -3666,7 +3651,7 @@ fn maliciously_return_wrong_hash(
             log,
             "[MALICIOUS] corrupting the hash of the state at height {}",
             height.get();
-            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::CorruptOwnStateAtHeights as i32}
+            malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::CorruptOwnStateAtHeights as i32}
         );
         CryptoHashOfState::from(CryptoHash(vec![0u8; 32]))
     } else {
@@ -3774,6 +3759,9 @@ pub mod testing {
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
+
+        /// Testing only: Wait till deallocation queue is empty.
+        fn flush_deallocation_channel(&self);
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -3796,6 +3784,10 @@ pub mod testing {
                 );
             }
             purged
+        }
+
+        fn flush_deallocation_channel(&self) {
+            self.deallocator_thread.flush_deallocation_channel();
         }
     }
 }

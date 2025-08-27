@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
@@ -90,7 +91,7 @@ pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
@@ -1712,7 +1713,7 @@ impl MetricsFetcher {
     }
 }
 
-/// Assert that all malicious nodes in a topology produced log that signals malicious behaviour.
+/// Assert that all malicious nodes in a topology produced log that signals malicious behavior.
 /// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
 /// Use this function at the end of malicious node tests, when all logs are present already.
 pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals: Vec<&str>) {
@@ -1723,7 +1724,7 @@ pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals
     assert_malicious(malicious_nodes, malicious_signals);
 }
 
-/// Assert that all nodes of the given set produced log that signals malicious behaviour.
+/// Assert that all nodes of the given set produced log that signals malicious behavior.
 /// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
 /// Use this function at the end of malicious node tests, when all logs are present already.
 pub fn assert_malicious(
@@ -1766,7 +1767,7 @@ async fn assert_nodes_malicious_parallel(
     }
 }
 
-/// Assert that a node produced log that signals malicious behaviour.
+/// Assert that a node produced log that signals malicious behavior.
 pub async fn assert_node_malicious(node: IcNodeSnapshot, malicious_signals: Vec<&str>) {
     LogStream::open(vec![node].into_iter())
         .await

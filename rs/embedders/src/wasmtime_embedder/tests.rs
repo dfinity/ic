@@ -25,7 +25,8 @@ use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemSta
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    batch::CanisterCyclesCostSchedule, time::UNIX_EPOCH, ComputeAllocation, Cycles,
+    MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -36,11 +37,12 @@ use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
 }
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 
@@ -68,6 +70,7 @@ fn test_wasmtime_system_api() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;

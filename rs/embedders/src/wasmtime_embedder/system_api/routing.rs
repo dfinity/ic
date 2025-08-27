@@ -4,6 +4,7 @@ use std::str::FromStr;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
+use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -44,7 +45,6 @@ fn route_canister_id(
     network_topology: &NetworkTopology,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     network_topology
-        .routing_table
         .route(canister_id.get())
         .map(|subnet_id| subnet_id.get())
         .ok_or(ResolveDestinationError::SubnetNotFound(canister_id, method))
@@ -57,6 +57,8 @@ pub(super) fn resolve_destination(
     method_name: &str,
     payload: &[u8],
     own_subnet: SubnetId,
+    caller: CanisterId,
+    logger: &ReplicaLogger,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     // Figure out the destination subnet based on the method and the payload.
     let method = Ic00Method::from_str(method_name);
@@ -131,6 +133,9 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
+                caller,
+                method_name,
+                logger,
             ))
         }
         Ok(Ic00Method::BitcoinGetUtxos) => {
@@ -139,6 +144,9 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
+                caller,
+                method_name,
+                logger,
             ))
         }
         Ok(Ic00Method::BitcoinGetBlockHeaders) => {
@@ -147,6 +155,9 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
+                caller,
+                method_name,
+                logger,
             ))
         }
         Ok(Ic00Method::BitcoinSendTransaction) => {
@@ -156,6 +167,9 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
+                caller,
+                method_name,
+                logger,
             ))
         }
         Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
@@ -164,6 +178,9 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
+                caller,
+                method_name,
+                logger,
             ))
         }
         Ok(Ic00Method::NodeMetricsHistory) => {
@@ -434,7 +451,17 @@ fn route_bitcoin_message(
     network: BitcoinNetwork,
     network_topology: &NetworkTopology,
     own_subnet: SubnetId,
+    caller: CanisterId,
+    method_name: &str,
+    logger: &ReplicaLogger,
 ) -> PrincipalId {
+    info!(
+        logger,
+        "Canister {} called Bitcoin method {} with network: {:?} directly on the management canister",
+        caller,
+        method_name,
+        network
+    );
     match network {
         // Route to the bitcoin canister if it exists, otherwise route to own subnet.
         // NOTE: Local deployments can run regtest mode for testing, and that routes to the
@@ -458,6 +485,7 @@ mod tests {
     use assert_matches::assert_matches;
     use candid::Encode;
     use ic_base_types::RegistryVersion;
+    use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{
         DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAArgs,
         VetKdCurve, VetKdKeyId,
@@ -615,6 +643,7 @@ mod tests {
 
     #[test]
     fn resolve_reshare_chain_key() {
+        let logger = no_op_logger();
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -626,6 +655,8 @@ mod tests {
                     &Ic00Method::ReshareChainKey.to_string(),
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(1)),
                     subnet_test_id(2),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap(),
                 PrincipalId::new_subnet_test_id(1)
@@ -635,6 +666,7 @@ mod tests {
 
     #[test]
     fn resolve_reshare_chain_key_key_not_held_error() {
+        let logger = no_op_logger();
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -646,6 +678,8 @@ mod tests {
                     &Ic00Method::ReshareChainKey.to_string(),
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                     subnet_test_id(2),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap_err(),
                 ResolveDestinationError::ChainKeyError(err) => assert_eq!(
@@ -662,6 +696,7 @@ mod tests {
 
     #[test]
     fn resolve_reshare_chain_key_unknown_subnet_error() {
+        let logger = no_op_logger();
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -673,6 +708,8 @@ mod tests {
                     &Ic00Method::ReshareChainKey.to_string(),
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap_err(),
                 ResolveDestinationError::ChainKeyError(err) => assert_eq!(
@@ -689,6 +726,7 @@ mod tests {
 
     #[test]
     fn resolve_reshare_chain_key_wrong_subnet_error() {
+        let logger = no_op_logger();
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -701,6 +739,8 @@ mod tests {
                         // Subnet 2 doesn't have the requested key.
                         &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                         subnet_test_id(2),
+                        canister_test_id(1),
+                        &logger,
                     )
                     .unwrap_err(),
                     ResolveDestinationError::ChainKeyError(err) => assert_eq!(
@@ -717,6 +757,7 @@ mod tests {
 
     #[test]
     fn resolve_reshare_chain_key_subnet_not_found_error() {
+        let logger = no_op_logger();
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -729,6 +770,8 @@ mod tests {
                     // Subnet 3 doesn't exist
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap_err(),
                 ResolveDestinationError::ChainKeyError(err) => assert_eq!(
@@ -745,6 +788,7 @@ mod tests {
 
     #[test]
     fn resolve_chain_key_request() {
+        let logger = no_op_logger();
         for (network_topology, method, payload) in [
             (
                 network_with_ecdsa_subnets(),
@@ -768,6 +812,8 @@ mod tests {
                     &method.to_string(),
                     &payload,
                     subnet_test_id(1),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap(),
                 PrincipalId::new_subnet_test_id(0)
@@ -777,6 +823,7 @@ mod tests {
 
     #[test]
     fn resolve_chain_key_request_error() {
+        let logger = no_op_logger();
         for (method, payload, master_key_id) in [
             (
                 Ic00Method::SignWithECDSA,
@@ -799,6 +846,8 @@ mod tests {
                 &method.to_string(),
                 &payload,
                 subnet_test_id(1),
+                canister_test_id(1),
+                &logger,
             )
             .unwrap_err(),
             ResolveDestinationError::ChainKeyError(err) => assert_eq!(
@@ -814,6 +863,7 @@ mod tests {
 
     #[test]
     fn resolve_chain_key_public_key_works_with_disabled_keys() {
+        let logger = no_op_logger();
         for (network_topology, method, payload) in [
             (
                 network_with_ecdsa_subnets(),
@@ -837,6 +887,8 @@ mod tests {
                     &method.to_string(),
                     &payload,
                     subnet_test_id(1),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap(),
                 PrincipalId::new_subnet_test_id(0)
@@ -846,6 +898,7 @@ mod tests {
 
     #[test]
     fn resolve_reshare_chain_key_works_with_disabled_keys() {
+        let logger = no_op_logger();
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -857,6 +910,8 @@ mod tests {
                     &Ic00Method::ReshareChainKey.to_string(),
                     &reshare_chain_key_request(key_id, subnet_test_id(0)),
                     subnet_test_id(1),
+                    canister_test_id(1),
+                    &logger,
                 )
                 .unwrap(),
                 PrincipalId::new_subnet_test_id(0)

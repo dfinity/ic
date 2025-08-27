@@ -125,8 +125,9 @@ pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
-        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterCyclesCostSchedule,
+        ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        ValidationContext, XNetPayload,
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
@@ -329,7 +330,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
-        guest_launch_measurement_sha256_hex: None,
+        guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
@@ -456,8 +457,8 @@ fn add_subnet_local_registry_records(
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
             key_configs: chain_keys_enabled_status
-                .iter()
-                .map(|(key_id, _)| KeyConfig {
+                .keys()
+                .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
                         1
@@ -898,7 +899,7 @@ pub struct StateMachine {
     time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
-    ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
+    ni_dkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -915,6 +916,7 @@ pub struct StateMachine {
     vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    cost_schedule: CanisterCyclesCostSchedule,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -994,6 +996,7 @@ pub struct StateMachineBuilder {
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
     create_at_registry_version: RegistryVersion,
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl StateMachineBuilder {
@@ -1033,6 +1036,14 @@ impl StateMachineBuilder {
             bitcoin_testnet_uds_path: None,
             remove_old_states: true,
             create_at_registry_version: INITIAL_REGISTRY_VERSION,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        }
+    }
+
+    pub fn with_cost_schedule(self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        Self {
+            cost_schedule,
+            ..self
         }
     }
 
@@ -1296,6 +1307,7 @@ impl StateMachineBuilder {
             self.log_level,
             self.remove_old_states,
             self.create_at_registry_version,
+            self.cost_schedule,
         )
     }
 
@@ -1390,6 +1402,10 @@ impl StateMachineBuilder {
             bitcoin_mainnet_uds_metrics_path: None,
             bitcoin_testnet_uds_path,
             bitcoin_testnet_uds_metrics_path: None,
+            dogecoin_mainnet_uds_path: None,
+            dogecoin_mainnet_uds_metrics_path: None,
+            dogecoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_metrics_path: None,
             https_outcalls_uds_path: None,
             https_outcalls_uds_metrics_path: None,
         };
@@ -1404,6 +1420,8 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             bitcoin_clients.btc_mainnet_client,
             bitcoin_clients.btc_testnet_client,
+            bitcoin_clients.doge_testnet_client,
+            bitcoin_clients.doge_mainnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),
@@ -1638,6 +1656,7 @@ impl StateMachine {
         log_level: Option<Level>,
         remove_old_states: bool,
         create_at_registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1927,7 +1946,7 @@ impl StateMachine {
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
 
-                    ni_dkg_ids.insert(key_id.clone(), nidkg_id);
+                    ni_dkg_ids.insert(NiDkgMasterPublicKeyId::VetKd(id.clone()), nidkg_id);
 
                     (public_key, private_key)
                 }
@@ -2020,6 +2039,7 @@ impl StateMachine {
             vetkd_payload_builder,
             remove_old_states,
             cycles_account_manager,
+            cost_schedule,
         }
     }
 
@@ -2132,6 +2152,7 @@ impl StateMachine {
                 return Err("No certified state available.".to_string());
             }
         };
+        // TODO(CON-1487): return the `canister_ranges/{subnet_id}` path as well
         let paths = vec![
             LabeledTreePath::new(vec![
                 b"subnet".into(),
@@ -2319,6 +2340,7 @@ impl StateMachine {
                 timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
+                replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
                 .sign(&response_metadata, node.node_id, registry_version)
@@ -2653,9 +2675,11 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
-            idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: self.ni_dkg_ids.clone(),
+            chain_key_data: ChainKeyData {
+                master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                idkg_pre_signatures: BTreeMap::new(),
+                nidkg_ids: self.ni_dkg_ids.clone(),
+            },
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
@@ -2669,13 +2693,7 @@ impl StateMachine {
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
-        assert_eq!(
-            self.state_manager
-                .latest_state_certification_hash()
-                .unwrap()
-                .0,
-            batch_number
-        );
+        assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
         self.check_critical_errors();
 
@@ -3115,7 +3133,7 @@ impl StateMachine {
         self.create_canister_with_cycles(None, Cycles::new(0), settings)
     }
 
-    /// Creates a new canister with a cycles balance and returns the canister principal.
+    /// Creates a new canister and returns the canister principal.
     pub fn create_canister_with_cycles(
         &self,
         specified_id: Option<PrincipalId>,
@@ -3123,17 +3141,7 @@ impl StateMachine {
         settings: Option<CanisterSettingsArgs>,
     ) -> CanisterId {
         let wasm_result = self
-            .execute_ingress(
-                ic00::IC_00,
-                ic00::Method::ProvisionalCreateCanisterWithCycles,
-                ic00::ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: Some(candid::Nat::from(cycles.get())),
-                    settings,
-                    specified_id,
-                    sender_canister_version: None,
-                }
-                .encode(),
-            )
+            .create_canister_with_cycles_impl(specified_id, cycles, settings)
             .expect("failed to create canister");
         match wasm_result {
             WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
@@ -3141,6 +3149,26 @@ impl StateMachine {
                 .get_canister_id(),
             WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
         }
+    }
+
+    /// Creates a new canister.
+    pub fn create_canister_with_cycles_impl(
+        &self,
+        specified_id: Option<PrincipalId>,
+        cycles: Cycles,
+        settings: Option<CanisterSettingsArgs>,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            ic00::IC_00,
+            ic00::Method::ProvisionalCreateCanisterWithCycles,
+            ic00::ProvisionalCreateCanisterWithCyclesArgs {
+                amount: Some(candid::Nat::from(cycles.get())),
+                settings,
+                specified_id,
+                sender_canister_version: None,
+            }
+            .encode(),
+        )
     }
 
     /// Creates a new canister and installs its code.
@@ -3396,7 +3424,7 @@ impl StateMachine {
         self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
-            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+            |offset, size| CanisterSnapshotDataKind::WasmMemory { offset, size },
         )
     }
 
@@ -3522,7 +3550,7 @@ impl StateMachine {
             data,
             start_chunk,
             end_chunk,
-            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+            |x| CanisterSnapshotDataOffset::WasmMemory { offset: x },
         )
     }
 
@@ -3816,13 +3844,13 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload);
-        let effective_canister_id =
-            extract_effective_canister_id(msg.content(), self.get_subnet_id()).unwrap();
+        let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             msg.content(),
             effective_canister_id,
             subnet_size,
+            self.cost_schedule,
         )
     }
 

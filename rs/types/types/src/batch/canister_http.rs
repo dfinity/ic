@@ -7,7 +7,7 @@ use crate::{
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
     signature::{BasicSignature, BasicSignatureBatch},
-    Time,
+    ReplicaVersion, Time,
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
 use ic_error_types::RejectCode;
@@ -61,6 +61,7 @@ impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCo
             }),
             hash: payload.proof.content.content_hash.clone().get().0,
             registry_version: payload.proof.content.registry_version.get(),
+            replica_version: payload.proof.content.replica_version.clone().into(),
             signatures: payload
                 .proof
                 .signature
@@ -115,6 +116,8 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         payload.hash,
                     )),
                     registry_version: RegistryVersion::new(payload.registry_version),
+                    replica_version: ReplicaVersion::try_from(payload.replica_version)
+                        .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
                 },
                 signature: BasicSignatureBatch {
                     signatures_map: payload
@@ -206,6 +209,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 timeout: share.content.timeout.as_nanos_since_unix_epoch(),
                 content_hash: share.content.content_hash.clone().get().0,
                 registry_version: share.content.registry_version.get(),
+                replica_version: share.content.replica_version.into(),
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -225,6 +229,8 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
         let timeout = Time::from_nanos_since_unix_epoch(metadata.timeout);
         let content_hash = CryptoHashOf::new(CryptoHash(metadata.content_hash.clone()));
         let registry_version = RegistryVersion::new(metadata.registry_version);
+        let replica_version = ReplicaVersion::try_from(metadata.replica_version)
+            .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?;
         let signature = share
             .signature
             .ok_or(ProxyDecodeError::MissingField("share.signature"))?;
@@ -234,6 +240,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 timeout,
                 content_hash,
                 registry_version,
+                replica_version,
             },
             signature: BasicSignature {
                 signer: NodeId::from(PrincipalId::try_from(signature.signer)?),
@@ -279,6 +286,7 @@ mod tests {
                         0, 1, 2, 3,
                     ])),
                     registry_version: RegistryVersion::new(1),
+                    replica_version: ReplicaVersion::default(),
                 },
                 signature: BasicSignatureBatch {
                     signatures_map: vec![(
@@ -308,6 +316,7 @@ mod tests {
                         0, 1, 2, 3,
                     ])),
                     registry_version: RegistryVersion::new(1),
+                    replica_version: ReplicaVersion::default(),
                 },
                 signature: BasicSignature {
                     signer: NodeId::from(PrincipalId::new_node_test_id(1)),

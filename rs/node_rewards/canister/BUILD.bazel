@@ -8,8 +8,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
+    "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
+    "//rs/node_rewards/canister/protobuf",
     "//rs/node_rewards/rewards_calculation",
     "//rs/protobuf",
     "//rs/registry/canister-client",
@@ -22,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:indexmap",
     "@crate_index//:itertools",
@@ -41,6 +44,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures-util",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
 ]

@@ -1,11 +1,12 @@
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InstanceConfig, InstanceId,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
+    InstanceId, MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal,
+    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId,
+    TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -27,9 +28,8 @@ use ic_management_canister_types::{
     CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
     InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
     ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags as CanisterInstallModeUpgradeInner,
-    UploadChunkArgs, UploadChunkResult,
-    WasmMemoryPersistence as CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags, UploadChunkArgs, UploadChunkResult,
+    WasmMemoryPersistence,
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
@@ -136,10 +136,11 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -201,11 +202,12 @@ impl PocketIc {
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features,
+            nonmainnet_features: Some(nonmainnet_features),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
             allow_incomplete_state: Some(false),
+            initial_time,
         };
 
         let test_driver_pid = std::process::id();
@@ -1158,11 +1160,28 @@ impl PocketIc {
         sender: Option<Principal>,
     ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
-            CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
-                wasm_memory_persistence: Some(
-                    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner::Replace,
-                ),
-                skip_pre_upgrade: Some(false),
+            CanisterInstallMode::Upgrade(None),
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
+        )
+        .await
+    }
+
+    /// Upgrade a Motoko EOP canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn upgrade_eop_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), RejectResponse> {
+        self.install_canister_helper(
+            CanisterInstallMode::Upgrade(Some(UpgradeFlags {
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                skip_pre_upgrade: None,
             })),
             canister_id,
             wasm_module,

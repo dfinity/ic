@@ -86,7 +86,7 @@ const APP_NODES_LARGE: usize = 37;
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
 
-pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -301,8 +301,7 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    let initial_version = get_guestos_img_version().unwrap();
-    let initial_version = ReplicaVersion::try_from(initial_version).unwrap();
+    let initial_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
@@ -444,18 +443,17 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let version_is_broken = cfg.upgrade && unassigned_nodes_ids.is_empty();
     let working_version = if version_is_broken {
-        get_guestos_update_img_version().unwrap()
+        get_guestos_update_img_version()
     } else {
-        initial_version.to_string()
+        initial_version
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
         keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
-        upgrade_version: version_is_broken
-            .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
-        upgrade_image_url: get_guestos_update_img_url().ok(),
-        upgrade_image_hash: get_guestos_update_img_sha256(&env).ok(),
+        upgrade_version: version_is_broken.then(|| working_version.clone()),
+        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
@@ -544,7 +542,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
-    assert_subnet_is_healthy(&all_app_nodes, working_version, app_can_id, msg, &logger);
+    assert_subnet_is_healthy(&all_app_nodes, &working_version, app_can_id, msg, &logger);
 
     for node in all_app_nodes {
         let height = block_on(get_node_metrics(&logger, &node.get_ip_addr()))

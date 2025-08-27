@@ -36,7 +36,7 @@ use ic_consensus_system_test_utils::{
     },
     upgrade::{
         assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
-        get_assigned_replica_version, UpdateImageType,
+        get_assigned_replica_version,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -52,7 +52,7 @@ use ic_system_test_driver::{
     },
     util::{block_on, get_nns_node, MessageCanister},
 };
-use ic_types::{Height, ReplicaVersion};
+use ic_types::Height;
 use slog::{debug, error, info, Logger};
 use std::{
     ffi::OsStr,
@@ -103,18 +103,19 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version().expect("tip-of-branch IC version");
-    let target_version = get_guestos_update_img_version().expect("target IC version");
+    let binary_version = get_current_branch_version();
+    let target_version = get_guestos_update_img_version();
 
     // Bless target version
-    let sha256 = get_guestos_update_img_sha256(&env).unwrap();
-    let upgrade_url = get_guestos_update_img_url().unwrap();
+    let sha256 = get_guestos_update_img_sha256();
+    let upgrade_url = get_guestos_update_img_url();
+    let guest_launch_measurements = get_guestos_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
-        UpdateImageType::Image,
         &log,
-        &sha256,
+        sha256,
+        guest_launch_measurements,
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);
@@ -137,16 +138,14 @@ pub fn test(env: TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
-    let replica_version =
+    let initial_replica_version =
         get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
-        .expect("Assigned replica version should be valid");
 
     info!(
         log,
         "Copy the binaries needed for replay of the current version"
     );
-    let backup_binaries_dir = backup_dir.join("binaries").join(&binary_version);
+    let backup_binaries_dir = backup_dir.join("binaries").join(binary_version.to_string());
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
@@ -235,7 +234,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Generate config file for ic-backup");
     let subnet = SubnetConfig {
         subnet_id,
-        initial_replica_version,
+        initial_replica_version: initial_replica_version.clone(),
         nodes_syncing: 2,
         sync_period_secs: 30,
         replay_period_secs: 30,
@@ -300,7 +299,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).expect("bad TARGET_VERSION string"),
+        &target_version,
         subnet_id,
     ));
 
@@ -314,12 +313,12 @@ pub fn test(env: TestEnv) {
     let orig_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
-        .join(replica_version)
+        .join(initial_replica_version.to_string())
         .join("0");
     let new_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
-        .join(target_version)
+        .join(target_version.to_string())
         .join("0");
 
     info!(

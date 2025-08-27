@@ -109,7 +109,7 @@ pub trait RegistryDataStableMemory: Send + Sync {
 macro_rules! test_registry_data_stable_memory_impl {
     ($state_struct:ident, $local_key_btree_map:expr) => {
 
-        struct $state_struct;
+        pub struct $state_struct;
 
         impl RegistryDataStableMemory for $state_struct {
             fn with_registry_map<R>(

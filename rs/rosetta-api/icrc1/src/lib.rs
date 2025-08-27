@@ -15,6 +15,7 @@ use std::{
 };
 use tokio::sync::Mutex as AsyncMutex;
 pub mod common;
+pub mod config;
 pub mod construction_api;
 pub mod data_api;
 pub mod ledger_blocks_synchronization;

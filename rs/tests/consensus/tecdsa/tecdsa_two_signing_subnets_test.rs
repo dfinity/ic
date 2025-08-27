@@ -41,7 +41,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::{Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
 
@@ -165,8 +165,7 @@ fn test(env: TestEnv) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    let replica_version = get_guestos_img_version().unwrap();
-    let replica_version = ReplicaVersion::try_from(replica_version).unwrap();
+    let replica_version = get_guestos_img_version();
     let mut registry_version = snapshot.get_registry_version();
     let root_subnet_id = snapshot.root_subnet_id();
 

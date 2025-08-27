@@ -191,7 +191,7 @@ fn test_recover_subnet_with_replacement_nodes() {
             assert_eq!(subnet_record.membership.len(), num_unassigned_nodes);
             for node_id in unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
-                assert!(subnet_record.membership.iter().any(|x| *x == node_id));
+                assert!(subnet_record.membership.contains(&node_id));
             }
 
             let updated_cup_contents: CatchUpPackageContents =

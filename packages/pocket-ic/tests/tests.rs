@@ -12,8 +12,8 @@ use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
-        BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, SubnetKind,
+        BlobCompression, CanisterHttpReply, CanisterHttpResponse, IcpFeatures,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
     PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
@@ -30,13 +30,23 @@ use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-#[cfg(not(windows))]
-use std::time::Instant;
+use std::net::{IpAddr, Ipv4Addr};
 use std::{
     io::Read,
+    net::SocketAddr,
     sync::OnceLock,
     time::{Duration, SystemTime},
+};
+#[cfg(not(windows))]
+use std::{
+    io::Write,
+    net::{TcpListener, TcpStream},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::JoinHandle,
+    time::Instant,
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
@@ -371,6 +381,81 @@ fn test_multiple_large_xnet_payloads() {
     }
 }
 
+#[test]
+fn test_initial_timestamp() {
+    let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_initial_timestamp(initial_timestamp)
+        .build();
+
+    // Initial time is bumped by 1ns during instance creation to ensure strict monotonicity.
+    assert_eq!(
+        pic.get_time().as_nanos_since_unix_epoch(),
+        initial_timestamp + 1
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "The initial timestamp (unix timestamp in nanoseconds) must be no earlier than 1620328630000000000 (provided 0)."
+)]
+fn test_invalid_initial_timestamp() {
+    let _pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_initial_timestamp(0)
+        .build();
+}
+
+#[test]
+fn test_initial_timestamp_with_cycles_minting() {
+    let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
+    let icp_features = IcpFeatures {
+        cycles_minting: true,
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_icp_features(icp_features)
+        .with_initial_timestamp(initial_timestamp)
+        .build();
+
+    // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
+    assert_eq!(
+        pic.get_time().as_nanos_since_unix_epoch(),
+        initial_timestamp + 7
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "The initial timestamp (unix timestamp in nanoseconds) must be no earlier than 1620633601000000000 (provided 1620328630000000000)."
+)]
+fn test_invalid_initial_timestamp_with_cycles_minting() {
+    let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
+    let icp_features = IcpFeatures {
+        cycles_minting: true,
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_icp_features(icp_features)
+        .with_initial_timestamp(initial_timestamp)
+        .build();
+}
+
+#[test]
+fn test_auto_progress() {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_auto_progress(None)
+        .build();
+
+    assert!(pic.auto_progress_enabled());
+}
+
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic.get_time().as_nanos_since_unix_epoch();
     let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
@@ -527,11 +612,12 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
         state_dir: Some(temp_dir.path().to_path_buf()),
-        nonmainnet_features: false,
+        nonmainnet_features: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
         allow_incomplete_state,
+        initial_time: None,
     };
     let response = client
         .post(server_url.join("instances").unwrap())
@@ -1308,7 +1394,6 @@ fn test_vetkd() {
     let pic = PocketIcBuilder::new()
         .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
-        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 
     // We retrieve the app subnet ID from the topology.
@@ -1369,6 +1454,76 @@ fn test_vetkd() {
     }
 }
 
+#[cfg(not(windows))]
+struct HttpServer {
+    addr: SocketAddr,
+    flag: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+#[cfg(not(windows))]
+impl HttpServer {
+    fn new(bind_addr: &str) -> Self {
+        fn handle_connection(mut stream: TcpStream) {
+            let mut buffer = [0; 1024];
+            let _ = stream.read(&mut buffer).unwrap();
+
+            let status_line = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+            let body = "Hello from dynamic-port Rust server!";
+            let response = format!("{status_line}{body}");
+
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        }
+
+        let flag = Arc::new(AtomicBool::new(true));
+
+        // Bind to port 0 (OS assigns a free port)
+        let listener = TcpListener::bind(format!("{}:0", bind_addr)).expect("Failed to bind");
+
+        listener.set_nonblocking(true).unwrap();
+
+        // Extract the assigned bind address
+        let addr = listener.local_addr().unwrap();
+
+        let flag_in_thread = flag.clone();
+        let handle = std::thread::spawn(move || {
+            while flag_in_thread.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        handle_connection(stream);
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // No incoming connection; sleep briefly and retry
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => {
+                        panic!("Unexpected error: {}", e);
+                    }
+                }
+            }
+        });
+
+        Self {
+            addr,
+            flag,
+            handle: Some(handle),
+        }
+    }
+
+    fn addr(&self) -> String {
+        format!("http://{}", self.addr)
+    }
+}
+
+#[cfg(not(windows))]
+impl Drop for HttpServer {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::Relaxed);
+        self.handle.take().unwrap().join().unwrap();
+    }
+}
+
 #[test]
 fn test_canister_http() {
     let pic = PocketIc::new();
@@ -1388,7 +1543,7 @@ fn test_canister_http() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
 
@@ -1425,6 +1580,9 @@ fn test_canister_http() {
     assert_eq!(http_response.unwrap().body, body);
 }
 
+// This test does not work on Windows since the test HTTP webserver is spawned by the test driver
+// on the Windows host while the PocketIC server (making the canister HTTP outcall) runs in WSL.
+#[cfg(not(windows))]
 #[test]
 fn test_canister_http_in_live_mode() {
     // We create a PocketIC instance with an NNS subnet
@@ -1436,6 +1594,8 @@ fn test_canister_http_in_live_mode() {
 
     // Enable the "live" mode.
     let _ = pic.make_live(None);
+
+    let http_server = HttpServer::new("127.0.0.1");
 
     // Create a canister and charge it with 2T cycles.
     let canister_id = pic.create_canister();
@@ -1451,7 +1611,7 @@ fn test_canister_http_in_live_mode() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one(http_server.addr()).unwrap(),
         )
         .unwrap();
 
@@ -1484,7 +1644,7 @@ fn test_canister_http_with_transform() {
             canister_id,
             Principal::anonymous(),
             "canister_http_with_transform",
-            encode_one(()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
     // We need a pair of ticks for the test canister method to make the http outcall
@@ -1542,7 +1702,7 @@ fn test_canister_http_with_diverging_responses() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
 
@@ -1604,7 +1764,7 @@ fn test_canister_http_with_one_additional_response() {
         canister_id,
         Principal::anonymous(),
         "canister_http",
-        encode_one(()).unwrap(),
+        encode_one("example.com").unwrap(),
     )
     .unwrap();
 
@@ -1653,7 +1813,7 @@ fn test_canister_http_timeout() {
             canister_id,
             Principal::anonymous(),
             "canister_http",
-            encode_one(()).unwrap(),
+            encode_one("example.com").unwrap(),
         )
         .unwrap();
 

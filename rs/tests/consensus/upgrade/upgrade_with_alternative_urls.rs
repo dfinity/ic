@@ -26,7 +26,7 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version_with_urls,
-    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -39,9 +39,8 @@ use ic_system_test_driver::{
     },
     util::{block_on, get_nns_node},
 };
-use ic_types::{Height, ReplicaVersion};
+use ic_types::Height;
 use slog::info;
-use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
 
@@ -65,9 +64,9 @@ fn test(env: TestEnv) {
     let original_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let target_version = get_guestos_update_img_version().expect("target IC version");
+    let target_version = get_guestos_update_img_version();
 
-    let upgrade_url = get_guestos_update_img_url().expect("no image URL");
+    let upgrade_url = get_guestos_update_img_url();
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:
@@ -86,17 +85,17 @@ fn test(env: TestEnv) {
     block_on(bless_replica_version_with_urls(
         &nns_node,
         &target_version,
-        UpdateImageType::Image,
         release_package_urls,
-        get_guestos_update_img_sha256(&env).expect("no SHA256 hash"),
+        get_guestos_update_img_sha256(),
+        get_guestos_launch_measurements(),
         &logger,
     ));
 
     info!(logger, "Proposing to upgrade the subnet replica version");
-    let target_version = get_guestos_update_img_version().unwrap();
+    let target_version = get_guestos_update_img_version();
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).unwrap(),
+        &target_version,
         subnet_id,
     ));
 

@@ -1,9 +1,8 @@
 use crate::state_machine_helpers::ledger::icp_ledger_tip;
 use candid::{Decode, Encode, Nat};
-use canister_test::WasmResult;
 use ic_base_types::CanisterId;
 use ic_icp_index::{GetBlocksResponse, Status};
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use std::time::Duration;
 

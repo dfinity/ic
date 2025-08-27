@@ -9,14 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
-* Minor improvement on voting power spike detection mechanism - the mechanism is kept in place even
-  when the voting power snapshot is not full.
-
 ## Changed
 
 ## Deprecated
 
 ## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
 
 ## Fixed
 

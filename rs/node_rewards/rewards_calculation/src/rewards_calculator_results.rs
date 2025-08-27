@@ -1,183 +1,84 @@
-use crate::types::{NodeType, Region, RewardPeriod, RewardPeriodError, UnixTsNanos, NANOS_PER_DAY};
+use crate::types::{DayUtc, Region, RewardPeriod, RewardPeriodError};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::fmt;
 
-#[derive(Debug, Default, Clone)]
-pub struct XDRPermyriad(Decimal);
+pub type XDRPermyriad = Decimal;
+pub type Percent = Decimal;
 
-impl XDRPermyriad {
-    pub fn get(&self) -> Decimal {
-        self.0
-    }
-}
-impl From<Decimal> for XDRPermyriad {
-    fn from(value: Decimal) -> Self {
-        XDRPermyriad(value)
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Default)]
-
-pub struct Percent(Decimal);
-
-impl Percent {
-    pub fn get(&self) -> Decimal {
-        self.0
-    }
-}
-
-impl From<Decimal> for Percent {
-    fn from(value: Decimal) -> Self {
-        Percent(value)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Hash, PartialOrd, Ord, Eq, Copy)]
-pub struct DayUTC(UnixTsNanos);
-
-impl From<UnixTsNanos> for DayUTC {
-    fn from(value: UnixTsNanos) -> Self {
-        let day_end = ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1;
-        Self(day_end)
-    }
-}
-
-impl Default for DayUTC {
-    fn default() -> Self {
-        DayUTC::from(0)
-    }
-}
-
-impl DayUTC {
-    pub fn unix_ts_at_day_end(&self) -> UnixTsNanos {
-        self.0
-    }
-
-    pub fn get(&self) -> UnixTsNanos {
-        self.0
-    }
-
-    pub fn unix_ts_at_day_start(&self) -> UnixTsNanos {
-        (self.0 / NANOS_PER_DAY) * NANOS_PER_DAY
-    }
-
-    pub fn next_day(&self) -> DayUTC {
-        DayUTC(self.0 + NANOS_PER_DAY)
-    }
-
-    pub fn previous_day(&self) -> DayUTC {
-        let ts_previous_day = self.0.checked_sub(NANOS_PER_DAY).unwrap_or_default();
-        DayUTC(ts_previous_day)
-    }
-
-    pub fn days_until(&self, other: &DayUTC) -> Result<Vec<DayUTC>, String> {
-        if self > other {
-            return Err(format!(
-                "Cannot compute days_until: {} > {}",
-                self.0, other.0
-            ));
-        }
-
-        let num_days = (other.0 - self.0) / NANOS_PER_DAY;
-        let days_until = (0..=num_days)
-            .map(|i| DayUTC(self.0 + i * NANOS_PER_DAY))
-            .collect();
-
-        Ok(days_until)
-    }
-}
-
-pub fn days_between(first_day: DayUTC, last_day: DayUTC) -> usize {
-    (((last_day.unix_ts_at_day_end() - first_day.unix_ts_at_day_start()) / NANOS_PER_DAY) + 1)
-        as usize
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NodeCategory {
-    pub region: String,
-    pub node_type: String,
-}
-
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NodeMetricsDaily {
-    pub day: DayUTC,
     pub subnet_assigned: SubnetId,
-    /// Subnet Assigned Failure Rate.
-    ///
-    /// The failure rate of the entire subnet.
-    /// Calculated as 75th percentile of the failure rate of all nodes in the subnet.
     pub subnet_assigned_fr: Percent,
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
-    /// Original Failure Rate.
-    ///
     /// The failure rate before subnet failure rate reduction.
     /// Calculated as `blocks_failed` / (`blocks_proposed` + `blocks_failed`)
     pub original_fr: Percent,
-    /// Relative Failure Rate (`RFR`).
-    ///
     /// The failure rate reduced by the subnet assigned failure rate.
     /// Calculated as Max(0, `original_fr` - `subnet_assigned_fr`)
     pub relative_fr: Percent,
 }
 
-#[derive(Debug, Default)]
-pub struct NodeResults {
-    pub region: Region,
-    pub node_type: NodeType,
-    pub dc_id: String,
-    pub rewardable_days: Vec<DayUTC>,
-    pub daily_metrics: Vec<NodeMetricsDaily>,
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub enum NodeStatus {
+    Assigned { node_metrics: NodeMetricsDaily },
+    Unassigned { extrapolated_fr: Percent },
+}
 
-    /// Average Relative Failure Rate (`ARFR`).
-    ///
-    /// Average of `RFR` for the entire reward period.
-    /// None if the node is unassigned in the entire reward period
-    pub avg_relative_fr: Option<Percent>,
-
-    /// Average Extrapolated Failure Rate (`AEFR`).
-    ///
-    /// Failure rate average for the entire reward period
-    /// - On days when the node is unassigned `ARFR` is used
-    /// - On days when the node is assigned `RFR` is used
-    pub avg_extrapolated_fr: Percent,
-
-    /// Rewards reduction (`RR`).
-    ///
-    /// - For nodes with `AEFR` < 0.1, the rewards reduction is 0
-    /// - For nodes with `AEFR` > 0.6, the rewards reduction is 0.8
-    /// - For nodes with 0.1 <= `AEFR` <= 0.6, the rewards reduction is linearly interpolated between 0 and 0.8
-    pub rewards_reduction: Percent,
-
-    /// Performance multiplier (`PM`).
-    ///
-    /// Calculated as 1 - 'RR'
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct DailyResults {
+    pub day: DayUtc,
+    pub node_status: NodeStatus,
     pub performance_multiplier: Percent,
-    pub base_rewards_per_month: XDRPermyriad,
-
-    /// Base Rewards for the rewards period.
-    ///
-    /// Calculated as `base_rewards_per_month` / 30.4375 * `rewardable_days`
+    pub rewards_reduction: Percent,
     pub base_rewards: XDRPermyriad,
-
-    /// Adjusted rewards (`AR`).
-    ///
-    /// Calculated as base_rewards * `PM`
     pub adjusted_rewards: XDRPermyriad,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct NodeResults {
+    pub node_id: NodeId,
+    pub node_reward_type: NodeRewardType,
+    pub region: String,
+    pub dc_id: String,
+    pub daily_results: Vec<DailyResults>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct BaseRewards {
+    pub node_reward_type: NodeRewardType,
+    pub region: Region,
+    pub monthly: XDRPermyriad,
+    pub daily: XDRPermyriad,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct DailyBaseRewardsType3 {
+    pub day: DayUtc,
+    pub region: Region,
+    pub nodes_count: usize,
+    pub avg_rewards: XDRPermyriad,
+    pub avg_coefficient: Percent,
+    pub value: XDRPermyriad,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct NodeProviderRewards {
+    pub rewards_total_xdr_permyriad: u64,
+    pub base_rewards: Vec<BaseRewards>,
+    pub base_rewards_type3: Vec<DailyBaseRewardsType3>,
+    pub nodes_results: Vec<NodeResults>,
+}
+
 pub struct RewardsCalculatorResults {
-    pub results_by_node: BTreeMap<NodeId, NodeResults>,
-    // [EFR]
-    // Extrapolated failure rate used as replacement for days when the node is unassigned
-    pub extrapolated_fr: Percent,
-    /// Rewards Total
-    /// The total rewards for the entire reward period computed as sum of the `AR`
-    pub rewards_total: XDRPermyriad,
+    pub start_day: DayUtc,
+    pub end_day: DayUtc,
+    pub subnets_fr: BTreeMap<(DayUtc, SubnetId), Percent>,
+    pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -186,10 +87,10 @@ pub enum RewardCalculatorError {
     EmptyMetrics,
     SubnetMetricsOutOfRange {
         subnet_id: SubnetId,
-        day: DayUTC,
+        day: DayUtc,
         reward_period: RewardPeriod,
     },
-    DuplicateMetrics(SubnetId, DayUTC),
+    DuplicateMetrics(SubnetId, DayUtc),
     ProviderNotFound(PrincipalId),
     NodeNotInRewardables(NodeId),
     RewardableNodeOutOfRange(NodeId),
@@ -201,7 +102,7 @@ impl From<RewardPeriodError> for RewardCalculatorError {
     }
 }
 
-impl Error for RewardCalculatorError {}
+impl std::error::Error for RewardCalculatorError {}
 
 impl fmt::Display for RewardCalculatorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -217,7 +118,9 @@ impl fmt::Display for RewardCalculatorError {
                 write!(
                     f,
                     "Node {} has metrics outside the reward period: timestamp: {} not in {}",
-                    subnet_id, day.0, reward_period
+                    subnet_id,
+                    day.get(),
+                    reward_period
                 )
             }
             RewardCalculatorError::DuplicateMetrics(subnet_id, day) => {

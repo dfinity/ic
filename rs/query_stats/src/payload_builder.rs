@@ -363,7 +363,7 @@ impl QueryStatsPayloadBuilderImpl {
 
         // Check the certified state for stats that we have already sent
         if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
-            .map(|record| record.iter().map(|(canister_id, _)| canister_id))
+            .map(|record| record.keys())
         {
             previous_ids.extend(state_stats);
         }

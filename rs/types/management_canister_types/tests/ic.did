@@ -62,6 +62,10 @@ type change_details = variant {
       canister_version : nat64;
       snapshot_id : snapshot_id;
       taken_at_timestamp : nat64;
+      source : variant {
+        taken_from_canister : reserved;
+        metadata_upload : reserved;
+      };
     };
     // Deprecated: `settings_change` is used instead.
     controllers_change : record {
@@ -274,6 +278,8 @@ type canister_status_args = record {
 
 type canister_status_result = record {
     status : variant { running; stopping; stopped };
+    version : nat64;
+    ready_for_migration : bool;
     settings : definite_canister_settings;
     module_hash : opt blob;
     memory_size : nat;
@@ -420,6 +426,7 @@ type subnet_info_args = record {
 
 type subnet_info_result = record {
     replica_version : text;
+    registry_version : nat64;
 };
 
 type provisional_create_canister_with_cycles_args = record {
@@ -495,12 +502,12 @@ type read_canister_snapshot_metadata_args = record {
 
 type read_canister_snapshot_metadata_response = record {
     source : variant {
-        taken_from_canister;
-        metadata_upload;
+        taken_from_canister: reserved;
+        metadata_upload : reserved;
     };
     taken_at_timestamp : nat64;
     wasm_module_size : nat64;
-    exported_globals : vec variant {
+    globals : vec variant {
         i32 : int32;
         i64 : int64;
         f32 : float32;
@@ -533,7 +540,7 @@ type read_canister_snapshot_data_args = record {
             offset : nat64;
             size : nat64;
         };
-        main_memory : record {
+        wasm_memory : record {
             offset : nat64;
             size : nat64;
         };
@@ -555,7 +562,7 @@ type upload_canister_snapshot_metadata_args = record {
     canister_id : principal;
     replace_snapshot : opt blob;
     wasm_module_size : nat64;
-    exported_globals : vec variant {
+    globals : vec variant {
         i32 : int32;
         i64 : int64;
         f32 : float32;
@@ -587,7 +594,7 @@ type upload_canister_snapshot_data_args = record {
         wasm_module : record {
             offset : nat64;
         };
-        main_memory : record {
+        wasm_memory : record {
             offset : nat64;
         };
         stable_memory : record {

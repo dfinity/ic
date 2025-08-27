@@ -8,7 +8,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
 };
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
@@ -35,10 +35,11 @@ use ic_test_utilities_metrics::{
     fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
-use ic_types::messages::{
-    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
-};
 use ic_types::time::CoarseTime;
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
+};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
@@ -1509,21 +1510,13 @@ fn ic0_global_timer_deactivated() {
     let set_timer = wasm().api_global_timer_set(1).reply_int64().build();
     let unset_timer = wasm().api_global_timer_set(0).reply_int64().build();
 
+    // The timer is initially inactive.
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
-    test.ingress(canister_id, "update", set_timer.clone())
-        .unwrap();
-    assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
-        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
-    );
-    test.ingress(canister_id, "update", unset_timer).unwrap();
-    assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
-        CanisterTimer::Inactive
-    );
+
+    // Setting the timer in update call works and sets the timer.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
@@ -1531,18 +1524,37 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Unsetting the timer in update call works and makes the timer inactive.
+    test.ingress(canister_id, "update", unset_timer).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+
+    // We set the timer again for the sake of the following tests.
+    test.ingress(canister_id, "update", set_timer.clone())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    // Failed upgrade does not unset the timer.
     test.upgrade_canister(canister_id, vec![]).unwrap_err();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Successful upgrade unsets the timer.
     test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
+
+    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
@@ -1550,18 +1562,22 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Uninstalling code unsets the timer.
     test.uninstall_code(canister_id).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
 
+    // The timer stays unset after installing code.
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
+
+    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
@@ -1569,24 +1585,29 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Failed reinstall does not unset the timer.
     test.reinstall_canister(canister_id, vec![]).unwrap_err();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Successful reinstall unsets the timer.
     test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::Inactive
     );
+
+    // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Changing canister settings does not unset the timer.
     test.canister_update_allocations_settings(canister_id, None, None)
         .unwrap();
     assert_eq!(
@@ -1601,18 +1622,21 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Stopping the canister does not unset the timer.
     test.stop_canister(canister_id);
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Starting the canister does not unset the timer.
     test.start_canister(canister_id).unwrap();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // We change the controller to trigger a failed uninstall in the following test.
     test.set_controller(canister_id, canister_id.into())
         .unwrap();
     assert_eq!(
@@ -1620,6 +1644,7 @@ fn ic0_global_timer_deactivated() {
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
+    // Failed uninstall does not unset the timer.
     test.uninstall_code(canister_id).unwrap_err();
     assert_eq!(
         test.canister_state(canister_id).system_state.global_timer,
@@ -1800,7 +1825,7 @@ fn ic0_msg_reject_works() {
 
 #[test]
 fn wasm64_active_data_segments() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -2618,18 +2643,22 @@ fn ic0_call_cycles_add_deducts_cycles() {
     assert_eq!(IngressState::Processing, ingress_state);
     assert_eq!(1, test.xnet_messages().len());
     let mgr = test.cycles_account_manager();
-    let messaging_fee = mgr.xnet_call_performed_fee(test.subnet_size())
+    let messaging_fee = mgr
+        .xnet_call_performed_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
         + mgr.xnet_call_bytes_transmitted_fee(
             test.xnet_messages()[0].payload_size_bytes(),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
         + mgr.xnet_call_bytes_transmitted_fee(
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
         + mgr.execution_cost(
             MAX_NUM_INSTRUCTIONS,
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(canister_id),
         );
     let transferred_cycles = Cycles::new(10_000_000_000);
@@ -2915,7 +2944,7 @@ fn ic0_call_perform_enqueues_request() {
 
 #[test]
 fn wasm64_ic0_call_perform_enqueues_request() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "call_new"
@@ -3434,7 +3463,7 @@ fn ic0_msg_cycles_available_works_for_calls() {
 
 #[test]
 fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_cycles_available128" (func $msg_cycles_available128 (param i64)))
@@ -3462,7 +3491,7 @@ fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
 
 #[test]
 fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_cycles_accept128"
@@ -3845,6 +3874,23 @@ fn declare_memory_beyond_max_size_1() {
             )
             (memory 65537)
         )"#;
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(ErrorCode::CanisterInvalidWasm, err.code());
+}
+
+#[test]
+fn declare_memory_beyond_max_size_64_bit() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_init")
+                (i32.store (i32.const 0) (i32.const 1))
+            )
+            (memory i64 {})
+        )"#,
+        (ic_types::MAX_WASM64_MEMORY_IN_BYTES / WASM_PAGE_SIZE as u64) + 1
+    );
     let err = test.canister_from_wat(wat).unwrap_err();
     assert_eq!(ErrorCode::CanisterInvalidWasm, err.code());
 }
@@ -5757,6 +5803,7 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
                 test.canister_wasm_execution_mode(canister_id)
             ),
     );
@@ -5790,6 +5837,7 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
                 test.canister_wasm_execution_mode(canister_id)
             ),
     );
@@ -5836,7 +5884,7 @@ fn dts_concurrent_subnet_available_change() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong
     );
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0, 0));
+    test.set_available_execution_memory(0);
     while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(canister_id);
     }
@@ -5885,7 +5933,7 @@ fn system_state_apply_change_fails() {
     test.induct_messages();
     test.execute_slice(b_id);
     // No memory available after the first slice.
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0, 0));
+    test.set_available_execution_memory(0);
     while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(b_id);
     }
@@ -7283,6 +7331,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
@@ -7328,6 +7377,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
 
@@ -7429,6 +7479,7 @@ fn stable_memory_grow_reserves_cycles() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -7510,6 +7561,7 @@ fn wasm_memory_grow_reserves_cycles() {
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
                 test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
             )
         );
 
@@ -7589,6 +7641,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
             memory_usage_after - memory_usage_before,
             &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -7719,6 +7772,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
                 CAPACITY / SCALING
             ),
             test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
         )
     );
 
@@ -8589,7 +8643,7 @@ fn ic0_mint_cycles_u64() {
 }
 
 fn check_correct_execution_state(is_wasm64: bool) {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let memory_size = if is_wasm64 { "i64" } else { "" };
     let wat = format!(
         r#"
@@ -8633,6 +8687,7 @@ fn invoke_cost_call() {
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
         WasmExecutionMode::Wasm32,
+        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
@@ -8654,7 +8709,7 @@ fn invoke_cost_create_canister() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .canister_creation_fee(subnet_size);
+        .canister_creation_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
@@ -8679,6 +8734,7 @@ fn invoke_cost_http_request() {
         request_size.into(),
         Some(max_res_bytes.into()),
         subnet_size,
+        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
@@ -8707,7 +8763,7 @@ fn invoke_cost_sign_with_ecdsa() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .ecdsa_signature_fee(subnet_size);
+        .ecdsa_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
@@ -8787,7 +8843,7 @@ fn invoke_cost_sign_with_schnorr() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .schnorr_signature_fee(subnet_size);
+        .schnorr_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
@@ -8865,7 +8921,9 @@ fn invoke_cost_vetkd_derive_key() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost = test.cycles_account_manager().vetkd_fee(subnet_size);
+    let expected_cost = test
+        .cycles_account_manager()
+        .vetkd_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
