@@ -634,6 +634,7 @@ flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
+get_if_addrs = "0.5.3"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
