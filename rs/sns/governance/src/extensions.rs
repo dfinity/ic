@@ -1873,10 +1873,10 @@ mod tests {
             "canister_info",
             Encode!(&CanisterInfoRequest::new(store_canister_id, Some(1))).unwrap(),
             Ok(Encode!(&CanisterInfoResponse::new(
-                0,            // total_num_changes
-                vec![],       // recent_changes
-                Some(vec![]), // module_hash should be empty
-                vec![],       // controllers
+                0,      // total_num_changes
+                vec![], // recent_changes
+                None,   // module_hash should be empty
+                vec![], // controllers
             ))
             .unwrap()),
         );
@@ -2219,6 +2219,20 @@ mod tests {
                     ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
                 ],
             })
+            .unwrap()),
+        );
+
+        // Mock canister_info response (management canister call)
+        env.set_call_canister_response(
+            CanisterId::ic_00(),
+            "canister_info",
+            Encode!(&CanisterInfoRequest::new(store_canister_id, Some(1))).unwrap(),
+            Ok(Encode!(&CanisterInfoResponse::new(
+                0,      // total_num_changes
+                vec![], // recent_changes
+                None,   // module_hash should be empty
+                vec![], // controllers
+            ))
             .unwrap()),
         );
 
