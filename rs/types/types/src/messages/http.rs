@@ -712,6 +712,21 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub enum CertificateDelegationFormat {
+    /// Delegation with the canister ranges in the `/subnet/{subnet_id}/canister_ranges` path.
+    Flat,
+    /// Delegation with the canister ranges in the `/canister_ranges/{subnet_id}` path.
+    Tree,
+    /// Delegation with the canister ranges pruned out.
+    Pruned,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct CertificateDelegationMetadata {
+    pub format: CertificateDelegationFormat,
+}
+
 /// A `CertificateDelegation` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CertificateDelegation {

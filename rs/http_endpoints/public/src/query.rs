@@ -18,7 +18,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
     crypto::BasicSigner,
-    execution_environment::{QueryExecutionError, QueryExecutionService},
+    execution_environment::{QueryExecutionError, QueryExecutionInput, QueryExecutionService},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -218,9 +218,14 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
-    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
+    let delegation_from_nns =
+        nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat);
+    let query_execution_input = QueryExecutionInput {
+        query: user_query.clone(),
+        certificate_delegation_with_metadata: delegation_from_nns,
+    };
     let query_execution_response = query_execution_service
-        .oneshot((user_query.clone(), delegation_from_nns))
+        .oneshot(query_execution_input)
         .await
         .unwrap();
 
