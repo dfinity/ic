@@ -239,7 +239,7 @@ pub(crate) async fn query(
     let delegation_from_nns = match version {
         Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
         Version::V3 => {
-            nns_delegation_reader.get_delegation(CanisterRangesFilter::Tree(canister_id))
+            nns_delegation_reader.get_delegation(CanisterRangesFilter::Tree(effective_canister_id))
         }
     };
     let query_execution_response = query_execution_service

@@ -408,7 +408,7 @@ fn call_v4_management_canister_returns_correct_delegation(env: TestEnv) {
             .delegation
             .expect("Should have an NNS delegation attached"),
         subnet.subnet_id,
-        None,
+        Some(CanisterRangesFormat::Tree),
     );
 }
 
