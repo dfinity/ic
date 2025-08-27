@@ -1481,8 +1481,33 @@ fn test_icrc3_get_blocks() {
         .map(|BlockWithId { id, block }| (id, block))
         .collect::<BTreeMap<_, _>>();
 
+    let expected_num_blocks = |ranges: &Vec<(u64, u64)>| {
+        let mut count = 0;
+        for (start, length) in ranges {
+            let start = *start;
+            let length = *length;
+            if start >= expected_blocks_by_id.len() as u64 {
+                continue;
+            }
+            let end = (start + length).min(expected_blocks_by_id.len() as u64);
+            count += end - start;
+        }
+        count as usize
+    };
+
     let check_icrc3_get_blocks = |ranges: Vec<(u64, u64)>| {
-        for (pos, BlockWithId { id, block }) in get_all_blocks(ranges).into_iter().enumerate() {
+        let expected_block_count = expected_num_blocks(&ranges);
+        let all_blocks = get_all_blocks(ranges.clone());
+        assert_eq!(
+            expected_block_count,
+            all_blocks.len(),
+            "Expected {} blocks but got {} blocks, total num blocks: {}, ranges: {:?}",
+            expected_block_count,
+            all_blocks.len(),
+            expected_blocks_by_id.len(),
+            &ranges
+        );
+        for (pos, BlockWithId { id, block }) in all_blocks.into_iter().enumerate() {
             let expected_block = match expected_blocks_by_id.get(&id) {
                 None => panic!("Got block with id {id} at position {pos} which doesn't exist"),
                 Some(expected_block) => expected_block,

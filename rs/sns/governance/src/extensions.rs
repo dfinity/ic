@@ -16,19 +16,23 @@ use crate::{
     storage::{cache_registered_extension, get_registered_extension_from_cache},
     types::{Environment, Wasm},
 };
-use candid::{Decode, Encode, Nat};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat};
 use candid_utils::printing;
 use futures::future::BoxFuture;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
+use ic_nervous_system_common::{
+    ledger::compute_distribution_subaccount_bytes, NANO_SECONDS_PER_SECOND, ONE_HOUR_SECONDS,
+};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, REGISTRY_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use serde::Serialize;
 use sns_treasury_manager::{
     Allowance, Asset, DepositRequest, TreasuryManagerArg, TreasuryManagerInit, WithdrawRequest,
 };
@@ -444,7 +448,7 @@ impl ValidatedRegisterExtension {
                     })?;
 
                 governance
-                    .deposit_treasury_manager(
+                    .approve_treasury_manager(
                         extension_canister_id,
                         treasury_allocation_sns_e8s,
                         treasury_allocation_icp_e8s,
@@ -591,27 +595,27 @@ impl Governance {
         Ok(())
     }
 
-    pub async fn deposit_treasury_manager(
+    async fn approve_treasury_manager(
         &self,
         treasury_manager_canister_id: CanisterId,
         sns_amount_e8s: u64,
         icp_amount_e8s: u64,
     ) -> Result<(), GovernanceError> {
-        let treasury_sns_subaccount = self.sns_treasury_subaccount();
-        let treasury_icp_subaccount = self.icp_treasury_subaccount();
-
         let to = Account {
             owner: treasury_manager_canister_id.get().0,
             subaccount: None,
         };
 
+        let expiry_time_sec = self.env.now().saturating_add(ONE_HOUR_SECONDS);
+        let expiry_time_nsec = expiry_time_sec.saturating_mul(NANO_SECONDS_PER_SECOND);
+
         self.ledger
-            .transfer_funds(
-                sns_amount_e8s,
-                self.transaction_fee_e8s_or_panic(),
-                treasury_sns_subaccount,
+            .icrc2_approve(
                 to,
-                0,
+                sns_amount_e8s.saturating_sub(self.transaction_fee_e8s_or_panic()),
+                Some(expiry_time_nsec),
+                self.transaction_fee_e8s_or_panic(),
+                self.sns_treasury_subaccount(),
             )
             .await
             .map(|_| ())
@@ -623,19 +627,19 @@ impl Governance {
             })?;
 
         self.nns_ledger
-            .transfer_funds(
-                icp_amount_e8s,
-                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
-                treasury_icp_subaccount,
+            .icrc2_approve(
                 to,
-                0,
+                icp_amount_e8s.saturating_sub(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
+                Some(expiry_time_nsec),
+                icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
+                self.icp_treasury_subaccount(),
             )
             .await
             .map(|_| ())
             .map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error making ICP treasury transfer: {}", e),
+                    format!("Error making ICP Token treasury transfer: {}", e),
                 )
             })?;
 
@@ -909,60 +913,61 @@ fn construct_treasury_manager_withdraw_payload(_value: Precise) -> Result<Vec<u8
 pub async fn validate_register_extension(
     governance: &Governance,
     register_extension: RegisterExtension,
-) -> Result<ValidatedRegisterExtension, GovernanceError> {
+) -> Result<ValidatedRegisterExtension, String> {
     let RegisterExtension {
         chunked_canister_wasm,
         extension_init,
     } = register_extension;
 
     // Phase I. Validate all local properties.
-    let (spec, wasm, extension_canister_id, init) = (async {
-        let Some(ChunkedCanisterWasm {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        }) = chunked_canister_wasm
-        else {
-            return Err("chunked_canister_wasm is required".to_string());
-        };
+    let Some(ChunkedCanisterWasm {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    }) = chunked_canister_wasm
+    else {
+        return Err("chunked_canister_wasm is required".to_string());
+    };
 
-        let Some(store_canister_id) = store_canister_id else {
-            return Err("chunked_canister_wasm.store_canister_id is required".to_string());
-        };
+    let Some(store_canister_id) = store_canister_id else {
+        return Err("chunked_canister_wasm.store_canister_id is required".to_string());
+    };
 
-        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
-            .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
+    let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+        .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
 
-        // Use the store canister to install the extension itself.
-        let extension_canister_id = store_canister_id;
+    // Use the store canister to install the extension itself.
+    let extension_canister_id = store_canister_id;
 
-        let spec = validate_extension_wasm(&wasm_module_hash)
-            .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+    let spec = validate_extension_wasm(&wasm_module_hash)
+        .map_err(|err| format!("Invalid extension wasm: {}", err))?;
 
-        let wasm = Wasm::Chunked {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        };
+    let wasm = Wasm::Chunked {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    };
 
-        let Some(init) = extension_init else {
-            return Err("RegisterExtension.extension_init is required".to_string());
-        };
+    let Some(init) = extension_init else {
+        return Err("RegisterExtension.extension_init is required".to_string());
+    };
 
-        let init = spec
-            .validate_init_arg(governance, init)
-            .await
-            .map_err(|err| format!("Invalid init argument: {}", err))?;
+    let init = spec
+        .validate_init_arg(governance, init)
+        .await
+        .map_err(|err| format!("Invalid init argument: {}", err))?;
 
-        Ok::<_, String>((spec, wasm, extension_canister_id, init))
-    })
-    .await
-    .map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!("Invalid RegisterExtension: {:?}", err),
-        )
-    })?;
+    if spec.supports_extension_type(ExtensionType::TreasuryManager) {
+        // We validate that the canister is running on a fiduciary subnet.
+        let subnet_type =
+            get_subnet_type_canister_is_running_on(&*governance.env, extension_canister_id).await;
+
+        if subnet_type != Some("fiduciary".to_string()) {
+            return Err(
+                "TreasuryManager extensions must be installed on a fiduciary subnet.".to_string(),
+            );
+        }
+    }
 
     Ok(ValidatedRegisterExtension {
         wasm,
@@ -970,6 +975,110 @@ pub async fn validate_register_extension(
         spec,
         init,
     })
+}
+
+// Copied from Registry canister, to avoid import for just one type.
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+pub struct GetSubnetForCanisterRequest {
+    pub principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+pub struct SubnetForCanister {
+    pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+
+async fn get_subnet_for_canister(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<SubnetId, String> {
+    let request = GetSubnetForCanisterRequest {
+        principal: Some(canister_id.get()),
+    };
+
+    let payload = Encode!(&request)
+        .map_err(|e| format!("Failed to encode GetSubnetForCanisterRequest: {}", e))?;
+
+    let response_blob = env
+        .call_canister(REGISTRY_CANISTER_ID, "get_subnet_for_canister", payload)
+        .await
+        .map_err(|(code, err)| {
+            format!(
+                "Registry.get_subnet_for_canister failed with code {:?}: {}",
+                code, err
+            )
+        })?;
+
+    let response = Decode!(&response_blob, Result<SubnetForCanister, String>)
+        .map_err(|e| format!("Failed to decode get_subnet_for_canister response: {}", e))?
+        .map_err(|e| format!("Registry.get_subnet_for_canister returned error: {}", e))?;
+
+    let subnet_id = response
+        .subnet_id
+        .ok_or("Registry response missing subnet_id".to_string())?;
+
+    Ok(SubnetId::from(subnet_id))
+}
+
+// Type from CMC (copied to avoid unnecessary import)
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct SubnetTypesToSubnetsResponse {
+    pub data: Vec<(String, Vec<SubnetId>)>,
+}
+
+async fn get_subnet_types_to_subnets(
+    env: &dyn Environment,
+) -> Result<SubnetTypesToSubnetsResponse, String> {
+    let payload = Encode!(&()).map_err(|e| format!("Failed to encode empty request: {}", e))?;
+
+    let response_blob = env
+        .call_canister(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            payload,
+        )
+        .await
+        .map_err(|(code, err)| {
+            format!(
+                "CMC.get_subnet_types_to_subnets failed with code {:?}: {}",
+                code, err
+            )
+        })?;
+
+    let response = Decode!(&response_blob, SubnetTypesToSubnetsResponse).map_err(|e| {
+        format!(
+            "Failed to decode get_subnet_types_to_subnets response: {}",
+            e
+        )
+    })?;
+
+    Ok(response)
+}
+
+async fn get_subnet_type_canister_is_running_on(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Option<String> {
+    // Get the subnet ID for the current canister
+    let subnet_id = match get_subnet_for_canister(env, canister_id).await {
+        Ok(id) => id,
+        Err(_) => return None,
+    };
+
+    // Get the mapping of subnet types to subnets
+    let subnet_types_response = match get_subnet_types_to_subnets(env).await {
+        Ok(response) => response,
+        Err(_) => return None,
+    };
+
+    // Look through the mapping to find which subnet type contains our subnet ID
+    for (subnet_type, subnet_ids) in subnet_types_response.data {
+        if subnet_ids.contains(&subnet_id) {
+            return Some(subnet_type);
+        }
+    }
+
+    None
 }
 
 async fn get_extension_spec_and_update_cache(
@@ -1111,15 +1220,6 @@ async fn execute_treasury_manager_deposit(
         original,
     } = arg;
 
-    // 1. Transfer funds from treasury to treasury manager
-    governance
-        .deposit_treasury_manager(
-            extension_canister_id,
-            treasury_allocation_sns_e8s,
-            treasury_allocation_icp_e8s,
-        )
-        .await?;
-
     let context = governance.treasury_manager_deposit_context().await?;
     let arg_blob =
         construct_treasury_manager_deposit_payload(context, original).map_err(|err| {
@@ -1131,6 +1231,15 @@ async fn execute_treasury_manager_deposit(
                 ),
             )
         })?;
+
+    // 1. Transfer funds from treasury to treasury manager
+    governance
+        .approve_treasury_manager(
+            extension_canister_id,
+            treasury_allocation_sns_e8s,
+            treasury_allocation_icp_e8s,
+        )
+        .await?;
 
     // 2. Call deposit on treasury manager
     let balances = governance
@@ -1642,6 +1751,179 @@ mod tests {
             .contains("does not have an operation named invalid_operation"));
     }
 
+    /// Helper function to create a valid RegisterExtension payload for tests
+    fn valid_register_extension_payload(store_canister_id: CanisterId) -> RegisterExtension {
+        RegisterExtension {
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![
+                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0,
+                ], // Use whitelisted hash from other tests
+                store_canister_id: Some(store_canister_id.get()),
+                chunk_hashes_list: vec![], // Can be empty for tests
+            }),
+            extension_init: Some(ExtensionInit {
+                value: Some(Precise {
+                    value: Some(precise::Value::Map(PreciseMap {
+                        map: btreemap! {
+                            "treasury_allocation_sns_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(1000000))
+                            },
+                            "treasury_allocation_icp_e8s".to_string() => Precise {
+                                value: Some(precise::Value::Nat(2000000))
+                            },
+                        },
+                    })),
+                }),
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_fiduciary_subnet_success() {
+        // Set up mock environment for successful fiduciary subnet validation
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(3000); // This becomes extension_canister_id
+
+        // Mock get_subnet_for_canister response (registry call)
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(100));
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Ok(Encode!(&Ok::<SubnetForCanister, String>(SubnetForCanister {
+                subnet_id: Some(subnet_id.get()),
+            }))
+            .unwrap()),
+        );
+
+        // Mock get_subnet_types_to_subnets response (CMC call)
+        env.set_call_canister_response(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            Encode!(&()).unwrap(),
+            Ok(Encode!(&SubnetTypesToSubnetsResponse {
+                data: vec![
+                    (
+                        "european".to_string(),
+                        vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
+                    ),
+                    ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
+                ],
+            })
+            .unwrap()),
+        );
+
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
+
+        // Create a valid RegisterExtension request for TreasuryManager
+        let register_extension = valid_register_extension_payload(store_canister_id);
+
+        // Should succeed because extension canister is on fiduciary subnet
+        let result = validate_register_extension(&governance, register_extension).await;
+        assert!(
+            result.is_ok(),
+            "Expected success but got error: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_non_fiduciary_subnet_failure() {
+        // Set up mock environment for non-fiduciary subnet (should fail)
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(3000); // This becomes extension_canister_id
+
+        // Mock get_subnet_for_canister response (registry call)
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(100));
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Ok(Encode!(&Ok::<SubnetForCanister, String>(SubnetForCanister {
+                subnet_id: Some(subnet_id.get()),
+            }))
+            .unwrap()),
+        );
+
+        // Mock get_subnet_types_to_subnets response (CMC call) - subnet is NOT fiduciary
+        env.set_call_canister_response(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            Encode!(&()).unwrap(),
+            Ok(Encode!(&SubnetTypesToSubnetsResponse {
+                data: vec![
+                    ("european".to_string(), vec![subnet_id]), // Our subnet is application, not fiduciary
+                    (
+                        "fiduciary".to_string(),
+                        vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
+                    ),
+                ],
+            })
+            .unwrap()),
+        );
+
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
+
+        // Create a valid RegisterExtension request for TreasuryManager
+        let register_extension = valid_register_extension_payload(store_canister_id);
+
+        // Should fail because extension canister is NOT on fiduciary subnet
+        let result = validate_register_extension(&governance, register_extension).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("TreasuryManager extensions must be installed on a fiduciary subnet"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_register_extension_subnet_lookup_failure() {
+        // Set up mock environment where subnet lookup fails
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(3000); // This becomes extension_canister_id
+
+        // Mock get_subnet_for_canister response (registry call) - return error
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Err((Some(999), "Registry lookup failed".to_string())),
+        );
+
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
+
+        // Create a valid RegisterExtension request for TreasuryManager
+        let register_extension = valid_register_extension_payload(store_canister_id);
+
+        // Should fail because subnet lookup failed
+        let result = validate_register_extension(&governance, register_extension).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("TreasuryManager extensions must be installed on a fiduciary subnet"));
+    }
+
     #[tokio::test]
     async fn test_validate_deposit_operation() {
         // Use setup that configures mock ledgers to return balances and root responses
@@ -1757,26 +2039,7 @@ mod tests {
         let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
 
         fn valid_register_extension() -> RegisterExtension {
-            RegisterExtension {
-                chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                    wasm_module_hash: vec![
-                        1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, 0, 0, 0, 0,
-                    ],
-                    store_canister_id: Some(CanisterId::from_u64(10000).get()),
-                    chunk_hashes_list: vec![],
-                }),
-                extension_init: Some(ExtensionInit {
-                    value: Some(Precise {
-                        value: Some(precise::Value::Map(PreciseMap {
-                            map: btreemap! {
-                                "treasury_allocation_sns_e8s".to_string() => Precise { value: Some(precise::Value::Nat(1000000)) },
-                                "treasury_allocation_icp_e8s".to_string() => Precise { value: Some(precise::Value::Nat(2000000)) },
-                            },
-                        })),
-                    }),
-                }),
-            }
+            valid_register_extension_payload(CanisterId::from_u64(10000))
         }
 
         // Test missing chunked_canister_wasm
@@ -1788,13 +2051,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_wasm)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"chunked_canister_wasm is required\""
-            )
-        );
+        assert_eq!(err, "chunked_canister_wasm is required");
 
         // Test missing store_canister_id
         let missing_store_id = {
@@ -1809,13 +2066,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_store_id)
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"chunked_canister_wasm.store_canister_id is required\""
-            )
-        );
+        assert_eq!(err, "chunked_canister_wasm.store_canister_id is required");
 
         // Test invalid store_canister_id (not a valid principal)
         let invalid_store_id = {
@@ -1830,7 +2081,7 @@ mod tests {
         let err = validate_register_extension(&governance, invalid_store_id)
             .await
             .unwrap_err();
-        assert!(err.error_message.contains("invalid principal id"));
+        assert!(err.contains("Invalid store_canister_id"));
 
         // Test invalid wasm module hash length
         let invalid_hash_length = {
@@ -1847,10 +2098,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             err,
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Invalid RegisterExtension: \"Invalid extension wasm: Invalid wasm module hash length: expected 32 bytes, got 16\""
-            )
+            "Invalid extension wasm: Invalid wasm module hash length: expected 32 bytes, got 16"
         );
 
         // Test missing extension_init
@@ -1862,9 +2110,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("RegisterExtension.extension_init is required"));
+        assert!(err.contains("RegisterExtension.extension_init is required"));
 
         // Test wasm not in whitelist (in non-test mode this would fail)
         // Since we're in test mode, this will succeed, so we can't test the whitelist rejection here
@@ -1875,19 +2121,54 @@ mod tests {
     async fn test_validate_register_extension_treasury_manager_init() {
         // Test that validate_register_extension (init path) validates treasury manager init
         // the same way as validate_deposit_operation validates deposits
-        let governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Set up environment mocks for fiduciary subnet validation (required for treasury manager)
+        let mut env = NativeEnvironment::new(Some(CanisterId::from_u64(1000)));
+        let store_canister_id = CanisterId::from_u64(2000); // Same as used in mk_register_extension below
+
+        // Mock get_subnet_for_canister response (registry call)
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(100));
+        env.set_call_canister_response(
+            REGISTRY_CANISTER_ID,
+            "get_subnet_for_canister",
+            Encode!(&GetSubnetForCanisterRequest {
+                principal: Some(store_canister_id.get()),
+            })
+            .unwrap(),
+            Ok(Encode!(&Ok::<SubnetForCanister, String>(SubnetForCanister {
+                subnet_id: Some(subnet_id.get()),
+            }))
+            .unwrap()),
+        );
+
+        // Mock get_subnet_types_to_subnets response (CMC call) - mark as fiduciary
+        env.set_call_canister_response(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_subnet_types_to_subnets",
+            Encode!(&()).unwrap(),
+            Ok(Encode!(&SubnetTypesToSubnetsResponse {
+                data: vec![
+                    (
+                        "european".to_string(),
+                        vec![SubnetId::from(PrincipalId::new_user_test_id(101))]
+                    ),
+                    ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
+                ],
+            })
+            .unwrap()),
+        );
+
+        // Start with properly configured ledger balances
+        let mut governance = setup_governance_with_treasury_balances(100_000_000, 200_000_000);
+
+        // Replace the environment with our custom mock for subnet validation
+        governance.env = Box::new(env);
 
         // Build a helper to invoke validate_register_extension with a given precise value
-        let mk_register_extension = |value: Option<Precise>| RegisterExtension {
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: vec![
-                    1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ],
-                store_canister_id: Some(CanisterId::from_u64(2000).get()),
-                chunk_hashes_list: vec![],
-            }),
-            extension_init: Some(ExtensionInit { value }),
+        let mk_register_extension = |value: Option<Precise>| {
+            let mut extension = valid_register_extension_payload(CanisterId::from_u64(2000));
+            extension.extension_init = Some(ExtensionInit { value });
+            extension
         };
 
         // Success case: valid arguments should succeed
@@ -1917,9 +2198,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_sns_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+        assert!(err.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Structural validation failure: missing ICP allocation
         let missing_icp_init = mk_register_extension(Some(Precise {
@@ -1932,9 +2211,7 @@ mod tests {
         let err = validate_register_extension(&governance, missing_icp_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("treasury_allocation_icp_e8s must be a Nat value"));
+        assert!(err.contains("treasury_allocation_icp_e8s must be a Nat value"));
 
         // Structural validation failure: wrong type
         let wrong_type_init = mk_register_extension(Some(Precise {
@@ -1948,18 +2225,14 @@ mod tests {
         let err = validate_register_extension(&governance, wrong_type_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("treasury_allocation_sns_e8s must be a Nat value"));
+        assert!(err.contains("treasury_allocation_sns_e8s must be a Nat value"));
 
         // Structural validation failure: no arguments
         let no_args_init = mk_register_extension(None);
         let err = validate_register_extension(&governance, no_args_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("Deposit operation arguments must be provided"));
+        assert!(err.contains("Deposit operation arguments must be provided"));
 
         // Structural validation failure: not a map
         let not_map_init = mk_register_extension(Some(Precise {
@@ -1968,9 +2241,7 @@ mod tests {
         let err = validate_register_extension(&governance, not_map_init)
             .await
             .unwrap_err();
-        assert!(err
-            .error_message
-            .contains("Deposit operation arguments must be a PreciseMap"));
+        assert!(err.contains("Deposit operation arguments must be a PreciseMap"));
     }
 
     #[tokio::test]

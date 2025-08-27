@@ -213,6 +213,7 @@ members = [
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
     "rs/ledger_suite/icrc1/test_utils",
+    "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
     "rs/ledger_suite/icrc1/tokens_u256",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
@@ -729,6 +730,7 @@ p256 = { version = "0.13.2", default-features = false, features = [
     "pem",
     "pkcs8",
 ] }
+p384 = "0.13"
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
@@ -750,6 +752,7 @@ proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
+ring = { version = "^0.17.7", features = ["std"] }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
@@ -760,9 +763,11 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
+raw-cpuid = "11.5"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
+serde_regex = "1.1.0"
 reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
@@ -774,9 +779,9 @@ reqwest = { version = "0.12.15", default-features = false, features = [
     "stream",
 ] }
 rolling-file = "0.2.0"
-rsa = { version = "0.9.6", features = ["sha2"] }
+rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
-rust-ini = "0.21.2"
+rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",

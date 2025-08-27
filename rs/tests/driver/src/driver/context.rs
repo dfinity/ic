@@ -2,6 +2,7 @@
 
 use crate::driver::test_env::TestEnv;
 use anyhow::{bail, Context, Result};
+use regex::Regex;
 use slog::Logger;
 use std::{
     fs,
@@ -25,6 +26,7 @@ pub struct GroupContext {
     pub group_base_name: String,
     pub k8s: bool,
     pub logs_enabled: bool,
+    pub exclude_logs: Vec<Regex>,
 }
 
 impl GroupContext {
@@ -42,6 +44,7 @@ impl GroupContext {
         group_base_name: String,
         k8s: bool,
         logs_enabled: bool,
+        exclude_logs: Vec<Regex>,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
         let sock_id = subproc_info.map(|t| t.1).unwrap_or_default();
@@ -67,6 +70,7 @@ impl GroupContext {
             group_base_name,
             k8s,
             logs_enabled,
+            exclude_logs,
         })
     }
 

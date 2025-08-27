@@ -32,6 +32,13 @@
 //    that registers a Treasury Manager extension. However, anyone can deploy a ledger canister
 //    and remain its controller; as a rule of thumb, such ledgers should not be trusted by DAOs.
 
+// Known Security Risks:
+// ====================
+// Some liquidity pools do not implement slippage protection
+// for deposits. In other words, the price ratio at the time
+// of execution may differ from the ratio at the time the proposal was
+// approved.
+
 // Part O. Common types
 // ====================
 

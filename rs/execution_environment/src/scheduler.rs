@@ -487,7 +487,8 @@ impl SchedulerImpl {
             }
 
             // Update subnet available memory before taking out the canisters.
-            round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
+            round_limits.subnet_available_memory =
+                self.exec_env.scaled_subnet_available_memory(&state);
             let mut canisters = state.take_canister_states();
             round_schedule.charge_idle_canisters(
                 &mut canisters,
@@ -715,18 +716,8 @@ impl SchedulerImpl {
             .map(|_| Default::default())
             .collect();
 
-        // Distribute subnet available memory equally between the threads.
-        let round_limits_per_thread = RoundLimits {
-            instructions: round_limits.instructions,
-            subnet_available_memory: (round_limits.subnet_available_memory
-                / self.config.scheduler_cores as i64),
-            // This is a soft cap, it is unnecessary to strictly divide the pool among
-            // the threads. If it is exceeded, canisters can still rely on their guaranteed
-            // callback quota.
-            subnet_available_callbacks: round_limits.subnet_available_callbacks,
-            compute_allocation_used: round_limits.compute_allocation_used,
-        };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
+        let round_limits_per_thread = round_limits.clone();
         thread_pool.scoped(|scope| {
             // Zip together the input and the output of each thread.
             // The input is a vector of canisters.
@@ -1355,7 +1346,7 @@ impl Scheduler for SchedulerImpl {
                 subnet_instructions: as_round_instructions(
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
-                subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }

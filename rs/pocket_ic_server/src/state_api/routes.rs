@@ -37,9 +37,9 @@ use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InitialTime, InstanceConfig, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
-    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
+    HttpGatewayDetails, InitialTime, InstanceConfig, MockCanisterHttpResponse, NonmainnetFeatures,
+    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
+    RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
     RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs, Topology,
 };
 use pocket_ic::RejectResponse;
@@ -1324,6 +1324,7 @@ pub async fn create_instance(
         Some(InitialTime::AutoProgress(config)) => Some(config),
         Some(InitialTime::Timestamp(_)) | None => None,
     };
+    let auto_progress_enabled = auto_progress.is_some();
 
     match api_state
         .add_instance(
@@ -1333,12 +1334,15 @@ pub async fn create_instance(
                     seed,
                     subnet_configs,
                     instance_config.state_dir,
-                    instance_config.nonmainnet_features,
+                    instance_config
+                        .nonmainnet_features
+                        .unwrap_or(NonmainnetFeatures::default()),
                     log_level,
                     instance_config.bitcoind_addr,
                     instance_config.icp_features,
                     instance_config.allow_incomplete_state,
                     initial_time,
+                    auto_progress_enabled,
                 )
             },
             auto_progress,

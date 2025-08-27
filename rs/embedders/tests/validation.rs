@@ -1391,16 +1391,8 @@ fn wasm_with_multiple_code_sections_is_invalid() {
 #[test]
 fn test_wasm64_initial_wasm_memory_size_validation() {
     use crate::WasmValidationError::InitialWasm64MemoryTooLarge;
-    use ic_config::embedders::FeatureFlags;
-    use ic_config::flag_status::FlagStatus;
 
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            wasm64: FlagStatus::Enabled,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let embedders_config = EmbeddersConfig::default();
     let allowed_wasm_memory_size_in_pages =
         embedders_config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let declared_wasm_memory_size_in_pages = allowed_wasm_memory_size_in_pages + 10;
@@ -1423,16 +1415,7 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
 
 #[test]
 fn test_validate_table64() {
-    use ic_config::embedders::FeatureFlags;
-    use ic_config::flag_status::FlagStatus;
-
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            wasm64: FlagStatus::Enabled,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let embedders_config = EmbeddersConfig::default();
 
     let wasm = wat2wasm(
         r#"(module

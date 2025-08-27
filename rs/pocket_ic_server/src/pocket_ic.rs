@@ -1,3 +1,7 @@
+use crate::external_canister_types::{
+    CaptchaConfig, CaptchaTrigger, InternetIdentityInit, OpenIdConfig, RateLimitConfig,
+    StaticCaptchaTrigger,
+};
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
@@ -59,8 +63,9 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
@@ -80,6 +85,7 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
@@ -102,9 +108,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpFeatures, MockCanisterHttpResponse,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
-    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
+    MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterId,
+    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
+    TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -158,6 +165,8 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -519,11 +528,12 @@ struct PocketIcSubnets {
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
-    nonmainnet_features: bool,
+    nonmainnet_features: NonmainnetFeatures,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
+    auto_progress_enabled: bool,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
@@ -537,18 +547,54 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        nonmainnet_features: bool,
+        nonmainnet_features: &NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        let mut hypervisor_config = if nonmainnet_features {
-            crate::nonmainnet_features::hypervisor_config(true)
+        // using `let NonmainnetFeatures { }` with explicit field names
+        // to force an update after adding a new field to `NonmainnetFeatures`
+        let NonmainnetFeatures {
+            enable_beta_features,
+            disable_canister_backtrace,
+            disable_function_name_length_limits,
+            disable_canister_execution_rate_limiting,
+        } = nonmainnet_features;
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
+            crate::beta_features::hypervisor_config()
         } else {
             execution_environment::Config::default()
         };
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_backtrace {
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .canister_backtrace = FlagStatus::Disabled;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_function_name_length_limits {
+            // the maximum size of a canister WASM is much less than 1GB
+            // and thus the following limits effectively disable all limits
+            hypervisor_config
+                .embedders_config
+                .max_number_exported_functions = 1_000_000_000;
+            hypervisor_config
+                .embedders_config
+                .max_sum_exported_function_name_lengths = 1_000_000_000;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_execution_rate_limiting {
+            hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+            hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        }
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -560,14 +606,6 @@ impl PocketIcSubnets {
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
-
-            // exported functions limits
-            hypervisor_config
-                .embedders_config
-                .max_number_exported_functions = 100_000;
-            hypervisor_config
-                .embedders_config
-                .max_sum_exported_function_name_lengths = 5_000_000;
         }
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
@@ -598,11 +636,12 @@ impl PocketIcSubnets {
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
+        auto_progress_enabled: bool,
         synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -629,6 +668,7 @@ impl PocketIcSubnets {
             bitcoind_addr,
             icp_features,
             initial_time,
+            auto_progress_enabled,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
         }
@@ -668,8 +708,11 @@ impl PocketIcSubnets {
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
-        let subnet_id = self.routing_table.route(canister_id.get());
-        subnet_id.map(|subnet_id| self.get(subnet_id).unwrap())
+        self.get(SubnetId::from(canister_id.get())).or_else(|| {
+            self.routing_table
+                .lookup_entry(canister_id)
+                .and_then(|(_, subnet_id)| self.get(subnet_id))
+        })
     }
 
     fn time(&self) -> SystemTime {
@@ -721,7 +764,7 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            self.nonmainnet_features,
+            &self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
         );
@@ -750,14 +793,12 @@ impl PocketIcSubnets {
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
             }
 
-            if self.nonmainnet_features {
-                for name in ["key_1", "test_key_1", "dfx_test_key"] {
-                    let key_id = VetKdKeyId {
-                        curve: VetKdCurve::Bls12_381_G2,
-                        name: name.to_string(),
-                    };
-                    subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
-                }
+            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: name.to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
             }
         }
         for chain_key in &subnet_chain_keys {
@@ -899,6 +940,7 @@ impl PocketIcSubnets {
                 cycles_token,
                 nns_governance,
                 sns,
+                ii,
             } = icp_features;
             if registry {
                 self.update_registry();
@@ -917,6 +959,9 @@ impl PocketIcSubnets {
             }
             if sns {
                 self.deploy_sns();
+            }
+            if ii {
+                self.deploy_ii();
             }
         }
 
@@ -1212,6 +1257,17 @@ impl PocketIcSubnets {
             initial_values.insert(
                 AccountIdentifier::from_hex(
                     "2b8fbde99de881f695f279d2a892b1137bfe81a42d7694e064b1be58701e1138",
+                )
+                .unwrap(),
+                Tokens::from_tokens(1_000_000_000).unwrap(),
+            );
+            // The following account is the account of the anonymous principal
+            // from which funds can be transfered to any other account
+            // without hard-coding any fixed identity controlling
+            // one of the above accounts.
+            initial_values.insert(
+                AccountIdentifier::from_hex(
+                    "1c7a48ba6a562aa9eaa2481a9049cdf0433b9738c992d698c31d8abf89cadc79",
                 )
                 .unwrap(),
                 Tokens::from_tokens(1_000_000_000).unwrap(),
@@ -1708,6 +1764,148 @@ impl PocketIcSubnets {
         }
     }
 
+    fn deploy_ii(&self) {
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        if !ii_subnet
+            .state_machine
+            .canister_exists(IDENTITY_CANISTER_ID)
+        {
+            // Create the Internet Identity canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"rdmx6-jaaaa-aaaaa-aaadq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            // Create the Internet Identity canister.
+            // Although the Internet Identity canister is created on a system subnet, it always attaches cycles to canister http outcalls and thus it needs cycles:
+            // - the canister should have enough cycles to never run out of cycles;
+            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
+            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
+            let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+                Some(IDENTITY_CANISTER_ID.get()),
+                Cycles::from(u128::MAX / 2),
+                Some(settings),
+            );
+            assert_eq!(canister_id, IDENTITY_CANISTER_ID);
+
+            // Install the Internet Identity canister.
+            // The initial values have been adapted from the mainnet values obtained by calling
+            // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
+            // record {
+            //   fetch_root_key = null;
+            //   openid_google = opt opt record {
+            //     client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //   };
+            //   is_production = opt true;
+            //   enable_dapps_explorer = opt false;
+            //   assigned_user_number_range = opt record {
+            //     10_000 : nat64;
+            //     7_569_744 : nat64;
+            //   };
+            //   new_flow_origins = opt vec { "https://id.ai" };
+            //   archive_config = opt record {
+            //     polling_interval_ns = 15_000_000_000 : nat64;
+            //     entries_buffer_limit = 10_000 : nat64;
+            //     module_hash = blob "\17\4d\7e\2c\3d\4d\3b\0f\34\61\63\4d\49\ea\c2\85\55\5a\97\48\de\7c\c7\a8\53\cf\ea\00\41\52\a1\97";
+            //     entries_fetch_limit = 1_000 : nat16;
+            //   };
+            //   canister_creation_cycles_cost = opt (0 : nat64);
+            //   analytics_config = opt opt variant {
+            //     Plausible = record {
+            //       domain = opt "identity.internetcomputer.org";
+            //       track_localhost = null;
+            //       hash_mode = null;
+            //       api_host = null;
+            //     }
+            //   };
+            //   related_origins = opt vec {
+            //     "https://id.ai";
+            //     "https://identity.ic0.app";
+            //     "https://identity.internetcomputer.org";
+            //     "https://identity.icp0.io";
+            //   };
+            //   feature_flag_continue_from_another_device = null;
+            //   captcha_config = opt record {
+            //     max_unsolved_captchas = 500 : nat64;
+            //     captcha_trigger = variant { Static = variant { CaptchaDisabled } };
+            //   };
+            //   dummy_auth = opt null;
+            //   register_rate_limit = opt record {
+            //     max_tokens = 25_000 : nat64;
+            //     time_per_token_ns = 1_000_000_000 : nat64;
+            //   };
+            // },
+
+            // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
+            // and thus we should only provide one if auto progress is enabled
+            // (and canister http outcalls are handled by PocketIC automically).
+            let openid_google = if self.auto_progress_enabled {
+                // We use a different id than in production:
+                // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
+                Some(Some(OpenIdConfig {
+                    client_id:
+                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
+                            .to_string(),
+                }))
+            } else {
+                None
+            };
+            let internet_identity_test_args = Some(InternetIdentityInit {
+                assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
+                archive_config: None,             // DIFFERENT FROM ICP MAINNET
+                canister_creation_cycles_cost: Some(0),
+                register_rate_limit: Some(RateLimitConfig {
+                    max_tokens: 25_000,
+                    time_per_token_ns: 1_000_000_000,
+                }),
+                captcha_config: Some(CaptchaConfig {
+                    max_unsolved_captchas: 500,
+                    captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
+                }),
+                related_origins: None,      // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None,     // DIFFERENT FROM ICP MAINNET
+                openid_google,              // DIFFERENT FROM ICP MAINNET
+                analytics_config: None,     // DIFFERENT FROM ICP MAINNET
+                fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
+                enable_dapps_explorer: Some(false),
+                is_production: Some(false), // DIFFERENT FROM ICP MAINNET
+                dummy_auth: Some(None),
+                feature_flag_continue_from_another_device: None,
+            });
+            ii_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
+                    Encode!(&internet_identity_test_args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
     // This function should only be called for ingress messages that complete quickly
     // (within 100 rounds).
     fn execute_ingress_on(
@@ -1840,12 +2038,13 @@ impl PocketIc {
         seed: u64,
         mut subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         allow_incomplete_state: Option<bool>,
         initial_time: Option<Time>,
+        auto_progress_enabled: bool,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
@@ -2088,6 +2287,7 @@ impl PocketIc {
             bitcoind_addr,
             icp_features,
             initial_time,
+            auto_progress_enabled,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
@@ -3020,7 +3220,16 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let delegation = pic
+                    .get_nns_delegation_for_subnet(subnet.get_subnet_id())
+                    .map(|delegation| {
+                        (
+                            delegation,
+                            CertificateDelegationMetadata {
+                                format: CertificateDelegationFormat::Flat,
+                            },
+                        )
+                    });
                 match subnet.query_as_with_delegation(
                     self.0.sender,
                     self.0.canister_id,
@@ -4061,12 +4270,13 @@ mod tests {
                     ..Default::default()
                 },
                 None,
+                NonmainnetFeatures::default(),
+                None,
+                None,
+                None,
+                None,
+                None,
                 false,
-                None,
-                None,
-                None,
-                None,
-                None,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -4077,12 +4287,13 @@ mod tests {
                     ..Default::default()
                 },
                 None,
+                NonmainnetFeatures::default(),
+                None,
+                None,
+                None,
+                None,
+                None,
                 false,
-                None,
-                None,
-                None,
-                None,
-                None,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());

@@ -1358,20 +1358,6 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.30.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1945a5048598e4189e239d3f809b19bdad4845c4b2ba400d304d2dcf26d2c462"
-dependencies = [
- "bech32 0.9.1",
- "bitcoin-private",
- "bitcoin_hashes 0.12.0",
- "hex_lit",
- "secp256k1 0.27.0",
- "serde",
-]
-
-[[package]]
-name = "bitcoin"
 version = "0.32.99"
 source = "git+https://github.com/dfinity/rust-dogecoin?rev=b5125f00d9d1e6c553d83ee54ee9d6203da8e0db#b5125f00d9d1e6c553d83ee54ee9d6203da8e0db"
 dependencies = [
@@ -1404,12 +1390,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b47c4ab7a93edb0c7198c5535ed9b52b63095f4e9b45279c6736cec4b856baf"
 
 [[package]]
-name = "bitcoin-private"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73290177011694f38ec25e165d0387ab7ea749a4b81cd4c80dae5988229f7a57"
-
-[[package]]
 name = "bitcoin-units"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1424,16 +1404,6 @@ name = "bitcoin_hashes"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
-
-[[package]]
-name = "bitcoin_hashes"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
-dependencies = [
- "bitcoin-private",
- "serde",
-]
 
 [[package]]
 name = "bitcoin_hashes"
@@ -1453,7 +1423,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
 dependencies = [
  "bitcoincore-rpc-json",
- "jsonrpc 0.18.0",
+ "jsonrpc",
  "log",
  "serde",
  "serde_json",
@@ -1468,19 +1438,6 @@ dependencies = [
  "bitcoin 0.32.99",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "bitcoind"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee93e3628c679646a9f1cb2e4c55ec10fc3d477a2a8c26dcde4267dfb2e2109a"
-dependencies = [
- "anyhow",
- "core-rpc",
- "log",
- "tempfile",
- "which 4.4.2",
 ]
 
 [[package]]
@@ -2655,6 +2612,7 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "fs_extra",
+ "ic-config",
  "ic-types",
  "ic_sev",
  "macaddr",
@@ -2668,6 +2626,7 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
+ "walkdir",
 ]
 
 [[package]]
@@ -2972,32 +2931,6 @@ name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
-
-[[package]]
-name = "core-rpc"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26d77079e1b71c2778d6e1daf191adadcd4ff5ec3ccad8298a79061d865b235b"
-dependencies = [
- "bitcoin-private",
- "core-rpc-json",
- "jsonrpc 0.13.0",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "core-rpc-json"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "581898ed9a83f31c64731b1d8ca2dfffcfec14edf1635afacd5234cddbde3a41"
-dependencies = [
- "bitcoin 0.30.2",
- "bitcoin-private",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "core2"
@@ -4719,11 +4652,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc",
  "candid",
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-btc-adapter-test-utils",
  "ic-cdk",
  "ic-config",
  "ic-crypto-sha2",
@@ -5401,6 +5334,7 @@ dependencies = [
  "nix 0.24.3",
  "parking_lot",
  "rand 0.8.5",
+ "sev",
  "tempfile",
 ]
 
@@ -6776,8 +6710,6 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.99",
- "bitcoincore-rpc",
- "bitcoind",
  "clap 4.5.27",
  "criterion",
  "futures",
@@ -6843,12 +6775,14 @@ name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.99",
+ "bitcoincore-rpc",
  "flate2",
  "hex",
  "ic-btc-adapter",
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
@@ -8129,7 +8063,6 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic_bls12_381",
  "itertools 0.12.1",
- "lazy_static",
  "pairing",
  "paste",
  "rand 0.8.5",
@@ -8206,7 +8139,6 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-types",
  "ic-types-test-utils",
- "lazy_static",
  "mockall",
  "num_cpus",
  "parking_lot",
@@ -8367,7 +8299,6 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
- "lazy_static",
  "parking_lot",
  "proptest 1.6.0",
  "proptest-derive",
@@ -8403,7 +8334,6 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "k256 0.13.4",
- "lazy_static",
  "num-traits",
  "p256",
  "paste",
@@ -10198,6 +10128,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc3-test-ledger"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-icrc1",
+ "ic-icrc1-ledger",
+ "ic-icrc1-test-utils",
+ "ic-ledger-suite-state-machine-tests",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "icrc-ledger-types",
+ "num-traits",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-identity-hsm"
 version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10964,6 +10913,7 @@ name = "ic-nervous-system-common-test-utils"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "candid",
  "dfn_core",
  "futures",
  "ic-nervous-system-canisters",
@@ -11941,7 +11891,6 @@ dependencies = [
  "async-trait",
  "candid",
  "candid_parser",
- "chrono",
  "futures",
  "futures-util",
  "ic-base-types",
@@ -11957,14 +11906,13 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
+ "ic-node-rewards-canister-protobuf",
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
  "ic-stable-structures 0.6.8",
- "ic-state-machine-tests",
  "ic-types",
- "indexmap 2.10.0",
  "itertools 0.12.1",
  "maplit",
  "mockall",
@@ -11972,7 +11920,6 @@ dependencies = [
  "pretty_assertions",
  "prost 0.13.4",
  "rewards-calculation",
- "serde",
  "serde_json",
  "tokio",
 ]
@@ -11982,7 +11929,22 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk",
+ "ic-node-rewards-canister-protobuf",
+ "rewards-calculation",
+ "serde",
+]
+
+[[package]]
+name = "ic-node-rewards-canister-protobuf"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-management-canister-types",
+ "ic-nervous-system-proto",
+ "ic-stable-structures 0.6.8",
+ "prost 0.13.4",
+ "rewards-calculation",
  "serde",
 ]
 
@@ -13108,7 +13070,6 @@ dependencies = [
  "hex-literal 0.4.1",
  "hmac",
  "k256 0.13.4",
- "lazy_static",
  "num-bigint 0.4.6",
  "pem 1.1.1",
  "rand 0.8.5",
@@ -13127,7 +13088,6 @@ dependencies = [
  "hex",
  "hex-literal 0.4.1",
  "hmac",
- "lazy_static",
  "num-bigint 0.4.6",
  "p256",
  "pem 1.1.1",
@@ -14222,6 +14182,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
+ "serde_regex",
  "serde_yaml",
  "slog",
  "slog-async",
@@ -14558,13 +14519,13 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "bitcoin 0.32.99",
- "bitcoincore-rpc",
  "candid",
  "canister-test",
  "dfn_candid",
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-btc-adapter-test-utils",
  "ic-btc-checker",
  "ic-btc-interface",
  "ic-canister-client",
@@ -15000,7 +14961,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "walrus",
+ "walrus 0.21.3",
 ]
 
 [[package]]
@@ -15390,12 +15351,17 @@ dependencies = [
  "der 0.7.9",
  "hkdf",
  "mockall",
+ "p384",
  "pem 1.1.1",
+ "rand 0.8.5",
+ "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
+ "rsa",
  "sev",
  "sha2 0.10.9",
  "tempfile",
+ "x509-cert",
 ]
 
 [[package]]
@@ -15515,7 +15481,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "candid",
  "ciborium",
@@ -15529,7 +15495,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "async-trait",
  "candid",
@@ -15538,7 +15504,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "candid",
@@ -16174,17 +16140,6 @@ dependencies = [
  "regex",
  "serde_json",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "jsonrpc"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
-dependencies = [
- "base64 0.13.1",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -19075,7 +19030,6 @@ dependencies = [
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
- "lazy_static",
  "reqwest 0.12.15",
  "schemars",
  "serde",
@@ -19109,9 +19063,9 @@ dependencies = [
  "backoff",
  "base64 0.13.1",
  "bitcoin 0.32.99",
- "bitcoincore-rpc",
  "bytes",
  "candid",
+ "candid_parser",
  "clap 4.5.27",
  "ctrlc",
  "cycles-minting-canister",
@@ -19127,6 +19081,7 @@ dependencies = [
  "ic-agent",
  "ic-boundary",
  "ic-btc-adapter",
+ "ic-btc-adapter-test-utils",
  "ic-btc-interface",
  "ic-canister-sandbox-backend-lib",
  "ic-cdk",
@@ -19201,6 +19156,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+ "walrus 0.23.3",
  "wat",
 ]
 
@@ -20311,9 +20267,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "11.3.0"
+version = "11.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6928fa44c097620b706542d428957635951bade7143269085389d42c8a4927e"
+checksum = "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
 dependencies = [
  "bitflags 2.9.0",
 ]
@@ -20765,7 +20721,6 @@ checksum = "a1e211f878258887b3e65dd3c8ff9f530fe109f441a117ee0cdc27f341355032"
 name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
- "candid",
  "chrono",
  "ic-base-types",
  "ic-cdk",
@@ -20776,7 +20731,6 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -21715,10 +21669,7 @@ version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25996b82292a7a57ed3508f052cfff8640d38d32018784acd714758b43da9c8f"
 dependencies = [
- "bitcoin_hashes 0.12.0",
- "rand 0.8.5",
  "secp256k1-sys 0.8.1",
- "serde",
 ]
 
 [[package]]
@@ -23279,6 +23230,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
+ "itertools 0.12.1",
  "serde_json",
  "slog",
  "ssh2",
@@ -24606,9 +24558,25 @@ dependencies = [
  "id-arena",
  "leb128",
  "log",
- "walrus-macro",
+ "walrus-macro 0.19.0",
  "wasm-encoder 0.212.0",
  "wasmparser 0.212.0",
+]
+
+[[package]]
+name = "walrus"
+version = "0.23.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6481311b98508f4bc2d0abbfa5d42172e7a54b4b24d8f15e28b0dc650be0c59f"
+dependencies = [
+ "anyhow",
+ "gimli 0.26.2",
+ "id-arena",
+ "leb128",
+ "log",
+ "walrus-macro 0.22.0",
+ "wasm-encoder 0.214.0",
+ "wasmparser 0.214.0",
 ]
 
 [[package]]
@@ -24621,6 +24589,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "walrus-macro"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "439ad39ff894c43c9649fa724cdde9a6fc50b855d517ef071a93e5df82fe51d3"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -24760,6 +24740,15 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
+version = "0.214.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff694f02a8d7a50b6922b197ae03883fbf18cdb2ae9fbee7b6148456f5f44041"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-encoder"
 version = "0.228.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05d30290541f2d4242a162bbda76b8f2d8b1ac59eab3568ed6f2327d52c9b2c4"
@@ -24806,6 +24795,20 @@ name = "wasmparser"
 version = "0.212.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d28bc49ba1e5c5b61ffa7a2eace10820443c4b7d1c0b144109261d14570fdf8"
+dependencies = [
+ "ahash 0.8.11",
+ "bitflags 2.9.0",
+ "hashbrown 0.14.5",
+ "indexmap 2.10.0",
+ "semver",
+ "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.214.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5309c1090e3e84dad0d382f42064e9933fdaedb87e468cc239f0eabea73ddcb6"
 dependencies = [
  "ahash 0.8.11",
  "bitflags 2.9.0",

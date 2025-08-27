@@ -123,6 +123,10 @@ pub struct ICOSSettings {
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
     /// SEV-SNP.
+    ///
+    /// IMPORTANT: This field only controls whether TEE is enabled in config.
+    /// In GuestOS code, to check if SEV is actually active, use `is_sev_active()` from the `ic_sev` crate,
+    /// which queries the CPU and cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
