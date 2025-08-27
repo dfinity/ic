@@ -640,23 +640,22 @@ pub fn nns_recovery_test(env: TestEnv) {
         secs(10),
     );
 
+    info!(logger, "Ensure the subnet uses the new replica version");
+    let nns_subnet = block_on(new_topology.block_for_newer_registry_version())
+        .expect("Could not obtain updated registry.")
+        .root_subnet();
+    for node in nns_subnet.nodes() {
+        assert_assigned_replica_version(&node, &working_version, env.logger());
+    }
+    let nns_node = nns_subnet.nodes().next().unwrap();
+
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(
         &logger,
-        &dfinity_owned_node.get_public_url(),
+        &nns_node.get_public_url(),
         app_can_id,
         msg
     ));
-
-    info!(logger, "Ensure the subnet uses the new replica version");
-    let final_topology = block_on(new_topology.block_for_newer_registry_version())
-        .expect("Could not obtain updated registry.");
-    let dfinity_owned_node = final_topology
-        .subnets()
-        .flat_map(|s| s.nodes())
-        .find(|n| n.node_id == dfinity_owned_node.node_id)
-        .expect("Could not find upload_node in updated registry.");
-    assert_assigned_replica_version(&dfinity_owned_node, &working_version, env.logger());
 
     info!(
         logger,
@@ -664,14 +663,14 @@ pub fn nns_recovery_test(env: TestEnv) {
     );
     let new_msg = "subnet recovery still works!";
     let new_app_can_id = store_message(
-        &dfinity_owned_node.get_public_url(),
-        dfinity_owned_node.effective_canister_id(),
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
         new_msg,
         &logger,
     );
     assert!(can_read_msg(
         &logger,
-        &dfinity_owned_node.get_public_url(),
+        &nns_node.get_public_url(),
         new_app_can_id,
         new_msg
     ));
