@@ -180,6 +180,7 @@ jobs:
                 fuzz_test
                 fi_tests_nightly
                 nns_tests_nightly
+                pocketic_tests_nightly
             )
 
             # Prepend tags with '-' and join them with commas for Bazel

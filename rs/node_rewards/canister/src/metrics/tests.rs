@@ -1,12 +1,11 @@
 use crate::metrics::{MetricsManager, UnixTsNanos};
-use crate::pb::v1::SubnetMetricsKey;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::SubnetMetricsKey;
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::NodeMetricsDailyRaw;
+use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 

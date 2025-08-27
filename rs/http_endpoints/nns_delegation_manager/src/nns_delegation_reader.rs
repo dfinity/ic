@@ -4,7 +4,10 @@ use ic_crypto_tree_hash::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
-    messages::{Blob, Certificate, CertificateDelegation},
+    messages::{
+        Blob, Certificate, CertificateDelegation, CertificateDelegationFormat,
+        CertificateDelegationMetadata,
+    },
     CanisterId, SubnetId,
 };
 use serde::ser::Serialize;
@@ -55,6 +58,29 @@ impl NNSDelegationReader {
             .borrow()
             .as_ref()
             .map(|builder| builder.build_or_original(canister_ranges_filter, &self.logger))
+    }
+
+    /// Returns the most recent NNS delegation known to the replica together with some metadata.
+    /// Consecutive calls might return different delegations.
+    /// Note: on the NNS subnet this always returns `None`.
+    pub fn get_delegation_with_metadata(
+        &self,
+        canister_ranges_filter: CanisterRangesFilter,
+    ) -> Option<(CertificateDelegation, CertificateDelegationMetadata)> {
+        let metadata = CertificateDelegationMetadata {
+            format: match canister_ranges_filter {
+                CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
+                CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
+                CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
+            },
+        };
+
+        self.receiver.borrow().as_ref().map(|builder| {
+            (
+                builder.build_or_original(canister_ranges_filter, &self.logger),
+                metadata,
+            )
+        })
     }
 
     pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
