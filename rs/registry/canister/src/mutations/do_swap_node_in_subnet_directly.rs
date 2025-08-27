@@ -21,12 +21,16 @@ impl Registry {
     fn swap_nodes_inner(
         &mut self,
         enabled: bool,
-        _payload: SwapNodeInSubnetDirectlyPayload,
+        payload: SwapNodeInSubnetDirectlyPayload,
         _caller: PrincipalId,
     ) -> Result<(), SwapError> {
+        // Check if the feature is enabled on the network.
         if !enabled {
             return Err(SwapError::FeatureDisabled);
         }
+
+        // Check if the payload is valid by itself.
+        payload.validate()?;
 
         //TODO(DRE-547): Check if the feature is allowed on the target subnet and for the caller
 
@@ -91,62 +95,70 @@ impl SwapNodeInSubnetDirectlyPayload {
 
 #[cfg(test)]
 mod tests {
-    mod payload_validation_tests {
-        use ic_types::PrincipalId;
 
-        use crate::mutations::do_swap_node_in_subnet_directly::{
-            SwapError, SwapNodeInSubnetDirectlyPayload,
+    use ic_types::PrincipalId;
+
+    use crate::{
+        mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
+        registry::Registry,
+    };
+
+    fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
+    {
+        vec![
+            (
+                SwapNodeInSubnetDirectlyPayload {
+                    new_node_id: None,
+                    old_node_id: None,
+                },
+                SwapError::MissingInput,
+            ),
+            (
+                SwapNodeInSubnetDirectlyPayload {
+                    new_node_id: Some(PrincipalId::new_node_test_id(1)),
+                    old_node_id: None,
+                },
+                SwapError::MissingInput,
+            ),
+            (
+                SwapNodeInSubnetDirectlyPayload {
+                    new_node_id: None,
+                    old_node_id: Some(PrincipalId::new_user_test_id(2)),
+                },
+                SwapError::MissingInput,
+            ),
+            (
+                SwapNodeInSubnetDirectlyPayload {
+                    new_node_id: Some(PrincipalId::new_node_test_id(1)),
+                    old_node_id: Some(PrincipalId::new_node_test_id(1)),
+                },
+                SwapError::SamePrincipals,
+            ),
+        ]
+    }
+
+    #[test]
+    fn valid_payload() {
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(PrincipalId::new_node_test_id(1)),
+            old_node_id: Some(PrincipalId::new_node_test_id(2)),
         };
 
-        #[test]
-        fn valid_payload() {
-            let payload = SwapNodeInSubnetDirectlyPayload {
-                new_node_id: Some(PrincipalId::new_node_test_id(1)),
-                old_node_id: Some(PrincipalId::new_node_test_id(2)),
-            };
+        assert!(payload.validate().is_ok())
+    }
 
-            assert!(payload.validate().is_ok())
-        }
+    #[test]
+    fn invalid_payloads() {
+        let mut registry = Registry::new();
 
-        #[test]
-        fn invalid_payloads() {
-            for (payload, expected_err) in [
-                (
-                    SwapNodeInSubnetDirectlyPayload {
-                        new_node_id: None,
-                        old_node_id: None,
-                    },
-                    SwapError::MissingInput,
-                ),
-                (
-                    SwapNodeInSubnetDirectlyPayload {
-                        new_node_id: Some(PrincipalId::new_node_test_id(1)),
-                        old_node_id: None,
-                    },
-                    SwapError::MissingInput,
-                ),
-                (
-                    SwapNodeInSubnetDirectlyPayload {
-                        new_node_id: None,
-                        old_node_id: Some(PrincipalId::new_user_test_id(2)),
-                    },
-                    SwapError::MissingInput,
-                ),
-                (
-                    SwapNodeInSubnetDirectlyPayload {
-                        new_node_id: Some(PrincipalId::new_node_test_id(1)),
-                        old_node_id: Some(PrincipalId::new_node_test_id(1)),
-                    },
-                    SwapError::SamePrincipals,
-                ),
-            ] {
-                let output = payload.validate();
-                let expected: Result<(), SwapError> = Err(expected_err);
-                assert_eq!(
-                    output, expected,
-                    "Expected: {expected:?} but found result: {output:?}"
-                );
-            }
+        for (payload, expected_err) in invalid_payloads_with_expected_errors() {
+            let output = registry.swap_nodes_inner(true, payload, PrincipalId::new_user_test_id(1));
+
+            let expected: Result<(), SwapError> = Err(expected_err);
+            assert_eq!(
+                output, expected,
+                "Expected: {expected:?} but found result: {output:?}"
+            );
         }
     }
 }
