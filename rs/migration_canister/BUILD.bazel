@@ -2,30 +2,20 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic_stable_structures_next",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
-ALIASES = {}
-
 rust_canister(
     name = "migration-canister",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_root = "src/lib.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":migration_canister.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic_stable_structures_next",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+    ],
 )
