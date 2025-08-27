@@ -275,8 +275,10 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
         Ok(addr.to_string())
     };
 
-    // Try to get IPv6 address with retries
-    for retry in 0..12 {
+    const MAX_RETRIES: usize = 12;
+    const RETRY_DELAY_SECS: u64 = 10;
+
+    for attempt in 1..=MAX_RETRIES {
         let output = Command::new("ip")
             .args([
                 "-o", "-6", "addr", "show", "up", "primary", "scope", "global", interface,
@@ -288,13 +290,13 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
         match parse_ipv6_address(&output_str) {
             Ok(ipv6_address) => return Ok(ipv6_address),
             Err(e) => {
-                if retry < 11 {
+                if attempt < MAX_RETRIES {
                     eprintln!(
-                        "Retrying {} ... (Failed to parse IPv6 address: {})",
-                        11 - retry,
+                        "Retrying {} more times... (Failed to parse IPv6 address: {})",
+                        MAX_RETRIES - attempt,
                         e
                     );
-                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
                 } else {
                     return Err(e.context("Failed to parse IPv6 address after all retries"));
                 }
