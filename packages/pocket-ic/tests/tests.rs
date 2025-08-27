@@ -15,7 +15,6 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 #[cfg(not(windows))]
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-#[cfg(not(windows))]
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
