@@ -30,9 +30,11 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
+use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
-    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
+    call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
+    SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter::{
     start_server as start_canister_http_server, Config as HttpsOutcallsConfig,
@@ -83,6 +85,7 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
@@ -105,9 +108,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpFeatures, MockCanisterHttpResponse,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
-    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
+    MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterId,
+    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
+    TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -524,7 +528,7 @@ struct PocketIcSubnets {
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
-    nonmainnet_features: bool,
+    nonmainnet_features: NonmainnetFeatures,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
@@ -543,18 +547,54 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        nonmainnet_features: bool,
+        nonmainnet_features: &NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        let mut hypervisor_config = if nonmainnet_features {
-            crate::nonmainnet_features::hypervisor_config(true)
+        // using `let NonmainnetFeatures { }` with explicit field names
+        // to force an update after adding a new field to `NonmainnetFeatures`
+        let NonmainnetFeatures {
+            enable_beta_features,
+            disable_canister_backtrace,
+            disable_function_name_length_limits,
+            disable_canister_execution_rate_limiting,
+        } = nonmainnet_features;
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
+            crate::beta_features::hypervisor_config()
         } else {
             execution_environment::Config::default()
         };
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_backtrace {
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .canister_backtrace = FlagStatus::Disabled;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_function_name_length_limits {
+            // the maximum size of a canister WASM is much less than 1GB
+            // and thus the following limits effectively disable all limits
+            hypervisor_config
+                .embedders_config
+                .max_number_exported_functions = 1_000_000_000;
+            hypervisor_config
+                .embedders_config
+                .max_sum_exported_function_name_lengths = 1_000_000_000;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_execution_rate_limiting {
+            hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+            hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        }
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -566,14 +606,6 @@ impl PocketIcSubnets {
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
-
-            // exported functions limits
-            hypervisor_config
-                .embedders_config
-                .max_number_exported_functions = 100_000;
-            hypervisor_config
-                .embedders_config
-                .max_sum_exported_function_name_lengths = 5_000_000;
         }
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
@@ -604,7 +636,7 @@ impl PocketIcSubnets {
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -732,7 +764,7 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            self.nonmainnet_features,
+            &self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
         );
@@ -761,14 +793,12 @@ impl PocketIcSubnets {
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
             }
 
-            if self.nonmainnet_features {
-                for name in ["key_1", "test_key_1", "dfx_test_key"] {
-                    let key_id = VetKdKeyId {
-                        curve: VetKdCurve::Bls12_381_G2,
-                        name: name.to_string(),
-                    };
-                    subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
-                }
+            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: name.to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
             }
         }
         for chain_key in &subnet_chain_keys {
@@ -1990,14 +2020,6 @@ impl PocketIc {
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_seed,
-                node_ids: self
-                    .subnets
-                    .get(config.subnet_id)
-                    .unwrap()
-                    .nodes
-                    .iter()
-                    .map(|n| n.node_id.get().0.into())
-                    .collect(),
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
             };
@@ -2014,7 +2036,7 @@ impl PocketIc {
         seed: u64,
         mut subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -3196,7 +3218,16 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let delegation = pic
+                    .get_nns_delegation_for_subnet(subnet.get_subnet_id())
+                    .map(|delegation| {
+                        (
+                            delegation,
+                            CertificateDelegationMetadata {
+                                format: CertificateDelegationFormat::Flat,
+                            },
+                        )
+                    });
                 match subnet.query_as_with_delegation(
                     self.0.sender,
                     self.0.canister_id,
@@ -3328,6 +3359,7 @@ impl Operation for StatusRequest {
 pub enum CallRequestVersion {
     V2,
     V3,
+    V4,
 }
 
 pub struct CallRequest {
@@ -3396,8 +3428,8 @@ impl Operation for CallRequest {
                 });
 
                 let svc = match self.version {
-                    CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
-                    CallRequestVersion::V3 => {
+                    CallRequestVersion::V2 => call_async::new_service(ingress_validator),
+                    CallRequestVersion::V3 | CallRequestVersion::V4 => {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                         let builder = delegation.map(|delegation| {
@@ -3412,7 +3444,7 @@ impl Operation for CallRequest {
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
-                        call_v3::new_service(
+                        call_sync::new_service(
                             ingress_validator,
                             subnet.ingress_watcher_handle.clone(),
                             metrics,
@@ -3420,6 +3452,11 @@ impl Operation for CallRequest {
                                 .ingress_message_certificate_timeout_seconds,
                             NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                             subnet.state_manager.clone(),
+                            match self.version {
+                                CallRequestVersion::V2 => unreachable!(),
+                                CallRequestVersion::V3 => call_sync::Version::V3,
+                                CallRequestVersion::V4 => call_sync::Version::V4,
+                            },
                         )
                     }
                 };
@@ -3427,6 +3464,7 @@ impl Operation for CallRequest {
                 let api_version = match self.version {
                     CallRequestVersion::V2 => "v2",
                     CallRequestVersion::V3 => "v3",
+                    CallRequestVersion::V4 => "v4",
                 };
 
                 let request = axum::http::Request::builder()
@@ -3473,6 +3511,7 @@ impl Operation for CallRequest {
 pub struct QueryRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
+    pub version: query::Version,
 }
 
 #[derive(Clone)]
@@ -3523,15 +3562,21 @@ impl Operation for QueryRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
+                    self.version,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
+
+                let version_str = match self.version {
+                    query::Version::V2 => "v2",
+                    query::Version::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/canister/{}/query",
+                        "/api/{version_str}/canister/{}/query",
                         PrincipalId(self.effective_canister_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
@@ -3560,6 +3605,7 @@ impl Operation for QueryRequest {
 pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
+    pub version: read_state::canister::Version,
 }
 
 impl Operation for CanisterReadStateRequest {
@@ -3589,15 +3635,21 @@ impl Operation for CanisterReadStateRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    self.version,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
+
+                let version_str = match self.version {
+                    read_state::canister::Version::V2 => "v2",
+                    read_state::canister::Version::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/canister/{}/read_state",
+                        "/api/{version_str}/canister/{}/read_state",
                         PrincipalId(self.effective_canister_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
@@ -3629,6 +3681,7 @@ impl Operation for CanisterReadStateRequest {
 pub struct SubnetReadStateRequest {
     pub subnet_id: SubnetId,
     pub bytes: Bytes,
+    pub version: read_state::subnet::Version,
 }
 
 impl Operation for SubnetReadStateRequest {
@@ -3651,14 +3704,20 @@ impl Operation for SubnetReadStateRequest {
                 let svc = SubnetReadStateServiceBuilder::builder(
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    self.version,
                 )
                 .build_service();
+
+                let version_str = match self.version {
+                    read_state::subnet::Version::V2 => "v2",
+                    read_state::subnet::Version::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/subnet/{}/read_state",
+                        "/api/{version_str}/subnet/{}/read_state",
                         PrincipalId(self.subnet_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
@@ -4209,7 +4268,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                false,
+                NonmainnetFeatures::default(),
                 None,
                 None,
                 None,
@@ -4226,7 +4285,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                false,
+                NonmainnetFeatures::default(),
                 None,
                 None,
                 None,

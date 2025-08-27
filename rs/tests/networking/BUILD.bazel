@@ -38,6 +38,7 @@ COMMON_DEPS = [
 HTTP_ENDPOINTS_DEPS = [
     # Keep sorted.
     "//rs/crypto/tree_hash",
+    "//rs/http_endpoints/public",
     "//rs/http_endpoints/test_agent",
     "//rs/tests/consensus/utils",
     "//rs/types/types",
@@ -247,7 +248,9 @@ rust_binary(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
         "@crate_index//:reqwest",

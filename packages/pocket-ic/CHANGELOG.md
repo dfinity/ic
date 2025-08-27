@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIcBuilder::with_auto_progress` to specify that the new instance should make progress automatically,
   i.e., PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
 
+### Removed
+- The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+
 
 
 ## 9.0.2 - 2025-06-06

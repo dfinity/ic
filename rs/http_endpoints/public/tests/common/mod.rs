@@ -12,7 +12,9 @@ use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
+    },
     ingress_pool::IngressPoolThrottler,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -56,7 +58,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, MessageId, Query, SignedIngress, SignedIngressContent},
+    messages::{CertificateDelegation, MessageId, SignedIngress, SignedIngressContent},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
@@ -77,30 +79,25 @@ use tower_test::mock::Handle;
 
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
-pub type QueryExecutionHandle =
-    Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>;
+pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) =
-        tower_test::mock::pair::<(Query, Option<CertificateDelegation>), QueryExecutionResponse>();
+    let (service, handle) = tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
 
-    let infallible_service =
-        tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
-            let mut service_clone = service.clone();
-            async move {
-                Ok::<QueryExecutionResponse, Infallible>(
-                    service_clone
-                        .ready()
-                        .await
-                        .expect("Mocking Infallible service. Waiting for readiness failed.")
-                        .call(request)
-                        .await
-                        .expect(
-                            "Mocking Infallible service and can therefore not return an error.",
-                        ),
-                )
-            }
-        });
+    let infallible_service = tower::service_fn(move |request: QueryExecutionInput| {
+        let mut service_clone = service.clone();
+        async move {
+            Ok::<QueryExecutionResponse, Infallible>(
+                service_clone
+                    .ready()
+                    .await
+                    .expect("Mocking Infallible service. Waiting for readiness failed.")
+                    .call(request)
+                    .await
+                    .expect("Mocking Infallible service and can therefore not return an error."),
+            )
+        }
+    });
     (BoxCloneService::new(infallible_service), handle)
 }
 
