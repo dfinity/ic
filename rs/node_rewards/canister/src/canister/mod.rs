@@ -312,7 +312,7 @@ impl NodeRewardsCanister {
                 format!("No rewards found for node provider {}", provider_id),
             )?;
 
-            node_provider_rewards.into()
+            Ok(node_provider_rewards.into())
         }
     }
 
