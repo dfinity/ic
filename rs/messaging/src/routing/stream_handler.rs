@@ -781,9 +781,7 @@ impl StreamHandlerImpl {
         } else {
             // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
             //
-            // Do not enqueue a reject response as remote subnet is likely malicious and
-            // trying to cause a memory leak by sending bogus messages and never consuming
-            // reject responses.
+            // Do not push a reject signal as remote subnet is likely malicious.
             error!(
                 self.log,
                 "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
