@@ -463,6 +463,12 @@ impl ValidatedRegisterExtension {
             .register_extension_with_root(extension_canister_id)
             .await?;
 
+        // Before granting any SNS capabilities to the extension, we must ensure that old code
+        // could not have snuck in between proposal (re-)validation and the SNS assuming control.
+        governance
+            .ensure_no_code_is_installed(extension_canister_id)
+            .await?;
+
         // This needs to happen before the canister code is installed.
         let init_blob = match init {
             ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
@@ -676,6 +682,33 @@ impl Governance {
 
         Ok(())
     }
+
+    async fn ensure_no_code_is_installed(
+        &self,
+        extension_canister_id: CanisterId,
+    ) -> Result<(), GovernanceError> {
+        // Ideally, we would ensure that the extension canister is not running any code by calling
+        // uninstall_code. However, this would also wipe out the Wasm chunk store, so a subsequent
+        // call to install_code would fail.
+        //
+        // See https://internetcomputer.org/docs/references/ic-interface-spec#ic-uninstall_code
+        //
+        // Instead, we just check that the canister doesn't have any Wasm module installed up until
+        // this point.
+        if let Some(module_hash) = canister_module_hash(&*self.env, extension_canister_id).await? {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Extension canister {} already has code installed (module hash {}). \
+                     Treating this as an attack.",
+                    extension_canister_id,
+                    hex::encode(module_hash),
+                ),
+            ));
+        };
+
+        Ok(())
+    }
 }
 
 pub mod treasury_manager {
@@ -816,37 +849,34 @@ async fn list_extensions(
     Ok(extensions)
 }
 
-async fn canister_module_hash(
+async fn canister_module_hash_impl(
     env: &dyn Environment,
     canister_id: CanisterId,
-) -> Result<Vec<u8>, GovernanceError> {
-    let canister_info_arg =
-        Encode!(&CanisterInfoRequest::new(canister_id, Some(1),)).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!("Error encoding canister_info request.\n{}", err),
-            )
-        })?;
+) -> Result<Option<Vec<u8>>, String> {
+    let canister_info_arg = Encode!(&CanisterInfoRequest::new(canister_id, Some(1),))
+        .map_err(|err| format!("Error encoding canister_info request.\n{}", err))?;
 
     let response = env
         .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
         .await
         .map_err(|err: (Option<i32>, String)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!("Canister method call IC00.canister_info failed: {:?}", err),
-            )
+            format!("Canister method call IC00.canister_info failed: {:?}", err)
         })
         .and_then(|blob| {
-            Decode!(&blob, CanisterInfoResponse).map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Error decoding IC00.canister_info response:\n{}", err),
-                )
-            })
+            Decode!(&blob, CanisterInfoResponse)
+                .map_err(|err| format!("Error decoding IC00.canister_info response:\n{}", err))
         })?;
 
-    Ok(response.module_hash().unwrap_or_default())
+    Ok(response.module_hash())
+}
+
+async fn canister_module_hash(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<Option<Vec<u8>>, GovernanceError> {
+    canister_module_hash_impl(env, canister_id)
+        .await
+        .map_err(|err| GovernanceError::new_with_message(ErrorType::External, err))
 }
 
 /// Returns the ICRC-1 subaccounts for the SNS treasury and ICP treasury.
@@ -996,6 +1026,19 @@ pub async fn validate_register_extension(
             );
         }
     }
+
+    // Check that the extension canister does not have any code installed yet.
+    //
+    // This will need to be checked again after the SNS assumes control over the extension.
+    if let Some(module_hash) =
+        canister_module_hash_impl(&*governance.env, extension_canister_id).await?
+    {
+        return Err(format!(
+            "Extension canister {} already has code installed (module hash {}).",
+            extension_canister_id,
+            hex::encode(module_hash),
+        ));
+    };
 
     Ok(ValidatedRegisterExtension {
         wasm,
@@ -1265,7 +1308,15 @@ async fn get_extension_spec_and_update_cache(
         ));
     }
 
-    let wasm_module_hash = canister_module_hash(env, extension_canister_id).await?;
+    let Some(wasm_module_hash) = canister_module_hash(env, extension_canister_id).await? else {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Extension canister {} does not have a Wasm module installed.",
+                extension_canister_id
+            ),
+        ));
+    };
 
     let result = validate_extension_wasm(&wasm_module_hash).map_err(|err| {
         GovernanceError::new_with_message(
@@ -1780,8 +1831,9 @@ mod tests {
         );
 
         // Mock canister_info call for extension canister (only needed if extension is registered)
+
+        // Get the test hash from our test allowed extensions
         if extension_registered {
-            // Get the test hash from our test allowed extensions
             let test_hash: Vec<u8> = vec![
                 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
@@ -1983,6 +2035,20 @@ mod tests {
                     ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
                 ],
             })
+            .unwrap()),
+        );
+
+        // Mock canister_info response (management canister call)
+        env.set_call_canister_response(
+            CanisterId::ic_00(),
+            "canister_info",
+            Encode!(&CanisterInfoRequest::new(store_canister_id, Some(1))).unwrap(),
+            Ok(Encode!(&CanisterInfoResponse::new(
+                0,      // total_num_changes
+                vec![], // recent_changes
+                None,   // module_hash should be empty
+                vec![], // controllers
+            ))
             .unwrap()),
         );
 
@@ -2324,6 +2390,20 @@ mod tests {
                     ("fiduciary".to_string(), vec![subnet_id]), // Our subnet is fiduciary
                 ],
             })
+            .unwrap()),
+        );
+
+        // Mock canister_info response (management canister call)
+        env.set_call_canister_response(
+            CanisterId::ic_00(),
+            "canister_info",
+            Encode!(&CanisterInfoRequest::new(store_canister_id, Some(1))).unwrap(),
+            Ok(Encode!(&CanisterInfoResponse::new(
+                0,      // total_num_changes
+                vec![], // recent_changes
+                None,   // module_hash should be empty
+                vec![], // controllers
+            ))
             .unwrap()),
         );
 
