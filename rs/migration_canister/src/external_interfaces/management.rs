@@ -57,10 +57,44 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
     }
 }
 
-// pub async fn set_original_controllers(canister_id: Principal, subnet_id: Principal) -> () {
-//     // TODO
-//     todo!()
-// }
+/// This is a success if the call is a success OR if it fails with "we are not controller"
+pub async fn set_original_controllers(
+    canister_id: Principal,
+    controllers: Vec<Principal>,
+    subnet_id: Principal,
+) -> ProcessingResult<(), () /* should be `!` */> {
+    let args = UpdateSettingsArgs {
+        canister_id,
+        settings: CanisterSettings {
+            controllers: Some(controllers),
+        },
+    };
+    match Call::bounded_wait(subnet_id, "update_settings")
+        .with_arg(args)
+        .await
+    {
+        Ok(_) => ProcessingResult::Success(()),
+        // If we fail due to not being controller, this is a success
+        Err(ref e) => match e {
+            ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
+            | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
+            ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
+                if call_rejected
+                    .reject_message()
+                    .contains("Only the controllers of the canister")
+                {
+                    ProcessingResult::Success(())
+                } else {
+                    println!(
+                        "Call `update_settings` for {:?} failed {:?}",
+                        canister_id, e
+                    );
+                    ProcessingResult::NoProgress
+                }
+            }
+        },
+    }
+}
 
 // ========================================================================= //
 // `canister_status`
