@@ -14,15 +14,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
 ]
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
-DEV_MACRO_DEPENDENCIES = [
     # Keep sorted.
 ]
 
