@@ -16,17 +16,17 @@ pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
 // Sync Call labels
 // !!! Be careful to update alert queries in k8s repo if changing these constants.!!!
-pub const LABEL_CALL_SYNC_CERTIFICATE_STATUS: &str = "status";
-pub const LABEL_CALL_SYNC_EARLY_RESPONSE_TRIGGER: &str = "trigger";
-pub const CALL_SYNC_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str =
+const LABEL_SYNC_CALL_CERTIFICATE_STATUS: &str = "status";
+const LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER: &str = "trigger";
+pub const SYNC_CALL_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str =
     "ingress_watcher_not_running";
-pub const CALL_SYNC_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
-pub const CALL_SYNC_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
-pub const CALL_SYNC_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
-pub const CALL_SYNC_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
+pub const SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
+pub const SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
+pub const SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
+pub const SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
-pub const CALL_SYNC_STATUS_IS_NOT_LEAF: &str = "not_leaf";
-pub const CALL_SYNC_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
+pub const SYNC_CALL_STATUS_IS_NOT_LEAF: &str = "not_leaf";
+pub const SYNC_CALL_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
@@ -69,8 +69,8 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_messages_completed_execution_channel_capacity: IntGauge,
 
     // sync call handler metrics
-    pub call_sync_early_response_trigger_total: IntCounterVec,
-    pub call_sync_certificate_status_total: IntCounterVec,
+    pub sync_call_early_response_trigger_total: IntCounterVec,
+    pub sync_call_certificate_status_total: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -197,15 +197,15 @@ impl HttpHandlerMetrics {
 
             ),
             // TODO: rename the metric names
-            call_sync_certificate_status_total: metrics_registry.int_counter_vec(
+            sync_call_certificate_status_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_certificate_status_total",
                 "The count of certificate states returned by the /{v3,v4}/.../call endpoint. I.e. replied, rejected, unknown, etc.",
-                &[LABEL_CALL_SYNC_CERTIFICATE_STATUS],
+                &[LABEL_SYNC_CALL_CERTIFICATE_STATUS],
             ),
-            call_sync_early_response_trigger_total: metrics_registry.int_counter_vec(
+            sync_call_early_response_trigger_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_early_response_trigger_total",
                 "The count of early response triggers for the /{v3,v4}/.../call endpoint.",
-                &[LABEL_CALL_SYNC_EARLY_RESPONSE_TRIGGER],
+                &[LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER],
             ),
         }
     }

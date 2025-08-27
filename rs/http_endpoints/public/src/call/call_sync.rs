@@ -7,12 +7,12 @@ use super::{
 use crate::{
     common::{into_cbor, Cbor, WithTimeout},
     metrics::{
-        HttpHandlerMetrics, CALL_SYNC_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
-        CALL_SYNC_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
-        CALL_SYNC_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
-        CALL_SYNC_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
-        CALL_SYNC_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, CALL_SYNC_STATUS_IS_INVALID_UTF8,
-        CALL_SYNC_STATUS_IS_NOT_LEAF,
+        HttpHandlerMetrics, SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
+        SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+        SYNC_CALL_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+        SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
+        SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, SYNC_CALL_STATUS_IS_INVALID_UTF8,
+        SYNC_CALL_STATUS_IS_NOT_LEAF,
     },
     HttpError,
 };
@@ -225,8 +225,8 @@ async fn call_sync(
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
-                .call_sync_early_response_trigger_total
-                .with_label_values(&[CALL_SYNC_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
+                .sync_call_early_response_trigger_total
+                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
                 .inc();
 
             return SyncCallResponse::Certificate(Certificate {
@@ -245,7 +245,7 @@ async fn call_sync(
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
         Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => Err((
             "Duplicate request. Message is already being tracked and executed.",
-            CALL_SYNC_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+            SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         )),
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
             error!(
@@ -255,7 +255,7 @@ async fn call_sync(
             );
             Err((
                 "Could not track the ingress message. Please try /read_state for the status.",
-                CALL_SYNC_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+                SYNC_CALL_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
             ))
         }
         Err(_) => {
@@ -266,7 +266,7 @@ async fn call_sync(
             );
             Err((
                 "Could not track the ingress message. Please try /read_state for the status.",
-                CALL_SYNC_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+                SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
             ))
         }
     };
@@ -282,7 +282,7 @@ async fn call_sync(
         Ok(certification_subscriber) => certification_subscriber,
         Err((reason, metric_label)) => {
             metrics
-                .call_sync_early_response_trigger_total
+                .sync_call_early_response_trigger_total
                 .with_label_values(&[metric_label])
                 .inc();
             return SyncCallResponse::Accepted(reason);
@@ -299,8 +299,8 @@ async fn call_sync(
         Ok(()) => (),
         Err(_) => {
             metrics
-                .call_sync_early_response_trigger_total
-                .with_label_values(&[CALL_SYNC_EARLY_RESPONSE_CERTIFICATION_TIMEOUT])
+                .sync_call_early_response_trigger_total
+                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT])
                 .inc();
             return SyncCallResponse::Accepted(
                 "Message did not complete execution and certification within the replica defined timeout.",
@@ -322,7 +322,7 @@ async fn call_sync(
     };
 
     metrics
-        .call_sync_certificate_status_total
+        .sync_call_certificate_status_total
         .with_label_values(&[&status_label])
         .inc();
 
@@ -352,10 +352,10 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
     match tree.lookup(&status_path) {
         LookupStatus::Found(MixedHashTree::Leaf(status)) => ParsedMessageStatus::Known(
             String::from_utf8(status.clone())
-                .unwrap_or_else(|_| CALL_SYNC_STATUS_IS_INVALID_UTF8.to_string()),
+                .unwrap_or_else(|_| SYNC_CALL_STATUS_IS_INVALID_UTF8.to_string()),
         ),
         LookupStatus::Found(_) => {
-            ParsedMessageStatus::Known(CALL_SYNC_STATUS_IS_NOT_LEAF.to_string())
+            ParsedMessageStatus::Known(SYNC_CALL_STATUS_IS_NOT_LEAF.to_string())
         }
         LookupStatus::Absent | LookupStatus::Unknown => ParsedMessageStatus::Unknown,
     }
