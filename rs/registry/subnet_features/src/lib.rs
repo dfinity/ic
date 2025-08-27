@@ -148,6 +148,12 @@ impl ChainKeyConfig {
             .map(|key_config| key_config.key_id.clone())
             .collect()
     }
+
+    pub fn key_config(&self, key_id: &MasterPublicKeyId) -> Option<&KeyConfig> {
+        self.key_configs
+            .iter()
+            .find(|config| config.key_id == *key_id)
+    }
 }
 
 impl From<ChainKeyConfig> for pb::ChainKeyConfig {
