@@ -56,8 +56,9 @@
 use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
-        HttpsConfig, IcpFeatures, InitialTime, InstanceId, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
+        HttpsConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -153,6 +154,7 @@ impl PocketIcState {
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
+    http_gateway_config: Option<InstanceHttpGatewayConfig>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
@@ -170,6 +172,7 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: None,
+            http_gateway_config: None,
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
@@ -202,6 +205,7 @@ impl PocketIcBuilder {
             self.bitcoind_addr,
             self.icp_features,
             self.initial_time,
+            self.http_gateway_config,
         )
     }
 
@@ -218,6 +222,7 @@ impl PocketIcBuilder {
             self.bitcoind_addr,
             self.icp_features,
             self.initial_time,
+            self.http_gateway_config,
         )
         .await
     }
@@ -446,6 +451,11 @@ impl PocketIcBuilder {
         self.initial_time = Some(InitialTime::AutoProgress(config));
         self
     }
+
+    pub fn with_http_gateway(mut self, http_gateway_config: InstanceHttpGatewayConfig) -> Self {
+        self.http_gateway_config = Some(http_gateway_config);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -560,6 +570,7 @@ impl PocketIc {
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -584,6 +595,7 @@ impl PocketIc {
                 bitcoind_addr,
                 icp_features,
                 initial_time,
+                http_gateway_config,
             )
             .await
         });
