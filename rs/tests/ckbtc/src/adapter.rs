@@ -12,7 +12,7 @@ use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 /// A proxy to make requests to the bitcoin adapter
 ///
@@ -72,7 +72,7 @@ impl<'a> AdapterProxy<'a> {
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::Regtest,
+                network: BitcoinNetwork::BitcoinMainnet,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -117,7 +117,7 @@ impl<'a> AdapterProxy<'a> {
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
         let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: BitcoinNetwork::Mainnet,
+            network: BitcoinNetwork::BitcoinMainnet,
             transaction,
         };
 
@@ -158,7 +158,7 @@ impl<'a> AdapterProxy<'a> {
                 }
 
                 tries += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             };
 
             let new_headers = new_blocks
@@ -170,7 +170,7 @@ impl<'a> AdapterProxy<'a> {
             blocks.extend(new_blocks);
 
             tries += 1;
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         Ok(blocks)

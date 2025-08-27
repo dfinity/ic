@@ -3676,6 +3676,7 @@ dependencies = [
  "opentelemetry-prometheus 0.13.0",
  "opentelemetry_sdk 0.27.1",
  "p256",
+ "p384",
  "pairing",
  "parking_lot 0.12.1",
  "paste",
@@ -3710,6 +3711,7 @@ dependencies = [
  "rand_distr",
  "rand_pcg 0.3.1",
  "ratelimit",
+ "raw-cpuid",
  "rayon",
  "rcgen",
  "regex",
@@ -3819,6 +3821,7 @@ dependencies = [
  "virt",
  "vsock",
  "walkdir",
+ "walrus 0.23.3",
  "warp",
  "wasm-bindgen",
  "wasm-encoder 0.228.0",
@@ -10525,9 +10528,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "11.1.0"
+version = "11.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb9ee317cfe3fbd54b36a511efc1edd42e216903c9cd575e686dd68a2ba90d8d"
+checksum = "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
 dependencies = [
  "bitflags 2.9.0",
 ]

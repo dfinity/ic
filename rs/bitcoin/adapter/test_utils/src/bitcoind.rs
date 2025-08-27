@@ -281,6 +281,7 @@ pub struct BitcoinD {
 
 impl Drop for BitcoinD {
     fn drop(&mut self) {
+        let _ = self.stop();
         let _ = self.process.kill();
         let _ = self.process.wait();
     }
@@ -344,23 +345,15 @@ impl BitcoinD {
         };
 
         let conf_path = work_dir.path().join("bitcoin.conf");
-        let mut rpc_user = String::new();
-        let mut rpc_pass = String::new();
         let auth = match conf.auth {
             None => {
                 let cookie_file = work_dir.path().join(network.to_string()).join(".cookie");
                 Auth::CookieFile(cookie_file)
             }
-            Some(auth) => {
-                if let Auth::UserPass(user, password) = &auth {
-                    rpc_user = format!("rpc_user:{user}");
-                    rpc_pass = format!("rpc_password:{password}");
-                }
-                auth
-            }
+            Some(Auth::UserPass(_, _)) => panic!("Auth::UserPass is not supported"),
+            Some(auth) => auth,
         };
-        fs::write(conf_path.clone(), format!("{rpc_user}\n{rpc_pass}\n"))?;
-
+        fs::write(conf_path.clone(), "")?;
         let rpc_port = get_available_port()?;
         let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
         let rpc_url = format!("http://{}", rpc_socket);
@@ -390,7 +383,6 @@ impl BitcoinD {
             .spawn()?;
 
         if let Some(status) = process.try_wait()? {
-            // TODO: return an error instead panic.
             panic!("early exit with: {:?}", status);
         }
         assert!(process.stderr.is_none());

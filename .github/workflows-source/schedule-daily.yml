@@ -48,6 +48,7 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
+    environment: Nightly Tests
     steps:
       - <<: *checkout
       - name: Run Bazel Launch Bare Metal
@@ -87,6 +88,7 @@ jobs:
     name: Bazel Test FI Nightly
     <<: *dind-large-setup
     timeout-minutes: 720 # 12 hours
+    environment: Nightly Tests
     steps:
       - <<: *checkout
       - name: Set up backup pod access
@@ -107,6 +109,7 @@ jobs:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 30
+    environment: Nightly Tests
     steps:
       - <<: *checkout
       - name: Set up backup pod access

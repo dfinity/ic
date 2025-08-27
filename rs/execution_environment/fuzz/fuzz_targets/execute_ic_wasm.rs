@@ -1,11 +1,13 @@
-use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::{
+    embedders::Config as EmbeddersConfig, execution_environment::Config as ExecutionConfig,
+};
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;
-use wasm_fuzzers::ic_wasm::{ic_embedders_config, ICWasmModule};
+use wasm_fuzzers::ic_wasm::ICWasmModule;
 
 thread_local! {
     static ENV_32: RefCell<(ExecutionTest, CanisterId)> = RefCell::new(setup_env(false));
@@ -70,7 +72,7 @@ where
 // canister is reinstalled under the same canister_id.
 fn setup_env(memory64_enabled: bool) -> (ExecutionTest, CanisterId) {
     let exec_config = ExecutionConfig {
-        embedders_config: ic_embedders_config(memory64_enabled),
+        embedders_config: EmbeddersConfig::default(),
         max_compilation_cache_size: NumBytes::new(10 * 1024 * 1024), // 10MiB
         ..Default::default()
     };
