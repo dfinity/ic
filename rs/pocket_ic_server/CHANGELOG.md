@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The argument of the endpoint `/instances/` takes an additional optional field `allow_incomplete_state` specifying if incomplete state (e.g., resulting from not deleting a PocketIC instance gracefully) is allowed.
 - The argument of the endpoint `/instances/` takes an additional optional field `initial_time` specifying the initial timestamp of the newly created instance or
   if the new instance should make progress automatically, i.e., if PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
+- The argument of the endpoint `/instances/` takes an additional optional field `http_gateway_config` specifying that an HTTP gateway with the given configuration
+  should be created for the newly created instance.
 
 
 

@@ -611,6 +611,7 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
+        http_gateway_config: None,
         state_dir: Some(temp_dir.path().to_path_buf()),
         nonmainnet_features: false,
         log_level: None,

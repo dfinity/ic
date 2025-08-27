@@ -195,6 +195,7 @@ impl PocketIc {
 
         let instance_config = InstanceConfig {
             subnet_config_set,
+            http_gateway_config: None,
             #[cfg(not(windows))]
             state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
             #[cfg(windows)]

@@ -1214,6 +1214,15 @@ pub async fn create_instance(
     };
     let auto_progress_enabled = auto_progress.is_some();
 
+    if instance_config.http_gateway_config.is_some() && !auto_progress_enabled {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error {
+                message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
+            }),
+        );
+    }
+
     match api_state
         .add_instance(
             move |seed| {
@@ -1232,14 +1241,16 @@ pub async fn create_instance(
                 )
             },
             auto_progress,
+            instance_config.http_gateway_config,
         )
         .await
     {
-        Ok((instance_id, topology)) => (
+        Ok((instance_id, topology, http_gateway_info)) => (
             StatusCode::CREATED,
             Json(rest::CreateInstanceResponse::Created {
                 instance_id,
                 topology,
+                http_gateway_info,
             }),
         ),
         Err(err) => (

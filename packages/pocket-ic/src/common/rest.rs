@@ -34,6 +34,14 @@ pub struct HttpsConfig {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InstanceHttpGatewayConfig {
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
     pub ip_addr: Option<String>,
     pub port: Option<u16>,
@@ -68,6 +76,7 @@ pub enum CreateInstanceResponse {
     Created {
         instance_id: InstanceId,
         topology: Topology,
+        http_gateway_info: Option<HttpGatewayInfo>,
     },
     Error {
         message: String,
@@ -581,6 +590,7 @@ pub enum InitialTime {
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
