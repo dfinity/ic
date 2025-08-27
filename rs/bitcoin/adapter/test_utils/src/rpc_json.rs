@@ -174,7 +174,7 @@ pub struct GetMempoolEntryResultFees {
     pub descendant: Amount,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListUnspentResultEntry {
     pub txid: Txid,
