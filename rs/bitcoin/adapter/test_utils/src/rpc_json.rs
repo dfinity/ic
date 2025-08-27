@@ -30,7 +30,6 @@ pub struct GetBalancesResultEntry {
     pub immature: Amount,
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetBalancesResult {
