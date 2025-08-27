@@ -1130,12 +1130,11 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-pub fn get_current_branch_version() -> Result<ReplicaVersion> {
-    let replica_version = ReplicaVersion::try_from(read_dependency_from_env_to_string(
-        "ENV_DEPS__IC_VERSION_FILE",
-    )?)?;
-
-    Ok(replica_version)
+pub fn get_current_branch_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(
+        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
+    )
+    .expect("Invalid ReplicaVersion")
 }
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {

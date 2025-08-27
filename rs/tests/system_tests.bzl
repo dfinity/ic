@@ -89,6 +89,7 @@ def _run_system_test(ctx):
               --group-base-name {group_base_name} \
               {logs} \
               {no_summary_report} \
+              {exclude_logs} \
               "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
@@ -97,6 +98,7 @@ def _run_system_test(ctx):
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
             info_file = ctx.info_file.short_path,
             logs = "--no-logs" if no_logs else "",
+            exclude_logs = " ".join(["--exclude-logs {pattern}".format(pattern = pattern) for pattern in ctx.attr.exclude_logs]),
         ),
     )
 
@@ -190,6 +192,7 @@ run_system_test = rule(
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
+        "exclude_logs": attr.string_list(doc = "Specifies uvm name patterns to exclude from streaming."),
     },
 )
 
@@ -226,6 +229,7 @@ def system_test(
         uses_hostos_latest_release_mainnet_update = False,
         env = {},
         env_inherit = [],
+        exclude_logs = ["prometheus", "vector"],
         additional_colocate_tags = [],
         logs = True,
         **kwargs):
@@ -270,6 +274,7 @@ def system_test(
       the external environment when the test is executed by bazel test.
       additional_colocate_tags: additional tags to pass to the colocated test.
       logs: Specifies if vector vm for scraping logs should not be spawned.
+      exclude_logs: Specifies uvm name patterns to exclude from streaming.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -296,14 +301,13 @@ def system_test(
         test_driver_target = bin_name
 
     # Environment variable names to targets (targets are resolved)
+    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps = {}
+    icos_images = dict()
+    info_file_vars = dict()
 
     _guestos = "//ic-os/guestos/envs/dev:"
     _guestos_malicious = "//ic-os/guestos/envs/dev-malicious:"
-
-    # Always add version.txt for now as all test use it even that they don't declare they use dev image.
-    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     # Guardrails for specifying source and target images
     if int(uses_guestos_img) + int(uses_guestos_nns_mainnet_img) + int(uses_guestos_latest_release_mainnet_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
@@ -318,9 +322,6 @@ def system_test(
     if int(uses_hostos_update) + int(uses_hostos_test_update) + int(uses_hostos_latest_release_mainnet_update) >= 2:
         fail("More than one target HostOS (upgrade) image was specified!")
 
-    icos_images = dict()
-    info_file_vars = dict()
-
     if uses_guestos_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
@@ -328,7 +329,7 @@ def system_test(
 
     if uses_guestos_nns_mainnet_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_SUBNET_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:nns-mainnet-guest-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(
             git_commit_id = MAINNET_NNS_SUBNET_REVISION,
             variant = "guest-os",
@@ -341,7 +342,7 @@ def system_test(
 
     if uses_guestos_latest_release_mainnet_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APPLICATION_SUBNET_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-guest-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:latest-release-mainnet-guest-img.tar.zst"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(
             git_commit_id = MAINNET_APPLICATION_SUBNET_REVISION,
             variant = "guest-os",
@@ -402,7 +403,7 @@ def system_test(
     if uses_setupos_latest_release_mainnet_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-test-img.tar.zst"
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:latest-release-mainnet-test-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
@@ -450,6 +451,7 @@ def system_test(
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+        exclude_logs = exclude_logs,
     )
 
     env = env | {
@@ -491,6 +493,7 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
         visibility = visibility,
+        exclude_logs = exclude_logs,
     )
     return struct(test_driver_target = test_driver_target)
 

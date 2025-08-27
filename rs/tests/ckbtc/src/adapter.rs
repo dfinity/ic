@@ -1,3 +1,4 @@
+use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
@@ -12,7 +13,7 @@ use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 /// A proxy to make requests to the bitcoin adapter
 ///
@@ -72,7 +73,7 @@ impl<'a> AdapterProxy<'a> {
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::Regtest,
+                network: BitcoinNetwork::BitcoinMainnet,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -117,7 +118,7 @@ impl<'a> AdapterProxy<'a> {
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
         let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: BitcoinNetwork::Mainnet,
+            network: BitcoinNetwork::BitcoinMainnet,
             transaction,
         };
 
