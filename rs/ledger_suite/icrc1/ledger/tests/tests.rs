@@ -2374,7 +2374,8 @@ mod incompatible_token_type_upgrade {
 
     // TODO: enable and rewrite when FI-1653 is fixed.
     #[test]
-    fn should_successfully_upgrade_ledger_from_u64_to_u256_to_u64_wasm() {
+    #[should_panic(expected = "assertion `left == right` failed: u256 representation is 32-bytes long")]
+    fn should_fail_ledger_upgrade_from_u64_to_u256_wasm() {
         let env = StateMachine::new();
         let ledger_id = env
             .install_canister(ledger_u64_wasm(), default_init_args(), None)
