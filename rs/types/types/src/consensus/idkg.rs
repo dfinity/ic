@@ -99,6 +99,7 @@ impl IDkgMasterPublicKeyId {
         &self.0
     }
 
+    // Return the transcript capacity required to create a pre-signature for this key ID
     pub fn required_pre_sig_capacity(&self) -> usize {
         match self.inner() {
             // Ecdsa pre-signatures require working on 2 transcripts in parallel
@@ -379,6 +380,7 @@ impl IDkgPayload {
         })
     }
 
+    /// Return the total transcript capacity consumed by ongoing pre-signatures in this payload
     pub fn consumed_pre_sig_capacity(&self) -> usize {
         self.pre_signatures_in_creation
             .values()
