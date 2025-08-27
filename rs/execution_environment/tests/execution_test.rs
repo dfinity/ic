@@ -686,7 +686,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(21 * MIB),
+            subnet_memory_capacity: NumBytes::from(81 * MIB),
             subnet_memory_reservation: NumBytes::from(MIB),
             ..Default::default()
         },
@@ -696,29 +696,31 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let now = std::time::SystemTime::now();
     env.set_time(now);
 
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
+    // There are 4 cores by default so the subnet available memory is 80 / 4 = 20 MiB.
     // Set the memory to 20MiB + 1. Should fail.
     let res = env
-        .update_settings(
-            &canister_id,
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(20u64 * MIB + 1)
-                .build(),
+        .create_canister_with_cycles_impl(
+            None,
+            INITIAL_CYCLES_BALANCE,
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(20u64 * MIB + 1)
+                    .build(),
+            ),
         )
         .unwrap_err();
     assert_eq!(res.code(), ErrorCode::SubnetOversubscribed);
 
+    // There are 4 cores by default so the subnet available memory is 80 / 4 = 20 MiB.
     // Set the memory to exactly 20MiB. Should succeed.
-    env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_memory_allocation(20u64 * MIB)
-            .build(),
+    env.create_canister_with_cycles_impl(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(20u64 * MIB)
+                .build(),
+        ),
     )
     .unwrap();
 }
@@ -730,7 +732,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -749,7 +751,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         canister_id,
         "update",
         wasm()
-            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            // As there are 2 scheduler cores, the memory capacity is 120 / 2 = 60 MiB per core.
             .memory_size_is_at_least(30 * MIB)
             .reply_data(&[42])
             .build(),
@@ -765,7 +767,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         other_canister_id,
         "update",
         wasm()
-            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            // The memory capacity is (120 - 30) / 2 = 45 MiB per core.
             .memory_size_is_at_least(25 * MIB)
             .reply_data(&[42])
             .build(),
@@ -773,7 +775,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     .expect("Error increasing the canister memory size");
 
     // This should take another 30 MiB on top of the 30 MiB of the canister state.
-    // The available memory at this point is 100 - 30 - 25 = 45 MiB.
+    // The available memory at this point is (120 - 30 - 25) / 2 = 32.5 MiB.
     env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap();
 
@@ -781,7 +783,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     env.tick();
 
     // Taking a snapshot of the second canister should take another 25MiB, however the available
-    // memory at this point is 100 - 30 - 25 - 30 = 15 MiB, so it should fail.
+    // memory at this point is (120 - 30 - 25 - 30) / 2 = 17.5 MiB, so it should fail.
     let error = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
         .map(|_| ())
@@ -796,7 +798,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -815,7 +817,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         canister_id,
         "update",
         wasm()
-            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            // As there are 2 scheduler cores, the memory capacity is 120 / 2 = 60 MiB per core.
             .memory_size_is_at_least(30 * MIB)
             .reply_data(&[42])
             .build(),
@@ -831,7 +833,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         other_canister_id,
         "update",
         wasm()
-            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            // The memory capacity is (120 - 30) / 2 = 45 MiB per core.
             .memory_size_is_at_least(25 * MIB)
             .reply_data(&[42])
             .build(),
@@ -839,7 +841,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     .expect("Error increasing the canister memory size");
 
     // This should take another 30 MiB on top of the 30 MiB of the canister state.
-    // The available memory at this point is 100 - 30 - 25 = 45 MiB.
+    // The available memory at this point is (120 - 30 - 25) / 2 = 32.5 MiB.
     let snapshot_id = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap()
@@ -849,11 +851,11 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     env.tick();
 
     // Uninstall the first canister to free up some memory. This should free up 30MiB.
-    // The available memory at this point should be 100 - 30 - 25 - 30 + 30 = 45 MiB.
+    // The available memory at this point should be (120 - 30 - 25 - 30 + 30) / 2 = 32.5 MiB.
     env.uninstall_code(canister_id).unwrap();
 
     // Taking a snapshot of the second canister should take another 25MiB,
-    // making the available memory 100 - 30 - 25 - 30 + 30 - 25 = 20 MiB.
+    // making the available memory (120 - 30 - 25 - 30 + 30 - 25) / 2 = 20 MiB.
     env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
         .unwrap();
 
@@ -876,7 +878,7 @@ fn canister_snapshot_metrics_are_observed() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -895,7 +897,7 @@ fn canister_snapshot_metrics_are_observed() {
         canister_id,
         "update",
         wasm()
-            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            // As there are 2 scheduler cores, the memory capacity is 120 / 2 = 60 MiB per core.
             .memory_size_is_at_least(30 * MIB)
             .reply_data(&[42])
             .build(),
@@ -911,7 +913,7 @@ fn canister_snapshot_metrics_are_observed() {
         other_canister_id,
         "update",
         wasm()
-            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            // The memory capacity is (120 - 30) / 2 = 45 MiB per core.
             .memory_size_is_at_least(25 * MIB)
             .reply_data(&[42])
             .build(),
@@ -1199,7 +1201,7 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_wasm_memory() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_capacity: NumBytes::from(400_000_000),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -1255,7 +1257,7 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_stable_memory() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_capacity: NumBytes::from(400_000_000),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },

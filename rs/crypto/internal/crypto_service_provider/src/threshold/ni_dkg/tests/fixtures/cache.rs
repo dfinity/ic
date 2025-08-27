@@ -18,18 +18,16 @@
 //! use the static fixture.  Generate your own NiDKG.
 
 use super::*;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 
-lazy_static! {
-    /// Alert: Creating this element costs about 30 seconds on a 2GHz AMD64 CPU.
-    pub static ref STATE_WITH_TRANSCRIPT: Mutex<StateWithTranscript> = {
-        let seed = [69u8; 32];
-        let network_size = 4;
-        let rng = &mut ChaCha20Rng::from_seed(seed);
-        let network = MockNetwork::random(rng, network_size);
-        let config = MockDkgConfig::from_network(rng, &network, None);
-        let state = state_with_transcript(&config, network);
-        Mutex::new(state)
-    };
-}
+/// Alert: Creating this element costs about 30 seconds on a 2GHz AMD64 CPU.
+pub static STATE_WITH_TRANSCRIPT: LazyLock<Mutex<StateWithTranscript>> = LazyLock::new(|| {
+    let seed = [69u8; 32];
+    let network_size = 4;
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size);
+    let config = MockDkgConfig::from_network(rng, &network, None);
+    let state = state_with_transcript(&config, network);
+    Mutex::new(state)
+});

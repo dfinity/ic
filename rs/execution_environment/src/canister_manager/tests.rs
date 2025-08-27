@@ -135,11 +135,12 @@ fn test_slice() {
 }
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
@@ -6116,15 +6117,27 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(190);
+
+#[test]
+fn empty_canister_memory_usage() {
+    let env = StateMachine::new();
+    let canister_id = env.create_canister_with_cycles(None, Cycles::new(1 << 64), None);
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(EMPTY_CANISTER_MEMORY_USAGE, status.memory_size());
+}
+
 /// Subnet available memory is recalculated at the beginning of each round.
 /// This test checks that the wasm chunk store is accounted for then.
 #[test]
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
-    // Initialize subnet with enough memory for one chunk but not two (the
-    // canister history will take up some memory).
+    // Initialize subnet with enough memory for one chunk but not two.
+    assert!(EMPTY_CANISTER_MEMORY_USAGE < wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
-        subnet_memory_capacity: wasm_chunk_store::chunk_size() * 2,
+        subnet_memory_capacity: (wasm_chunk_store::chunk_size() + EMPTY_CANISTER_MEMORY_USAGE)
+            * subnet_config.scheduler_config.scheduler_cores as u64,
         subnet_memory_threshold: NumBytes::from(0),
         subnet_memory_reservation: NumBytes::from(0),
         ..Config::default()

@@ -1,0 +1,21 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_canister(
+    name = "migration-canister",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
+    service_file = ":migration_canister.did",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic_stable_structures_next",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+    ],
+)

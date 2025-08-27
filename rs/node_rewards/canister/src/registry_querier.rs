@@ -14,8 +14,7 @@ use ic_registry_keys::{
 };
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
+use rewards_calculation::types::{DayUtc, Region, RewardableNode, UnixTsNanos};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;

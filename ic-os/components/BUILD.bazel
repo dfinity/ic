@@ -7,7 +7,7 @@ load("setupos.bzl", setupos_component_files = "component_files")
 package(default_visibility = ["//ic-os:__subpackages__"])
 
 PUBLIC_GUESTOS_EXPORTS = [
-    "ic/generate-ic-config/ic.json5.template",
+    "guestos/generate-ic-config/ic.json5.template",
     "networking/dev-certs/canister_http_test_ca.cert",
     "networking/dev-certs/canister_http_test_ca.key",
 ]
@@ -86,6 +86,6 @@ EOF
 sh_test(
     name = "validate-ic-json5",
     srcs = ["validate-ic-json5-script"],
-    args = ["$(execpath ic/generate-ic-config/ic.json5.template)"],
-    data = ["ic/generate-ic-config/ic.json5.template"],
+    args = ["$(execpath guestos/generate-ic-config/ic.json5.template)"],
+    data = ["guestos/generate-ic-config/ic.json5.template"],
 )

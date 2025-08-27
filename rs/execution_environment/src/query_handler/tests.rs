@@ -462,6 +462,7 @@ fn query_compiled_once() {
         },
         Arc::new(test.state().clone()),
         vec![],
+        /*certificate_delegation_metadata=*/ None,
     );
     assert!(result.is_ok());
 
@@ -550,6 +551,7 @@ fn composite_query_works_in_non_replicated_mode() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
 
@@ -578,6 +580,7 @@ fn composite_query_fails_if_disabled() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap_err();
 
@@ -645,6 +648,7 @@ fn composite_query_single_user_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply([2_u8].to_vec()));
@@ -692,6 +696,7 @@ fn composite_query_single_canister_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply([3_u8].to_vec()));
@@ -738,6 +743,7 @@ fn composite_query_no_user_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap_err();
     assert_eq!(
@@ -795,6 +801,7 @@ fn composite_query_no_canister_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     match result {
@@ -836,6 +843,7 @@ fn composite_query_chained_calls() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply(b));
@@ -1241,6 +1249,7 @@ fn query_call_exceeds_instructions_limit() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap_err();
     output.assert_contains(

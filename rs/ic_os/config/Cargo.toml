@@ -14,6 +14,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 serde_with = "1.6.2"
 regex = { workspace = true }
+ic-config = { path = "../../config" }
 config_types = { path = "../config_types" }
 network = { path = "../network" }                     # Only required by bin
 deterministic_ips = { path = "../deterministic_ips" }

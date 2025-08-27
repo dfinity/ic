@@ -15,7 +15,6 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
@@ -767,7 +766,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
     // requests plus epsilon). Checks that the limit is enforced on application
     // subnets and ignored on system subnets.
-    let run_test = |subnet_available_memory: SubnetAvailableMemory, subnet_type| {
+    let run_test = |guaranteed_response_message_memory, subnet_type| {
         let mut test = SchedulerTestBuilder::new()
             .with_scheduler_config(SchedulerConfig {
                 scheduler_cores: 2,
@@ -780,7 +779,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 ..SchedulerConfig::application_subnet()
             })
             .with_subnet_guaranteed_response_message_memory(
-                subnet_available_memory.get_guaranteed_response_message_memory() as u64,
+                guaranteed_response_message_memory as u64,
             )
             .with_subnet_type(subnet_type)
             .build();
@@ -841,13 +840,13 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Subnet has memory for 4 outbound requests and 2 inbound requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 0),
+        MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10,
         SubnetType::Application,
     );
 
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
-    run_test(SubnetAvailableMemory::new(0, 0, 0), SubnetType::System);
+    run_test(0, SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_execution`] puts

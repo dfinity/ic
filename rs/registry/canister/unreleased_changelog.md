@@ -15,8 +15,6 @@ on the process that this file is part of, see
 
 ## Removed
 
-* The single entry routing table is no longer updated when there are changes to the routing table.
-
 ## Fixed
 
 ## Security

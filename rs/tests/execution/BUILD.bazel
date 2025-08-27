@@ -245,13 +245,13 @@ system_test_nns(
         UNIVERSAL_CANISTER_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,
     deps = [
+        "//rs/bitcoin/adapter/test_utils",
         "//rs/registry/subnet_type",
         "//rs/tests/ckbtc",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
-        "@crate_index//:bitcoincore-rpc",
         "@crate_index//:candid",
         "@crate_index//:slog",
     ],

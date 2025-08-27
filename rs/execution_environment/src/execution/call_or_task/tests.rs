@@ -4,7 +4,6 @@ use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
@@ -1120,11 +1119,7 @@ fn stable_grow_updates_subnet_available_memory() {
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(
-        initial_subnet_memory,
-        initial_subnet_memory,
-        initial_subnet_memory,
-    ));
+    test.set_available_execution_memory(initial_subnet_memory);
 
     // Growing stable memory should reduce the subnet total memory.
     let payload = wasm()

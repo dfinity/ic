@@ -1,0 +1,5 @@
+type MigrationCanisterInitPayload = record {};
+
+service : (opt MigrationCanisterInitPayload) -> {
+
+};

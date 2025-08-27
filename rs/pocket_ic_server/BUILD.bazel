@@ -104,6 +104,7 @@ LIB_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/bitcoin/adapter/test_utils",
     "//rs/config",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
@@ -113,7 +114,6 @@ TEST_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
     "@crate_index//:flate2",
@@ -216,9 +216,9 @@ rust_library(
     name = "pocket-ic-server-lib",
     testonly = True,
     srcs = [
+        "src/beta_features.rs",
         "src/external_canister_types.rs",
         "src/lib.rs",
-        "src/nonmainnet_features.rs",
         "src/pocket_ic.rs",
     ] + glob([
         "src/state_api/**/*.rs",
@@ -247,7 +247,7 @@ rust_test(
     # this test is manual to not block automatic PR merge
     # bumping mainnet canister versions
     # from which the external types are derived
-    tags = ["manual"],
+    tags = ["pocketic_tests_nightly"],
     deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
 )
 
