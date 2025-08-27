@@ -1,5 +1,5 @@
 {
-  "checksum": "d58f18063365e231dad77a7adc5cfc27e1b1bfdb7f9c17ef354e6447b8d87f81",
+  "checksum": "fc2aca3e84e4a91b04ac9dccd437ae6bdffb6f0b73e804f6e995076b18cee60a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21730,6 +21730,10 @@
               "target": "icrc1_test_suite"
             },
             {
+              "id": "idl2json 0.10.1",
+              "target": "idl2json"
+            },
+            {
               "id": "idna 1.0.3",
               "target": "idna"
             },
@@ -38047,6 +38051,73 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "idl2json 0.10.1": {
+      "name": "idl2json",
+      "version": "0.10.1",
+      "package_url": "https://github.com/dfinity/idl2json",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/idl2json/0.10.1/download",
+          "sha256": "96c98794e1d7ff2814db503a7fb3aed059b8c816cbaaaa7cf7420ab39edbca41"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "idl2json",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "idl2json",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "crypto",
+            "default",
+            "sha2"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "candid_parser 0.1.4",
+              "target": "candid_parser"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.10.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "idna 0.2.3": {
       "name": "idna",
@@ -95681,6 +95752,7 @@
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
+    "idl2json 0.10.1",
     "idna 1.0.3",
     "indexmap 2.7.1",
     "indicatif 0.17.5",

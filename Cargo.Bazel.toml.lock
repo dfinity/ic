@@ -3716,6 +3716,7 @@ dependencies = [
  "ic_principal",
  "icrc1-test-env",
  "icrc1-test-suite",
+ "idl2json",
  "idna 1.0.3",
  "indexmap 2.7.1",
  "indicatif",
@@ -6620,6 +6621,18 @@ name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+
+[[package]]
+name = "idl2json"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96c98794e1d7ff2814db503a7fb3aed059b8c816cbaaaa7cf7420ab39edbca41"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "serde_json",
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "idna"

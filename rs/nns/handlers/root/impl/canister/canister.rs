@@ -232,6 +232,55 @@ async fn update_canister_settings(
     .await
 }
 
+use candid::{export_service, CandidType, Deserialize, IDLArgs};
+use candid_parser::{check_prog, IDLProg, TypeEnv};
+use idl2json::{idl2json, BytesFormat, Idl2JsonOptions};
+use serde::Serialize;
+use std::str::FromStr;
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+struct ValidateAndRenderNnsFunctionPayload {
+    name: String,
+    args: Vec<u8>,
+}
+
+#[query]
+fn validate_and_render_nns_function(
+    payload: ValidateAndRenderNnsFunctionPayload,
+) -> Result<String, String> {
+    export_service!();
+    let candid = __export_service();
+    let ValidateAndRenderNnsFunctionPayload { name, args } = payload;
+
+    let candid_source = IDLProg::from_str(&candid).expect("Failed to parse candid");
+    let mut type_env = TypeEnv::new();
+    let service = check_prog(&mut type_env, &candid_source)
+        .map_err(|e| format!("Failed to parse candid: {:?}", e))?
+        .ok_or_else(|| format!("Failed to parse candid: {:?}", candid))?;
+    let method = type_env
+        .get_method(&service, &name)
+        .map_err(|e| format!("Failed to get method: {:?}", e))?;
+    let args = IDLArgs::from_bytes_with_types(&args, &type_env, &method.args)
+        .map_err(|e| format!("Failed to parse args: {:?}", e))?;
+    assert_eq!(
+        args.args.len(),
+        1,
+        "NNS Function should have exactly one argument"
+    );
+    let arg = args.args.into_iter().next().unwrap();
+    let options = Idl2JsonOptions {
+        bytes_as: Some(BytesFormat::Hex),
+        long_bytes_as: Some((100, BytesFormat::Sha256)),
+        compact: true,
+        prog: vec![],
+    };
+    let json = idl2json(&arg, &options);
+    let json_string = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("Failed to serialize to json: {:?}", e))?;
+
+    Ok(json_string)
+}
+
 /// Resources to serve for a given http_request
 /// Serve an HttpRequest made to this canister
 #[query(

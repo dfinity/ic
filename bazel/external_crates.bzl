@@ -762,6 +762,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "idna": crate.spec(
                 version = "^1.0.2",
             ),
+            "idl2json": crate.spec(
+                version = "^0.10.1",
+            ),
             "indexmap": crate.spec(
                 version = "^2.2.6",
             ),

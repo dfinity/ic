@@ -5000,6 +5000,52 @@ impl Governance {
         Ok(action.clone())
     }
 
+    async fn render_proposal_action(&self, action: &Action) -> Result<String, GovernanceError> {
+        match action {
+            Action::ExecuteNnsFunction(execute_nns_function) => {
+                self.validate_and_render_execute_nns_function(execute_nns_function)
+                    .await
+            }
+            _ => Ok("not implemented".to_string()),
+        }
+    }
+
+    async fn validate_and_render_execute_nns_function(
+        &self,
+        update: &ExecuteNnsFunction,
+    ) -> Result<String, GovernanceError> {
+        let nns_function = update.nns_function();
+        let (canister_id, method_name) = nns_function.canister_and_function()?;
+        let request = ValidateAndRenderNnsFunctionPayload {
+            name: method_name.to_string(),
+            args: update.payload.clone(),
+        };
+        let encoded_request = Encode!(&request).expect("Failed to encode payload");
+        let response = self
+            .env
+            .call_canister_method(
+                canister_id,
+                "validate_and_render_nns_function",
+                encoded_request,
+            )
+            .await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Failed to call validate_and_render_nns_function: {}", msg),
+                )
+            })?;
+        let decoded_response = Decode!([decoder_config()]; &response, Result<String, String>)
+            .expect("Failed to decode response");
+        let rendered = decoded_response.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("The nns function payload is malformed: {}", e),
+            )
+        })?;
+        Ok(rendered)
+    }
+
     fn validate_execute_nns_function(
         &self,
         update: &ExecuteNnsFunction,
@@ -5304,6 +5350,9 @@ impl Governance {
 
         // Validate proposal
         let action = self.validate_proposal(proposal)?;
+
+        let rendered = self.render_proposal_action(&action).await?;
+        println!("Proposal rendered: {:?}", rendered);
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
@@ -8351,4 +8400,10 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
+struct ValidateAndRenderNnsFunctionPayload {
+    name: String,
+    args: Vec<u8>,
 }

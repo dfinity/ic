@@ -11682,6 +11682,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
  "ic-types",
+ "idl2json",
  "lazy_static",
  "maplit",
  "on_wire",
@@ -11690,6 +11691,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_bytes",
+ "serde_json",
  "tempfile",
  "tokio",
 ]
@@ -11831,6 +11833,18 @@ dependencies = [
  "tokio",
  "wat",
  "xrc-mock",
+]
+
+[[package]]
+name = "ic-nns-proposal-payload"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "hex",
+ "idl2json",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -15727,6 +15741,18 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "identity-canister"
 version = "0.9.0"
+
+[[package]]
+name = "idl2json"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96c98794e1d7ff2814db503a7fb3aed059b8c816cbaaaa7cf7420ab39edbca41"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "serde_json",
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "idna"
@@ -20525,6 +20551,7 @@ dependencies = [
  "ic-nervous-system-time-helpers",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-proposal-payload",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
@@ -20547,6 +20574,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-utils 0.9.0",
+ "idl2json",
  "idna 1.0.3",
  "ipnet",
  "itertools 0.12.1",

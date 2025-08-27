@@ -684,6 +684,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "zeroize",
 ] }
 ic_principal = { version = "0.1.1", default-features = false }
+idl2json = { version = "0.10.1" }
 idna = "1.0.2"
 indexmap = "2.10.0"
 inferno = "0.12.0"
