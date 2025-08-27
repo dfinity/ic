@@ -230,86 +230,72 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        return inner_get_node_providers_rewards::<S>(canister, request).await;
-        async fn inner_get_node_providers_rewards<S: RegistryDataStableMemory>(
-            canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-            request: GetNodeProvidersRewardsRequest,
-        ) -> Result<NodeProvidersRewards, String> {
-            NodeRewardsCanister::schedule_registry_sync(canister)
-                .await
-                .map_err(|e| {
-                    format!(
-                        "Could not sync registry store to latest version, \
+        NodeRewardsCanister::schedule_registry_sync(canister)
+            .await
+            .map_err(|e| {
+                format!(
+                    "Could not sync registry store to latest version, \
                     please try again later: {:?}",
-                        e
-                    )
-                })?;
-            NodeRewardsCanister::schedule_metrics_sync(canister).await;
-            let result =
-                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
-            let rewards_xdr_permyriad = result
-                .provider_results
-                .iter()
-                .map(|(provider_id, provider_rewards)| {
-                    (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
-                })
-                .collect();
-
-            HISTORICAL_SUBNETS_FR.with_borrow_mut(|historical_subnets_fr| {
-                for ((day, subnet_id), subnet_fr_percent) in result.subnets_fr {
-                    let key = SubnetsFailureRateKey {
-                        day: Some(day.into()),
-                        subnet_id: Some(subnet_id.get()),
-                    };
-                    let value = SubnetsFailureRateValue {
-                        subnet_fr_percent: Some(subnet_fr_percent.into()),
-                    };
-                    historical_subnets_fr.insert(key, value);
-                }
-            });
-
-            HISTORICAL_REWARDS.with_borrow_mut(|historical_rewards| {
-                for (provider_id, provider_rewards) in result.provider_results {
-                    let key = NodeProviderRewardsKey {
-                        principal_id: Some(provider_id),
-                        end_day: Some(result.end_day.into()),
-                        start_day: Some(result.start_day.into()),
-                    };
-                    historical_rewards.insert(key, provider_rewards.into());
-                }
-            });
-
-            Ok(NodeProvidersRewards {
-                rewards_xdr_permyriad,
+                    e
+                )
+            })?;
+        NodeRewardsCanister::schedule_metrics_sync(canister).await;
+        let result = canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
+        let rewards_xdr_permyriad = result
+            .provider_results
+            .iter()
+            .map(|(provider_id, provider_rewards)| {
+                (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
             })
-        }
+            .collect();
+
+        HISTORICAL_SUBNETS_FR.with_borrow_mut(|historical_subnets_fr| {
+            for ((day, subnet_id), subnet_fr_percent) in result.subnets_fr {
+                let key = SubnetsFailureRateKey {
+                    day: Some(day.into()),
+                    subnet_id: Some(subnet_id.get()),
+                };
+                let value = SubnetsFailureRateValue {
+                    subnet_fr_percent: Some(subnet_fr_percent.into()),
+                };
+                historical_subnets_fr.insert(key, value);
+            }
+        });
+
+        HISTORICAL_REWARDS.with_borrow_mut(|historical_rewards| {
+            for (provider_id, provider_rewards) in result.provider_results {
+                let key = NodeProviderRewardsKey {
+                    principal_id: Some(provider_id),
+                    end_day: Some(result.end_day.into()),
+                    start_day: Some(result.start_day.into()),
+                };
+                historical_rewards.insert(key, provider_rewards.into());
+            }
+        });
+
+        Ok(NodeProvidersRewards {
+            rewards_xdr_permyriad,
+        })
     }
 
     pub fn get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
-        return inner_get_node_provider_rewards_calculation::<S>(canister, request);
+        let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
+        let request_inner = GetNodeProvidersRewardsRequest {
+            from_nanos: request.from_nanos,
+            to_nanos: request.to_nanos,
+        };
+        let result =
+            canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
+        let node_provider_rewards = result
+            .provider_results
+            .get(&provider_id)
+            .cloned()
+            .ok_or_else(|| format!("No rewards found for node provider {}", provider_id))?;
 
-        fn inner_get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
-            canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-            request: GetNodeProviderRewardsCalculationRequest,
-        ) -> Result<NodeProviderRewards, String> {
-            let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
-            let request_inner = GetNodeProvidersRewardsRequest {
-                from_nanos: request.from_nanos,
-                to_nanos: request.to_nanos,
-            };
-            let result =
-                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
-            let node_provider_rewards = result
-                .provider_results
-                .get(&provider_id)
-                .cloned()
-                .ok_or_else(|| format!("No rewards found for node provider {}", provider_id))?;
-
-            Ok(node_provider_rewards.into())
-        }
+        Ok(node_provider_rewards.into())
     }
 }
 

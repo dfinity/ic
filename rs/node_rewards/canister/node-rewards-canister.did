@@ -24,8 +24,6 @@ type NodeProvidersRewards = record {
   };
 };
 
-type GetNodeProviderRewardsCalculationResponse = variant { Ok : NodeProvidersRewards; Err : text };
-
 type Decimal = record {
   human_readable: opt text;
 };
