@@ -78,7 +78,6 @@ impl Display for SwapError {
 }
 
 impl SwapNodeInSubnetDirectlyPayload {
-    #[allow(dead_code)]
     fn validate(&self) -> Result<(), SwapError> {
         let (old_node_id, new_node_id) = match (&self.old_node_id, &self.new_node_id) {
             (Some(old_node_id), Some(new_node_id)) => (old_node_id, new_node_id),
