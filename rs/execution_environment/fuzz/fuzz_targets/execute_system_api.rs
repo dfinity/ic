@@ -70,7 +70,7 @@ where
 // A setup function to initialize ExecutionTest with a dummy canister and expose the canister_id.
 // The same canister_id and ExecutionTest reference is used in the fuzzing runs, where the
 // canister is reinstalled under the same canister_id.
-fn setup_env(memory64_enabled: bool) -> (ExecutionTest, CanisterId) {
+fn setup_env(_memory64_enabled: bool) -> (ExecutionTest, CanisterId) {
     let exec_config = ExecutionConfig {
         embedders_config: EmbeddersConfig::default(),
         max_compilation_cache_size: NumBytes::new(10 * 1024 * 1024), // 10MiB
