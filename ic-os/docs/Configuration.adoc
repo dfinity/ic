@@ -14,7 +14,7 @@ SetupOS constructs its config struct from the following user-facing configuratio
   deployment.json                 # Deployment-specific configurations
   nns_public_key.pem              # NNS public key
 
-Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
+Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../components/setupos/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
 
 == HostOS -> GuestOS
 

@@ -231,7 +231,7 @@ impl<T: RpcClientType> RpcClient<T> {
     /// account name and default address.
     /// This is different than the wallet feature supported by the Bitcoin daemon
     /// because all accounts will share the same wallet.
-    /// We cann't rely on the wallet feature because Dogecoin does not support it.
+    /// We can't rely on the wallet feature because Dogecoin does not support it.
     pub fn with_account(&self, account: &str) -> Result<Self> {
         let address = get_new_address(self, self.network, Some(account))?;
         Ok(RpcClient {

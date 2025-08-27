@@ -6,9 +6,10 @@ fn main() {
         std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
-    let out = manifest_dir.join("../src/gen");
+    let out = manifest_dir.join("../protobuf/src/gen");
     let node_rewards_proto = manifest_dir.join("../proto");
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
+    let nervous_system_proto = manifest_dir.join("../../../nervous_system/proto/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -23,6 +24,7 @@ fn main() {
         ProtoPaths {
             node_rewards: &node_rewards_proto,
             base_types: &base_types_proto,
+            nervous_system: &nervous_system_proto,
         },
         out.as_ref(),
     );
