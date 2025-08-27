@@ -112,6 +112,8 @@ fn setup(env: TestEnv, config: Config) {
                     )),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_unit_delay(Duration::from_millis(200))
+                .with_initial_notary_delay(Duration::from_millis(200))
                 .add_nodes(config.nodes_count),
         )
         .setup_and_start(&env)

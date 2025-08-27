@@ -379,40 +379,6 @@ async fn modify_canister_heap(
     skip_odd_indexed_canister: bool,
     seed: usize,
 ) {
-    // for x in 1..=size_level {
-    //     info!(
-    //         logger,
-    //         "Start modifying canisters {} times, it is now {}",
-    //         x,
-    //         Utc::now()
-    //     );
-    //     for (i, canister) in canisters.iter().enumerate() {
-    //         if skip_odd_indexed_canister && i % 2 == 1 {
-    //             continue;
-    //         }
-    //         let seed_for_canister = i + (x - 1) * num_canisters + seed;
-    //         let payload = (x as u32, seed_for_canister as u32);
-    //         // Each call will expand the memory by writing a chunk of 128 MiB.
-    //         // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
-    //         let _res: Result<u64, String> = canister
-    //             .update_("expand_state", dfn_candid::candid, payload)
-    //             .await
-    //             .unwrap_or_else(|e| {
-    //                 panic!(
-    //                     "Calling expand_state() on canister {} failed: {}",
-    //                     canister.canister_id_vec8()[0],
-    //                     e
-    //                 )
-    //             });
-    //     }
-    //     info!(
-    //         logger,
-    //         "Expanded canisters {} times, it is now {}",
-    //         x,
-    //         Utc::now()
-    //     );
-    // }
-
     let expansions = canisters
         .iter()
         .enumerate()
