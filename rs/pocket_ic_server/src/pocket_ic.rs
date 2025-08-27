@@ -105,9 +105,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpFeatures, MockCanisterHttpResponse,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
-    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
+    MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterId,
+    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
+    TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -524,7 +525,7 @@ struct PocketIcSubnets {
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
-    nonmainnet_features: bool,
+    nonmainnet_features: NonmainnetFeatures,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
@@ -543,18 +544,54 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        nonmainnet_features: bool,
+        nonmainnet_features: &NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        let mut hypervisor_config = if nonmainnet_features {
-            crate::nonmainnet_features::hypervisor_config(true)
+        // using `let NonmainnetFeatures { }` with explicit field names
+        // to force an update after adding a new field to `NonmainnetFeatures`
+        let NonmainnetFeatures {
+            enable_beta_features,
+            disable_canister_backtrace,
+            disable_function_name_length_limits,
+            disable_canister_execution_rate_limiting,
+        } = nonmainnet_features;
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
+            crate::beta_features::hypervisor_config()
         } else {
             execution_environment::Config::default()
         };
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_backtrace {
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .canister_backtrace = FlagStatus::Disabled;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_function_name_length_limits {
+            // the maximum size of a canister WASM is much less than 1GB
+            // and thus the following limits effectively disable all limits
+            hypervisor_config
+                .embedders_config
+                .max_number_exported_functions = 1_000_000_000;
+            hypervisor_config
+                .embedders_config
+                .max_sum_exported_function_name_lengths = 1_000_000_000;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_execution_rate_limiting {
+            hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+            hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        }
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -566,14 +603,6 @@ impl PocketIcSubnets {
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
-
-            // exported functions limits
-            hypervisor_config
-                .embedders_config
-                .max_number_exported_functions = 100_000;
-            hypervisor_config
-                .embedders_config
-                .max_sum_exported_function_name_lengths = 5_000_000;
         }
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
@@ -604,7 +633,7 @@ impl PocketIcSubnets {
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -732,7 +761,7 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            self.nonmainnet_features,
+            &self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
         );
@@ -761,14 +790,12 @@ impl PocketIcSubnets {
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
             }
 
-            if self.nonmainnet_features {
-                for name in ["key_1", "test_key_1", "dfx_test_key"] {
-                    let key_id = VetKdKeyId {
-                        curve: VetKdCurve::Bls12_381_G2,
-                        name: name.to_string(),
-                    };
-                    subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
-                }
+            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: name.to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
             }
         }
         for chain_key in &subnet_chain_keys {
@@ -2008,7 +2035,7 @@ impl PocketIc {
         seed: u64,
         mut subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -4203,7 +4230,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                false,
+                NonmainnetFeatures::default(),
                 None,
                 None,
                 None,
@@ -4220,7 +4247,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                false,
+                NonmainnetFeatures::default(),
                 None,
                 None,
                 None,
