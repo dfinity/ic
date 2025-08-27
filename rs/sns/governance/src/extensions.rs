@@ -44,7 +44,7 @@ use std::{
 };
 
 thread_local! {
-    static ALLOWED_EXTENSIONS: RefCell<BTreeMap<[u8; 32], ExtensionSpec>> = RefCell::new(btreemap! {});
+    static ALLOWED_EXTENSIONS: RefCell<BTreeMap<[u8; 32], ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
 }
 
 #[cfg(feature = "test")]
