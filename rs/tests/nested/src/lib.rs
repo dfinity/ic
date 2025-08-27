@@ -618,8 +618,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     info!(logger, "Simulate node provider action on 2f+1 nodes");
     block_on(join_all(
         get_host_vm_names(SUBNET_SIZE)
-            .iter()
-            .take(2 * f + 1)
+            .choose_multiple(&mut rand::thread_rng(), 2 * f + 1)
             .map(|vm_name| {
                 simulate_node_provider_action(
                     &logger,
