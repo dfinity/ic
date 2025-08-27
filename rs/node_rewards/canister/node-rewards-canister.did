@@ -33,10 +33,6 @@ type GetNodeProvidersRewardsResponse = record {
   error: opt text;
 };
 
-type DayUtc = record {
-  value: nat64;
-};
-
 type DayUtcOpt = record {
     value: opt nat64;
 };
