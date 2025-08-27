@@ -316,9 +316,9 @@ fn test_fetch_canister_logs_via_inter_canister_update_call() {
             .build(),
     );
     let reject_message = get_reject(result);
-    // let expected_message =
-    //     "fetch_canister_logs API is only accessible to end users in non-replicated mode";
-    let expected_message = "fetch_canister_logs API is only accessible BLA2 in non-replicated mode";
+    let expected_message =
+        "fetch_canister_logs API is only accessible to end users in non-replicated mode";
+    //let expected_message = "fetch_canister_logs API is only accessible BLA2 in non-replicated mode";
     assert!(
         reject_message.contains(expected_message),
         "Expected: {}\nActual: {}",
