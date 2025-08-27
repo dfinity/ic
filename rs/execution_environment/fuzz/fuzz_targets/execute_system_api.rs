@@ -40,10 +40,10 @@ fuzz_target!(|data: SystemApiModule| {
         let canister_id = env.borrow().1;
         let execution_test = &mut env.borrow_mut().0;
         let wasm = data.module;
-        if env.reinstall_canister(*canister_id, wasm).is_ok() {
+        if execution_test.reinstall_canister(canister_id, wasm).is_ok() {
             // For determinism, all methods are executed.
             for wasm_method in &data.exported_functions {
-                let _ = env.ingress(*canister_id, wasm_method.name(), vec![]);
+                let _ = execution_test.ingress(canister_id, wasm_method.name(), vec![]);
             }
         }
     })
