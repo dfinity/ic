@@ -797,8 +797,6 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Node ids of nodes in the subnet.
-    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }
