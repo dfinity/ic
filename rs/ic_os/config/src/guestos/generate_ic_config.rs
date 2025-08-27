@@ -268,7 +268,7 @@ fn get_router_advertisement_ipv6_address_helper() -> Result<String> {
             match &iface.addr {
                 get_if_addrs::IfAddr::V6(addr) => {
                     let ipv6_str = addr.ip.to_string();
-                    if !ipv6_str.is_empty() && !addr.ip.is_loopback() {
+                    if !ipv6_str.is_empty() {
                         Some(ipv6_str)
                     } else {
                         None
