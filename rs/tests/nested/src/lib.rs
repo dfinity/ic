@@ -407,13 +407,13 @@ pub fn nns_recovery_test(env: TestEnv) {
     }
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 
-    // Define faulty and healthy nodes, pick a DFINITY-owned node that is healthy
+    // Define faulty and healthy nodes, pick a DFINITY-owned node (could be healthy or faulty)
     let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
+    let dfinity_owned_node = nns_nodes.first().unwrap().clone();
     nns_nodes.shuffle(&mut rand::thread_rng());
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
-    let dfinity_owned_node = healthy_nodes.first().unwrap();
 
     // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
     info!(
