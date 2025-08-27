@@ -610,10 +610,7 @@ impl Governance {
         let expiry_time_nsec = expiry_time_sec.saturating_mul(NANO_SECONDS_PER_SECOND);
 
         // If expected_allowance is None, the ledger *blindly* overwrites any existing
-        // allowance (even if non-zero). We use this to retry failed proposals by
-        // replacing the prior allowance.
-        // Safety: double-spend is avoided because the ledger treats the write as an
-        // unconditional replace, not an increment/accumulate.
+        // allowance (even if non-zero). Therefore, there is no risk of double spending.
 
         self.ledger
             .icrc2_approve(
