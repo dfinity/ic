@@ -7,14 +7,9 @@ use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
-use ic_node_rewards_canister_api::provider_historical_rewards::{
-    GetNodeProviderHistoricalRewardsCalculationRequest,
-    GetNodeProviderHistoricalRewardsCalculationResponse,
-    GetNodeProvidersHistoricalRewardsTsResponse,
-};
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriods, GetNodeProviderLatestRewardsCalculationRequest,
-    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+    GetHistoricalRewardPeriods, GetNodeProviderRewardsCalculationRequest,
+    GetNodeProviderRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
