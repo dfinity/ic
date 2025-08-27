@@ -1,6 +1,6 @@
 //! This module contains types and internal methods.  
 //!
-//! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant.
+//!
 
 use candid::{CandidType, Principal};
 use ic_cdk::futures::spawn;
@@ -64,6 +64,18 @@ impl Request {
     }
 }
 
+/// Represents the state a `Request` is currently in and contains all data necessary
+/// to transition to the next state (and sometimes data for a future state).
+///
+/// The variants are ordered according to the successful path.
+/// Each variant has a corresponding `process_*` function which attempts to make progress.
+/// Every such function may collect data via various xnet calls, but for every function (and
+/// therefore state), only _one_ effectful call is allowed, and on success it has to transition
+/// to the next state.
+///
+/// If a transition fails, it may either be retried (signalled by `ProcessingResult::NoProgress`)
+/// or fails fatally and transitions into the Failed state. Failed states run a cleanup and end up
+/// as a record in the event log `HISTORY`.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestState {
     /// Request was validated successfully.
