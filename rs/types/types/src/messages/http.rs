@@ -724,7 +724,6 @@ pub enum CertificateDelegationFormat {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct CertificateDelegationMetadata {
-    // TODO(kpop): additionally include the time from the certification
     pub format: CertificateDelegationFormat,
 }
 
