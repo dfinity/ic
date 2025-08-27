@@ -10,7 +10,10 @@ use crate::{
         requests::{insert_request, list_by, remove_request},
         MethodGuard,
     },
-    external_interfaces::management::set_exclusive_controller,
+    external_interfaces::management::{
+        canister_info, canister_status, set_exclusive_controller, CanisterInfoArgs,
+        CanisterStatusType,
+    },
     Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
@@ -75,10 +78,63 @@ pub async fn process_accepted(
         .map_failure(|reason| RequestState::Failed { request, reason })
 }
 
-// pub async fn process_controllers_changed(
-//     request: RequestState,
-// ) -> ProcessingResult<RequestState, RequestState> {
-// }
+pub async fn process_controllers_changed(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::ControllersChanged { request } = request else {
+        println!("Error: list_by ControllersChanged returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+
+    // These checks are repeated because the canisters may have changed since validation:
+    let ProcessingResult::Success(source_status) =
+        canister_status(request.source, request.source_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    if source_status.status != CanisterStatusType::Stopped {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Source is not stopped.".to_string(),
+        });
+    }
+    if !source_status.ready_for_migration {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Source is not ready for migration.".to_string(),
+        });
+    }
+    let canister_version = source_status.version;
+    if canister_version > u64::MAX / 2 {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Source version is too large.".to_string(),
+        });
+    }
+
+    let ProcessingResult::Success(target_status) =
+        canister_status(request.target, request.target_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    if target_status.status != CanisterStatusType::Stopped {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Target is not stopped.".to_string(),
+        });
+    }
+    // TODO: target has no snapshots
+    // TODO: target has enough cycles
+
+    // Determine history length of source
+    let ProcessingResult::Success(canister_info) = canister_info(CanisterInfoArgs {
+        canister_id: request.source,
+    }) else {
+        return todo!();
+    };
+
+    todo!()
+}
 
 pub async fn process_all_failed() {
     let Ok(_guard) = MethodGuard::new("failed") else {

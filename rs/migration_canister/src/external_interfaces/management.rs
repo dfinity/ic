@@ -159,7 +159,7 @@ pub struct CanisterInfoResponse {
     pub controllers: Vec<Principal>,
 }
 
-pub async fn _canister_info(
+pub async fn canister_info(
     canister_id: Principal,
     subnet_id: Principal,
 ) -> ProcessingResult<CanisterInfoResponse, ValidationError> {
