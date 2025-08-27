@@ -1,5 +1,6 @@
 use anyhow::{ensure, Context, Result};
 use config_types::{GuestOSConfig, Ipv6Config};
+use get_if_addrs::get_if_addrs;
 use serde_json;
 use std::fs::{read_to_string, write};
 use std::path::Path;
@@ -90,8 +91,7 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
             Ok((ipv6_address, ipv6_prefix))
         }
         Ipv6Config::RouterAdvertisement => {
-            let interface = get_network_interface()?;
-            let ipv6_address = get_interface_ipv6_address(&interface)?;
+            let ipv6_address = get_primary_ipv6_address()?;
 
             let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
             Ok((ipv6_address, ipv6_prefix))
@@ -231,15 +231,71 @@ fn substitute_template(template_content: &str, config_vars: &ConfigVariables) ->
     content
 }
 
-fn get_network_interface() -> Result<String> {
+fn get_primary_ipv6_address() -> Result<String> {
+    const MAX_RETRIES: usize = 12;
+    const RETRY_DELAY_SECS: u64 = 10;
+
+    for attempt in 1..=MAX_RETRIES {
+        match get_primary_ipv6_address_internal() {
+            Ok(ipv6_address) => return Ok(ipv6_address),
+            Err(e) => {
+                if attempt < MAX_RETRIES {
+                    eprintln!(
+                        "Retrying {} more times... (Failed to get IPv6 address: {})",
+                        MAX_RETRIES - attempt,
+                        e
+                    );
+                    std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
+                } else {
+                    return Err(e.context("Failed to get IPv6 address after all retries"));
+                }
+            }
+        }
+    }
+
+    anyhow::bail!("Cannot determine an IPv6 address, aborting");
+}
+
+fn get_primary_ipv6_address_internal() -> Result<String> {
+    let valid_interfaces = get_valid_interfaces()?;
+
+    let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
+    // Find the first valid interface with an IPv6 address
+    let ipv6_address = ifaces
+        .iter()
+        .find_map(|iface| {
+            // Only consider interfaces that are in our valid list
+            if !valid_interfaces.contains(&iface.name) {
+                return None;
+            }
+
+            // Get IPv6 address if available
+            match &iface.addr {
+                get_if_addrs::IfAddr::V6(addr) => {
+                    let ipv6_str = addr.ip.to_string();
+                    if !ipv6_str.is_empty() && !addr.ip.is_loopback() {
+                        Some(ipv6_str)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        })
+        .context("No suitable network interface with IPv6 address found")?;
+
+    Ok(ipv6_address)
+}
+
+fn get_valid_interfaces() -> Result<Vec<String>> {
     let net_dir = "/sys/class/net";
 
-    WalkDir::new(net_dir)
+    let valid_interfaces: Vec<String> = WalkDir::new(net_dir)
         .max_depth(1)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| entry.depth() > 0)
-        .find_map(|entry| {
+        .filter_map(|entry| {
             let path = entry.path();
 
             // Check if it's a symbolic link
@@ -256,59 +312,13 @@ fn get_network_interface() -> Result<String> {
 
             Some(path.file_name()?.to_string_lossy().into_owned())
         })
-        .ok_or_else(|| anyhow::anyhow!("No network interfaces found"))
-}
+        .collect();
 
-fn get_interface_ipv6_address(interface: &str) -> Result<String> {
-    let parse_ipv6_address = |output_str: &str| -> Result<String> {
-        let addr = output_str
-            .lines()
-            .next()
-            .context("No output lines found")?
-            .split_whitespace()
-            .nth(3)
-            .context("No IPv6 address found in output")?
-            .split('/')
-            .next()
-            .expect("Failed to extract address part");
-
-        if addr.is_empty() {
-            anyhow::bail!("Empty IPv6 address found");
-        }
-
-        Ok(addr.to_string())
-    };
-
-    const MAX_RETRIES: usize = 12;
-    const RETRY_DELAY_SECS: u64 = 10;
-
-    for attempt in 1..=MAX_RETRIES {
-        let output = Command::new("ip")
-            .args([
-                "-o", "-6", "addr", "show", "up", "primary", "scope", "global", interface,
-            ])
-            .output()
-            .context("Failed to get IPv6 address")?;
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        match parse_ipv6_address(&output_str) {
-            Ok(ipv6_address) => return Ok(ipv6_address),
-            Err(e) => {
-                if attempt < MAX_RETRIES {
-                    eprintln!(
-                        "Retrying {} more times... (Failed to parse IPv6 address: {})",
-                        MAX_RETRIES - attempt,
-                        e
-                    );
-                    std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
-                } else {
-                    return Err(e.context("Failed to parse IPv6 address after all retries"));
-                }
-            }
-        }
+    if valid_interfaces.is_empty() {
+        anyhow::bail!("No valid network interfaces found");
     }
 
-    anyhow::bail!("Cannot determine an IPv6 address, aborting");
+    Ok(valid_interfaces)
 }
 
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
