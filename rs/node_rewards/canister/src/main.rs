@@ -1,6 +1,5 @@
 #[cfg(any(feature = "test", test))]
-use ic_cdk::query;
-use ic_cdk::{init, post_upgrade, pre_upgrade, update};
+use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
@@ -129,10 +128,7 @@ fn get_node_provider_rewards_calculation(
     //     &CANISTER, request,
     // );
 
-    GetNodeProviderRewardsCalculationResponse {
-        rewards: None,
-        error: Some("Not yet active.".to_string()),
-    }
+    GetNodeProviderRewardsCalculationResponse::Err("Not yet active.".to_string())
 }
 
 #[cfg(test)]

@@ -124,8 +124,8 @@ impl NodeRewardsCanister {
         &self,
         request: GetNodeProvidersRewardsRequest,
     ) -> Result<RewardsCalculatorResults, String> {
-        let reward_period =
-            RewardPeriod::new(request.from.into(), request.to.into()).map_err(|e| e.to_string())?;
+        let reward_period = RewardPeriod::new(request.from_nanos.into(), request.to_nanos.into())
+            .map_err(|e| e.to_string())?;
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
@@ -231,16 +231,9 @@ impl NodeRewardsCanister {
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
         return match inner_get_node_providers_rewards::<S>(canister, request).await {
-            Ok(rewards) => GetNodeProvidersRewardsResponse {
-                rewards: Some(rewards),
-                error: None,
-            },
-            Err(e) => GetNodeProvidersRewardsResponse {
-                rewards: None,
-                error: Some(e),
-            },
+            Ok(rewards) => GetNodeProvidersRewardsResponse::Ok(rewards),
+            Err(e) => GetNodeProvidersRewardsResponse::Err(e),
         };
-
         async fn inner_get_node_providers_rewards<S: RegistryDataStableMemory>(
             canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
             request: GetNodeProvidersRewardsRequest,
@@ -300,14 +293,8 @@ impl NodeRewardsCanister {
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
         return match inner_get_node_provider_rewards_calculation::<S>(canister, request) {
-            Ok(rewards) => GetNodeProviderRewardsCalculationResponse {
-                rewards: Some(rewards),
-                error: None,
-            },
-            Err(e) => GetNodeProviderRewardsCalculationResponse {
-                rewards: None,
-                error: Some(e),
-            },
+            Ok(rewards) => GetNodeProviderRewardsCalculationResponse::Ok(rewards),
+            Err(e) => GetNodeProviderRewardsCalculationResponse::Err(e),
         };
 
         fn inner_get_node_provider_rewards_calculation<S: RegistryDataStableMemory>(
@@ -316,8 +303,8 @@ impl NodeRewardsCanister {
         ) -> Result<NodeProviderRewards, String> {
             let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
             let request_inner = GetNodeProvidersRewardsRequest {
-                from: request.from,
-                to: request.to,
+                from_nanos: request.from_nanos,
+                to_nanos: request.to_nanos,
             };
             let result =
                 canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
