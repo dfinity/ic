@@ -125,7 +125,7 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
     // Creating an SNS
-    let (sns, dev_participant_neuron_id) = create_sns(
+    let (sns, dev_sns_neuron_id) = create_sns(
         &pocket_ic,
         dev_participant_id,
         dev_neuron_id,
@@ -138,7 +138,7 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     let proposal_id = propose_sns_controlled_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
-        dev_participant_neuron_id,
+        dev_sns_neuron_id,
         sns.clone(),
         test_canister_id,
         Wasm::from_location_specified_by_env_var("sns_testing_canister", &[])
@@ -169,7 +169,7 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
     // Creating an SNS
-    let (sns, dev_participant_neuron_id) = create_sns(
+    let (sns, dev_sns_neuron_id) = create_sns(
         &pocket_ic,
         dev_participant_id,
         dev_neuron_id,
@@ -183,7 +183,7 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let proposal_id = propose_sns_controlled_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
-        dev_participant_neuron_id,
+        dev_sns_neuron_id,
         sns.clone(),
         test_canister_id,
         Wasm::from_location_specified_by_env_var("sns_testing_canister", &[])

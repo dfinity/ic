@@ -81,7 +81,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         validate_candid_arg_for_wasm(&upgrade_canister_wasm, args.upgrade_candid_arg).unwrap();
 
     println!("Creating SNS...");
-    let (sns, dev_participant_neuron_id) = create_sns(
+    let (sns, dev_sns_neuron_id) = create_sns(
         dev_agent,
         nns_neuron_id,
         dev_agent,
@@ -93,7 +93,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
     println!("Upgrading SNS-controlled test canister...");
     let proposal_id = propose_sns_controlled_canister_upgrade(
         dev_agent,
-        dev_participant_neuron_id,
+        dev_sns_neuron_id,
         sns.clone(),
         args.canister_id,
         upgrade_canister_wasm.bytes().to_vec(),

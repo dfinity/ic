@@ -98,7 +98,7 @@ pub async fn create_sns<
 
     let sns_governance = sns.governance;
 
-    let dev_participant_neuron_id = get_caller_neuron(dev_participant_agent, sns_governance)
+    let dev_sns_neuron_id = get_caller_neuron(dev_participant_agent, sns_governance)
         .await
         .unwrap()
         .expect("Expecting the identity to have a Neuron");
@@ -110,7 +110,7 @@ pub async fn create_sns<
         sns_swap,
         sns_governance,
         if follow_dev_neuron {
-            vec![dev_participant_neuron_id.clone()]
+            vec![dev_sns_neuron_id.clone()]
         } else {
             vec![]
         },
@@ -118,7 +118,7 @@ pub async fn create_sns<
     .await
     .unwrap();
 
-    (sns, dev_participant_neuron_id)
+    (sns, dev_sns_neuron_id)
 }
 
 // Find all SNSes with the given name.
