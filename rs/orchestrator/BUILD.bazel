@@ -25,6 +25,7 @@ rust_library(
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/tls_interfaces",
+        "//rs/crypto/utils/threshold_sig_der",
         "//rs/http_endpoints/async_utils",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
