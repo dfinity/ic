@@ -534,11 +534,6 @@ fn sign_envelope(content: &EnvelopeContent) -> Vec<u8> {
     serialized_bytes
 }
 
-enum CanisterRangesFormat {
-    Flat,
-    Tree,
-}
-
 fn validate_delegation(
     env: &TestEnv,
     delegation: &CertificateDelegation,
