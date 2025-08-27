@@ -97,7 +97,11 @@ pub async fn process_all_failed() {
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
 async fn process_failed(request: RequestState) -> ProcessingResult<Event, ()> {
-    let RequestState::Failed { request, reason } = request else {
+    let RequestState::Failed {
+        request: _,
+        reason: _,
+    } = request
+    else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
     };
@@ -118,6 +122,7 @@ pub enum ProcessingResult<S, F> {
     FatalFailure(F),
 }
 
+#[allow(dead_code)]
 impl<S, F> ProcessingResult<S, F> {
     pub fn map_success<T>(self, f: impl FnOnce(S) -> T) -> ProcessingResult<T, F> {
         match self {
@@ -136,22 +141,13 @@ impl<S, F> ProcessingResult<S, F> {
     }
 
     pub fn is_success(&self) -> bool {
-        match self {
-            ProcessingResult::Success(_) => true,
-            _ => false,
-        }
+        matches!(self, ProcessingResult::Success(_))
     }
     pub fn is_no_progress(&self) -> bool {
-        match self {
-            ProcessingResult::NoProgress => true,
-            _ => false,
-        }
+        matches!(self, ProcessingResult::NoProgress)
     }
     pub fn is_fatal_failure(&self) -> bool {
-        match self {
-            ProcessingResult::FatalFailure(_) => true,
-            _ => false,
-        }
+        matches!(self, ProcessingResult::FatalFailure(_))
     }
 }
 
@@ -190,7 +186,7 @@ impl ProcessingResult<RequestState, RequestState> {
 impl ProcessingResult<Event, ()> {
     fn transition(self, old_state: RequestState) {
         match self {
-            ProcessingResult::Success(event) => {
+            ProcessingResult::Success(_event) => {
                 // Cleanup successful.
                 remove_request(&old_state);
                 // TODO: insert_event(event);

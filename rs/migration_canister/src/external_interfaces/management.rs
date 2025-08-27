@@ -57,10 +57,10 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
     }
 }
 
-pub async fn set_original_controllers(canister_id: Principal, subnet_id: Principal) -> () {
-    // TODO
-    todo!()
-}
+// pub async fn set_original_controllers(canister_id: Principal, subnet_id: Principal) -> () {
+//     // TODO
+//     todo!()
+// }
 
 // ========================================================================= //
 // `canister_status`
@@ -159,7 +159,7 @@ pub struct CanisterInfoResponse {
     pub controllers: Vec<Principal>,
 }
 
-pub async fn canister_info(
+pub async fn _canister_info(
     canister_id: Principal,
     subnet_id: Principal,
 ) -> ProcessingResult<CanisterInfoResponse, ValidationError> {
