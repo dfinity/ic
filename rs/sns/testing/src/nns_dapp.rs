@@ -15,7 +15,6 @@ use ic_nns_governance_api::{
     neuron::DissolveState, ClaimOrRefreshNeuronFromAccount,
     ClaimOrRefreshNeuronFromAccountResponse, GovernanceError, Neuron,
 };
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
@@ -34,7 +33,6 @@ async fn validate_subnet_setup(pocket_ic: &PocketIc) {
 
 pub async fn bootstrap_nns(
     pocket_ic: &PocketIc,
-    _initial_mutations: Vec<RegistryAtomicMutateRequest>,
     ledger_balances: Vec<(PrincipalId, Tokens)>,
     neuron_controller: PrincipalId,
 ) -> NeuronId {

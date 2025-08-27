@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_on_subnet, load_registry_mutations, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
+    install_canister_on_subnet, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
@@ -63,14 +63,11 @@ async fn prepare_network_for_test(
         .with_application_subnet()
         .build_async()
         .await;
-    let registry_proto_path = state_dir.join("registry.proto");
-    let initial_mutations = load_registry_mutations(registry_proto_path);
     let treasury_principal_id = *TREASURY_PRINCIPAL_ID;
 
     // Installing NNS canisters
     let dev_neuron_id = bootstrap_nns(
         &pocket_ic,
-        vec![initial_mutations],
         vec![(
             treasury_principal_id,
             Tokens::from_tokens(10_000_000).unwrap(),
@@ -229,7 +226,7 @@ pub async fn test_missing_nns_canisters() {
         .build_async()
         .await;
     // Installing NNS canisters
-    bootstrap_nns(&pocket_ic, vec![], vec![], dev_participant_id).await;
+    bootstrap_nns(&pocket_ic, vec![], dev_participant_id).await;
 
     // Deleting the ledger-index canister
     pocket_ic

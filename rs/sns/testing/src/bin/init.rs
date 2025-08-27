@@ -1,5 +1,4 @@
 use clap::Parser;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
 use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::utils::{get_identity_principal, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
@@ -31,8 +30,6 @@ async fn nns_init(args: NnsInitArgs) {
     let endpoint = pocket_ic.make_live(Some(args.ic_network_port)).await;
     println!("PocketIC endpoint: {}", endpoint);
 
-    let registry_proto_path = state_dir.join("registry.proto");
-    let initial_mutations = load_registry_mutations(registry_proto_path);
     let dev_principal_id = get_identity_principal(&args.dev_identity).unwrap();
 
     let treasury_principal_id = if let Some(icp_treasury_identity) = args.icp_treasury_identity {
@@ -47,7 +44,6 @@ async fn nns_init(args: NnsInitArgs) {
 
     let deciding_nns_neuron_id = bootstrap_nns(
         &pocket_ic,
-        vec![initial_mutations],
         vec![
             (
                 treasury_principal_id,
