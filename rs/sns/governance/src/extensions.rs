@@ -2766,7 +2766,7 @@ mod tests {
         cache_registered_extension(
             extension_canister_id,
             ExtensionSpec {
-                name: "KongSwap Treasury Manager".to_string(),
+                name: "My Test Extension".to_string(),
                 version: ExtensionVersion(1),
                 topic: Topic::TreasuryAssetManagement,
                 extension_type: ExtensionType::TreasuryManager,
