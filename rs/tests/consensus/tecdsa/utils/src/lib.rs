@@ -1,22 +1,20 @@
-#![allow(deprecated)]
 use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_bls12_381::G1Affine;
 use ic_canister_client::Sender;
-use ic_cdk::api::management_canister::{
-    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+use ic_cdk::management_canister::{
+    SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE, VETKD_FEE};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
-    SignWithSchnorrReply, VetKdCurve, VetKdDeriveKeyArgs, VetKdDeriveKeyResult, VetKdKeyId,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    SignWithSchnorrAux, SignWithSchnorrReply, VetKdCurve, VetKdDeriveKeyArgs, VetKdDeriveKeyResult,
+    VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -825,7 +823,7 @@ pub async fn generate_dummy_ecdsa_signature_with_logger(
     key_id: &EcdsaKeyId,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithEcdsaResponse, AgentError> {
+) -> Result<SignWithEcdsaResult, AgentError> {
     let signature_request = GenEcdsaParams {
         derivation_path_length,
         derivation_path_element_size,
@@ -868,14 +866,16 @@ pub async fn generate_dummy_schnorr_signature_with_logger(
     derivation_path_length: usize,
     derivation_path_element_size: usize,
     key_id: &SchnorrKeyId,
+    aux: Option<SignWithSchnorrAux>,
     sig_can: &SignerCanister<'_>,
     logger: &Logger,
-) -> Result<SignWithSchnorrResponse, AgentError> {
+) -> Result<SignWithSchnorrResult, AgentError> {
     let signature_request = GenSchnorrParams {
         message_size,
         derivation_path_length,
         derivation_path_element_size,
         key_id: cast_schnorr_key_id(key_id.clone()),
+        aux: aux.map(|a| cast_schnorr_aux(a)),
     };
     info!(
         logger,
@@ -1185,37 +1185,43 @@ pub enum SignWithChainKeyReply {
     VetKd(VetKdDeriveKeyResult),
 }
 
-fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk::api::management_canister::ecdsa::EcdsaKeyId {
-    ic_cdk::api::management_canister::ecdsa::EcdsaKeyId {
+fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk::management_canister::EcdsaKeyId {
+    ic_cdk::management_canister::EcdsaKeyId {
         curve: match key_id.curve {
-            EcdsaCurve::Secp256k1 => ic_cdk::api::management_canister::ecdsa::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256k1 => ic_cdk::management_canister::EcdsaCurve::Secp256k1,
         },
         name: key_id.name,
     }
 }
 
-fn cast_schnorr_key_id(
-    key_id: SchnorrKeyId,
-) -> ic_cdk::api::management_canister::schnorr::SchnorrKeyId {
-    ic_cdk::api::management_canister::schnorr::SchnorrKeyId {
+fn cast_schnorr_key_id(key_id: SchnorrKeyId) -> ic_cdk::management_canister::SchnorrKeyId {
+    ic_cdk::management_canister::SchnorrKeyId {
         algorithm: match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => {
-                ic_cdk::api::management_canister::schnorr::SchnorrAlgorithm::Bip340secp256k1
+                ic_cdk::management_canister::SchnorrAlgorithm::Bip340secp256k1
             }
-            SchnorrAlgorithm::Ed25519 => {
-                ic_cdk::api::management_canister::schnorr::SchnorrAlgorithm::Ed25519
-            }
+            SchnorrAlgorithm::Ed25519 => ic_cdk::management_canister::SchnorrAlgorithm::Ed25519,
         },
         name: key_id.name,
     }
 }
 
-fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_management_canister_types::VetKDKeyId {
-    ic_management_canister_types::VetKDKeyId {
+fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_cdk::management_canister::VetKDKeyId {
+    ic_cdk::management_canister::VetKDKeyId {
         curve: match key_id.curve {
-            VetKdCurve::Bls12_381_G2 => ic_management_canister_types::VetKDCurve::Bls12_381_G2,
+            VetKdCurve::Bls12_381_G2 => ic_cdk::management_canister::VetKDCurve::Bls12_381_G2,
         },
         name: key_id.name,
+    }
+}
+
+fn cast_schnorr_aux(aux: SignWithSchnorrAux) -> ic_cdk::management_canister::SchnorrAux {
+    match aux {
+        SignWithSchnorrAux::Bip341(aux) => {
+            ic_cdk::management_canister::SchnorrAux::Bip341(ic_cdk::management_canister::Bip341 {
+                merkle_root_hash: aux.merkle_root_hash.to_vec(),
+            })
+        }
     }
 }
 
@@ -1313,12 +1319,14 @@ impl ChainSignatureRequest {
         derivation_path_length: usize,
         derivation_path_element_size: usize,
         key_id: SchnorrKeyId,
+        aux: Option<SignWithSchnorrAux>,
     ) -> (String, Vec<u8>) {
         let params = GenSchnorrParams {
             message_size,
             derivation_path_length,
             derivation_path_element_size,
             key_id: cast_schnorr_key_id(key_id),
+            aux: aux.map(|a| cast_schnorr_aux(a)),
         };
 
         (String::from("gen_schnorr_sig"), Encode!(&params).unwrap())
