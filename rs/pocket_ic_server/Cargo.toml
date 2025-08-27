@@ -100,9 +100,9 @@ uuid = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-bitcoincore-rpc = { workspace = true }
 candid_parser = { workspace = true }
 flate2 = { workspace = true }
+ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }

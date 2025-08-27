@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   i.e., PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
 - The function `PocketIcBuilder::with_http_gateway` to specify that an HTTP gateway should be created for the newly created instance.
 
+### Removed
+- The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+
 
 
 ## 9.0.2 - 2025-06-06

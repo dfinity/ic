@@ -598,8 +598,8 @@ fn test_get_node_providers_rewards() {
     let to = DayUtc::try_from("2024-01-02").unwrap();
 
     let request = GetNodeProvidersRewardsRequest {
-        from: from.into(),
-        to: to.into(),
+        from_nanos: from.unix_ts_at_day_start(),
+        to_nanos: to.unix_ts_at_day_end(),
     };
     let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
         &CANISTER_TEST,
@@ -621,7 +621,7 @@ fn test_get_node_providers_rewards() {
             test_provider_id(2).0 => 10000,
         },
     };
-    assert_eq!(result_endpoint.rewards, Some(expected));
+    assert_eq!(result_endpoint, Ok(expected));
 
     HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
         let p1 = test_provider_id(1);

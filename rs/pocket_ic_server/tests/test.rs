@@ -128,7 +128,7 @@ fn test_creation_of_instance_extended() {
         .into(),
         http_gateway_config: None,
         state_dir: None,
-        nonmainnet_features: false,
+        nonmainnet_features: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,

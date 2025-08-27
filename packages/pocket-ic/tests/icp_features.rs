@@ -1040,7 +1040,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         },
         http_gateway_config: None,
         state_dir: None,
-        nonmainnet_features: false,
+        nonmainnet_features: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: Some(IcpFeatures::all_icp_features()),

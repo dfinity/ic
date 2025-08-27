@@ -33,6 +33,7 @@ CANISTERS = {
     "ledger-canister.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+    "migration-canister.wasm.gz": "//rs/migration_canister:migration-canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
     "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
