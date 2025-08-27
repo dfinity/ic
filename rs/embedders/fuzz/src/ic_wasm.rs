@@ -49,7 +49,7 @@ impl<'a> Arbitrary<'a> for ICWasmModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         let embedder_config = EmbeddersConfig::default();
         let exports = generate_exports(embedder_config.clone(), u)?;
-        let is_wasm64 = u.arbitrary()?;
+        let is_wasm64 = u.ratio(2, 3)?;
         let mut config = ic_wasm_config(embedder_config, is_wasm64);
         config.exports = exports;
         Ok(ICWasmModule::new(config.clone(), Module::new(config, u)?))
@@ -71,7 +71,7 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         // memory pages are bound to 100
         let memory_minimum = u.int_in_range(0..=50)?;
         let memory_maximum = u.int_in_range(memory_minimum..=100)?;
-        let is_wasm64 = u.arbitrary()?;
+        let is_wasm64 = u.ratio(2, 3)?;
 
         let store: &'static SystemApiImportStore = if is_wasm64 {
             &SYSTEM_API_IMPORTS_WASM64
@@ -264,7 +264,7 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Conf
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
-        memory64_enabled: true,
+        memory64_enabled: is_wasm64,
 
         threads_enabled: false,
         relaxed_simd_enabled: false,
