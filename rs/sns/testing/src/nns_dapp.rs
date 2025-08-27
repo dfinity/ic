@@ -167,7 +167,6 @@ pub async fn bootstrap_nns(
     .await
     .unwrap()
     .0;
-    println!("res: {:?}", res);
     assert!(res.is_none());
 
     install_frontend_nns_canisters(pocket_ic).await;

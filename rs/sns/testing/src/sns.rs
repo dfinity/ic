@@ -56,9 +56,6 @@ pub async fn create_sns<
         .build();
     let governance_parameters = create_service_nervous_system.governance_parameters.clone();
 
-    let minimum_dissolve_delay =
-        governance_parameters.and_then(|p| p.neuron_minimum_dissolve_delay_to_vote);
-
     // Set developer identity to have initial neuron eligible for voting
     create_service_nervous_system.initial_token_distribution = create_service_nervous_system
         .initial_token_distribution
@@ -68,7 +65,8 @@ pub async fn create_sns<
                 .map(|mut developer_distribution| {
                     developer_distribution.developer_neurons = vec![NeuronDistribution {
                         controller: Some(dev_participant_agent.caller().unwrap().into()),
-                        dissolve_delay: minimum_dissolve_delay,
+                        dissolve_delay: governance_parameters
+                            .and_then(|p| p.neuron_minimum_dissolve_delay_to_vote),
                         memo: Some(400000),
                         stake: Some(ic_nervous_system_proto::pb::v1::Tokens { e8s: Some(400000) }),
                         vesting_period: Some(ic_nervous_system_proto::pb::v1::Duration::from_secs(
@@ -119,20 +117,6 @@ pub async fn create_sns<
     )
     .await
     .unwrap();
-
-    sns_governance
-        .increase_dissolve_delay(
-            dev_participant_agent,
-            dev_participant_neuron_id.clone(),
-            minimum_dissolve_delay.unwrap().seconds.unwrap() as u32,
-        )
-        .await
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to increase dissolve delay for neuron {:?}: {}",
-                dev_participant_neuron_id, e
-            )
-        });
 
     (sns, dev_participant_neuron_id)
 }
