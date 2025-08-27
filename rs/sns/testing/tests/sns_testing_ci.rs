@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_on_subnet, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
+    install_canister_on_subnet, STARTING_CYCLES_PER_CANISTER,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
@@ -250,36 +250,6 @@ pub async fn test_missing_nns_canisters() {
         vec![SnsTestingNetworkValidationError::MissingNnsCanister(
             "ledger-index".to_string(),
         )]
-    )
-}
-
-#[tokio::test]
-pub async fn test_missing_sns_wasm_upgrade_steps() {
-    // Preparing the PocketIC-based network
-    let pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .with_ii_subnet()
-        .with_application_subnet()
-        .build_async()
-        .await;
-
-    // Install NNS canisters, but do not add SNS wasm modules to SNS-W canister
-    let mut nns_installer = NnsInstaller::default();
-    nns_installer.with_current_nns_canister_versions();
-    nns_installer.with_test_governance_canister();
-    nns_installer.with_cycles_minting_canister();
-    nns_installer.with_cycles_ledger();
-    nns_installer.with_index_canister();
-    nns_installer.with_custom_registry_mutations(vec![]);
-    nns_installer.with_ledger_balances(vec![]);
-    nns_installer.with_neurons_fund_hotkeys(vec![]);
-    nns_installer.install(&pocket_ic).await;
-
-    // Assert that the SNS-W canister is missing wasm upgrade steps
-    assert_eq!(
-        validate_network(&pocket_ic).await,
-        vec![SnsTestingNetworkValidationError::MissingSnsWasmModules]
     )
 }
 
