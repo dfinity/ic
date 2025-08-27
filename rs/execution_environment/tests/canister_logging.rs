@@ -390,7 +390,7 @@ fn test_fetch_canister_logs_via_inter_canister_query_call_enabled() {
 }
 
 // TODO: temporary ignore, because the reject message changed to "register canister not found in get_active_canister"
-#[ignore]
+//#[ignore]
 #[test]
 fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is not accessible via composite query call.
@@ -501,13 +501,15 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
     println!("ABC canister_b: {canister_b:?}");
 
     // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
-    let reject_message = get_reject(actual_result);
-    let expected_message = "not found";
+    let error = actual_result.unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
+    // TODO(EXC-1655): fix reject response propagation.
+    let expected_error_message = "did not produce a response";
     assert!(
-        reject_message.contains(expected_message),
+        error.description().contains(expected_error_message),
         "Expected: {}\nActual: {}",
-        expected_message,
-        reject_message
+        expected_error_message,
+        error.description()
     );
 }
 
