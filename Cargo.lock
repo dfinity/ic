@@ -11018,6 +11018,7 @@ dependencies = [
  "canister-test",
  "cycles-minting-canister",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-error-types 0.2.0",
