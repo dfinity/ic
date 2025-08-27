@@ -97,6 +97,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 regex = { workspace = true }
+serde_regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }

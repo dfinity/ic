@@ -167,6 +167,7 @@ fn main() {
         None,
         None,
         None,
+        None,
         Vec::new(),
     );
     let initialized_ic = ic_config.initialize().unwrap();
@@ -206,8 +207,6 @@ fn main() {
             domain_name: None,
             mgmt_mac: None,
             deployment_environment: Some(DeploymentEnvironment::Testnet),
-            elasticsearch_hosts: None,
-            elasticsearch_tags: None,
             nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
             enable_trusted_execution_environment: None,
             use_node_operator_private_key: Some(true),

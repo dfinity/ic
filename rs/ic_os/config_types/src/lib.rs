@@ -13,11 +13,11 @@
 //!
 //! - **Adding Enum Variants (Forward Compatibility)**: When adding new variants to an enum, ensure older versions can handle unknown variants gracefully by using `#[serde(other)]` on a fallback variant.
 //!
-//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be deprecated, and code that reads the value must be removed. In a second step, after the first step has rolled out to all nodes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
+//! - **Removing Fields**: To prevent backwards compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be given a default attribute and all IC-OS references to them have to be removed. In a second step, after the first step has rolled out to all OSes (HostOS and GuestOS) and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 //!
-//! ## Logging Safety
+//! ## Logging safety
 //!
 //! All configuration objects defined in this file are safe to log. They do not contain any secret material.
 use ic_types::malicious_behavior::MaliciousBehavior;
@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.4.0";
+pub const CONFIG_VERSION: &str = "1.5.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -113,6 +113,7 @@ pub struct ICOSSettings {
     pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
+    #[serde(default)]
     pub logging: Logging,
     // NODE-1653: remove field after next HostOS/GuestOS upgrade reaches NNS
     pub use_nns_public_key: bool,
@@ -123,6 +124,10 @@ pub struct ICOSSettings {
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
     /// SEV-SNP.
+    ///
+    /// IMPORTANT: This field only controls whether TEE is enabled in config.
+    /// In GuestOS code, to check if SEV is actually active, use `is_sev_active()` from the `ic_sev` crate,
+    /// which queries the CPU and cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
@@ -253,13 +258,9 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
+// NODE-1681: Leftover from push-based logging. Remove now that it's fully deprecated
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
-pub struct Logging {
-    /// Space-separated lists of hosts to ship logs to.
-    pub elasticsearch_hosts: Option<String>,
-    /// Space-separated list of tags to apply to exported log records.
-    pub elasticsearch_tags: Option<String>,
-}
+pub struct Logging {}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {

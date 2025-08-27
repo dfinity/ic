@@ -5,8 +5,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "rosetta_test",
-    tags = ["experimental_system_test_colocation"],
-    test_timeout = "long",
+    tags = ["colocate"],
     runtime_deps = [
         "//rs/rosetta-api/icp:ic-rosetta-api",
         "//rs/tests:rosetta_workspace",
@@ -35,7 +34,6 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_follow_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

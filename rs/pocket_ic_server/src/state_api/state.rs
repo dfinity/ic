@@ -37,8 +37,8 @@ use ic_gateway::{setup_router, Cli};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
-    HttpGatewayInfo, Topology,
+    AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
+    HttpGatewayDetails, HttpGatewayInfo, Topology,
 };
 use pocket_ic::RejectResponse;
 use reqwest::Url;
@@ -364,6 +364,7 @@ pub type Computations = HashMap<OpId, (StateLabel, OpOut)>;
 /// vector is replaced by a Busy variant which contains information about the
 /// computation that is currently running. Afterwards, the instance is put back as
 /// Available.
+#[allow(clippy::large_enum_variant)]
 pub enum InstanceState {
     Busy {
         state_label: StateLabel,
@@ -555,13 +556,17 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance<F>(&self, f: F) -> Result<(InstanceId, Topology), String>
+    pub async fn add_instance<F>(
+        &self,
+        create_instance_from_seed: F,
+        auto_progress: Option<AutoProgressConfig>,
+    ) -> Result<(InstanceId, Topology), String>
     where
         F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // create the instance using `spawn_blocking` before acquiring a lock
-        let instance = tokio::task::spawn_blocking(move || f(seed))
+        let instance = tokio::task::spawn_blocking(move || create_instance_from_seed(seed))
             .await
             .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
@@ -571,6 +576,14 @@ impl ApiState {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
+        drop(instances);
+        if let Some(config) = auto_progress {
+            // safe to unwrap here because the instance is fresh and thus auto progress
+            // cannot be enabled already
+            self.auto_progress(instance_id, config.artificial_delay_ms)
+                .await
+                .unwrap();
+        }
         Ok((instance_id, topology))
     }
 

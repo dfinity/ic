@@ -10,11 +10,15 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//rs/bitcoin/adapter",
         "@crate_index//:bitcoin",
+        "@crate_index//:bitcoincore-rpc",
         "@crate_index//:flate2",
         "@crate_index//:hex",
         "@crate_index//:rand",
+        "@crate_index//:serde",
         "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],
 )

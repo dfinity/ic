@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::CandidType;
 use ic_cdk::api::management_canister::{ecdsa::EcdsaKeyId, schnorr::SchnorrKeyId};
 use ic_management_canister_types::VetKDKeyId;

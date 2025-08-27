@@ -8,6 +8,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added extension_operations to list_topics, which exposes the operations of each registered extension underneath the
+  topic which allows voters to correctly understand the impact of following on particular topics. Extensions are
+  canisters that add additional functionality to an SNS through a privileged integration.
 
 ## Changed
 
@@ -16,11 +19,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-Fixed multiple issues in `disburse_neuron` functionality:
-
-- Fixed a bug that could allow an SNS Neuron to burn fees that would have been refunded after proposal acceptance.
-- Fees are now only recorded as burned when they exceed the transaction fee threshold and are actually burned.
-- Added comprehensive tests to ensure the correct behavior in the future.
 
 ## Security

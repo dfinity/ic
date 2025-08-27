@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};

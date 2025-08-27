@@ -45,7 +45,6 @@ fn route_canister_id(
     network_topology: &NetworkTopology,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     network_topology
-        .routing_table
         .route(canister_id.get())
         .map(|subnet_id| subnet_id.get())
         .ok_or(ResolveDestinationError::SubnetNotFound(canister_id, method))

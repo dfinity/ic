@@ -36,8 +36,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    batch::ChainKeyData,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
@@ -432,7 +431,7 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
         let mut ingress_execution_results = Vec::new();
@@ -488,7 +487,8 @@ impl SchedulerImpl {
             }
 
             // Update subnet available memory before taking out the canisters.
-            round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
+            round_limits.subnet_available_memory =
+                self.exec_env.scaled_subnet_available_memory(&state);
             let mut canisters = state.take_canister_states();
             round_schedule.charge_idle_canisters(
                 &mut canisters,
@@ -716,18 +716,8 @@ impl SchedulerImpl {
             .map(|_| Default::default())
             .collect();
 
-        // Distribute subnet available memory equally between the threads.
-        let round_limits_per_thread = RoundLimits {
-            instructions: round_limits.instructions,
-            subnet_available_memory: (round_limits.subnet_available_memory
-                / self.config.scheduler_cores as i64),
-            // This is a soft cap, it is unnecessary to strictly divide the pool among
-            // the threads. If it is exceeded, canisters can still rely on their guaranteed
-            // callback quota.
-            subnet_available_callbacks: round_limits.subnet_available_callbacks,
-            compute_allocation_used: round_limits.compute_allocation_used,
-        };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
+        let round_limits_per_thread = round_limits.clone();
         thread_pool.scoped(|scope| {
             // Zip together the input and the output of each thread.
             // The input is a vector of canisters.
@@ -907,7 +897,7 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
@@ -1249,7 +1239,7 @@ impl Scheduler for SchedulerImpl {
         );
 
         // Copy state of registry flag over to ReplicatedState
-        state.metadata.cost_schedule = registry_settings.canister_cycles_cost_schedule;
+        state.set_own_cost_schedule(registry_settings.canister_cycles_cost_schedule);
 
         // Round preparation.
         let mut scheduler_round_limits = {
@@ -1356,7 +1346,7 @@ impl Scheduler for SchedulerImpl {
                 subnet_instructions: as_round_instructions(
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
-                subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
@@ -1522,20 +1512,25 @@ impl Scheduler for SchedulerImpl {
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
-            let contexts = state
-                .metadata
-                .subnet_call_context_manager
+            let subnet_call_context_manager = &mut state.metadata.subnet_call_context_manager;
+
+            let contexts = subnet_call_context_manager
                 .sign_with_threshold_contexts
                 .values_mut()
                 .collect();
+
+            let pre_signature_stashes = &mut subnet_call_context_manager.pre_signature_stashes;
 
             update_signature_request_contexts(
                 current_round,
                 chain_key_data.idkg_pre_signatures,
                 contexts,
+                pre_signature_stashes,
                 &mut csprng,
                 registry_settings,
                 self.metrics.as_ref(),
+                &self.config,
+                &round_log,
             );
         }
 
@@ -2112,6 +2107,13 @@ fn observe_replicated_state_metrics(
             .in_flight_signature_request_contexts
             .with_label_values(&[&key_id.to_string()])
             .observe(count as f64);
+    }
+
+    for (key_id, stash) in state.pre_signature_stashes() {
+        metrics
+            .pre_signature_stash_size
+            .with_label_values(&[&key_id.to_string()])
+            .set(stash.pre_signatures.len() as i64);
     }
 
     let observe_reading = |status: CanisterStatusType, num: i64| {

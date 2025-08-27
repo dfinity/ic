@@ -84,6 +84,17 @@ impl IcpLedger for DegradedEnv {
         unimplemented!()
     }
 
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,

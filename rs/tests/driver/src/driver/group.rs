@@ -6,7 +6,7 @@ use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasGroupSetup, HasIcDependencies},
+    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
     universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,
@@ -28,9 +28,11 @@ use crate::driver::{
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use chrono::Utc;
+use regex::Regex;
 use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
@@ -137,6 +139,12 @@ pub struct CliArgs {
 
     #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
     pub no_logs: bool,
+
+    #[clap(
+        long = "exclude-logs",
+        help = "The list of regexes which will be skipped from the streaming."
+    )]
+    pub exclude_logs: Vec<Regex>,
 }
 
 impl CliArgs {
@@ -427,6 +435,18 @@ impl Plan<Box<dyn Task>> {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CliArguments {
+    #[serde(with = "serde_regex")]
+    pub exclude_logs: Vec<Regex>,
+}
+
+impl TestEnvAttribute for CliArguments {
+    fn attribute_name() -> String {
+        "cli_arguments".to_string()
+    }
+}
+
 impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
@@ -584,11 +604,27 @@ impl SystemTestGroup {
                                 .to_path_buf()
                         };
                         let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
+                        let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
                         debug!(logger, ">>> {UVMS_LOGS_STREAM_TASK_NAME}");
                         loop {
                             match discover_uvms(root_search_dir.clone()) {
                                 Ok(discovered_uvms) => {
                                     for (key, value) in discovered_uvms {
+                                        if skipped_uvms.contains(&key) {
+                                            continue;
+                                        }
+
+                                        let key_match = group_ctx
+                                            .exclude_logs
+                                            .iter()
+                                            .any(|pattern| pattern.is_match(&key));
+
+                                        if key_match {
+                                            debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
+                                            skipped_uvms.insert(key);
+                                            continue;
+                                        }
+
                                         streamed_uvms.entry(key.clone()).or_insert_with(|| {
                                                 let logger = logger.clone();
                                                 info!(
@@ -721,7 +757,15 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
+                    let cli_arguments = CliArguments {
+                        exclude_logs: group_ctx.exclude_logs.clone(),
+                    };
+
                     let env = ensure_setup_env(group_ctx);
+
+                    // Persist the cli arguments in case the test needs them
+                    cli_arguments.write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
@@ -870,6 +914,7 @@ impl SystemTestGroup {
             args.group_base_name,
             args.k8s,
             !args.no_logs,
+            args.exclude_logs,
         )?;
 
         let with_farm = self.with_farm && !args.k8s;

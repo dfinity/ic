@@ -135,11 +135,12 @@ fn test_slice() {
 }
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
@@ -1308,6 +1309,7 @@ fn get_canister_status_of_self() {
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
+    assert!(!status.ready_for_migration());
 }
 
 #[test]
@@ -1319,16 +1321,29 @@ fn get_canister_status_of_stopped_canister() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        let status = canister_manager
+        let status_res = canister_manager
             .get_canister_status(
                 sender,
                 canister,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                false,
             )
-            .unwrap()
-            .status();
-        assert_eq!(status, CanisterStatusType::Stopped);
+            .unwrap();
+        assert_eq!(status_res.status(), CanisterStatusType::Stopped);
+        assert!(!status_res.ready_for_migration());
+
+        // pretend it's ready for migration:
+        let status_res = canister_manager
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                true,
+            )
+            .unwrap();
+        assert!(status_res.ready_for_migration());
     });
 }
 
@@ -1347,6 +1362,7 @@ fn get_canister_status_of_stopping_canister() {
                 canister,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                false,
             )
             .unwrap()
             .status();
@@ -6101,15 +6117,27 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(190);
+
+#[test]
+fn empty_canister_memory_usage() {
+    let env = StateMachine::new();
+    let canister_id = env.create_canister_with_cycles(None, Cycles::new(1 << 64), None);
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(EMPTY_CANISTER_MEMORY_USAGE, status.memory_size());
+}
+
 /// Subnet available memory is recalculated at the beginning of each round.
 /// This test checks that the wasm chunk store is accounted for then.
 #[test]
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
-    // Initialize subnet with enough memory for one chunk but not two (the
-    // canister history will take up some memory).
+    // Initialize subnet with enough memory for one chunk but not two.
+    assert!(EMPTY_CANISTER_MEMORY_USAGE < wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
-        subnet_memory_capacity: wasm_chunk_store::chunk_size() * 2,
+        subnet_memory_capacity: (wasm_chunk_store::chunk_size() + EMPTY_CANISTER_MEMORY_USAGE)
+            * subnet_config.scheduler_config.scheduler_cores as u64,
         subnet_memory_threshold: NumBytes::from(0),
         subnet_memory_reservation: NumBytes::from(0),
         ..Config::default()
@@ -6166,7 +6194,7 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
     "#
     );
 
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
         .unwrap();
@@ -7079,6 +7107,112 @@ fn test_environment_variables_are_not_set_duplicate_keys() {
             "Duplicate environment variables are not allowed".to_string(),
         )
     );
+}
+
+// Helper function that updates the environment variables of a canister.
+fn update_settings_with_environment_variables(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    env_vars: Vec<EnvironmentVariable>,
+) {
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(env_vars)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+}
+
+// Helper function that fetches environment variables from the canister status API
+// and directly from the canister state, and verifies they both match the expected value.
+fn check_environment_variables_via_canister_status(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    expected_env_vars: Vec<EnvironmentVariable>,
+) {
+    let status = test.canister_status(canister_id);
+    let reply = get_reply(status);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(
+        status.settings().environment_variables(),
+        &expected_env_vars
+    );
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister
+            .system_state
+            .environment_variables
+            .iter()
+            .map(|(name, value)| EnvironmentVariable {
+                name: name.clone(),
+                value: value.clone()
+            })
+            .collect::<Vec<_>>(),
+        expected_env_vars
+    );
+}
+
+#[test]
+fn test_environment_variables() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(Config {
+            environment_variables: FlagStatus::Enabled,
+            ..Default::default()
+        })
+        .build();
+
+    let env_vars = [
+        ("KEY1".to_string(), "VALUE1".to_string()),
+        ("KEY2".to_string(), "VALUE2".to_string()),
+        ("KEY3".to_string(), "VALUE3".to_string()),
+    ];
+    let mut env_vars = env_vars
+        .into_iter()
+        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+        .collect::<Vec<_>>();
+
+    // Create canister without environment variables.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new().build(),
+        )
+        .unwrap();
+
+    // Set environment variables.
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Delete a variable.
+    env_vars.remove(0);
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Add new variable.
+    env_vars.push(EnvironmentVariable {
+        name: "KEY4".to_string(),
+        value: "VALUE4".to_string(),
+    });
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Update a variable value.
+    env_vars[0].value = "VALUE2_UPDATED".to_string();
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Update a variable name.
+    env_vars[0].name = "KEY2_UPDATED".to_string();
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
+
+    // Delete all the environment variables.
+    env_vars.clear();
+    update_settings_with_environment_variables(&mut test, canister_id, env_vars.clone());
+    check_environment_variables_via_canister_status(&mut test, canister_id, env_vars.clone());
 }
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one

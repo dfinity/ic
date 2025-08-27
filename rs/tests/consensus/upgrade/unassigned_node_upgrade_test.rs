@@ -47,9 +47,7 @@ use ic_system_test_driver::{
     },
     util::{block_on, get_nns_node, runtime_from_url},
 };
-use ic_types::ReplicaVersion;
 use slog::info;
-use std::convert::TryFrom;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -89,13 +87,10 @@ fn test(env: TestEnv) {
     let original_version = fetch_unassigned_node_version(&unassigned_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_guestos_update_img_url()
-        .expect("no image URL")
-        .to_string();
+    let upgrade_url = get_guestos_update_img_url().to_string();
     info!(logger, "Upgrade URL: {}", upgrade_url);
-    let target_version = get_guestos_update_img_version().unwrap();
-    let new_replica_version = ReplicaVersion::try_from(target_version.clone()).unwrap();
-    info!(logger, "Target replica version: {}", new_replica_version);
+    let target_version = get_guestos_update_img_version();
+    info!(logger, "Target replica version: {}", target_version);
 
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
 
@@ -105,8 +100,9 @@ fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256();
         info!(logger, "Update image SHA256: {}", sha256);
+        let guest_launch_measurements = get_guestos_launch_measurements();
 
         // prepare for the 1. proposal
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -119,9 +115,10 @@ fn test(env: TestEnv) {
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
-            Some(new_replica_version.clone()),
+            Some(&target_version),
             Some(sha256),
             vec![upgrade_url],
+            guest_launch_measurements,
             vec![],
         )
         .await;
@@ -141,7 +138,7 @@ fn test(env: TestEnv) {
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
-            target_version.clone(),
+            &target_version,
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;
@@ -156,7 +153,7 @@ fn test(env: TestEnv) {
     ic_system_test_driver::retry_with_msg!(
         format!(
             "check if unassigned node {} is at version {}",
-            unassigned_node.node_id, target_version
+            unassigned_node.node_id, &target_version
         ),
         env.logger(),
         secs(900),
@@ -168,7 +165,10 @@ fn test(env: TestEnv) {
         }
     )
     .expect("Unassigned node was not updated!");
-    info!(logger, "Unassigned node was updated to: {}", target_version);
+    info!(
+        logger,
+        "Unassigned node was updated to: {}", &target_version
+    );
 }
 
 fn main() -> Result<()> {

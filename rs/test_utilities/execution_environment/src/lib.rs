@@ -55,11 +55,11 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
-use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::batch::ChainKeyData;
+use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -148,6 +148,7 @@ pub fn generate_subnets(
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
         );
     }
@@ -508,8 +509,14 @@ impl ExecutionTest {
         self.subnet_available_memory
     }
 
-    pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
-        self.subnet_available_memory = memory
+    pub fn set_available_execution_memory(&mut self, execution_memory: i64) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            execution_memory,
+            self.subnet_available_memory
+                .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
     }
 
     pub fn subnet_available_callbacks(&self) -> i64 {
@@ -1179,6 +1186,7 @@ impl ExecutionTest {
             query,
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
+            /*certification_delegation_metadata=*/ None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1192,6 +1200,22 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        self.non_replicated_query_with_certificate_delegation_metadata(
+            canister_id,
+            method_name,
+            method_payload,
+            /*certificate_delegation_metadata=*/ None,
+        )
+    }
+
+    /// Executes a non-replicated query on the latest state.
+    pub fn non_replicated_query_with_certificate_delegation_metadata<S: ToString>(
+        &mut self,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+    ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
         let query = Query {
@@ -1204,7 +1228,12 @@ impl ExecutionTest {
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result = self.query(query, Arc::clone(&state), vec![]);
+        let result = self.query(
+            query,
+            Arc::clone(&state),
+            vec![],
+            certificate_delegation_metadata,
+        );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
         result
@@ -1671,6 +1700,7 @@ impl ExecutionTest {
         query: Query,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
     ) -> Result<WasmResult, UserError> {
         // We always pass 0 as the height to the query handler, because we don't run consensus
         // in these tests and therefore there isn't any height.
@@ -1682,6 +1712,7 @@ impl ExecutionTest {
             query,
             Labeled::new(Height::from(0), state),
             data_certificate,
+            certificate_delegation_metadata,
         )
     }
 
@@ -2200,11 +2231,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm64(mut self) -> Self {
-        self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
         self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
         self
@@ -2418,7 +2444,10 @@ impl ExecutionTestBuilder {
                         )),
                         target_subnet: NiDkgTargetSubnet::Local,
                     };
-                    Some((key_id.clone(), nidkg_id))
+                    Some((
+                        NiDkgMasterPublicKeyId::VetKd(vetkd_key_id.clone()),
+                        nidkg_id,
+                    ))
                 } else {
                     None
                 }
@@ -2508,7 +2537,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         );
-        state.metadata.cost_schedule = self.cost_schedule;
+        state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
             state: Some(state),
@@ -2517,7 +2546,7 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 self.execution_config.subnet_memory_capacity.get() as i64
                     - self.execution_config.subnet_memory_reservation.get() as i64,
                 self.execution_config

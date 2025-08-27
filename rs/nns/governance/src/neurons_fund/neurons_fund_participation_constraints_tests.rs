@@ -60,7 +60,7 @@ impl MatchingFunction for LogisticFunction {
         let x_icp = f64::try_from(rescale_to_icp(x_icp_e8s)?)
             .map_err(|err| format!("cannot convert {} to f64: {}", x_icp_e8s, err))?;
         let res_icp = self.supremum_icp
-            / (1.0 + (-1.0 * self.steepness_inv_icp * (x_icp - self.midpoint_icp)).exp());
+            / (1.0 + (-self.steepness_inv_icp * (x_icp - self.midpoint_icp)).exp());
         Decimal::try_from(res_icp).map_err(|err| err.to_string())
     }
 }

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, bail, Context, Error};
 use arc_swap::ArcSwapOption;
 use axum::{
     extract::Request,
@@ -130,7 +130,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if !(cli.registry.registry_local_store_path.is_none()
         ^ cli.registry.registry_stub_replica.is_empty())
     {
-        return Err(anyhow!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"));
+        bail!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified");
     }
 
     #[cfg(feature = "tls")]
@@ -138,16 +138,14 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         && cli.listen.listen_http_unix_socket.is_none()
         && cli.listen.listen_https_port.is_none()
     {
-        return Err(anyhow!(
+        bail!(
             "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
-        ));
+        );
     }
 
     #[cfg(not(feature = "tls"))]
     if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
-        return Err(anyhow!(
-            "at least one of --listen-http-port / --listen-http-unix-socket must be specified"
-        ));
+        bail!("at least one of --listen-http-port / --listen-http-unix-socket must be specified");
     }
 
     // Make sure ic-boundary is the leader of its own process group
@@ -178,13 +176,13 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
+    let dns_resolver = DnsResolver::new(registry_snapshot.clone());
 
     // TLS client
     let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
         Arc::new(NoopServerCertVerifier::default())
     } else {
-        Arc::new(TlsVerifier::new(Arc::clone(&registry_snapshot)))
+        Arc::new(TlsVerifier::new(registry_snapshot.clone()))
     };
 
     let mut tls_config_client =
@@ -227,7 +225,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     );
 
     // Setup registry-related stuff
-    let persister = Persister::new(Arc::clone(&routing_table));
+    let persister = Persister::new(routing_table.clone());
 
     // Snapshot update notification channels
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
@@ -274,9 +272,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
         if cli.misc.crypto_config.is_some() && registry_client.is_none() {
-            return Err(anyhow!(
-                "IC-Agent: registry client is required when crypto-config is in use"
-            ));
+            bail!("IC-Agent: registry client is required when crypto-config is in use");
         }
 
         if cli.misc.crypto_config.is_none() {
@@ -475,7 +471,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         metrics_cache,
         metrics_registry.clone(),
         cache_state,
-        Arc::clone(&registry_snapshot),
+        registry_snapshot.clone(),
         proxy_router,
     ));
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
@@ -576,7 +572,7 @@ async fn create_identity(
     registry_client: Arc<RegistryClientImpl>,
 ) -> Result<Box<dyn Identity>, Error> {
     let crypto_component = tokio::task::spawn_blocking({
-        let registry_client = Arc::clone(&registry_client);
+        let registry_client = registry_client.clone();
 
         move || {
             Arc::new(CryptoComponent::new(
@@ -591,7 +587,7 @@ async fn create_identity(
     .await?;
 
     let public_key = tokio::task::spawn_blocking({
-        let crypto_component = Arc::clone(&crypto_component);
+        let crypto_component = crypto_component.clone();
 
         move || {
             crypto_component
@@ -661,7 +657,7 @@ fn setup_registry(
     let snapshotter = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
-                Arc::clone(&registry_snapshot),
+                registry_snapshot.clone(),
                 channel_snapshot_send,
                 registry_client.clone(),
                 cli.registry.registry_min_version_age,
@@ -819,7 +815,7 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
         Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
     }
 
-    Err(anyhow!("TLS: no resolvers were able to load"))
+    bail!("TLS: no resolvers were able to load")
 }
 
 #[cfg(feature = "tls")]

@@ -30,7 +30,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_add_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -57,7 +56,6 @@ system_test_nns(
 system_test_nns(
     name = "tschnorr_message_sizes_test",
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -80,7 +78,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_remove_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -216,13 +213,13 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     # Remove when CON-937 is resolved
     flaky = True,  # flakiness rate of 1.57% over the month from 2025-02-11 till 2025-03-11
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
+    test_timeout = "eternal",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -264,7 +261,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_timeout_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -296,7 +292,7 @@ tecdsa_performance_test_template = system_test_nns(
         "//conditions:default": [],
     }),
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "manual",
     ],
     test_timeout = "eternal",
@@ -340,7 +336,7 @@ system_test_nns(
         "BENCHMARK_NAME": "tecdsa_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],
@@ -368,7 +364,7 @@ system_test_nns(
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],
@@ -396,7 +392,7 @@ system_test_nns(
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],
@@ -424,7 +420,7 @@ system_test_nns(
         "BENCHMARK_NAME": "vetkd_performance_test",
     },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "k8s",
         "manual",
     ],

@@ -2,7 +2,7 @@
 
 set -e
 
-readonly EXPECTED_RECOVERY_HASH=""
+readonly EXPECTED_RECOVERY_HASH_FILE="/opt/ic/share/expected_recovery_hash"
 readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
@@ -50,6 +50,20 @@ perform_recovery() {
         fi
     }
 
+    if [ ! -f "$EXPECTED_RECOVERY_HASH_FILE" ]; then
+        echo "ERROR: Expected recovery hash file not found: $EXPECTED_RECOVERY_HASH_FILE"
+        return 1
+    fi
+
+    EXPECTED_RECOVERY_HASH="$(cat "$EXPECTED_RECOVERY_HASH_FILE" | tr -d '\n\r')"
+
+    if [ -z "$EXPECTED_RECOVERY_HASH" ]; then
+        echo "ERROR: Expected recovery hash file is empty"
+        return 1
+    fi
+
+    echo "Using expected recovery hash: $EXPECTED_RECOVERY_HASH"
+
     echo "Downloading recovery artifact..."
     base_urls=(
         "https://download.dfinity.systems"
@@ -81,21 +95,19 @@ perform_recovery() {
     tar -xf "recovery.tar.zst"
 
     echo "Preparing recovery artifacts..."
-    TARGET_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/ic_registry_local_store)
+    REGISTRY_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/ic_registry_local_store)
+    CUP_PERMS=$(sudo stat -c '%a' /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb)
 
     mkdir ic_registry_local_store
     tar -xf "ic_registry_local_store.tar.zst" -C ic_registry_local_store
 
-    OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups)
-    GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups)
-    sudo chown -R "$OWNER_UID:$GROUP_UID" "cup.proto"
-
     echo "Applying recovery artifacts..."
     echo "Syncing ic_registry_local_store to target location..."
     sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/
-    sudo chmod "$TARGET_PERMS" /var/lib/ic/data/ic_registry_local_store
+    sudo chmod "$REGISTRY_PERMS" /var/lib/ic/data/ic_registry_local_store
     echo "Copying cup.proto to target location..."
     sudo cp "cup.proto" /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb
+    sudo chmod "$CUP_PERMS" /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb
 
     echo "Recovery artifacts applied successfully"
 

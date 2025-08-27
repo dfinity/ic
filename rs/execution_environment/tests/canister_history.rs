@@ -429,7 +429,8 @@ fn canister_history_tracks_uninstall() {
 #[test]
 fn canister_history_tracks_controllers_change() {
     let mut now = std::time::SystemTime::now();
-    let (env, _test_canister, _test_canister_sha256) = test_setup(SubnetType::Application, now);
+    let env = setup_with_environment_variables_flag(FlagStatus::Disabled);
+    env.set_time(now);
 
     // declare user IDs
     let user_id1 = user_test_id(7).get();
@@ -1162,7 +1163,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     );
 }
 
-fn setup_state_machine(environment_variables_flag: FlagStatus) -> StateMachine {
+fn setup_with_environment_variables_flag(environment_variables_flag: FlagStatus) -> StateMachine {
     StateMachine::new_with_config(StateMachineConfig::new(
         SubnetConfig::new(SubnetType::Application),
         HypervisorConfig {
@@ -1182,7 +1183,7 @@ fn check_environment_variables_for_create_canister_history(
 ) {
     // Set up StateMachine.
     let anonymous_user = PrincipalId::new_anonymous();
-    let env = setup_state_machine(environment_variables_flag);
+    let env = setup_with_environment_variables_flag(environment_variables_flag);
 
     // Set time of StateMachine to current system time.
     let mut now = std::time::SystemTime::now();
@@ -1276,7 +1277,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     let initial_env_vars_hash = intial_env_vars.hash();
 
     // Set up StateMachine.
-    let env = setup_state_machine(FlagStatus::Enabled);
+    let env = setup_with_environment_variables_flag(FlagStatus::Enabled);
     // Set time of StateMachine to current system time.
     let mut now = std::time::SystemTime::now();
     env.set_time(now);
@@ -1362,7 +1363,7 @@ fn canister_history_tracking_env_vars_update_settings() {
 #[test]
 fn canister_history_no_change_during_update_settings() {
     let user_id = user_test_id(7).get();
-    let env = setup_state_machine(FlagStatus::Enabled);
+    let env = setup_with_environment_variables_flag(FlagStatus::Enabled);
     let canister_id = env.create_canister_with_cycles(
         None,
         INITIAL_CYCLES_BALANCE,
@@ -1512,7 +1513,7 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
         .collect::<Vec<_>>();
 
     // Set up StateMachine with environment variables tracking enabled.
-    let env = setup_state_machine(FlagStatus::Enabled);
+    let env = setup_with_environment_variables_flag(FlagStatus::Enabled);
     let mut now = std::time::SystemTime::now();
     env.set_time(now);
 

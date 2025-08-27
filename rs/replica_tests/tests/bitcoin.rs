@@ -209,7 +209,7 @@ fn bitcoin_get_successors() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -247,7 +247,7 @@ fn bitcoin_get_successors_pagination() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -293,7 +293,7 @@ fn bitcoin_get_successors_pagination_invalid_adapter_request() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -327,7 +327,7 @@ fn bitcoin_get_successors_reject() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -359,7 +359,7 @@ fn bitcoin_send_transaction_internal_valid_request() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     transaction: vec![1, 2, 3],
                 },
             );
@@ -388,7 +388,7 @@ fn bitcoin_send_transaction_internal_reject() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     transaction: vec![1, 2, 3],
                 },
             );
@@ -441,7 +441,7 @@ fn bitcoin_send_transaction_internal_no_permissions() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     transaction: vec![1, 2, 3],
                 },
             );

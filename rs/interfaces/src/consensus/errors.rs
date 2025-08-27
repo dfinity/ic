@@ -1,21 +1,11 @@
 use ic_types::consensus::idkg::{
-    common::TranscriptOperationError,
-    ecdsa::{PreSignatureQuadrupleError, ThresholdEcdsaSigInputsError},
-    schnorr::{PreSignatureTranscriptError, ThresholdSchnorrSigInputsError},
+    common::{BuildSignatureInputsError, TranscriptOperationError},
+    ecdsa::PreSignatureQuadrupleError,
+    schnorr::PreSignatureTranscriptError,
     TranscriptParamsError,
 };
 
 use crate::crypto::ErrorReproducibility;
-
-impl ErrorReproducibility for ThresholdEcdsaSigInputsError {
-    fn is_reproducible(&self) -> bool {
-        match self {
-            ThresholdEcdsaSigInputsError::PreSignatureQuadruple(err) => err.is_reproducible(),
-            ThresholdEcdsaSigInputsError::KeyTranscript(_) => true,
-            ThresholdEcdsaSigInputsError::Failed(err) => err.is_reproducible(),
-        }
-    }
-}
 
 impl ErrorReproducibility for PreSignatureQuadrupleError {
     fn is_reproducible(&self) -> bool {
@@ -25,16 +15,6 @@ impl ErrorReproducibility for PreSignatureQuadrupleError {
             PreSignatureQuadrupleError::KappaTimesLambda(_) => true,
             PreSignatureQuadrupleError::KeyTimesLambda(_) => true,
             PreSignatureQuadrupleError::Failed(err) => err.is_reproducible(),
-        }
-    }
-}
-
-impl ErrorReproducibility for ThresholdSchnorrSigInputsError {
-    fn is_reproducible(&self) -> bool {
-        match self {
-            ThresholdSchnorrSigInputsError::PreSignatureTranscript(err) => err.is_reproducible(),
-            ThresholdSchnorrSigInputsError::KeyTranscript(_) => true,
-            ThresholdSchnorrSigInputsError::Failed(err) => err.is_reproducible(),
         }
     }
 }
@@ -64,6 +44,20 @@ impl ErrorReproducibility for TranscriptOperationError {
             TranscriptOperationError::ReshareOfUnmasked(_) => true,
             TranscriptOperationError::UnmaskedTimesMasked1(_) => true,
             TranscriptOperationError::UnmaskedTimesMasked2(_) => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for BuildSignatureInputsError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            BuildSignatureInputsError::ContextIncomplete => true,
+            BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError(err) => {
+                err.is_reproducible()
+            }
+            BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(err) => {
+                err.is_reproducible()
+            }
         }
     }
 }

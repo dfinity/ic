@@ -31,7 +31,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
@@ -1396,7 +1396,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
     let wasm_custom_sections_available_memory_before =
         subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
@@ -1465,7 +1466,8 @@ fn helper_test_on_low_wasm_memory(
 ) {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 20 * GIB;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
 
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
@@ -1516,8 +1518,13 @@ fn helper_test_on_low_wasm_memory(
     if grow_wasm_memory {
         api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
     } else {
-        api.try_grow_stable_memory(0, additional_wasm_pages, StableMemoryApi::Stable64)
-            .unwrap();
+        api.try_grow_stable_memory(
+            0,
+            additional_wasm_pages,
+            MAX_STABLE_MEMORY_IN_BYTES,
+            StableMemoryApi::Stable64,
+        )
+        .unwrap();
     }
 
     let system_state_modifications = api.take_system_state_modifications();
@@ -1693,7 +1700,7 @@ fn push_output_request_respects_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
     let subnet_available_message_memory_bytes = MAX_RESPONSE_COUNT_BYTES as i64 + 13;
 
-    let subnet_available_memory = SubnetAvailableMemory::new(
+    let subnet_available_memory = SubnetAvailableMemory::new_for_testing(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
         0,
@@ -1804,7 +1811,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
     let subnet_available_message_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
 
-    let subnet_available_memory = SubnetAvailableMemory::new(
+    let subnet_available_memory = SubnetAvailableMemory::new_for_testing(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
         0,
@@ -2248,7 +2255,7 @@ fn get_system_api_for_best_effort_response(
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters,
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,

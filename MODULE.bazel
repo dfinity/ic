@@ -410,11 +410,6 @@ stack_snapshot.package(
     },
 )
 
-# Kubernetes helper
-
-kubeconfig_ext = use_extension("//rs/tests:kubeconfig_extension.bzl", "kubeconfig_extension")
-use_repo(kubeconfig_ext, "kubeconfig")
-
 # Single files & archives that are not bazel modules
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
@@ -601,8 +596,8 @@ http_file(
 http_file(
     name = "kongswap-adaptor-canister",
     downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
-    sha256 = "d5b1326ddc4c002a211bb3e263c0d94c20250e5683b401096c74f385c326c175",
-    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250723-193307-6c37829/kongswap-adaptor-canister.wasm.gz",
+    sha256 = "4b3445ff18b417364a25c733f377eb0eb5943dea8781de73c226023657642ad1",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250821-094346-bab9aa4/kongswap-adaptor-canister.wasm.gz",
 )
 
 # Cycles Ledger canister
@@ -839,8 +834,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "399596330c40a76effbbd20660ce8e892d5d74f3de6380cad4aac1598b9d6394",
-    url = "https://download.dfinity.systems/ic/c36a05a9d367bb6ba9068444e6d6f53e7911f1b0/binaries/x86_64-linux/pocket-ic.gz",
+    sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
+    url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
 )
 
 # Management canister candid interface

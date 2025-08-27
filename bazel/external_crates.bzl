@@ -8,22 +8,30 @@ to regenerate Cargo Bazel lockfiles.
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-def sanitize_external_crates(sanitizers_enabled):
-    FUZZING_ANNOTATION = [crate.annotation(rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING)] if sanitizers_enabled else []
-    return {
-        "candid": FUZZING_ANNOTATION,
-        "wasmtime": FUZZING_ANNOTATION,
-        "bitcoin": FUZZING_ANNOTATION,
-        "bincode": FUZZING_ANNOTATION,
-        "ic-stable-structures": FUZZING_ANNOTATION,
-    }
-
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
-def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
+def external_crates_repository(name, cargo_lockfile, lockfile):
     CRATE_ANNOTATIONS = {
+        "bincode": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
+        "bitcoin": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
+        "candid": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
         # The upgrade to rust-1.86.0 in https://github.com/dfinity/ic/commit/d1dc4c2dc813c70611425749551c5ac40c8d5e40
         # was initially reverted since it caused the `//rs/pocket_ic_server:...` and `//packages/pocket-ic:...` tests
         # to fail on x86_64-apple-darwin.
@@ -73,6 +81,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "ic-stable-structures": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -169,8 +183,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "metrics-proxy": [crate.annotation(
             gen_binaries = True,
         )],
+        "wasmtime": [crate.annotation(rustc_flags = crate.select(
+            [],
+            {
+                "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+            },
+        ))],
     }
-    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
+
     crates_repository(
         name = name,
         isolated = True,
@@ -285,7 +305,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                version = "^0.32.5",
+                version = "^0.32.99",
                 features = [
                     "default",
                     "rand",
@@ -350,13 +370,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.15",
+                version = "^0.2.1",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.15",
+                version = "^0.2.1",
             ),
             "candid": crate.spec(
-                version = "^0.10.13",
+                version = "^0.10.17",
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
@@ -428,6 +448,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "convert_case": crate.spec(
                 version = "^0.6.0",
+            ),
+            "raw-cpuid": crate.spec(
+                version = "11.5",
             ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
@@ -509,7 +532,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.4.0",
+                version = "^2.0.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -622,7 +645,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic0": crate.spec(
-                version = "^0.18.11",
+                version = "^1.0.0",
             ),
             "ic-agent": crate.spec(
                 version = "^0.40.1",
@@ -642,21 +665,19 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "ic-canister-sig-creation": crate.spec(
-                git = "https://github.com/dfinity/ic-canister-sig-creation",
-                rev = "7f9e931954637526295269155881207f6c832d6d",
+                version = "^1.3.0",
             ),
             "ic-cbor": crate.spec(
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.17.2",
+                version = "^0.18.7",
             ),
-            "ic-cdk-next": crate.spec(
-                package = "ic-cdk",
-                version = "^0.18.0-alpha.2",
+            "ic-cdk-executor": crate.spec(
+                version = "^1.0.2",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.2",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -678,6 +699,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-http-gateway": crate.spec(
                 version = "0.3.0",
             ),
+            "ic-identity-hsm": crate.spec(
+                version = "^0.40.1",
+            ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
             ),
@@ -696,6 +720,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-stable-structures": crate.spec(
                 version = "^0.6.8",
+            ),
+            "ic-stable-structures-next": crate.spec(
+                package = "ic-stable-structures",
+                version = "^0.7.0",
             ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
@@ -723,8 +751,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                git = "https://github.com/dfinity/vetkeys",
-                rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f",
+                version = "^0.4.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
@@ -812,6 +839,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "libc": crate.spec(
                 version = "^0.2.158",
+            ),
+            "libcryptsetup-rs": crate.spec(
+                version = "^0.13.2",
+                features = [
+                    "mutex",
+                ],
             ),
             "libflate": crate.spec(
                 version = "^2.1.0",
@@ -962,6 +995,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "ecdsa",
                     "pem",
                     "pkcs8",
+                ],
+                default_features = False,
+            ),
+            "p384": crate.spec(
+                version = "0.13",
+                features = [
+                    "ecdsa",
+                    "pem",
                 ],
                 default_features = False,
             ),
@@ -1136,7 +1177,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rsa": crate.spec(
                 version = "^0.9.6",
-                features = ["sha2"],
+                features = ["sha2", "getrandom"],
             ),
             "rstest": crate.spec(
                 version = "^0.19.0",
@@ -1161,7 +1202,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rust-ini": crate.spec(
-                version = "^0.21.2",
+                version = "^0.21.1",
             ),
             "rustls": crate.spec(
                 version = "^0.23.18",
@@ -1528,6 +1569,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "walkdir": crate.spec(
                 version = "^2.3.1",
             ),
+            "walrus": crate.spec(
+                version = "^0.23.3",
+            ),
             "warp": crate.spec(
                 version = "^0.3.7",
                 features = ["tls"],
@@ -1555,7 +1599,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^34.0.1",
+                version = "^35.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1566,7 +1610,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^34.0.1",
+                version = "^35.0.0",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",

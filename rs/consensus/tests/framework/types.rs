@@ -68,6 +68,7 @@ pub const PRIORITY_FN_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
 /// delivered to peers, or to a timer expired event that should trigger
 /// consensus on_state_change.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Input {
     Message(Message),
     TimerExpired(Time),
@@ -108,6 +109,7 @@ impl Eq for Input {}
 pub type Output = Message;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
