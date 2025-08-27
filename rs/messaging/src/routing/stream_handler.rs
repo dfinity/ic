@@ -54,10 +54,6 @@ struct StreamHandlerMetrics {
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
-    /// messages received from a subnet that is not known to host (or to have hosted
-    /// according to `canister_migrations`) the sender.
-    pub critical_error_sender_subnet_mismatch: IntCounter,
-    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// messages for canisters not hosted (now, or previously, according to
     /// `canister_migrations`) by this subnet.
     pub critical_error_receiver_subnet_mismatch: IntCounter,
@@ -88,7 +84,6 @@ const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
 const LABEL_REMOTE: &str = "remote";
 
 const CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE: &str = "mr_bad_reject_signal_for_response";
-const CRITICAL_ERROR_SENDER_SUBNET_MISMATCH: &str = "mr_sender_subnet_mismatch";
 const CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH: &str = "mr_receiver_subnet_mismatch";
 const CRITICAL_ERROR_REQUEST_MISROUTED: &str = "mr_request_misrouted";
 
@@ -133,8 +128,6 @@ impl StreamHandlerMetrics {
         let critical_error_induct_response_failed = message_routing_metrics
             .critical_error_induct_response_failed
             .clone();
-        let critical_error_sender_subnet_mismatch =
-            metrics_registry.error_counter(CRITICAL_ERROR_SENDER_SUBNET_MISMATCH);
         let critical_error_receiver_subnet_mismatch =
             metrics_registry.error_counter(CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH);
         let critical_error_request_misrouted =
@@ -171,7 +164,6 @@ impl StreamHandlerMetrics {
             xnet_message_backlog,
             critical_error_bad_reject_signal_for_response,
             critical_error_induct_response_failed,
-            critical_error_sender_subnet_mismatch,
             critical_error_receiver_subnet_mismatch,
             critical_error_request_misrouted,
         }
@@ -788,23 +780,10 @@ impl StreamHandlerImpl {
             }
         } else {
             // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
-            //
-            // Do not enqueue a reject response as remote subnet is likely malicious and
-            // trying to cause a memory leak by sending bogus messages and never consuming
-            // reject responses.
-            error!(
-                self.log,
-                "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
-                CRITICAL_ERROR_SENDER_SUBNET_MISMATCH,
-                remote_subnet_id,
-                msg.sender(),
-                msg
-            );
+            // This can legitimatly happen if the sender canister is migrating.
             self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_SUBNET_MISMATCH);
-            self.metrics.critical_error_sender_subnet_mismatch.inc();
-            stream.push_accept_signal();
-            // Cycles are lost.
-            msg.cycles()
+            stream.push_reject_signal(RejectReason::CanisterMigrating);
+            Cycles::zero()
         }
     }
 
@@ -1096,7 +1075,10 @@ fn generate_reject_response_for(reason: RejectReason, request: &Request) -> Requ
     let (code, message) = match reason {
         RejectReason::CanisterMigrating => (
             RejectCode::SysTransient,
-            format!("Canister {} is migrating", request.receiver),
+            format!(
+                "Canister {} or {} is migrating",
+                request.receiver, request.sender
+            ),
         ),
         RejectReason::CanisterNotFound => (
             RejectCode::DestinationInvalid,

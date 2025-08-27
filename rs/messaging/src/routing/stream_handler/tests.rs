@@ -1715,21 +1715,17 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 &mut expected_state,
                 message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 0).clone(),
             );
-            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with all 3 messages accepted.
+            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with all 1 message accepted and 2 rejected.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 0,
                 signals_end: 3,
+                reject_signals: vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 1.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 2.into()),
+                ],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
-
-            // Cycles attached to the dropped reply and request are lost.
-            let cycles_lost = messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1..=2)
-                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
-            expected_state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -1761,7 +1757,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
             ]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                sender_subnet_mismatch: 2,
+                // sender_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -1906,7 +1902,10 @@ fn check_stream_handler_locally_generated_reject_response_canister_migrating() {
     check_stream_handler_locally_generated_reject_response_impl(
         RejectReason::CanisterMigrating,
         RejectCode::SysTransient,
-        format!("Canister {} is migrating", *REMOTE_CANISTER),
+        format!(
+            "Canister {} or {} is migrating",
+            *REMOTE_CANISTER, *LOCAL_CANISTER
+        ),
     );
 }
 
@@ -2384,10 +2383,11 @@ fn induct_stream_slices_partial_success() {
                 // ...a request to a missing canister @46 (on this subnet according to the
                 // routing table); this is expected to trigger a reject response...
                 Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
-                // ..a request not from `REMOTE_SUBNET` @47...
+                // ..a request not from `REMOTE_SUBNET` @47; this is also expected to trigger
+                // a reject respose...
                 Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
                 // ...a request from a missing canister @48 (not anywhere according to the routing
-                // table); this is expected to be accepted but dropped...
+                // table); this is expected to be a reject response...
                 Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
                 // ...and a response to a missing canister @49 (on this subnet according to the
                 // routing table); this expected to be accepted but dropped.
@@ -2416,11 +2416,13 @@ fn induct_stream_slices_partial_success() {
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 31).clone(),
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
                 ],
-                // ...6 accept signals for the messages in the stream slice...
+                // ...4 accept signals for the messages in the stream slice...
                 signals_end: 50,
                 reject_signals: vec![
-                    // ...and a reject signal for the request @46 due to a missing canister.
+                    // ...and three reject signal for the requests @46 and @47.
                     RejectSignal::new(RejectReason::CanisterNotFound, 46.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 48.into()),
                 ],
                 ..StreamConfig::default()
             });
@@ -2429,7 +2431,7 @@ fn induct_stream_slices_partial_success() {
             // Cycles attached to the dropped requests from `LOCAL_CANISTER` and
             // `UNKNOWN_CANISTER`; as well as those attached to the non-existent response to
             // `OTHER_LOCAL_CANISTER` are lost.
-            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 47..=49)
+            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 49..=49)
                 .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
             expected_state
                 .metadata
@@ -2482,7 +2484,7 @@ fn induct_stream_slices_partial_success() {
             // Three critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 induct_response_failed: 1,
-                sender_subnet_mismatch: 2,
+                //sender_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -2521,7 +2523,7 @@ fn legacy_induct_stream_slices_partial_success() {
                 // ..a request not from `REMOTE_SUBNET` @47...
                 Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
                 // ...a request from a missing canister @48 (not anywhere according to the routing
-                // table); this is expected to be accepted but dropped...
+                // table); this is expected to be rejected...
                 Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
                 // ...and a response to a missing canister @49 (on this subnet according to the
                 // routing table); this expected to be accepted but dropped.
@@ -2556,8 +2558,13 @@ fn legacy_induct_stream_slices_partial_success() {
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
                     reject_response,
                 ],
-                // ...7 accept signals for all of the messages in the stream slice.
+                // ...5 accept signals for all of the messages in the stream slice...
                 signals_end: 50,
+                // ...and 2 rejects
+                reject_signals: vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 48.into()),
+                ],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
@@ -2565,7 +2572,7 @@ fn legacy_induct_stream_slices_partial_success() {
             // Cycles attached to the dropped requests from `LOCAL_CANISTER` and
             // `UNKNOWN_CANISTER`; as well as those attached to the non-existent response to
             // `OTHER_LOCAL_CANISTER` are lost.
-            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 47..=49)
+            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 49..=49)
                 .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
             expected_state
                 .metadata
@@ -2618,7 +2625,7 @@ fn legacy_induct_stream_slices_partial_success() {
             // Three critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 induct_response_failed: 1,
-                sender_subnet_mismatch: 2,
+                //sender_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -3483,6 +3490,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 reject_signals: vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 154.into()),
                 ],
                 ..StreamConfig::default()
             });
@@ -3496,16 +3504,6 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 REMOTE_SUBNET => expected_outgoing_stream,
                 CANISTER_MIGRATION_SUBNET => rerouted_stream,
             ]);
-            // Cycles attached to the dropped request from `UNKNOWN_CANISTER` are lost.
-            expected_state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(
-                    DroppedMessages,
-                    message_in_slice(slices.get(&REMOTE_SUBNET), 154)
-                        .cycles()
-                        .into(),
-                );
 
             // Act.
             let inducted_state = stream_handler.process_stream_slices(state, slices);
@@ -4626,10 +4624,6 @@ impl MetricsFixture {
                     counts.bad_reject_signal_for_response
                 ),
                 (
-                    &[("error", &CRITICAL_ERROR_SENDER_SUBNET_MISMATCH.to_string())],
-                    counts.sender_subnet_mismatch
-                ),
-                (
                     &[("error", &CRITICAL_ERROR_REQUEST_MISROUTED.to_string())],
                     counts.request_misrouted
                 ),
@@ -4650,7 +4644,6 @@ impl MetricsFixture {
 struct CriticalErrorCounts {
     pub induct_response_failed: u64,
     pub bad_reject_signal_for_response: u64,
-    pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
     pub request_misrouted: u64,
 }
