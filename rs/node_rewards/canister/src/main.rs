@@ -1,4 +1,3 @@
-#[cfg(any(feature = "test", test))]
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
