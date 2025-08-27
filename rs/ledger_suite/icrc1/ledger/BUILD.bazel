@@ -274,7 +274,8 @@ package(default_visibility = ["//visibility:public"])
         crate_features = features,
         data = [
             ":block.cddl",
-            ":ledger_canister" + name_suffix + ".wasm.gz",
+            ":ledger_canister.wasm.gz",
+            ":ledger_canister_u256.wasm.gz",
             ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
@@ -309,6 +310,8 @@ package(default_visibility = ["//visibility:public"])
             "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz)",
             "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+            "IC_ICRC1_LEDGER_WASM_U256_PATH": "$(rootpath :ledger_canister_u256.wasm.gz)",
+            "IC_ICRC1_LEDGER_WASM_U64_PATH": "$(rootpath :ledger_canister.wasm.gz)",
         },
         deps = [
             # Keep sorted.
@@ -338,18 +341,20 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:proptest",
             "@crate_index//:rand",
             "@crate_index//:serde_bytes",
+            "//rs/ledger_suite/icrc1/tokens_u64",
+            "//rs/ledger_suite/icrc1/tokens_u256",
         ] + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [
         (
             "",
             [],
-            ["//rs/ledger_suite/icrc1/tokens_u64"],
+            [],
         ),
         (
             "_u256",
             ["u256-tokens"],
-            ["//rs/ledger_suite/icrc1/tokens_u256"],
+            [],
         ),
     ]
 ]

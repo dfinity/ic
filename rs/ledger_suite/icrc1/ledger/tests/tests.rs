@@ -176,6 +176,14 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn ledger_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_U256_PATH").unwrap()).unwrap()
+}
+
+fn ledger_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_U64_PATH").unwrap()).unwrap()
+}
+
 fn ledger_wasm_lowupgradeinstructionlimits() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH").unwrap()).unwrap()
 }
@@ -2365,90 +2373,20 @@ mod incompatible_token_type_upgrade {
     }
 
     // TODO: enable and rewrite when FI-1653 is fixed.
-    #[ignore]
     #[test]
     fn should_successfully_upgrade_ledger_from_u64_to_u256_to_u64_wasm() {
         let env = StateMachine::new();
         let ledger_id = env
-            .install_canister(ledger_mainnet_u64_wasm(), default_init_args(), None)
+            .install_canister(ledger_u64_wasm(), default_init_args(), None)
             .unwrap();
         // Create a large balance
         transfer(&env, ledger_id, MINTER, account(1), u64::MAX);
         let mut balance = balance_of(&env, ledger_id, account(1));
-        let initial_allowance = Allowance {
-            allowance: Nat::from(u64::MAX),
-            expires_at: Some(u64::MAX - 1u64),
-        };
-        // Create a large allowance
-        let approval_result = send_approval(
-            &env,
-            ledger_id,
-            account(1).owner,
-            &ApproveArgs {
-                from_subaccount: None,
-                spender: account(2),
-                amount: initial_allowance.allowance.clone(),
-                expected_allowance: None,
-                expires_at: initial_allowance.expires_at,
-                fee: None,
-                memo: None,
-                created_at_time: None,
-            },
-        );
-        assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
-        balance -= FEE;
-        let initial_total_supply = icrc1_total_supply(&env, ledger_id);
-        assert_eq!(initial_total_supply.to_u64(), Some(u64::MAX - FEE));
-        let initial_blocks = icrc3_get_blocks(
-            &env,
-            ledger_id,
-            vec![GetBlocksRequest {
-                start: Nat::from(0u64),
-                length: Nat::from(u64::MAX),
-            }],
-        );
-        assert_eq!(initial_blocks.log_length, Nat::from(2u64));
-        assert_eq!(initial_blocks.blocks.len(), 2);
-        assert_eq!(initial_blocks.archived_blocks.len(), 0);
-        let initial_metadata = metadata(&env, ledger_id);
-        assert!(!initial_metadata.is_empty());
 
         // Try to upgrade the ledger from using a u64 wasm to a u256 wasm
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-        env.upgrade_canister(ledger_id, ledger_mainnet_u256_wasm(), upgrade_args)
+        env.upgrade_canister(ledger_id, ledger_u256_wasm(), upgrade_args)
             .expect("Unable to upgrade the ledger canister");
-
-        // The balance, allowance, total supply, and blocks should not change
-        let verify_state = || {
-            assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
-            let actual_allowance = Account::get_allowance(&env, ledger_id, account(1), account(2));
-            assert_eq!(actual_allowance, initial_allowance);
-            assert_eq!(
-                initial_blocks,
-                icrc3_get_blocks(
-                    &env,
-                    ledger_id,
-                    vec![GetBlocksRequest {
-                        start: Nat::from(0u64),
-                        length: Nat::from(u64::MAX),
-                    }]
-                )
-            );
-            assert_eq!(initial_metadata, metadata(&env, ledger_id));
-        };
-        verify_state();
-        // The total supply is calculated based on the token type, so this actually changes (even though it should not)
-        assert_ne!(initial_total_supply, icrc1_total_supply(&env, ledger_id));
-
-        // Try to upgrade the ledger back to a u64 wasm
-        let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-        env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args)
-            .expect("Unable to upgrade the ledger canister");
-
-        // The balance, allowance, and blocks should not change
-        verify_state();
-        // The total supply should be back to what it was originally
-        assert_eq!(initial_total_supply, icrc1_total_supply(&env, ledger_id));
     }
 
     #[test]

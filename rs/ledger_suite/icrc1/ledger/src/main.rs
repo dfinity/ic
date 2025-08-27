@@ -19,7 +19,7 @@ use ic_icrc1::{
 use ic_icrc1_ledger::{
     balances_len, clear_stable_allowance_data, clear_stable_balances_data,
     clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
-    set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    read_first_balance, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -287,6 +287,8 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
     }
+
+    read_first_balance();
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;

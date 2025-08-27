@@ -1231,6 +1231,10 @@ pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
 
+pub fn read_first_balance() {
+    BALANCES_MEMORY.with_borrow(|balances| balances.first_key_value());
+}
+
 pub fn get_allowances(
     from: Account,
     spender: Option<Account>,
