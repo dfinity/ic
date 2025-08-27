@@ -422,7 +422,6 @@ impl ExecutionEnvironment {
             Arc::clone(&ingress_history_writer),
             fd_factory,
             config.environment_variables,
-            config.replicated_query_inter_canister_log_fetch,
         );
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
