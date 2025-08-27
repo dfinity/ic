@@ -2564,3 +2564,8 @@ enum Topic {
   // Critical proposals related to dapp operations
   TOPIC_CRITICAL_DAPP_OPERATIONS = 7;
 }
+
+message AddAllowedExtensionRequest {
+  bytes wasm_hash = 1;
+  ExtensionSpec spec = 2;
+}

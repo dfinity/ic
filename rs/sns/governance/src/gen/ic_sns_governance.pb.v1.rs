@@ -4229,6 +4229,20 @@ pub struct Account {
     #[prost(message, optional, tag = "2")]
     pub subaccount: ::core::option::Option<Subaccount>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddAllowedExtensionRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub spec: ::core::option::Option<ExtensionSpec>,
+}
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(

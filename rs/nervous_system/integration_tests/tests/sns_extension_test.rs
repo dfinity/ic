@@ -20,7 +20,10 @@ use ic_sns_cli::{
     register_extension,
     register_extension::{RegisterExtensionArgs, RegisterExtensionInfo},
 };
-use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
+use ic_sns_governance::{
+    governance::TREASURY_SUBACCOUNT_NONCE,
+    pb::v1::{AddAllowedExtensionRequest, ExtensionSpec},
+};
 use ic_sns_governance_api::pb::v1::{
     proposal::Action, ExecuteExtensionOperation, ExtensionOperationArg, ExtensionUpgradeArg,
     PreciseValue, Proposal, UpgradeExtension, Wasm as ApiWasm,
@@ -57,6 +60,60 @@ fn make_deposit_allowances(
         "treasury_allocation_icp_e8s".to_string() => PreciseValue::Nat(treasury_allocation_icp_e8s),
         "treasury_allocation_sns_e8s".to_string() => PreciseValue::Nat(treasury_allocation_sns_e8s),
     }))
+}
+
+async fn add_allowed_extension(
+    pocket_ic: &PocketIc,
+    sns_governance_canister_id: PrincipalId,
+    hash: [u8; 32],
+    pb_extension: ExtensionSpec,
+) {
+    println!("We are making the add_allowed_extension call...");
+    let payload = Encode!(&AddAllowedExtensionRequest {
+        wasm_hash: hash.to_vec(),
+        spec: Some(pb_extension)
+    })
+    .unwrap();
+
+    pocket_ic
+        .update_call(
+            sns_governance_canister_id.0,
+            PrincipalId::new_anonymous().0,
+            "add_allowed_extension",
+            payload,
+        )
+        .await
+        .unwrap();
+}
+
+async fn setup_allowed_extension_specs(
+    pocket_ic: &PocketIc,
+    sns_governance_canister_id: PrincipalId,
+) {
+    let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
+        .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
+
+    let kong_backend_wasm = Wasm::from_file(wasm_path);
+
+    let v1_hash = kong_backend_wasm.sha256_hash();
+
+    let v2_hash = Wasm::from_bytes(modify_wasm_bytes(&kong_backend_wasm.bytes(), 1)).sha256_hash();
+
+    let spec_v1 = ExtensionSpec {
+        name: Some("KongSwap Treasury Manager".to_string()),
+        version: Some(1),
+        topic: Some(6),          // TreasuryAssetManagement
+        extension_type: Some(1), // TreasuryManager
+    };
+    let spec_v2 = ExtensionSpec {
+        name: Some("KongSwap Treasury Manager".to_string()),
+        version: Some(2),        // Version Bump
+        topic: Some(6),          // TreasuryAssetManagement
+        extension_type: Some(1), // TreasuryManager
+    };
+
+    add_allowed_extension(pocket_ic, sns_governance_canister_id, v1_hash, spec_v1).await;
+    add_allowed_extension(pocket_ic, sns_governance_canister_id, v2_hash, spec_v2).await;
 }
 
 #[tokio::test]
@@ -109,6 +166,8 @@ async fn do_test_treasury_manager() {
     .await;
 
     let sns = deploy_sns(&pocket_ic, false).await;
+
+    setup_allowed_extension_specs(&pocket_ic, sns.governance.canister_id).await;
 
     // Install KongSwap
     let _kong_backend_canister_id = {
@@ -623,8 +682,16 @@ async fn test_upgrade_extension() {
         nns_installer.install(&pocket_ic).await;
     }
 
+    add_fiduciary_subnet_type(&pocket_ic).await;
+    add_fiduciary_subnet_to_cmc(
+        &pocket_ic,
+        SubnetId::from(PrincipalId::from(fiduciary_subnet_id)),
+    )
+    .await;
+
     // Step 2: Deploy SNS
     let sns = deploy_sns(&pocket_ic, false).await;
+    setup_allowed_extension_specs(&pocket_ic, sns.governance.canister_id).await;
 
     let _sns_ledger_canister_id =
         CanisterId::try_from_principal_id(sns.ledger.canister_id).unwrap();
