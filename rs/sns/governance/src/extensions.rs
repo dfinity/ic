@@ -609,6 +609,12 @@ impl Governance {
         let expiry_time_sec = self.env.now().saturating_add(ONE_HOUR_SECONDS);
         let expiry_time_nsec = expiry_time_sec.saturating_mul(NANO_SECONDS_PER_SECOND);
 
+        // If expected_allowance is None, the ledger *blindly* overwrites any existing
+        // allowance (even if non-zero). We use this to retry failed proposals by
+        // replacing the prior allowance.
+        // Safety: double-spend is avoided because the ledger treats the write as an
+        // unconditional replace, not an increment/accumulate.
+
         self.ledger
             .icrc2_approve(
                 to,
@@ -616,6 +622,7 @@ impl Governance {
                 Some(expiry_time_nsec),
                 self.transaction_fee_e8s_or_panic(),
                 self.sns_treasury_subaccount(),
+                None,
             )
             .await
             .map(|_| ())
@@ -633,6 +640,7 @@ impl Governance {
                 Some(expiry_time_nsec),
                 icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
                 self.icp_treasury_subaccount(),
+                None,
             )
             .await
             .map(|_| ())

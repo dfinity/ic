@@ -72,6 +72,7 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError> {
         <IcpLedgerCanister<Rt> as IcpLedger>::icrc2_approve(
             self,
@@ -80,6 +81,7 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
             expires_at,
             fee,
             from_subaccount,
+            expected_allowance,
         )
         .await
     }
@@ -193,6 +195,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError> {
         let result: Result<(Result<Nat, ApproveError>,), (i32, String)> = Rt::call_with_cleanup(
             self.canister_id,
@@ -204,10 +207,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
                 fee: Some(Nat::from(fee)),
                 from_subaccount,
                 created_at_time: None,
-                // If the expected_allowance field is set, the ledger
-                // MUST ensure that the current allowance for the spender
-                // from the caller's account is equal to the given value.
-                expected_allowance: Some(Nat::from(0_u64)),
+                expected_allowance: expected_allowance.map(Nat::from),
                 memo: None,
             },),
         )
@@ -275,6 +275,7 @@ pub trait ICRC1Ledger: Send + Sync {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.
@@ -322,6 +323,7 @@ pub trait IcpLedger: Send + Sync {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.
