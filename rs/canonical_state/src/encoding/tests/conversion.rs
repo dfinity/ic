@@ -143,34 +143,18 @@ fn try_from_stream_header_with_invalid_signals_duplicates() {
     );
 }
 
-/// Decoding a slice with only deprecated reject signal deltas populated should return an error but not panic.
+/// Decoding a slice with field index 3 filler populated should return an error but not panic.
 #[test]
-fn try_from_stream_header_with_just_unsupported_deprecated_reject_signals() {
+fn try_from_stream_header_with_field_index_3_populated() {
     let mut header = types::StreamHeader::from((
         &stream_header(MAX_SUPPORTED_CERTIFICATION_VERSION),
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ));
-    header.reject_signals = types::RejectSignals::default();
-    header.deprecated_reject_signal_deltas = vec![1, 13, 17];
+    header.field_index_3_filler = 1;
 
     assert_matches!(
         ic_types::xnet::StreamHeader::try_from(header),
-        Err(ProxyDecodeError::Other(message)) if message.contains("deprecated reject signal deltas populated")
-    );
-}
-
-/// Decoding a slice with deprecated reject signal deltas populated should return an error but not panic.
-#[test]
-fn try_from_stream_header_with_unsupported_deprecated_reject_signals() {
-    let mut header = types::StreamHeader::from((
-        &stream_header(MAX_SUPPORTED_CERTIFICATION_VERSION),
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ));
-    header.deprecated_reject_signal_deltas = vec![1, 13, 17];
-
-    assert_matches!(
-        ic_types::xnet::StreamHeader::try_from(header),
-        Err(ProxyDecodeError::Other(message)) if message.contains("deprecated reject signal deltas populated")
+        Err(ProxyDecodeError::Other(message)) if message.contains("field index 3 is populated")
     );
 }
 

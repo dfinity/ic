@@ -36,8 +36,8 @@ pub struct StreamHeader {
     pub begin: u64,
     pub end: u64,
     pub signals_end: u64,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub deprecated_reject_signal_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub field_index_3_filler: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub flags: u64,
     #[serde(default, skip_serializing_if = "RejectSignals::is_empty")]
@@ -249,7 +249,7 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
             begin: header.begin().get(),
             end: header.end().get(),
             signals_end: header.signals_end().get(),
-            deprecated_reject_signal_deltas: vec![],
+            field_index_3_filler: 0,
             flags,
             reject_signals,
         }
@@ -259,10 +259,10 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
 impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
     type Error = ProxyDecodeError;
     fn try_from(header: StreamHeader) -> Result<Self, Self::Error> {
-        if !header.deprecated_reject_signal_deltas.is_empty() {
+        if header.field_index_3_filler != 0 {
             return Err(ProxyDecodeError::Other(format!(
-                "StreamHeader: deprecated reject signal deltas populated: {:?}",
-                header.deprecated_reject_signal_deltas,
+                "StreamHeader: field index 3 is populated: {:?}",
+                header.field_index_3_filler,
             )));
         }
         if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
