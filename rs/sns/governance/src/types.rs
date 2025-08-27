@@ -1081,11 +1081,17 @@ impl NervousSystemFunction {
         )
     }
 
-    /// The special case if for `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
-    /// proposals of this SNS. While technically being a native function, this one does not have
-    /// its own topic.
+    /// The special cases are for:
+    /// - `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
+    ///   proposals of this SNS While technically being a native function
+    /// - `EXECUTE_EXTENSION_OPERATION` which are custom functions for extensions
+    ///   which have their own topics defined on the extension operation spec
     pub fn needs_topic(&self) -> bool {
-        self.id != native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+        ![
+            native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            native_action_ids::EXECUTE_EXTENSION_OPERATION,
+        ]
+        .contains(&self.id)
     }
 
     fn unspecified() -> NervousSystemFunction {
@@ -2082,7 +2088,7 @@ impl Drop for LedgerUpdateLock {
         // may be inconsistent with the internal state of governance.  In that case,
         // we want to prevent further operations with that neuron until the issue can be
         // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
+        if ic_cdk::futures::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
@@ -3181,7 +3187,7 @@ pub mod test_helpers {
         /// circuit", i.e. return ResourceExhausted instead of doing the "real
         /// work". Most tests do not attempt exercise the special "running out of
         /// memory" condition; therefore, it makes sense for this to always
-        /// always return NoIssue.
+        /// return NoIssue.
         fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
             HeapGrowthPotential::NoIssue
         }

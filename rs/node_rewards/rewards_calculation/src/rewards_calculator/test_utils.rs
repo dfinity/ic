@@ -1,6 +1,4 @@
-use crate::rewards_calculator_results::DayUtc;
-use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode, SubnetMetricsDailyKey};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use crate::types::{DayUtc, NodeMetricsDailyRaw, Region, RewardableNode, SubnetMetricsDailyKey};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
@@ -17,18 +15,6 @@ pub fn test_provider_id(id: u64) -> PrincipalId {
 
 pub fn test_subnet_id(id: u64) -> SubnetId {
     SubnetId::from(PrincipalId::new_subnet_test_id(id))
-}
-
-impl From<&str> for DayUtc {
-    fn from(dmy: &str) -> Self {
-        let dt = format!("{} 00:00:00", dmy);
-        let naive =
-            NaiveDateTime::parse_from_str(&dt, "%Y-%m-%d %H:%M:%S").expect("Invalid date format");
-        let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, Utc);
-        let ts = datetime.timestamp_nanos_opt().unwrap() as u64;
-
-        DayUtc::from(ts)
-    }
 }
 
 impl Default for RewardableNode {

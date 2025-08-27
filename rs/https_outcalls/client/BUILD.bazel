@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/http_endpoints/async_utils",
+    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",

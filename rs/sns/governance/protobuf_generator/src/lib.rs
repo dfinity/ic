@@ -61,6 +61,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             "NeuronPermissionType",
             "Proposal.action",
             "Topic",
+            "ExtensionType",
+            "OperationType",
         ],
     );
     apply_attribute(

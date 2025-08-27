@@ -508,8 +508,14 @@ impl ExecutionTest {
         self.subnet_available_memory
     }
 
-    pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
-        self.subnet_available_memory = memory
+    pub fn set_available_execution_memory(&mut self, execution_memory: i64) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            execution_memory,
+            self.subnet_available_memory
+                .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
     }
 
     pub fn subnet_available_callbacks(&self) -> i64 {
@@ -2200,11 +2206,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm64(mut self) -> Self {
-        self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
         self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
         self
@@ -2511,7 +2512,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         );
-        state.metadata.cost_schedule = self.cost_schedule;
+        state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
             state: Some(state),
@@ -2520,7 +2521,7 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 self.execution_config.subnet_memory_capacity.get() as i64
                     - self.execution_config.subnet_memory_reservation.get() as i64,
                 self.execution_config

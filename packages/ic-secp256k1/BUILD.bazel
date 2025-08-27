@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "@crate_index//:hex-literal",
     "@crate_index//:hmac",
     "@crate_index//:k256",
-    "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:pem",
     "@crate_index//:rand",

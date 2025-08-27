@@ -246,6 +246,10 @@ impl IDkgBlockReader for TestIDkgBlockReader {
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         self.idkg_transcripts.keys().cloned().collect()
     }
+
+    fn iter_above(&self, _height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
+        Box::new(std::iter::empty())
+    }
 }
 
 pub(crate) enum TestTranscriptLoadStatus {

@@ -74,6 +74,10 @@ impl Task for SubprocessTask {
             child_cmd.arg("--no-logs");
         }
 
+        for pattern in &self.group_ctx.exclude_logs {
+            child_cmd.arg("--exclude-logs").arg(pattern.as_str());
+        }
+
         child_cmd
             .arg("spawn-child")
             .arg(self.task_id.name())
@@ -106,7 +110,7 @@ impl Task for SubprocessTask {
                 // if cancellation request: task state is set to cancelled
                 // we still have to wait for jh_res -> leads to report or failure
                 // if cancelled, ignore child report
-                // 
+                //
 
                 // A misbehaving child might have not connected to the parent at all. In such a
                 // case, this join would block forever.

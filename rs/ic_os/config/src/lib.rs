@@ -1,4 +1,5 @@
 pub mod generate_testnet_config;
+pub mod guestos;
 pub mod hostos;
 pub mod setupos;
 
@@ -19,6 +20,9 @@ pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config-guestos.json";
 pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/run/config/config.json";
+pub static DEFAULT_BOOTSTRAP_TAR_PATH: &str = "/mnt/config/ic-bootstrap.tar";
+pub static DEFAULT_IC_JSON5_TEMPLATE_PATH: &str = "/opt/ic/share/ic.json5.template";
+pub static DEFAULT_IC_JSON5_OUTPUT_PATH: &str = "/run/ic-node/config/ic.json5";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =

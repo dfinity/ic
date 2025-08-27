@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use async_trait::async_trait;
 use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -272,6 +273,7 @@ async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtens
     )
     .await;
 
+    log!(INFO, "register_extension done");
     RegisterExtensionResponse::from(result)
 }
 
@@ -400,7 +402,10 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
 }
 
 // Resources to serve for a given http_request
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../../packages/ic-error-types" }

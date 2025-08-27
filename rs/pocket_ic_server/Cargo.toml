@@ -56,12 +56,17 @@ ic-management-canister-types-private = { path = "../types/management_canister_ty
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
+ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
+ic-nns-governance-init = { path = "../nns/governance/init" }
+ic-nns-handler-root = { path = "../nns/handlers/root/impl" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
+ic-sns-wasm = { path = "../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
@@ -95,7 +100,9 @@ uuid = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-bitcoincore-rpc = { workspace = true }
+candid_parser = { workspace = true }
+flate2 = { workspace = true }
+ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
@@ -106,3 +113,4 @@ reqwest = { workspace = true }
 rustls = { workspace = true }
 serde_json = { workspace = true }
 spec-compliance = { path = "../tests/research/spec_compliance" }
+walrus = { workspace = true }

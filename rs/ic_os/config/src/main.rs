@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::setupos::deployment_json::get_deployment_settings;
@@ -10,7 +11,6 @@ use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
-use std::fs::File;
 use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
@@ -33,6 +33,20 @@ pub enum Commands {
         setupos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
+    },
+    /// Bootstrap IC Node from a bootstrap package
+    BootstrapICNode {
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
+        bootstrap_tar_path: PathBuf,
+    },
+    /// Generate IC configuration from template and guestos config
+    GenerateICConfig {
+        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        guestos_config_json_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_IC_JSON5_TEMPLATE_PATH, value_name = "ic.json5.template")]
+        template_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
+        output_path: PathBuf,
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
@@ -238,7 +252,7 @@ pub fn main() -> Result<()> {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
             let setupos_config: SetupOSConfig =
-                serde_json::from_reader(File::open(setupos_config_json_path)?)?;
+                config::deserialize_config(setupos_config_json_path)?;
 
             let hostos_config = HostOSConfig {
                 config_version: setupos_config.config_version,
@@ -257,6 +271,24 @@ pub fn main() -> Result<()> {
             );
 
             Ok(())
+        }
+        Some(Commands::BootstrapICNode { bootstrap_tar_path }) => {
+            println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
+            bootstrap_ic_node(&bootstrap_tar_path)
+        }
+        Some(Commands::GenerateICConfig {
+            guestos_config_json_path,
+            template_path,
+            output_path,
+        }) => {
+            println!(
+                "Generating IC configuration from template: {}",
+                template_path.display()
+            );
+            let guestos_config: GuestOSConfig =
+                config::deserialize_config(&guestos_config_json_path)?;
+
+            generate_ic_config::generate_ic_config(&guestos_config, &template_path, &output_path)
         }
         Some(Commands::GenerateTestnetConfig(clap_args)) => {
             // Convert `clap_args` into `GenerateTestnetConfigArgs`

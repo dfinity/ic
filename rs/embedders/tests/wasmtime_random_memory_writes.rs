@@ -40,11 +40,12 @@ const STABLE_OP_BYTES: u64 = 37;
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
 }
 
 fn test_api_for_update(
@@ -613,29 +614,18 @@ mod tests {
                     // Add the target pages.
                     for Write { dst, bytes } in writes {
                         if !bytes.is_empty() {
-                            if embedder.config().feature_flags.write_barrier == FlagStatus::Disabled
-                            {
-                                // A page will not actually be considered dirty
-                                // unless the contents has changed. Memory is
-                                // initially all 0, so this means we should ignore
-                                // all zero bytes.
-                                result.extend(
-                                    bytes
-                                        .iter()
-                                        .enumerate()
-                                        .filter(|(_, b)| **b != 0)
-                                        .map(|(addr, _)| {
-                                            (*dst as u64 + addr as u64) / PAGE_SIZE as u64
-                                        })
-                                        .collect::<BTreeSet<_>>(),
-                                );
-                            } else {
-                                result.extend(
-                                    *dst as u64 / PAGE_SIZE as u64
-                                        ..=(*dst as u64 + bytes.len() as u64 - 1)
-                                            / PAGE_SIZE as u64,
-                                );
-                            }
+                            // A page will not actually be considered dirty
+                            // unless the contents has changed. Memory is
+                            // initially all 0, so this means we should ignore
+                            // all zero bytes.
+                            result.extend(
+                                bytes
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, b)| **b != 0)
+                                    .map(|(addr, _)| (*dst as u64 + addr as u64) / PAGE_SIZE as u64)
+                                    .collect::<BTreeSet<_>>(),
+                            );
                         }
                     }
                     result.iter().cloned().collect()
@@ -1415,8 +1405,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
-            let mut config = EmbeddersConfig::default();
-            config.feature_flags.wasm64 = FlagStatus::Enabled;
+            let config = EmbeddersConfig::default();
             let embedder = WasmtimeEmbedder::new(config, log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
