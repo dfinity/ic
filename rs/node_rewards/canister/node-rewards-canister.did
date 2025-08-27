@@ -104,6 +104,8 @@ type GetNodeProviderRewardsCalculationRequest = record {
   provider_id: principal;
 };
 
+type GetNodeProvidersRewardsResponse = variant { Ok : NodeProvidersRewards; Err : text };
+
 type GetNodeProviderRewardsCalculationResponse = variant { Ok : NodeProviderRewards; Err : text };
 
 service : () -> {
