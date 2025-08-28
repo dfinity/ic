@@ -111,23 +111,27 @@ impl IngressMessage {
         self
     }
 
-    fn envelope(&self) -> HttpRequestEnvelope<HttpCallContent> {
-        let call_content = HttpCallContent::Call {
-            update: HttpCanisterUpdate {
-                canister_id: Blob(self.canister_id.into_vec()),
-                method_name: self.method_name.clone(),
-                ingress_expiry: self.ingress_expiry,
-                arg: Blob(ARG),
-                sender: Blob(SENDER.into_vec()),
-                nonce: None,
-            },
-        };
+    pub fn envelope(&self) -> HttpRequestEnvelope<HttpCallContent> {
+        let call_content = self.call_content();
 
         HttpRequestEnvelope {
             content: call_content,
             sender_pubkey: None,
             sender_sig: None,
             sender_delegation: None,
+        }
+    }
+
+    pub fn call_content(&self) -> HttpCallContent {
+        HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(self.canister_id.into_vec()),
+                method_name: self.method_name.clone(),
+                ingress_expiry: self.ingress_expiry,
+                arg: Blob(ARG),
+                sender: Blob(SENDER.into_vec()),
+                nonce: Some(Blob(vec![])),
+            },
         }
     }
 
@@ -143,27 +147,37 @@ impl Call {
         addr: SocketAddr,
         ingress_message: IngressMessage,
     ) -> reqwest::Response {
+        let url = self.url(addr, ingress_message.effective_canister_id);
+        Self::call_with_url(url, ingress_message).await
+    }
+
+    pub async fn call_with_custom_body(
+        self,
+        addr: SocketAddr,
+        effective_canister_id: PrincipalId,
+        body: Vec<u8>,
+    ) -> reqwest::Response {
+        let url = self.url(addr, effective_canister_id);
+        send_request(url, body).await
+    }
+
+    pub async fn call_with_url(url: String, ingress_message: IngressMessage) -> reqwest::Response {
         let envelope = ingress_message.envelope();
         let body = serde_cbor::to_vec(&envelope).unwrap();
+        send_request(url, body).await
+    }
 
+    pub fn url(self, addr: SocketAddr, effective_canister_id: PrincipalId) -> String {
         let version = match self {
             Call::V2 => "v2",
             Call::V3 => "v3",
             Call::V4 => "v4",
         };
 
-        let url = format!(
+        format!(
             "http://{}/api/{}/canister/{}/call",
-            addr, version, ingress_message.effective_canister_id
-        );
-
-        reqwest::Client::new()
-            .post(url)
-            .body(body)
-            .header(CONTENT_TYPE, APPLICATION_CBOR)
-            .send()
-            .await
-            .unwrap()
+            addr, version, effective_canister_id
+        )
     }
 }
 
@@ -187,18 +201,46 @@ impl Query {
     }
 
     pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
-        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+        let url = Self::url(addr, self.version, self.effective_canister_id);
+        Self::query_with_url_and_canister_id(url, self.canister_id).await
+    }
 
-        let call_content = HttpQueryContent::Query {
+    pub async fn query_with_body(&self, addr: SocketAddr, body: Vec<u8>) -> reqwest::Response {
+        let url = Self::url(addr, self.version, self.effective_canister_id);
+        send_request(url, body).await
+    }
+
+    pub fn url(socket: SocketAddr, version: query::Version, canister_id: PrincipalId) -> String {
+        let version_str = match version {
+            query::Version::V2 => "v2",
+            query::Version::V3 => "v3",
+        };
+
+        format!(
+            "http://{socket}/api/{version_str}/canister/{}/query",
+            canister_id
+        )
+    }
+
+    pub fn query_content(canister_id: PrincipalId) -> HttpQueryContent {
+        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+        HttpQueryContent::Query {
             query: HttpUserQuery {
-                canister_id: Blob(self.canister_id.into_vec()),
+                canister_id: Blob(canister_id.into_vec()),
                 method_name: METHOD_NAME.to_string(),
                 arg: Blob(ARG),
                 sender: Blob(SENDER.into_vec()),
                 ingress_expiry,
-                nonce: None,
+                nonce: Some(Blob(vec![])),
             },
-        };
+        }
+    }
+
+    pub async fn query_with_url_and_canister_id(
+        url: String,
+        canister_id: PrincipalId,
+    ) -> reqwest::Response {
+        let call_content = Self::query_content(canister_id);
 
         let envelope = HttpRequestEnvelope {
             content: call_content,
@@ -208,22 +250,8 @@ impl Query {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-        let version_str = match self.version {
-            query::Version::V2 => "v2",
-            query::Version::V3 => "v3",
-        };
-        let url = format!(
-            "http://{addr}/api/{version_str}/canister/{}/query",
-            self.effective_canister_id
-        );
 
-        reqwest::Client::new()
-            .post(url)
-            .body(body)
-            .header(CONTENT_TYPE, APPLICATION_CBOR)
-            .send()
-            .await
-            .unwrap()
+        send_request(url, body).await
     }
 }
 
@@ -247,32 +275,16 @@ impl CanisterReadState {
     }
 
     pub async fn read_state(self, addr: SocketAddr) -> reqwest::Response {
-        let url_string = format!("http://{}", addr);
-        let url = Url::parse(&url_string).unwrap();
-        self.read_state_at_url(url).await
+        let url = Self::url(addr, self.version, self.effective_canister_id);
+        Self::read_state_with_custom_url(url, self.paths).await
+    }
+
+    pub async fn read_state_with_body(self, addr: SocketAddr, body: Vec<u8>) -> reqwest::Response {
+        let url = Self::url(addr, self.version, self.effective_canister_id);
+        send_request(url, body).await
     }
 
     pub async fn read_state_at_url(self, mut url: Url) -> reqwest::Response {
-        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
-
-        let call_content = HttpReadStateContent::ReadState {
-            read_state: HttpReadState {
-                paths: self.paths,
-                sender: Blob(SENDER.into_vec()),
-                ingress_expiry,
-                nonce: None,
-            },
-        };
-
-        let envelope = HttpRequestEnvelope {
-            content: call_content,
-            sender_pubkey: None,
-            sender_sig: None,
-            sender_delegation: None,
-        };
-
-        let body = serde_cbor::to_vec(&envelope).unwrap();
-
         let version_str = match self.version {
             read_state::canister::Version::V2 => "v2",
             read_state::canister::Version::V3 => "v3",
@@ -283,18 +295,113 @@ impl CanisterReadState {
             self.effective_canister_id
         ));
 
-        let client = reqwest::Client::builder()
-            .http2_prior_knowledge()
-            .danger_accept_invalid_certs(true)
-            .build()
-            .unwrap();
-
-        client
-            .post(url)
-            .body(body)
-            .header(CONTENT_TYPE, APPLICATION_CBOR)
-            .send()
-            .await
-            .unwrap()
+        Self::read_state_with_custom_url(url.to_string(), self.paths).await
     }
+
+    pub fn url(
+        addr: SocketAddr,
+        version: read_state::canister::Version,
+        effective_canister_id: PrincipalId,
+    ) -> String {
+        let version_str = match version {
+            read_state::canister::Version::V2 => "v2",
+            read_state::canister::Version::V3 => "v3",
+        };
+
+        format!("http://{addr}/api/{version_str}/canister/{effective_canister_id}/read_state")
+    }
+
+    pub fn read_state_content(paths: Vec<Path>) -> HttpReadStateContent {
+        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+        HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                paths,
+                sender: Blob(SENDER.into_vec()),
+                ingress_expiry,
+                nonce: None,
+            },
+        }
+    }
+
+    pub async fn read_state_with_custom_url(url: String, paths: Vec<Path>) -> reqwest::Response {
+        let call_content = Self::read_state_content(paths);
+
+        let envelope = HttpRequestEnvelope {
+            content: call_content,
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        send_request(url, body).await
+    }
+}
+
+pub struct SubnetReadState {
+    pub subnet_id: PrincipalId,
+    pub version: read_state::subnet::Version,
+}
+
+impl SubnetReadState {
+    pub async fn read_state_with_body(&self, addr: SocketAddr, body: Vec<u8>) -> reqwest::Response {
+        send_request(Self::url(addr, self.version, self.subnet_id), body).await
+    }
+
+    pub async fn read_state_with_custom_url(url: String, paths: Vec<Path>) -> reqwest::Response {
+        let call_content = Self::read_state_content(paths);
+        let envelope = HttpRequestEnvelope {
+            content: call_content,
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        };
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+
+        send_request(url, body).await
+    }
+
+    pub fn read_state_content(paths: Vec<Path>) -> HttpReadStateContent {
+        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+        HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                paths,
+                sender: Blob(SENDER.into_vec()),
+                ingress_expiry,
+                nonce: None,
+            },
+        }
+    }
+
+    pub fn url(
+        addr: SocketAddr,
+        version: read_state::subnet::Version,
+        subnet_id: PrincipalId,
+    ) -> String {
+        let version_str = match version {
+            read_state::subnet::Version::V2 => "v2",
+            read_state::subnet::Version::V3 => "v3",
+        };
+
+        format!("http://{addr}/api/{version_str}/subnet/{subnet_id}/read_state")
+    }
+}
+
+async fn send_request(url: String, body: Vec<u8>) -> reqwest::Response {
+    let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    client
+        .post(url)
+        .body(body)
+        .header(CONTENT_TYPE, APPLICATION_CBOR)
+        .send()
+        .await
+        .unwrap()
 }

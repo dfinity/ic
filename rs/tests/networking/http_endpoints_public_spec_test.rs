@@ -48,9 +48,9 @@ use ic_system_test_driver::{
     util::{block_on, UniversalCanister},
 };
 use ic_types::{CanisterId, PrincipalId};
-use reqwest::Response;
+use reqwest::{Response, StatusCode};
 use slog::{info, Logger};
-use std::net::SocketAddr;
+use std::{collections::BTreeMap, net::SocketAddr};
 use url::Url;
 
 fn setup(env: TestEnv) {
@@ -250,6 +250,240 @@ async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16
     status
 }
 
+fn call_rejects_misrouted_requests(env: TestEnv, version: Call) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
+
+    let call_endpoint = version.url(socket, primary.get());
+
+    let response = block_on(Query::query_with_url_and_canister_id(
+        call_endpoint.clone(),
+        primary.get(),
+    ));
+    assert_eq!(
+        response.status().is_client_error(),
+        "Should reject a query request to a call endpoint"
+    );
+
+    let response = block_on(CanisterReadState::read_state_with_custom_url(
+        call_endpoint,
+        vec![Path::from(Label::from("time"))],
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a canister read state request to a call endpoint"
+    );
+}
+
+fn query_rejects_misrouted_requests(env: TestEnv, version: query::Version) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
+
+    let query_endpoint = Query::url(socket, version, primary.get());
+
+    let response = block_on(Call::call_with_url(
+        query_endpoint.clone(),
+        IngressMessage::default().with_canister_id(primary.into(), primary.into()),
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a call request to a query endpoint"
+    );
+
+    let response = block_on(CanisterReadState::read_state_with_custom_url(
+        query_endpoint,
+        vec![Path::from(Label::from("time"))],
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a call request to a query endpoint"
+    );
+}
+
+fn canister_read_state_rejects_misrouted_requests(
+    env: TestEnv,
+    version: read_state::canister::Version,
+) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
+
+    let canister_read_state_endpoint = CanisterReadState::url(socket, version, primary.get());
+
+    let response = block_on(Call::call_with_url(
+        canister_read_state_endpoint.clone(),
+        IngressMessage::default().with_canister_id(primary.into(), primary.into()),
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a call request to a canister read state endpoint"
+    );
+
+    let response = block_on(Query::query_with_url_and_canister_id(
+        canister_read_state_endpoint.clone(),
+        primary.get(),
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a query request to a canister read state endpoint"
+    );
+}
+
+fn subnet_read_state_rejects_misrouted_requests(
+    env: TestEnv,
+    version: read_state::subnet::Version,
+) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let (sys_subnet, _app_subnet) = get_subnets(&snapshot);
+    let socket = get_socket_addr(&snapshot);
+
+    let subnet_read_state_endpoint =
+        SubnetReadState::url(socket, version, sys_subnet.subnet_id.get());
+
+    let response = block_on(Call::call_with_url(
+        subnet_read_state_endpoint.clone(),
+        IngressMessage::default().with_canister_id(primary.into(), primary.into()),
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a call request to a subnet read state endpoint"
+    );
+
+    let response = block_on(Query::query_with_url_and_canister_id(
+        subnet_read_state_endpoint.clone(),
+        primary.get(),
+    ));
+    assert!(
+        response.status().is_client_error(),
+        "Should reject a query request to a subnet read state endpoint"
+    );
+}
+
+fn call_rejects_requests_with_missing_fields(env: TestEnv, version: Call) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+
+    let call_content = IngressMessage::default()
+        .with_canister_id(primary.into(), primary.into())
+        .call_content();
+    let cbor = serde_cbor::to_vec(&call_content).unwrap();
+
+    block_on(requests_with_missing_fields_are_rejected(
+        env,
+        cbor,
+        |socket, body| async move {
+            version
+                .call_with_custom_body(socket, primary.get(), body)
+                .await
+        },
+    ));
+}
+
+fn query_rejects_requests_with_missing_fields(env: TestEnv, version: query::Version) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+
+    let query_content = Query::query_content(primary.get());
+    let cbor = serde_cbor::to_vec(&query_content).unwrap();
+
+    block_on(requests_with_missing_fields_are_rejected(
+        env,
+        cbor,
+        |socket, body| async move {
+            let query = Query::new(primary.into(), primary.into(), version);
+            query.query_with_body(socket, body).await
+        },
+    ))
+}
+
+fn canister_read_state_rejects_requests_with_missing_fields(
+    env: TestEnv,
+    version: read_state::canister::Version,
+) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+
+    let read_state_content =
+        CanisterReadState::read_state_content(vec![Path::from(Label::from("time"))]);
+    let cbor = serde_cbor::to_vec(&read_state_content).unwrap();
+
+    block_on(requests_with_missing_fields_are_rejected(
+        env,
+        cbor,
+        |socket, body| async move {
+            CanisterReadState::new(vec![], primary.into(), version)
+                .read_state_with_body(socket, body)
+                .await
+        },
+    ))
+}
+
+fn subnet_read_state_rejects_requests_with_missing_fields(
+    env: TestEnv,
+    version: read_state::subnet::Version,
+) {
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let (sys_subnet, _app_subnet) = get_subnets(&snapshot);
+
+    let read_state_content =
+        CanisterReadState::read_state_content(vec![Path::from(Label::from("time"))]);
+    let cbor = serde_cbor::to_vec(&read_state_content).unwrap();
+
+    block_on(requests_with_missing_fields_are_rejected(
+        env,
+        cbor,
+        |socket, body| async move {
+            let subnet_read_state_endpoint = SubnetReadState {
+                subnet_id: sys_subnet.subnet_id.get(),
+                version,
+            };
+
+            subnet_read_state_endpoint
+                .read_state_with_body(socket, body)
+                .await
+        },
+    ))
+}
+
+async fn requests_with_missing_fields_are_rejected(
+    env: TestEnv,
+    valid_request: Vec<u8>,
+    sender: impl AsyncFn(SocketAddr, Vec<u8>) -> reqwest::Response,
+) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let socket = get_socket_addr(&snapshot);
+
+    for (field_name, request_with_the_field_missing) in iter_with_missing_fields(&valid_request) {
+        info!(logger, "Sending a request with {field_name} missing");
+        let body = serde_cbor::to_vec(&BTreeMap::from([(
+            serde_cbor::Value::Text("content".to_string()),
+            serde_cbor::Value::Map(request_with_the_field_missing),
+        )]))
+        .unwrap();
+
+        let response = sender(socket, body).await;
+        info!(logger, "Responded with status code {}", response.status());
+
+        if field_name != "nonce" {
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "Should reject a request with {field_name} missing"
+            );
+        } else {
+            assert!(
+                response.status().is_success(),
+                "Should accept a request with {field_name} field missing"
+            );
+        }
+    }
+}
+
 fn get_subnets(snapshot: &TopologySnapshot) -> (SubnetSnapshot, SubnetSnapshot) {
     let sys_subnet = snapshot
         .subnets()
@@ -345,6 +579,33 @@ fn assert_4xx(status: &u16) {
     );
 }
 
+/// Takes a valid payload in CBOR format and for each field of the payload
+/// returns a new payload with that field removed.
+fn iter_with_missing_fields(
+    cbor: &Vec<u8>,
+) -> Vec<(String, BTreeMap<serde_cbor::Value, serde_cbor::Value>)> {
+    let deserialized: BTreeMap<serde_cbor::Value, serde_cbor::Value> =
+        serde_cbor::from_slice(cbor).unwrap();
+
+    let mut result = Vec::new();
+
+    for field_name in deserialized.keys() {
+        let mut deserialized_clone = deserialized.clone();
+        deserialized_clone.remove(field_name);
+        let serde_cbor::Value::Text(field_name_str) = field_name else {
+            unreachable!()
+        };
+        result.push((field_name_str.clone(), deserialized_clone));
+    }
+
+    assert!(
+        !result.is_empty(),
+        "No fields found in payload {cbor:?}. This is a bug in the test."
+    );
+
+    result
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -359,6 +620,24 @@ fn main() -> Result<()> {
         .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V3))
         .add_test(systest!(read_time; read_state::canister::Version::V2))
         .add_test(systest!(read_time; read_state::canister::Version::V3))
+        .add_test(systest!(call_rejects_misrouted_requests; Call::V2))
+        .add_test(systest!(call_rejects_misrouted_requests; Call::V3))
+        .add_test(systest!(call_rejects_misrouted_requests; Call::V4))
+        .add_test(systest!(query_rejects_misrouted_requests; query::Version::V2))
+        .add_test(systest!(query_rejects_misrouted_requests; query::Version::V3))
+        .add_test(systest!(canister_read_state_rejects_misrouted_requests; read_state::canister::Version::V2))
+        .add_test(systest!(canister_read_state_rejects_misrouted_requests; read_state::canister::Version::V3))
+        .add_test(systest!(subnet_read_state_rejects_misrouted_requests; read_state::subnet::Version::V2))
+        .add_test(systest!(subnet_read_state_rejects_misrouted_requests; read_state::subnet::Version::V3))
+        .add_test(systest!(call_rejects_requests_with_missing_fields; Call::V2))
+        .add_test(systest!(call_rejects_requests_with_missing_fields; Call::V3))
+        .add_test(systest!(call_rejects_requests_with_missing_fields; Call::V4))
+        .add_test(systest!(query_rejects_requests_with_missing_fields; query::Version::V2))
+        .add_test(systest!(query_rejects_requests_with_missing_fields; query::Version::V3))
+        .add_test(systest!(canister_read_state_rejects_requests_with_missing_fields; read_state::canister::Version::V2))
+        .add_test(systest!(canister_read_state_rejects_requests_with_missing_fields; read_state::canister::Version::V3))
+        .add_test(systest!(subnet_read_state_rejects_requests_with_missing_fields; read_state::subnet::Version::V2))
+        .add_test(systest!(subnet_read_state_rejects_requests_with_missing_fields; read_state::subnet::Version::V3))
         .execute_from_args()?;
 
     Ok(())
