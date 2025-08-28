@@ -98,7 +98,7 @@ pub(crate) fn update_signature_request_contexts(
                     .exceeding_pre_signatures
                     .with_label_values(&[&key_id.to_string()])
                     .inc_by(exceeding as u64);
-                // Trim the stash by splitting of the highest exceeding entries
+                // Trim the stash by splitting off the highest exceeding entries
                 let Some(split_key) = stash.pre_signatures.keys().rev().nth(exceeding - 1) else {
                     continue;
                 };
