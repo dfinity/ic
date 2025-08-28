@@ -288,6 +288,10 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         );
     }
 
+    // This will fail if we try to upgrade a u64 ledger with a u256 wasm. The wasms use different
+    // encodings for storing numbers in stable structures. If the upgrade was successful,
+    // the ledger would later fail when trying to read the balances map.
+    // Upgrading a u256 ledger with a u64 wasm will fail earlier, while reading the `UPGRADES_MEMORY`.
     read_first_balance();
 
     let end = ic_cdk::api::instruction_counter();
