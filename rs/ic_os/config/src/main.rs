@@ -50,11 +50,6 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
-    /// Checks if the tool is config_dev or config.
-    /// Note: This command should generally be avoided.
-    /// Instead of relying on this command, consider porting the relevant bash logic to Rust
-    /// and integrating it directly with the config tool.
-    CheckVariantType,
 }
 
 #[derive(Parser)]
@@ -332,17 +327,6 @@ pub fn main() -> Result<()> {
                 &clap_args.guestos_config_json_path,
                 &generate_testnet_config(args)?,
             )
-        }
-        Some(Commands::CheckVariantType) => {
-            let is_dev_feature = cfg!(feature = "dev");
-
-            if is_dev_feature {
-                print!("dev");
-            } else {
-                print!("prod");
-            }
-
-            Ok(())
         }
         None => {
             println!("No command provided. Use --help for usage information.");
