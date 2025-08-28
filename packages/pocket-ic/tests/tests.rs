@@ -19,20 +19,18 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+#[cfg(not(windows))]
+use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as PocketIcAsync};
 use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        HttpGatewayDetails, IcpFeatures, InitialTime, InstanceHttpGatewayConfig,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
+        CreateInstanceResponse, HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig,
+        InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetConfigSet, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
-};
-#[cfg(not(windows))]
-use pocket_ic::{
-    common::rest::{CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig},
-    nonblocking::PocketIc as PocketIcAsync,
-    start_server, StartServerParams,
+    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
+    Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
