@@ -35,6 +35,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",  # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",  # Need for the canister/compilation sandboxing to work.
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",  # Need for the Bitcoin integration.
+            "//publish/binaries:ic-doge-adapter": "/opt/ic/bin/ic-doge-adapter:0755",  # Need for the Dogecoin integration.
             "//publish/binaries:ic-https-outcalls-adapter-https-only": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Need for the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",  # Crypto operations provider, required by the IC protocol (signing, etc).
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",  # Replica process manager, required by the IC protocol (upgrades, node addition, etc).

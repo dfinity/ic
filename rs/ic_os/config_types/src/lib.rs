@@ -201,6 +201,7 @@ pub struct GuestOSDevSettings {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
+    pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     // An optional hostname to override the deterministically generated hostname
