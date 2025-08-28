@@ -1715,17 +1715,22 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 &mut expected_state,
                 message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 0).clone(),
             );
-            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with all 1 message accepted and 2 rejected.
+            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with 2 message accepted and 1 rejected.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 0,
                 signals_end: 3,
-                reject_signals: vec![
-                    RejectSignal::new(RejectReason::CanisterMigrating, 1.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 2.into()),
-                ],
+                reject_signals: vec![RejectSignal::new(RejectReason::CanisterMigrating, 2.into())],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
+
+            // Cycles attached to the dropped reply are lost.
+            let cycles_lost = messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1..=1)
+                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -1757,7 +1762,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
             ]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                // sender_subnet_mismatch: 2,
+                sender_subnet_mismatch: 1,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -4624,6 +4629,10 @@ impl MetricsFixture {
                     counts.bad_reject_signal_for_response
                 ),
                 (
+                    &[("error", &CRITICAL_ERROR_SENDER_SUBNET_MISMATCH.to_string())],
+                    counts.sender_subnet_mismatch
+                ),
+                (
                     &[("error", &CRITICAL_ERROR_REQUEST_MISROUTED.to_string())],
                     counts.request_misrouted
                 ),
@@ -4644,6 +4653,7 @@ impl MetricsFixture {
 struct CriticalErrorCounts {
     pub induct_response_failed: u64,
     pub bad_reject_signal_for_response: u64,
+    pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
     pub request_misrouted: u64,
 }
