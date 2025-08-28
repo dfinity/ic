@@ -3195,6 +3195,9 @@ fn with_http_gateway_config_but_no_auto_progress() {
         .build();
 }
 
+// We already have a function `PocketIc::list_instances`,
+// but that function does not take a server URL as argument
+// (it tries to reuse an existing PocketIC server based on PID).
 async fn list_instances(server_url: &Url) -> Vec<String> {
     let url = server_url.join("instances").unwrap();
     reqwest::Client::new()
@@ -3243,7 +3246,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
 
     let instances = list_instances(&server_url).await;
     assert_eq!(instances.len(), 1);
-    assert_eq!(instances[0], "Available");
+    assert!(!instances[0].contains("Deleted"));
     assert_eq!(list_http_gateways(&server_url).await.len(), 1);
 
     pic.drop().await;
@@ -3285,30 +3288,16 @@ async fn with_http_gateway_config_invalid_instance_config() {
     };
     let (_child, server_url) = start_server(server_params).await;
 
+    // We provide an invalid log level.
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
         port: None,
         domains: None,
         https_config: None,
-    };
-    let pic = PocketIcBuilder::new()
-        .with_server_url(server_url.clone())
-        .with_application_subnet()
-        .with_http_gateway(http_gateway_config.clone())
-        .with_auto_progress(None)
-        .build_async()
-        .await;
-
-    let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert_eq!(instances[0], "Available");
-    let http_gateways = list_http_gateways(&server_url).await;
-    assert_eq!(http_gateways.len(), 1);
-
-    // We provide an invalid log level.
-    let subnet_config_set = SubnetConfigSet {
-        application: 1,
-        ..Default::default()
     };
     let auto_progress_config = AutoProgressConfig {
         artificial_delay_ms: None,
@@ -3326,15 +3315,12 @@ async fn with_http_gateway_config_invalid_instance_config() {
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
 
-    // We confirm that there are no new instances and HTTP gateways
+    // We confirm that there are no instances and HTTP gateways
     // after the failure, i.e., cleanup works.
     let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert_eq!(instances[0], "Available");
+    assert!(instances.is_empty());
     let http_gateways = list_http_gateways(&server_url).await;
-    assert_eq!(http_gateways.len(), 1);
-
-    pic.drop().await;
+    assert!(http_gateways.is_empty());
 }
 
 #[tokio::test]
@@ -3345,6 +3331,9 @@ async fn with_http_gateway_config_invalid_gateway_config() {
     };
     let (_child, server_url) = start_server(server_params).await;
 
+    // We first successfully create an instance with an HTTP gateway
+    // to later craft an invalid HTTP gateway configuration
+    // reusing the same port.
     let mut http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
         port: None,
@@ -3361,7 +3350,7 @@ async fn with_http_gateway_config_invalid_gateway_config() {
 
     let instances = list_instances(&server_url).await;
     assert_eq!(instances.len(), 1);
-    assert_eq!(instances[0], "Available");
+    assert!(!instances[0].contains("Deleted"));
     let http_gateways = list_http_gateways(&server_url).await;
     assert_eq!(http_gateways.len(), 1);
 
@@ -3392,7 +3381,7 @@ async fn with_http_gateway_config_invalid_gateway_config() {
     // after the failure, i.e., cleanup works.
     let instances = list_instances(&server_url).await;
     assert_eq!(instances.len(), 2);
-    assert_eq!(instances[0], "Available");
+    assert!(!instances[0].contains("Deleted"));
     assert_eq!(instances[1], "Deleted"); // an instance was temporarily created, but deleted before returning an error
     let http_gateways = list_http_gateways(&server_url).await;
     assert_eq!(http_gateways.len(), 1);
