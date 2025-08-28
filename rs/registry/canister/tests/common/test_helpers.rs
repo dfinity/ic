@@ -414,9 +414,19 @@ pub async fn check_subnet_for_canisters(
 }
 
 pub async fn install_registry_canister(pocket_ic: &PocketIc) {
-    let payload = RegistryCanisterInitPayloadBuilder::new();
-    let payload = payload.build();
+    install_registry_canister_with_mutations(pocket_ic, vec![]).await;
+}
 
+pub async fn install_registry_canister_with_mutations(
+    pocket_ic: &PocketIc,
+    requests: Vec<RegistryAtomicMutateRequest>,
+) {
+    let mut payload = RegistryCanisterInitPayloadBuilder::new();
+    for request in requests {
+        payload.push_init_mutate_request(request);
+    }
+
+    let payload = payload.build();
     install_canister(
         pocket_ic,
         "Registry",
