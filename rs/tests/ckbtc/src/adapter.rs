@@ -1,12 +1,13 @@
-use bitcoin::{block::Header, consensus::deserialize, Amount, Block};
+use crate::IcRpcClientType;
+use bitcoin::{consensus::deserialize, Amount};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_btc_adapter_test_utils::rpc_client::{ListUnspentResultEntry, RpcClient, RpcClientType};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
-    Method as Ic00Method, Payload,
+    BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Method as Ic00Method,
+    Payload,
 };
 use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
@@ -22,13 +23,14 @@ use std::str::FromStr;
 /// This allows to make arbitrary calls to the adapter, but they will go through the
 /// entire replica code path.
 #[derive(Clone)]
-pub struct AdapterProxy<'a> {
+pub struct AdapterProxy<'a, T: IcRpcClientType> {
+    _network: T,
     msg_can: MessageCanister<'a>,
     log: Logger,
 }
 
-impl<'a> AdapterProxy<'a> {
-    pub async fn new(agent: &'a Agent, log: Logger) -> Self {
+impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
+    pub async fn new(_network: T, agent: &'a Agent, log: Logger) -> Self {
         let bitcoin_principal_id = PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap();
         let bitcoin_principal = bitcoin_principal_id.into();
 
@@ -61,7 +63,11 @@ impl<'a> AdapterProxy<'a> {
         };
 
         let msg_can = MessageCanister::from_canister_id(agent, bitcoin_principal_id.into());
-        Self { msg_can, log }
+        Self {
+            _network,
+            msg_can,
+            log,
+        }
     }
 
     /// Make a `bitcoin_get_succesors` call
@@ -69,10 +75,10 @@ impl<'a> AdapterProxy<'a> {
         &self,
         anchor: Vec<u8>,
         headers: Vec<Vec<u8>>,
-    ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
+    ) -> Result<(Vec<T::Block>, Vec<T::Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::Regtest,
+                network: T::REGTEST_REPLICA,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -100,13 +106,13 @@ impl<'a> AdapterProxy<'a> {
         let blocks = blocks
             .iter()
             .map(|block| {
-                deserialize::<Block>(block).expect("Failed to deserialize a bitcoin block")
+                deserialize::<T::Block>(block).expect("Failed to deserialize a bitcoin block")
             })
             .collect();
         let next = next
             .iter()
             .map(|next| {
-                deserialize::<Header>(next).expect("Failed to deserialize a bitcoin header")
+                deserialize::<T::Header>(next).expect("Failed to deserialize a bitcoin header")
             })
             .collect();
 
@@ -117,7 +123,7 @@ impl<'a> AdapterProxy<'a> {
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
         let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: BitcoinNetwork::Mainnet,
+            network: T::REGTEST_REPLICA,
             transaction,
         };
 
@@ -139,7 +145,7 @@ impl<'a> AdapterProxy<'a> {
         anchor: Vec<u8>,
         max_num_blocks: usize,
         max_tries: u64,
-    ) -> Result<Vec<Block>, AgentError> {
+    ) -> Result<Vec<T::Block>, AgentError> {
         let mut blocks = vec![];
         let mut tries = 0;
 
@@ -163,7 +169,7 @@ impl<'a> AdapterProxy<'a> {
 
             let new_headers = new_blocks
                 .iter()
-                .map(|block| block.block_hash()[..].to_vec())
+                .map(|block| T::block_hash(&block)[..].to_vec())
                 .collect::<Vec<_>>();
 
             headers.extend(new_headers);

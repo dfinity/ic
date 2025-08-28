@@ -38,7 +38,7 @@ fn test_received_blocks<T: IcRpcClientType>(env: TestEnv) {
     // Instruct the adapter to sync the blocks
     let blocks = block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let adapter_proxy = AdapterProxy::new(&agent, log).await;
+        let adapter_proxy = AdapterProxy::new(T::REGTEST, &agent, log).await;
         adapter_proxy
             .sync_blocks(&mut vec![], anchor, 150, 15)
             .await
@@ -48,7 +48,7 @@ fn test_received_blocks<T: IcRpcClientType>(env: TestEnv) {
     assert_eq!(blocks.len() as u64, start_height + 150);
     for (h, block) in blocks.iter().enumerate() {
         assert_eq!(
-            block.block_hash(),
+            T::block_hash(block),
             client.get_block_hash((h + 1) as u64).unwrap()
         );
     }
@@ -104,19 +104,14 @@ fn test_receives_new_3rd_party_txs<T: IcRpcClientType>(env: TestEnv) {
     // Instruct the adapter to sync the blocks
     let blocks = block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let adapter_proxy = AdapterProxy::new(&agent, log).await;
+        let adapter_proxy = AdapterProxy::new(T::REGTEST, &agent, log).await;
         adapter_proxy
             .sync_blocks(&mut vec![], anchor, 102, 15)
             .await
             .expect("Failed to synchronize blocks")
     });
 
-    assert!(blocks
-        .last()
-        .unwrap()
-        .txdata
-        .iter()
-        .any(|tx| tx.compute_txid() == txid));
+    assert!(T::iter_transactions(blocks.last().unwrap()).any(|tx| tx.compute_txid() == txid));
 }
 
 fn test_send_tx<T: IcRpcClientType>(env: TestEnv) {
@@ -161,7 +156,7 @@ fn test_send_tx<T: IcRpcClientType>(env: TestEnv) {
 
     block_on(async {
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let adapter_proxy = AdapterProxy::new(&agent, log).await;
+        let adapter_proxy = AdapterProxy::new(T::REGTEST, &agent, log).await;
         adapter_proxy
             .send_tx(signed_tx.hex)
             .await

@@ -21,7 +21,9 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWithCyclesArgs};
-use ic_management_canister_types_private::{EcdsaCurve, MasterPublicKeyId};
+use ic_management_canister_types_private::{
+    BitcoinNetwork as ReplicaNetwork, EcdsaCurve, MasterPublicKeyId,
+};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
@@ -84,6 +86,7 @@ pub trait IcRpcClientType: RpcClientType {
     const CONFIG_MAPPING: &str;
     const RPC_PORT: u16;
     const P2P_PORT: u16;
+    const REGTEST_REPLICA: ReplicaNetwork;
     fn internet_computer(socket_addr: SocketAddr) -> InternetComputer;
 }
 
@@ -93,6 +96,7 @@ impl IcRpcClientType for BtcNetwork {
     const CONFIG_MAPPING: &str = "/tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf";
     const RPC_PORT: u16 = 8332;
     const P2P_PORT: u16 = 18444;
+    const REGTEST_REPLICA: ReplicaNetwork = ReplicaNetwork::Regtest;
     fn internet_computer(socket_addr: SocketAddr) -> InternetComputer {
         InternetComputer::new().with_bitcoind_addr(socket_addr)
     }
@@ -104,6 +108,7 @@ impl IcRpcClientType for DogeNetwork {
     const CONFIG_MAPPING: &str = "/tmp/dogecoin.conf:/node/dogecoin-core/configs/config.conf";
     const RPC_PORT: u16 = 18332;
     const P2P_PORT: u16 = 18444;
+    const REGTEST_REPLICA: ReplicaNetwork = ReplicaNetwork::DogecoinRegtest;
     fn internet_computer(socket_addr: SocketAddr) -> InternetComputer {
         InternetComputer::new().with_dogecoind_addr(socket_addr)
     }
