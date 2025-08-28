@@ -17,7 +17,7 @@ use ic_nns_governance_api::{
 };
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use pocket_ic::nonblocking::{update_candid_as, PocketIc};
 
 use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
@@ -94,14 +94,13 @@ pub async fn bootstrap_nns(
         subaccount: Some(neuron_subaccount),
     };
     let fee: Nat = 10_000_u64.into();
-    let memo: Memo = nonce.into();
     let neuron_stake_e8s = Tokens::from_tokens(1_000_000).unwrap().get_e8s();
     let transfer_arg = TransferArg {
         from_subaccount: None,
         to: neuron_account,
         fee: Some(fee),
         created_at_time: None,
-        memo: Some(memo),
+        memo: None,
         amount: neuron_stake_e8s.into(),
     };
     update_candid_as::<_, (Result<Nat, TransferError>,)>(

@@ -582,7 +582,7 @@ pub mod pocket_ic {
     /// 5) follow_dev_neuron - If true, all SNS neurons controlled by swap participants will follow the neuron that is controlled
     ///    by the `dev_participant_id` identity.
     ///
-    /// Returns SNS canisters IDs.
+    /// Returns SNS canisters IDs and the initial SNS neuron associated with dev_participant_id.
     pub async fn create_sns(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
