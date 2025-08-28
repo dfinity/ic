@@ -176,14 +176,6 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
-fn ledger_u256_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_U256_PATH").unwrap()).unwrap()
-}
-
-fn ledger_u64_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_U64_PATH").unwrap()).unwrap()
-}
-
 fn ledger_wasm_lowupgradeinstructionlimits() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH").unwrap()).unwrap()
 }
