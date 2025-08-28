@@ -2614,8 +2614,6 @@ dependencies = [
  "fs_extra",
  "get_if_addrs",
  "ic-config",
- "ic-types",
- "ic_sev",
  "macaddr",
  "network",
  "once_cell",
@@ -15374,6 +15372,7 @@ dependencies = [
  "sev",
  "sha2 0.10.9",
  "tempfile",
+    "tokio",
  "x509-cert",
 ]
 
