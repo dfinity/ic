@@ -12,7 +12,9 @@ use std::{borrow::Cow, time::Duration};
 
 use crate::{
     canister_state::{max_active_requests, num_active_requests},
-    processing::{process_accepted, process_all_failed, process_all_generic},
+    processing::{
+        process_accepted, process_all_failed, process_all_generic, process_controllers_changed,
+    },
 };
 
 mod canister_state;
@@ -232,6 +234,13 @@ pub fn start_timers() {
             "accepted",
             |r| matches!(r, RequestState::Accepted { .. }),
             process_accepted,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_generic(
+            "controllers_changed",
+            |r| matches!(r, RequestState::ControllersChanged { .. }),
+            process_controllers_changed,
         ))
     });
 

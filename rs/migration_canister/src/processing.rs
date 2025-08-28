@@ -11,13 +11,13 @@ use crate::{
         MethodGuard,
     },
     external_interfaces::management::{
-        canister_info, canister_status, set_exclusive_controller, set_original_controllers,
-        CanisterInfoArgs, CanisterStatusType,
+        canister_status, get_canister_info, set_exclusive_controller, set_original_controllers,
+        CanisterStatusType,
     },
     Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
-use ic_cdk::println;
+use ic_cdk::{api::time, management_canister::CanisterInfoResult, println};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -127,13 +127,20 @@ pub async fn process_controllers_changed(
     // TODO: target has enough cycles
 
     // Determine history length of source
-    let ProcessingResult::Success(canister_info) = canister_info(CanisterInfoArgs {
-        canister_id: request.source,
-    }) else {
-        return todo!();
+    let ProcessingResult::Success(CanisterInfoResult {
+        total_num_changes, ..
+    }) = get_canister_info(request.source).await
+    else {
+        return ProcessingResult::NoProgress;
     };
 
-    todo!()
+    let stopped_since = time();
+    ProcessingResult::Success(RequestState::StoppedAndReady {
+        request,
+        stopped_since,
+        canister_version,
+        canister_history_total_num: total_num_changes,
+    })
 }
 
 pub async fn process_all_failed() {

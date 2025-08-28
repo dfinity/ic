@@ -1,5 +1,10 @@
 use candid::{CandidType, Principal};
-use ic_cdk::{api::canister_self, call::Call, println};
+use ic_cdk::{
+    api::canister_self,
+    call::Call,
+    management_canister::{canister_info, CanisterInfoArgs, CanisterInfoResult},
+    println,
+};
 use serde::Deserialize;
 
 use crate::{processing::ProcessingResult, ValidationError};
@@ -182,43 +187,18 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct CanisterInfoArgs {
-    pub canister_id: Principal,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct CanisterInfoResponse {
-    pub total_num_changes: u64,
-    pub controllers: Vec<Principal>,
-}
-
-pub async fn canister_info(
+pub async fn get_canister_info(
     canister_id: Principal,
-    subnet_id: Principal,
-) -> ProcessingResult<CanisterInfoResponse, ValidationError> {
-    let args = CanisterInfoArgs { canister_id };
+) -> ProcessingResult<CanisterInfoResult, ValidationError> {
+    let args = CanisterInfoArgs {
+        canister_id,
+        num_requested_changes: None,
+    };
 
-    // We have to provide the subnet_id explicitly because `aaaaa-aa` will not always work during migration.
-    match Call::bounded_wait(subnet_id, "canister_info")
-        .with_arg(args)
-        .await
-    {
-        Ok(response) => match response.candid::<CanisterInfoResponse>() {
-            Ok(canister_info) => ProcessingResult::Success(canister_info),
-            Err(e) => {
-                println!(
-                    "Decoding `CanisterInfoResponse` for {:?}, {:?} failed: {:?}",
-                    canister_id, subnet_id, e
-                );
-                ProcessingResult::NoProgress
-            }
-        },
+    match canister_info(&args).await {
+        Ok(canister_info) => ProcessingResult::Success(canister_info),
         Err(e) => {
-            println!(
-                "Call `canister_info` for {:?}, {:?} failed {:?}",
-                canister_id, subnet_id, e
-            );
+            println!("Call `canister_info` for {:?}, failed {:?}", canister_id, e);
             ProcessingResult::NoProgress
         }
     }
