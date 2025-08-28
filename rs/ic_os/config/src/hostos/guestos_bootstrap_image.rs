@@ -198,12 +198,6 @@ impl BootstrapOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config_types::{
-        DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
-        NetworkSettings,
-    };
-    use std::net::Ipv6Addr;
-    use std::str::FromStr;
 
     #[test]
     fn test_build_bootstrap_config_image_succeeds_with_default_options() {
@@ -234,6 +228,13 @@ mod tests {
     #[test]
     #[cfg(feature = "dev")]
     fn test_build_bootstrap_tar_with_all_options() -> Result<()> {
+        use config_types::{
+            DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
+            NetworkSettings,
+        };
+        use std::net::Ipv6Addr;
+        use std::str::FromStr;
+
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
