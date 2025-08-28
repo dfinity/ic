@@ -50,11 +50,10 @@ pub struct MetricsManager<Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
-    pub(crate) client: Box<dyn ManagementCanisterClient>,
-    pub(crate) subnets_metrics:
-        RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
-    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
-    pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
+    pub client: Box<dyn ManagementCanisterClient>,
+    pub subnets_metrics: RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
+    pub subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
+    pub last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
 
 impl<Memory> MetricsManager<Memory>
