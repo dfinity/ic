@@ -115,7 +115,7 @@ impl From<std::io::Error> for RpcError {
     }
 }
 
-/// The RPC interface of Bitcoin daemon. It is only a subnet of the
+/// The RPC interface of Bitcoin daemon. It is only a subset of the
 /// supported API and tailored for our own testing purpose.
 pub trait RpcApi {
     fn call<T: for<'a> serde::de::Deserialize<'a>>(
