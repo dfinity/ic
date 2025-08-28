@@ -420,4 +420,144 @@ mod tests {
         assert!(error_msg.contains("non-regular file"));
         assert!(error_msg.contains("symlink_in_subdir.txt"));
     }
+
+    #[test]
+    fn test_copy_bootstrap_files_normal() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create test files and directories
+        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
+        fs::write(extracted_dir.join("nns_public_key.pem"), "test_nns_key").unwrap();
+        fs::write(
+            extracted_dir.join("node_operator_private_key.pem"),
+            "test_node_op_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("accounts_ssh_authorized_keys")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("accounts_ssh_authorized_keys")
+                .join("authorized_keys"),
+            "ssh-rsa test_key",
+        )
+        .unwrap();
+
+        // Call copy_bootstrap_files
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify files were copied correctly
+        assert!(state_root.join("crypto").join("key.pem").exists());
+        assert!(state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(state_root
+            .join("data/ic_registry_local_store")
+            .join("registry.dat")
+            .exists());
+        assert!(state_root.join("data/nns_public_key.pem").exists());
+        assert!(state_root
+            .join("data/node_operator_private_key.pem")
+            .exists());
+        assert!(config_root
+            .join("accounts_ssh_authorized_keys")
+            .join("authorized_keys")
+            .exists());
+
+        // Verify file contents
+        assert_eq!(
+            fs::read_to_string(state_root.join("crypto").join("key.pem")).unwrap(),
+            "test_crypto_key"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
+            "test_state_data"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                state_root
+                    .join("data/ic_registry_local_store")
+                    .join("registry.dat")
+            )
+            .unwrap(),
+            "test_registry_data"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
+            "test_nns_key"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/node_operator_private_key.pem")).unwrap(),
+            "test_node_op_key"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                config_root
+                    .join("accounts_ssh_authorized_keys")
+                    .join("authorized_keys")
+            )
+            .unwrap(),
+            "ssh-rsa test_key"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "dev")]
+    fn test_copy_bootstrap_files_with_dev() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create nns_public_key files
+        fs::write(extracted_dir.join("nns_public_key.pem"), "original_nns_key").unwrap();
+        fs::write(
+            extracted_dir.join("nns_public_key_override.pem"),
+            "override_nns_key",
+        )
+        .unwrap();
+
+        // Call copy_bootstrap_files
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify that the override key was used instead of the original
+        assert!(state_root.join("data/nns_public_key.pem").exists());
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
+            "override_nns_key"
+        );
+    }
 }
