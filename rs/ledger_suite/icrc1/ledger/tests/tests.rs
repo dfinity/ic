@@ -112,6 +112,7 @@ fn ledger_mainnet_v1_wasm() -> Vec<u8> {
     mainnet_wasm
 }
 
+#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
         .unwrap()
@@ -993,15 +994,6 @@ fn transfer(
         .0
         .to_u64()
         .unwrap()
-}
-
-fn balance_of(env: &StateMachine, ledger_id: CanisterId, account: Account) -> u64 {
-    let args = Encode!(&account).unwrap();
-    let res = env
-        .query(ledger_id, "icrc1_balance_of", args)
-        .expect("Unable to perform icrc1_balance_of")
-        .bytes();
-    Decode!(&res, Nat).unwrap().0.to_u64().unwrap()
 }
 
 #[test]
