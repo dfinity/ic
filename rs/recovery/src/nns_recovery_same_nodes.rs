@@ -64,7 +64,7 @@ pub struct NNSRecoverySameNodesArgs {
     pub upgrade_image_hash: Option<String>,
 
     /// The method of downloading state. Possible values are either `local` (for a
-    /// local recovery on the admin node) or the ipv6 address of the target node.
+    /// local recovery on the admin node) or the ipv6 address of the source node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
     /// Should be different to node used in nns-url.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
