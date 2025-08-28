@@ -1725,7 +1725,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
 
             // Cycles attached to the dropped reply are lost.
-            let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles());
+            let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
             expected_state
                 .metadata
                 .subnet_metrics
@@ -1755,7 +1755,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 ),
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
                     1,
                 ),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
@@ -1906,10 +1906,7 @@ fn check_stream_handler_locally_generated_reject_response_canister_migrating() {
     check_stream_handler_locally_generated_reject_response_impl(
         RejectReason::CanisterMigrating,
         RejectCode::SysTransient,
-        format!(
-            "Canister {} or {} is migrating",
-            *REMOTE_CANISTER, *LOCAL_CANISTER
-        ),
+        "Canister migration in progress".to_string(),
     );
 }
 
@@ -2470,10 +2467,10 @@ fn induct_stream_slices_partial_success() {
                 // Request @46 not inducted because of missing canister.
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
                 // Request @47 not inducted because of canister not on `REMOTE_SUBNET`.
-                // Request @48 not inducted becaue of unknown canister sender.
+                // Request @48 not inducted because of unknown canister sender.
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
                     2,
                 ),
                 // Response @45 successfully inducted.
@@ -2485,7 +2482,6 @@ fn induct_stream_slices_partial_success() {
             // Three critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 induct_response_failed: 1,
-                //sender_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -2613,7 +2609,7 @@ fn legacy_induct_stream_slices_partial_success() {
                 // Request @48 not inducted becaue of unknown canister sender.
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
                     2,
                 ),
                 // Response @45 successfully inducted.
@@ -2625,7 +2621,6 @@ fn legacy_induct_stream_slices_partial_success() {
             // Three critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 induct_response_failed: 1,
-                //sender_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
@@ -3513,7 +3508,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 // The request from an unknown canister @154 is dropped.
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
                     1,
                 ),
                 // Three loopback and one incoming requests successfully inducted.
