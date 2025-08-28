@@ -10,6 +10,72 @@ use walkdir::WalkDir;
 const CONFIG_ROOT_PATH: &str = "/boot/config";
 const STATE_ROOT_PATH: &str = "/var/lib/ic";
 
+/// Bootstrap IC Node from a bootstrap package
+pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
+    let config_root = Path::new(CONFIG_ROOT_PATH);
+    let state_root = Path::new(STATE_ROOT_PATH);
+    let configured_marker = config_root.join("CONFIGURED");
+
+    if configured_marker.exists() {
+        println!("Bootstrap completed already");
+        return Ok(());
+    }
+
+    println!("Checking for bootstrap configuration");
+
+    anyhow::ensure!(
+        bootstrap_tar_path.exists(),
+        "No registration configuration provided to bootstrap IC node"
+    );
+
+    println!(
+        "Processing bootstrap data from {}",
+        bootstrap_tar_path.display()
+    );
+    process_bootstrap(bootstrap_tar_path, config_root, state_root)?;
+    println!("Successfully processed bootstrap data");
+
+    File::create(&configured_marker)?;
+
+    Ok(())
+}
+
+/// Process the bootstrap package to populate SSH keys and injected data
+fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+    let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
+
+    let status = Command::new("tar")
+        .args(["xf", bootstrap_tar.to_str().unwrap()])
+        .current_dir(tmpdir.path())
+        .status()
+        .context("Failed to extract bootstrap tar file")?;
+
+    anyhow::ensure!(
+        status.success(),
+        "tar extraction failed with status: {}",
+        status
+    );
+
+    validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
+
+    // Copy all bootstrap files
+    copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
+
+    // Fix up permissions. Ideally this is specific to only what is copied. If
+    // we do make this change, we need to make sure `data` itself has the
+    // correct permissions.
+    let _ = Command::new("chown")
+        .args(["ic-replica:nogroup", "-R"])
+        .arg(state_root.join("data"))
+        .status();
+
+    // Synchronize the above cached writes to persistent storage
+    // to make sure the system can boot successfully after a hard shutdown.
+    let _ = Command::new("sync").status();
+
+    Ok(())
+}
+
 /// Validate that the bootstrap tar contains only regular files and directories
 fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
     for entry in WalkDir::new(extracted_dir) {
@@ -97,72 +163,6 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
             let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
         }
     }
-
-    Ok(())
-}
-
-/// Process the bootstrap package to populate SSH keys and injected data
-fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
-    let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
-
-    let status = Command::new("tar")
-        .args(["xf", bootstrap_tar.to_str().unwrap()])
-        .current_dir(tmpdir.path())
-        .status()
-        .context("Failed to extract bootstrap tar file")?;
-
-    anyhow::ensure!(
-        status.success(),
-        "tar extraction failed with status: {}",
-        status
-    );
-
-    validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
-
-    // Copy all bootstrap files
-    copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
-
-    // Fix up permissions. Ideally this is specific to only what is copied. If
-    // we do make this change, we need to make sure `data` itself has the
-    // correct permissions.
-    let _ = Command::new("chown")
-        .args(["ic-replica:nogroup", "-R"])
-        .arg(state_root.join("data"))
-        .status();
-
-    // Synchronize the above cached writes to persistent storage
-    // to make sure the system can boot successfully after a hard shutdown.
-    let _ = Command::new("sync").status();
-
-    Ok(())
-}
-
-/// Bootstrap IC Node from a bootstrap package
-pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
-    let config_root = Path::new(CONFIG_ROOT_PATH);
-    let state_root = Path::new(STATE_ROOT_PATH);
-    let configured_marker = config_root.join("CONFIGURED");
-
-    if configured_marker.exists() {
-        println!("Bootstrap completed already");
-        return Ok(());
-    }
-
-    println!("Checking for bootstrap configuration");
-
-    anyhow::ensure!(
-        bootstrap_tar_path.exists(),
-        "No registration configuration provided to bootstrap IC node"
-    );
-
-    println!(
-        "Processing bootstrap data from {}",
-        bootstrap_tar_path.display()
-    );
-    process_bootstrap(bootstrap_tar_path, config_root, state_root)?;
-    println!("Successfully processed bootstrap data");
-
-    File::create(&configured_marker)?;
 
     Ok(())
 }
