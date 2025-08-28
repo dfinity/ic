@@ -127,7 +127,7 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
         println!("Setting up initial node_operator_private_key.pem");
-        fs::copy(&node_op_key_src, &node_op_key_dst)?;
+        copy_file_with_parent_dir(&node_op_key_src, &node_op_key_dst)?;
         // Try to set permissions, but don't fail if we can't in test environment
         let _ = fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400));
     }
@@ -146,7 +146,7 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
     let nns_key_dst = state_root.join("data/nns_public_key.pem");
     if nns_key_src.exists() {
         println!("Setting up initial nns_public_key.pem");
-        fs::copy(&nns_key_src, &nns_key_dst)?;
+        copy_file_with_parent_dir(&nns_key_src, &nns_key_dst)?;
         // Try to set permissions, but don't fail if we can't in test environment
         let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
     }
@@ -158,12 +158,23 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
             println!(
                 "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
             );
-            fs::copy(&nns_key_override_src, &nns_key_dst)?;
+            if nns_key_dst.exists() {
+                fs::remove_file(&nns_key_dst)?;
+            }
+            copy_file_with_parent_dir(&nns_key_override_src, &nns_key_dst)?;
             // Try to set permissions, but don't fail if we can't in test environment
             let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
         }
     }
 
+    Ok(())
+}
+
+fn copy_file_with_parent_dir(src: &Path, dst: &Path) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(src, dst)?;
     Ok(())
 }
 
