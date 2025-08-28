@@ -560,4 +560,34 @@ mod tests {
             "override_nns_key"
         );
     }
+
+    #[test]
+    #[cfg(not(feature = "dev"))]
+    fn test_copy_bootstrap_files_without_dev() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create nns_public_key files
+        fs::write(extracted_dir.join("nns_public_key.pem"), "original_nns_key").unwrap();
+        fs::write(
+            extracted_dir.join("nns_public_key_override.pem"),
+            "override_nns_key",
+        )
+        .unwrap();
+
+        // Call copy_bootstrap_files
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify that the original key was used, NOT the override
+        let file_path = state_root.join("data/nns_public_key.pem");
+        assert!(file_path.exists());
+        assert_eq!(fs::read_to_string(file_path).unwrap(), "original_nns_key");
+    }
 }
