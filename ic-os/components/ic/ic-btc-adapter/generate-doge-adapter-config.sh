@@ -6,7 +6,8 @@
 # Arguments:
 # - $1: Name of the file to be read.
 
-source /opt/ic/bin/config.sh
+# source /opt/ic/bin/config.sh
+source ../../../components/misc/config/guestos/config.sh
 
 function read_config_variables() {
     config_dogecoind_addr=$(get_config_value '.guestos_settings.guestos_dev_settings.dogecoind_addr')
@@ -50,7 +51,7 @@ if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; t
     SOCKS_PROXY="${config_socks_proxy}"
 fi
 
-DOGECOIN_NETWORK='"testnet"'
+DOGECOIN_NETWORK='"dogecoin:testnet"'
 DNS_SEEDS='"jrn.me.uk",
             "testseed.jrn.me.uk"'
 
@@ -68,7 +69,7 @@ fi
 # config_dogecoind_addr indicates that we are in system test environment. No socks proxy needed.
 if [ "${config_dogecoind_addr}" != "" ] && [ "${config_dogecoind_addr}" != "null" ]; then
     echo '{
-        "network": "regtest",
+        "network": "dogecoin:regtest",
         "dns_seeds": [],
         "nodes": ['"${config_dogecoind_addr:+\"${config_dogecoind_addr//,/\",\"}\"}"'],
         "logger": {
