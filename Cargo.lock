@@ -2612,6 +2612,7 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "fs_extra",
+ "get_if_addrs",
  "ic-config",
  "ic-types",
  "ic_sev",

@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
+    "@crate_index//:get_if_addrs",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
     "@crate_index//:rust-ini",
