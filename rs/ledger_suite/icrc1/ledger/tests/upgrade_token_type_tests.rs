@@ -13,6 +13,16 @@ fn ledger_u256_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_U256_PATH").unwrap()).unwrap()
 }
 
+fn ledger_mainnet_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+        .unwrap()
+}
+
+fn ledger_mainnet_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+        .unwrap()
+}
+
 fn default_init_args(initial_balances: Vec<(Account, Nat)>) -> Vec<u8> {
     Encode!(&LedgerArgument::Init(InitArgs {
         minting_account: PrincipalId::new_user_test_id(0).0.into(),
@@ -42,11 +52,11 @@ fn default_init_args(initial_balances: Vec<(Account, Nat)>) -> Vec<u8> {
 
 #[test]
 #[should_panic(expected = "assertion `left == right` failed: u256 representation is 32-bytes long")]
-fn should_fail_ledger_upgrade_from_u64_to_u256_wasm_with_balance() {
+fn test_mainnet_u64_with_balance_to_master_u256() {
     let env = StateMachine::new();
     let ledger_id = env
         .install_canister(
-            ledger_u64_wasm(),
+            ledger_mainnet_u64_wasm(),
             default_init_args(vec![(
                 PrincipalId::new_user_test_id(100).0.into(),
                 Nat::from(1u64),
@@ -62,10 +72,55 @@ fn should_fail_ledger_upgrade_from_u64_to_u256_wasm_with_balance() {
 }
 
 #[test]
+fn test_mainnet_u64_to_master_u256() {
+    let env = StateMachine::new();
+    let ledger_id = env
+        .install_canister(ledger_mainnet_u64_wasm(), default_init_args(vec![]), None)
+        .unwrap();
+
+    // Try to upgrade the ledger from using a u64 wasm to a u256 wasm
+    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    env.upgrade_canister(ledger_id, ledger_u256_wasm(), upgrade_args)
+        .expect("Unable to upgrade the ledger canister");
+}
+
+#[test]
+#[should_panic(
+    expected = "Incompatible token type, the upgraded ledger token type is U64, current wasm token type is U256"
+)]
+fn test_master_u64_to_master_u256() {
+    let env = StateMachine::new();
+    let ledger_id = env
+        .install_canister(ledger_u64_wasm(), default_init_args(vec![]), None)
+        .unwrap();
+
+    // Try to upgrade the ledger from using a u64 wasm to a u256 wasm
+    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    env.upgrade_canister(ledger_id, ledger_u256_wasm(), upgrade_args)
+        .expect("Unable to upgrade the ledger canister");
+}
+
+#[test]
 #[should_panic(
     expected = "Failed to read the Ledger state from memory manager managed stable structures"
 )]
-fn should_trap_when_upgrading_a_ledger_installed_as_u256_to_u64_wasm() {
+fn test_mainnet_u256_to_master_u64() {
+    let env = StateMachine::new();
+    let ledger_id = env
+        .install_canister(ledger_mainnet_u256_wasm(), default_init_args(vec![]), None)
+        .unwrap();
+
+    // Try to upgrade the ledger from using a u256 wasm to a u64 wasm
+    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    env.upgrade_canister(ledger_id, ledger_u64_wasm(), upgrade_args)
+        .expect("Unable to upgrade the ledger canister");
+}
+
+#[test]
+#[should_panic(
+    expected = "Failed to read the Ledger state from memory manager managed stable structures"
+)]
+fn test_master_u256_to_master_u64() {
     let env = StateMachine::new();
     let ledger_id = env
         .install_canister(ledger_u256_wasm(), default_init_args(vec![]), None)

@@ -611,6 +611,9 @@ pub struct Ledger {
 
     #[serde(default)]
     index_principal: Option<Principal>,
+
+    #[serde(default = "wasm_token_type")]
+    pub token_type: String,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -636,6 +639,16 @@ fn default_max_memo_length() -> u16 {
 
 fn default_decimals() -> u8 {
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+pub fn wasm_token_type() -> String {
+    "U64".to_string()
+}
+
+#[cfg(feature = "u256-tokens")]
+pub fn wasm_token_type() -> String {
+    "U256".to_string()
 }
 
 fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
@@ -713,6 +726,7 @@ impl Ledger {
             accounts_overflow_trim_quantity: 0,
             ledger_version: LEDGER_VERSION,
             index_principal,
+            token_type: wasm_token_type(),
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)

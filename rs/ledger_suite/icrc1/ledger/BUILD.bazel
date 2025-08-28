@@ -455,16 +455,20 @@ package(default_visibility = ["//visibility:public"])
 ]
 
 rust_ic_test(
-    name = "ledger_upgrade_test",
-    srcs = ["tests/upgrade_tests.rs"],
+    name = "ledger_upgrade_token_type_tests",
+    srcs = ["tests/upgrade_token_type_tests.rs"],
     crate_features = [],
     data = [
         ":ledger_canister.wasm.gz",
         ":ledger_canister_u256.wasm.gz",
+        "@mainnet_ckbtc_ic-icrc1-ledger//file",
+        "@mainnet_cketh_ic-icrc1-ledger-u256//file",
     ],
     env = {
         "IC_ICRC1_LEDGER_WASM_U64_PATH": "$(rootpath :ledger_canister.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_U256_PATH": "$(rootpath :ledger_canister_u256.wasm.gz)",
+        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
     },
     deps = [
         # Keep sorted.
