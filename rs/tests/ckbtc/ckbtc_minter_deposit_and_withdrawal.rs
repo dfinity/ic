@@ -189,7 +189,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
-        assert_eq!(get_tx_infos.bip125_replaceable, true);
+        assert!(get_tx_infos.bip125_replaceable);
 
         // Try to retrieve btc to minter's main_address
         let main_btc_address = minter_agent

@@ -246,7 +246,7 @@ pub fn test_batching(env: TestEnv) {
         assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
-        assert_eq!(get_tx_infos.bip125_replaceable, true);
+        assert!(get_tx_infos.bip125_replaceable);
 
         // Generate more blocks and wait for the minter to finalize the retrieval.
         generate_blocks(
