@@ -7,6 +7,7 @@ use p256::elliptic_curve::{
     Field, Group,
 };
 use std::ops::{Mul, Neg};
+use std::sync::LazyLock;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -186,23 +187,22 @@ pub struct Point {
 super::algos::declare_mul_by_g_impl!(Secp256r1MulByGenerator, Point, Scalar);
 super::algos::declare_mul2_table_impl!(Secp256r1Mul2Table, Point, Scalar);
 
-lazy_static::lazy_static! {
+/// Static deserialization of the fixed alternative group generator
+static SECP256R1_GENERATOR_H: LazyLock<Point> = LazyLock::new(|| {
+    Point::deserialize(&hex!(
+        "036774e87305efcb97c0ce289d57cd721972845ca33eccb8026c6d7c1c4182e7c1"
+    ))
+    .expect("The secp256r1 generator_h point is invalid")
+});
 
-    /// Static deserialization of the fixed alternative group generator
-    static ref SECP256R1_GENERATOR_H: Point = Point::deserialize(
-        &hex!("036774e87305efcb97c0ce289d57cd721972845ca33eccb8026c6d7c1c4182e7c1"))
-        .expect("The secp256r1 generator_h point is invalid");
+/// Precomputed multiples of the group generator for fast multiplication
+static SECP256R1_MUL_BY_GEN_TABLE: LazyLock<Secp256r1MulByGenerator> =
+    LazyLock::new(|| Secp256r1MulByGenerator::new(&Point::generator()));
 
-    /// Precomputed multiples of the group generator for fast multiplication
-    static ref SECP256R1_MUL_BY_GEN_TABLE: Secp256r1MulByGenerator =
-        Secp256r1MulByGenerator::new(&Point::generator());
-
-    /// Precomputed linear combinations of the g and h generators
-    /// for fast Pedersen commitment computation
-    static ref SECP256R1_MUL2_GX_HY_TABLE: Secp256r1Mul2Table =
-        Secp256r1Mul2Table::for_standard_generators();
-
-}
+/// Precomputed linear combinations of the g and h generators
+/// for fast Pedersen commitment computation
+static SECP256R1_MUL2_GX_HY_TABLE: LazyLock<Secp256r1Mul2Table> =
+    LazyLock::new(Secp256r1Mul2Table::for_standard_generators);
 
 impl Point {
     /// Internal constructor (private)

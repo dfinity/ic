@@ -141,8 +141,9 @@ pub struct Args {
     pub store_file: PathBuf,
 
     /// The network type that rosetta connects to.
+    /// DEPRECATED: This argument is deprecated.
     #[arg(short = 'n', long, value_enum)]
-    pub network_type: NetworkType,
+    pub network_type: Option<NetworkType>,
 
     /// URL of the IC to connect to.
     /// Default Mainnet URL is: https://ic0.app,
@@ -188,8 +189,16 @@ impl ParsedConfig {
     pub fn from_args(args: Args) -> Result<Self> {
         let tokens = Self::extract_token_defs_from_args(&args)?;
 
+        let network_type = match args.network_type {
+            Some(network_type) => {
+                eprintln!("WARNING: The --network-type argument is deprecated and will be removed in a future version.");
+                network_type
+            }
+            None => NetworkType::Mainnet,
+        };
+
         // Compute the effective network URL based on network_type and provided URL
-        let network_url_str = args.network_url.unwrap_or_else(|| match args.network_type {
+        let network_url_str = args.network_url.unwrap_or_else(|| match network_type {
             NetworkType::Mainnet => MAINNET_DEFAULT_URL.to_string(),
             NetworkType::Testnet => TESTNET_DEFAULT_URL.to_string(),
         });
@@ -285,7 +294,7 @@ mod tests {
             port_file: None,
             store_type: StoreType::InMemory,
             store_file: PathBuf::from("/test/db.sqlite"),
-            network_type: NetworkType::Testnet,
+            network_type: None,
             network_url: None,
             log_level: Level::INFO,
             exit_on_sync: false,
@@ -535,7 +544,7 @@ mod tests {
     fn test_parsed_config_network_url_mainnet_default() {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
-        args.network_type = NetworkType::Mainnet;
+        args.network_type = Some(NetworkType::Mainnet);
 
         let config = ParsedConfig::from_args(args).unwrap();
         assert!(config.network_url.domain() == Some("ic0.app"));
@@ -545,7 +554,7 @@ mod tests {
     fn test_parsed_config_network_url_testnet_default() {
         let mut args = create_test_args();
         args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
-        args.network_type = NetworkType::Testnet;
+        args.network_type = Some(NetworkType::Testnet);
 
         let config = ParsedConfig::from_args(args).unwrap();
 
@@ -553,6 +562,16 @@ mod tests {
             config.network_url.as_str(),
             "https://exchanges.testnet.dfinity.network/"
         );
+    }
+
+    #[test]
+    fn test_parsed_config_network_url_none_defaults_to_mainnet() {
+        let mut args = create_test_args();
+        args.ledger_id = Some(CanisterId::from_str("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap());
+        args.network_type = None;
+
+        let config = ParsedConfig::from_args(args).unwrap();
+        assert!(config.network_url.domain() == Some("ic0.app"));
     }
 
     #[test]

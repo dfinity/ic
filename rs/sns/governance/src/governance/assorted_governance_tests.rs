@@ -5056,6 +5056,18 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 19,
+                        name: "Upgrade SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },

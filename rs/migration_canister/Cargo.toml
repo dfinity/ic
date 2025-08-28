@@ -1,0 +1,20 @@
+[package]
+name = "ic-migration-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-stable-structures = "0.7.0"
+serde_cbor = { workspace = true }
+serde = { workspace =true }
+serde_bytes = { workspace =true }

@@ -18,7 +18,6 @@ ic-canister-client = { path = "../../../../canister_client" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../../../../config" }
 ic-limits = { path = "../../../../limits" }
-ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../../../types/management_canister_types" }
 ic-message = { path = "../../../test_canisters/message" }
 ic-nervous-system-common-test-keys = { path = "../../../../nervous_system/common/test_keys" }

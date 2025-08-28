@@ -722,6 +722,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ic-stable-structures": crate.spec(
                 version = "^0.6.8",
             ),
+            "ic-stable-structures-next": crate.spec(
+                package = "ic-stable-structures",
+                version = "^0.7.0",
+            ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
                 rev = ICRC_1_REV,
