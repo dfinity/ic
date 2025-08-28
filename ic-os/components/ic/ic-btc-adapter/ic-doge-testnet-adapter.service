@@ -11,7 +11,7 @@ StartLimitIntervalSec=0
 User=ic-replica
 Environment=RUST_BACKTRACE=1
 ExecStartPre=+/opt/ic/bin/generate-doge-adapter-config.sh -o /run/ic-node/config/ic-doge-testnet-adapter.json5
-ExecStart=/opt/ic/bin/ic-doge-adapter /run/ic-node/config/ic-doge-testnet-adapter.json5
+ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-doge-testnet-adapter.json5
 Restart=always
 
 [Install]

@@ -10,7 +10,7 @@ StartLimitIntervalSec=0
 [Service]
 User=ic-replica
 ExecStartPre=+/opt/ic/bin/generate-doge-adapter-config.sh -m -o /run/ic-node/config/ic-doge-mainnet-adapter.json5
-ExecStart=/opt/ic/bin/ic-doge-adapter /run/ic-node/config/ic-doge-mainnet-adapter.json5
+ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-doge-mainnet-adapter.json5
 Restart=always
 
 [Install]
