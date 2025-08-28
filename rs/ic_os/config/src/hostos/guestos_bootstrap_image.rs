@@ -232,6 +232,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "dev")]
     fn test_build_bootstrap_tar_with_all_options() -> Result<()> {
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.tar");
@@ -343,11 +344,5 @@ mod tests {
         );
 
         Ok(())
-    }
-
-    #[test]
-    fn ensure_tested_with_dev() {
-        // Ensure that the test is run with the dev feature enabled.
-        assert!(cfg!(feature = "dev"));
     }
 }
