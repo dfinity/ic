@@ -1715,7 +1715,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 &mut expected_state,
                 message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 0).clone(),
             );
-            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with 2 message accepted and 1 rejected.
+            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with the 2 responses accepted and the request rejected.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 0,
                 signals_end: 3,
@@ -1725,8 +1725,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
 
             // Cycles attached to the dropped reply are lost.
-            let cycles_lost = messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1..=1)
-                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles());
             expected_state
                 .metadata
                 .subnet_metrics
@@ -2424,7 +2423,7 @@ fn induct_stream_slices_partial_success() {
                 // ...4 accept signals for the messages in the stream slice...
                 signals_end: 50,
                 reject_signals: vec![
-                    // ...and three reject signal for the requests @46 and @47.
+                    // ...and three reject signal for the 3 misrouted requests.
                     RejectSignal::new(RejectReason::CanisterNotFound, 46.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 48.into()),
@@ -2433,11 +2432,8 @@ fn induct_stream_slices_partial_success() {
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
-            // Cycles attached to the dropped requests from `LOCAL_CANISTER` and
-            // `UNKNOWN_CANISTER`; as well as those attached to the non-existent response to
-            // `OTHER_LOCAL_CANISTER` are lost.
-            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 49..=49)
-                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            // Cycles attached to the response to non-existent `OTHER_LOCAL_CANISTER` are lost.
+            let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles();
             expected_state
                 .metadata
                 .subnet_metrics
@@ -2577,8 +2573,7 @@ fn legacy_induct_stream_slices_partial_success() {
             // Cycles attached to the dropped requests from `LOCAL_CANISTER` and
             // `UNKNOWN_CANISTER`; as well as those attached to the non-existent response to
             // `OTHER_LOCAL_CANISTER` are lost.
-            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 49..=49)
-                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles();
             expected_state
                 .metadata
                 .subnet_metrics
