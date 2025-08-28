@@ -18,7 +18,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
     crypto::BasicSigner,
-    execution_environment::{QueryExecutionError, QueryExecutionService},
+    execution_environment::{QueryExecutionError, QueryExecutionInput, QueryExecutionService},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -43,6 +43,14 @@ use std::{
 };
 use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
+#[derive(Copy, Clone)]
+pub enum Version {
+    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    V2,
+    // Endpoint with the NNS delegation using the tree format of the canister ranges.
+    V3,
+}
+
 #[derive(Clone)]
 pub struct QueryService {
     log: ReplicaLogger,
@@ -54,6 +62,7 @@ pub struct QueryService {
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
+    version: Version,
 }
 
 pub struct QueryServiceBuilder {
@@ -67,11 +76,15 @@ pub struct QueryServiceBuilder {
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
+    version: Version,
 }
 
 impl QueryService {
-    pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/{effective_canister_id}/query"
+    pub(crate) fn route(version: Version) -> &'static str {
+        match version {
+            Version::V2 => "/api/v2/canister/{effective_canister_id}/query",
+            Version::V3 => "/api/v3/canister/{effective_canister_id}/query",
+        }
     }
 }
 
@@ -84,6 +97,7 @@ impl QueryServiceBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
+        version: Version,
     ) -> Self {
         Self {
             log,
@@ -96,6 +110,7 @@ impl QueryServiceBuilder {
             ingress_verifier,
             registry_client,
             query_execution_service,
+            version,
         }
     }
 
@@ -131,9 +146,10 @@ impl QueryServiceBuilder {
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
+            version: self.version,
         };
         Router::new().route_service(
-            QueryService::route(),
+            QueryService::route(self.version),
             axum::routing::post(query)
                 .with_state(state)
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
@@ -158,6 +174,7 @@ pub(crate) async fn query(
         signer,
         nns_delegation_reader,
         query_execution_service,
+        version,
     }): State<QueryService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
 ) -> impl IntoResponse {
@@ -218,9 +235,20 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
-    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
+
+    let delegation_from_nns = match version {
+        Version::V2 => {
+            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat)
+        }
+        Version::V3 => nns_delegation_reader
+            .get_delegation_with_metadata(CanisterRangesFilter::Tree(effective_canister_id)),
+    };
+    let query_execution_input = QueryExecutionInput {
+        query: user_query.clone(),
+        certificate_delegation_with_metadata: delegation_from_nns,
+    };
     let query_execution_response = query_execution_service
-        .oneshot((user_query.clone(), delegation_from_nns))
+        .oneshot(query_execution_input)
         .await
         .unwrap();
 

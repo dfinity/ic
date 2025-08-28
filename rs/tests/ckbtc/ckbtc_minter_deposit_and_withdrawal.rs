@@ -27,7 +27,7 @@ use ic_tests_ckbtc::{
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
         wait_for_update_balance, BITCOIN_NETWORK_TRANSFER_FEE,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -268,6 +268,8 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_deposit_and_withdrawal))
         .execute_from_args()?;
