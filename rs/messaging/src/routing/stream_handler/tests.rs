@@ -2689,7 +2689,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
-            // Cycles attached to all messages in the slice are lost.
+            // Cycles attached to all other messages in the slice are lost.
             let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 44..=46)
                 .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
             expected_state
