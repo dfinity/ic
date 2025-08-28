@@ -138,7 +138,7 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
     }
 
-    // TODO(NODE-1695): remove nns_public_key.pem config after changes rolled
+    // TODO(NODE-1653): remove nns_public_key.pem config after changes rolled
     // out to all nodes (to allow tests that use mainnet images to continue
     // working)
     let nns_key_src = extracted_dir.join("nns_public_key.pem");
