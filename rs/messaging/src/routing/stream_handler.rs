@@ -79,6 +79,7 @@ const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
 const LABEL_VALUE_DROPPED: &str = "dropped";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
+const LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING: &str = "SenderSubnetMismatchMigrating";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
 const LABEL_VALUE_REQUEST_MISROUTED: &str = "RequestMisrouted";
 const LABEL_VALUE_CANISTER_MIGRATED: &str = "CanisterMigrated";
@@ -789,7 +790,10 @@ impl StreamHandlerImpl {
         } else if matches!(msg, RequestOrResponse::Request(_)) {
             // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
             // This can legitimatly happen if the sender canister is migrating.
-            self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_SUBNET_MISMATCH);
+            self.observe_inducted_message_status(
+                msg_type,
+                LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
+            );
             stream.push_reject_signal(RejectReason::CanisterMigrating);
             Cycles::zero()
         } else {
@@ -1102,10 +1106,7 @@ fn generate_reject_response_for(reason: RejectReason, request: &Request) -> Requ
     let (code, message) = match reason {
         RejectReason::CanisterMigrating => (
             RejectCode::SysTransient,
-            format!(
-                "Canister {} or {} is migrating",
-                request.receiver, request.sender
-            ),
+            "Canister migration in progress".to_string(),
         ),
         RejectReason::CanisterNotFound => (
             RejectCode::DestinationInvalid,
