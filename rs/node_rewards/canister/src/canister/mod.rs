@@ -122,7 +122,7 @@ impl NodeRewardsCanister {
         });
     }
 
-    pub fn calculate_rewards<S: RegistryDataStableMemory>(
+    fn calculate_rewards<S: RegistryDataStableMemory>(
         &self,
         request: GetNodeProvidersRewardsRequest,
     ) -> Result<RewardsCalculatorResults, String> {
