@@ -238,6 +238,7 @@ system_test_nns(
     },
     flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
     tags = [
+        "colocate",
         "k8s",
     ],
     runtime_deps =

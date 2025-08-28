@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v3/canister/.../call.
+//! Module that deals with requests to /api/{v3,v4}/canister/.../call.
 
 use super::{
     ingress_watcher::{IngressWatcherHandle, SubscriptionError},
@@ -48,6 +48,14 @@ const LOG_EVERY_N_SECONDS: i32 = 10;
 /// by calling [`IngressWatcherHandle::subscribe_for_certification`].
 const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(1);
 
+#[derive(Copy, Clone)]
+pub enum Version {
+    // Synchronous endpoint with the NNS delegation using the flat format of the canister ranges.
+    V3,
+    // Synchronous endpoint with the NNS delegation using the tree format of the canister ranges.
+    V4,
+}
+
 pub(crate) enum CallV3Response {
     Certificate(Certificate),
     Accepted(&'static str),
@@ -63,6 +71,7 @@ struct SynchronousCallHandlerState {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
     call_handler: IngressValidator,
+    version: Version,
 }
 
 impl IntoResponse for CallV3Response {
@@ -120,8 +129,11 @@ impl From<IngressError> for CallV3Response {
     }
 }
 
-pub(crate) fn route() -> &'static str {
-    "/api/v3/canister/{effective_canister_id}/call"
+pub(crate) fn route(version: Version) -> &'static str {
+    match version {
+        Version::V3 => "/api/v3/canister/{effective_canister_id}/call",
+        Version::V4 => "/api/v4/canister/{effective_canister_id}/call",
+    }
 }
 
 pub(crate) fn new_router(
@@ -131,6 +143,7 @@ pub(crate) fn new_router(
     ingress_message_certificate_timeout_seconds: u64,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    version: Version,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
         nns_delegation_reader,
@@ -139,11 +152,12 @@ pub(crate) fn new_router(
         ingress_message_certificate_timeout_seconds,
         call_handler,
         state_reader,
+        version,
     };
 
     Router::new().route_service(
-        route(),
-        axum::routing::post(call_sync_v3)
+        route(version),
+        axum::routing::post(call_sync)
             .with_state(call_service)
             .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
     )
@@ -156,6 +170,7 @@ pub fn new_service(
     ingress_message_certificate_timeout_seconds: u64,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    version: Version,
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
         call_handler,
@@ -164,12 +179,13 @@ pub fn new_service(
         ingress_message_certificate_timeout_seconds,
         nns_delegation_reader,
         state_reader,
+        version,
     );
     BoxCloneService::new(router.into_service())
 }
 
-/// Handles a call to /api/v3/canister/../call
-async fn call_sync_v3(
+/// Handles a call to /api/{v3,v4}/canister/../call
+async fn call_sync(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SynchronousCallHandlerState {
         call_handler,
@@ -178,6 +194,7 @@ async fn call_sync_v3(
         ingress_message_certificate_timeout_seconds,
         state_reader,
         nns_delegation_reader,
+        version,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
@@ -200,8 +217,11 @@ async fn call_sync_v3(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns =
-                nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
+            let delegation_from_nns = match version {
+                Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+                Version::V4 => nns_delegation_reader
+                    .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
+            };
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -306,7 +326,12 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat);
+    let delegation_from_nns = match version {
+        Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+        Version::V4 => {
+            nns_delegation_reader.get_delegation(CanisterRangesFilter::Tree(effective_canister_id))
+        }
+    };
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {
