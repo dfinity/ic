@@ -39,6 +39,7 @@ use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};
 use ic_wasm;
 use maplit::{btreemap, hashmap};
+use serde_json::{json, Value as JsonValue};
 use std::{
     cell::RefCell,
     collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
@@ -670,6 +671,54 @@ where
         ListDeployedSnsesResponse {
             instances: self.deployed_sns_list.clone(),
         }
+    }
+
+    pub fn get_metrics_service_discovery(&self) -> String {
+        let mut canister_ids_by_type = HashMap::new();
+
+        let add_canister_id_to_map =
+            |canister_ids_by_type: &mut HashMap<&'static str, Vec<PrincipalId>>,
+             canister_type: &'static str,
+             canister_id: Option<PrincipalId>| {
+                if let Some(canister_id) = canister_id {
+                    canister_ids_by_type
+                        .entry(canister_type)
+                        .or_insert(vec![])
+                        .push(canister_id);
+                }
+            };
+
+        for sns in self.deployed_sns_list.iter() {
+            add_canister_id_to_map(&mut canister_ids_by_type, "root", sns.root_canister_id);
+            add_canister_id_to_map(
+                &mut canister_ids_by_type,
+                "governance",
+                sns.governance_canister_id,
+            );
+            add_canister_id_to_map(&mut canister_ids_by_type, "ledger", sns.ledger_canister_id);
+            add_canister_id_to_map(&mut canister_ids_by_type, "swap", sns.swap_canister_id);
+            add_canister_id_to_map(&mut canister_ids_by_type, "index", sns.index_canister_id);
+        }
+
+        let targets_groups: Vec<_> = canister_ids_by_type
+            .into_iter()
+            .map(|(canister_type, canister_ids)| {
+                let targets: Vec<_> = canister_ids
+                    .into_iter()
+                    .map(|canister_id| json!(format!("{canister_id}.raw.icp0.io")))
+                    .collect();
+
+                json! ({
+                    "targets": JsonValue::Array(targets),
+                    "labels": json! ({
+                        "sns_canister_type": canister_type,
+                        "__metrics_path__": "/metrics",
+                    }),
+                })
+            })
+            .collect();
+
+        JsonValue::Array(targets_groups).to_string()
     }
 
     /// Deploys a new SNS based on the parameters of the payload
