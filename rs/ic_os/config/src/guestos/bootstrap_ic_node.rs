@@ -40,7 +40,7 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Process the bootstrap package to populate SSH keys and injected data
+/// Process the bootstrap package to copy config contents
 fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
     let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
 
@@ -58,7 +58,6 @@ fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path
 
     validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
-    // Copy all bootstrap files
     copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
 
     // Fix up permissions. Ideally this is specific to only what is copied. If
@@ -100,7 +99,7 @@ fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Copy bootstrap files from extracted directory to their destinations
+/// Copy select bootstrap files from extracted directory to their destinations
 fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
     let ic_crypto_src = extracted_dir.join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
@@ -128,8 +127,7 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
     if node_op_key_src.exists() {
         println!("Setting up initial node_operator_private_key.pem");
         copy_file_with_parent_dir(&node_op_key_src, &node_op_key_dst)?;
-        // Try to set permissions, but don't fail if we can't in test environment
-        let _ = fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400));
+        fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
     }
 
     // set up initial ssh authorized keys
@@ -140,15 +138,15 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
     }
 
-    // TODO: remove nns_public_key.pem config after changes rolled out to all nodes
-    // (to allow tests that use mainnet images to continue working)
+    // TODO(NODE-1695): remove nns_public_key.pem config after changes rolled
+    // out to all nodes (to allow tests that use mainnet images to continue
+    // working)
     let nns_key_src = extracted_dir.join("nns_public_key.pem");
     let nns_key_dst = state_root.join("data/nns_public_key.pem");
     if nns_key_src.exists() {
         println!("Setting up initial nns_public_key.pem");
         copy_file_with_parent_dir(&nns_key_src, &nns_key_dst)?;
-        // Try to set permissions, but don't fail if we can't in test environment
-        let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
+        fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
     }
 
     #[cfg(feature = "dev")]
@@ -162,8 +160,7 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
                 fs::remove_file(&nns_key_dst)?;
             }
             copy_file_with_parent_dir(&nns_key_override_src, &nns_key_dst)?;
-            // Try to set permissions, but don't fail if we can't in test environment
-            let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
+            fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
         }
     }
 
