@@ -138,27 +138,14 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
     }
 
-    // TODO(NODE-1653): remove nns_public_key.pem config after changes rolled
-    // out to all nodes (to allow tests that use mainnet images to continue
-    // working)
-    let nns_key_src = extracted_dir.join("nns_public_key.pem");
-    let nns_key_dst = state_root.join("data/nns_public_key.pem");
-    if nns_key_src.exists() {
-        println!("Setting up initial nns_public_key.pem");
-        copy_file_with_parent_dir(&nns_key_src, &nns_key_dst)?;
-        fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
-    }
-
     #[cfg(feature = "dev")]
     {
         let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
+        let nns_key_dst = state_root.join("data/nns_public_key.pem");
         if nns_key_override_src.exists() {
             println!(
                 "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
             );
-            if nns_key_dst.exists() {
-                fs::remove_file(&nns_key_dst)?;
-            }
             copy_file_with_parent_dir(&nns_key_override_src, &nns_key_dst)?;
             fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
         }
@@ -258,7 +245,6 @@ mod tests {
         )
         .unwrap();
 
-        fs::write(bootstrap_dir.join("nns_public_key.pem"), "test_nns_key").unwrap();
         fs::write(
             bootstrap_dir.join("node_operator_private_key.pem"),
             "test_node_op_key",
@@ -283,7 +269,6 @@ mod tests {
                 "./ic_crypto",
                 "./ic_state",
                 "./ic_registry_local_store",
-                "./nns_public_key.pem",
                 "./node_operator_private_key.pem",
                 "./accounts_ssh_authorized_keys",
             ])
@@ -314,7 +299,6 @@ mod tests {
             .join("data/ic_registry_local_store")
             .join("registry.dat")
             .exists());
-        assert!(state_root.join("data/nns_public_key.pem").exists());
         assert!(state_root
             .join("data/node_operator_private_key.pem")
             .exists());
@@ -453,7 +437,6 @@ mod tests {
         )
         .unwrap();
 
-        fs::write(extracted_dir.join("nns_public_key.pem"), "test_nns_key").unwrap();
         fs::write(
             extracted_dir.join("node_operator_private_key.pem"),
             "test_node_op_key",
@@ -480,7 +463,6 @@ mod tests {
             .join("data/ic_registry_local_store")
             .join("registry.dat")
             .exists());
-        assert!(state_root.join("data/nns_public_key.pem").exists());
         assert!(state_root
             .join("data/node_operator_private_key.pem")
             .exists());
@@ -506,10 +488,6 @@ mod tests {
             )
             .unwrap(),
             "test_registry_data"
-        );
-        assert_eq!(
-            fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
-            "test_nns_key"
         );
         assert_eq!(
             fs::read_to_string(state_root.join("data/node_operator_private_key.pem")).unwrap(),
@@ -538,8 +516,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        // Create nns_public_key files
-        fs::write(extracted_dir.join("nns_public_key.pem"), "original_nns_key").unwrap();
+        // Create nns_public_key_override file
         fs::write(
             extracted_dir.join("nns_public_key_override.pem"),
             "override_nns_key",
@@ -550,7 +527,7 @@ mod tests {
         let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
         assert!(result.is_ok());
 
-        // Verify that the override key was used instead of the original
+        // Verify that the override key was copied
         assert!(state_root.join("data/nns_public_key.pem").exists());
         assert_eq!(
             fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
@@ -570,8 +547,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        // Create nns_public_key files
-        fs::write(extracted_dir.join("nns_public_key.pem"), "original_nns_key").unwrap();
+        // Create nns_public_key_override file
         fs::write(
             extracted_dir.join("nns_public_key_override.pem"),
             "override_nns_key",
@@ -582,9 +558,7 @@ mod tests {
         let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
         assert!(result.is_ok());
 
-        // Verify that the original key was used, NOT the override
-        let file_path = state_root.join("data/nns_public_key.pem");
-        assert!(file_path.exists());
-        assert_eq!(fs::read_to_string(file_path).unwrap(), "original_nns_key");
+        // Verify that the override key was not copied
+        assert!(!state_root.join("data/nns_public_key.pem").exists());
     }
 }
