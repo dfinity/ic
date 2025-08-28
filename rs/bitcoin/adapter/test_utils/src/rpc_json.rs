@@ -88,7 +88,7 @@ pub enum StringOrStringArray {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetMempoolEntryResult {
+pub struct BtcGetMempoolEntryResult {
     /// Virtual transaction size as defined in BIP 141. This is different from actual serialized
     /// size for witness transactions as witness data is discounted.
     #[serde(alias = "size")]
@@ -112,47 +112,17 @@ pub struct GetMempoolEntryResult {
     #[serde(rename = "ancestorsize")]
     pub ancestor_size: u64,
     /// Hash of serialized transaction, including witness data
-    pub wtxid: Option<bitcoin::Txid>,
-    /// Fee information (only for Bitcoin)
-    pub fees: Option<GetMempoolEntryResultFees>,
-    /// Fee (only for Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub fee: Option<Amount>,
-    /// Transaction fee with fee deltas used for mining priority in BTC (only for Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub modifiedfee: Option<Amount>,
-    /// Modified fees (see above) of in-mempool ancestors (including this one) in BTC (only for
-    /// Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub ancestorfees: Option<Amount>,
-    /// Modified fees (see above) of in-mempool descendants (including this one) in BTC (only for
-    /// Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub descendantfees: Option<Amount>,
+    pub wtxid: bitcoin::Txid,
+    /// Fee information
+    pub fees: GetMempoolEntryResultFees,
     /// Unconfirmed transactions used as inputs for this transaction
     pub depends: Vec<Txid>,
     /// Unconfirmed transactions spending outputs from this transaction
     #[serde(rename = "spentby")]
     pub spent_by: Vec<Txid>,
-    /// Whether this transaction could be replaced due to BIP125 (replace-by-fee, only for Bitcoin)
+    /// Whether this transaction could be replaced due to BIP125
     #[serde(rename = "bip125-replaceable")]
-    pub bip125_replaceable: Option<bool>,
+    pub bip125_replaceable: bool,
     /// Whether this transaction is currently unbroadcast (initial broadcast not yet acknowledged by any peers)
     /// Added in Bitcoin Core v0.21
     pub unbroadcast: Option<bool>,
@@ -172,6 +142,48 @@ pub struct GetMempoolEntryResultFees {
     /// Modified fees (see above) of in-mempool descendants (including this one) in BTC
     #[serde(with = "bitcoin::amount::serde::as_btc")]
     pub descendant: Amount,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DogeGetMempoolEntryResult {
+    /// Virtual transaction size as defined in BIP 141. This is different from actual serialized
+    /// size for witness transactions as witness data is discounted.
+    #[serde(alias = "size")]
+    pub vsize: u64,
+    /// Transaction weight as defined in BIP 141. Added in Core v0.19.0.
+    pub weight: Option<u64>,
+    /// Local time transaction entered pool in seconds since 1 Jan 1970 GMT
+    pub time: u64,
+    /// Block height when transaction entered pool
+    pub height: u64,
+    /// Number of in-mempool descendant transactions (including this one)
+    #[serde(rename = "descendantcount")]
+    pub descendant_count: u64,
+    /// Virtual transaction size of in-mempool descendants (including this one)
+    #[serde(rename = "descendantsize")]
+    pub descendant_size: u64,
+    /// Number of in-mempool ancestor transactions (including this one)
+    #[serde(rename = "ancestorcount")]
+    pub ancestor_count: u64,
+    /// Virtual transaction size of in-mempool ancestors (including this one)
+    #[serde(rename = "ancestorsize")]
+    pub ancestor_size: u64,
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    /// Transaction fee.
+    pub fee: Amount,
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    /// Transaction fee with fee deltas used for mining priority.
+    pub modifiedfee: Amount,
+    /// Modified fees (see above) of in-mempool ancestors (including this one).
+    /// Dogecoin)
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    pub ancestorfees: Amount,
+    /// Modified fees (see above) of in-mempool descendants (including this one).
+    /// Dogecoin)
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    pub descendantfees: Amount,
+    /// Unconfirmed transactions used as inputs for this transaction
+    pub depends: Vec<Txid>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

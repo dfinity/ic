@@ -12,9 +12,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub use crate::rpc_json::{
-    CreateRawTransactionInput, GetBalancesResult, GetBlockchainInfoResult, GetMempoolEntryResult,
-    ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput, SignRawTransactionResult,
-    UnloadWalletResult,
+    BtcGetMempoolEntryResult, CreateRawTransactionInput, GetBalancesResult,
+    GetBlockchainInfoResult, ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput,
+    SignRawTransactionResult, UnloadWalletResult,
 };
 
 pub type Result<T> = std::result::Result<T, RpcError>;
@@ -156,7 +156,7 @@ pub trait RpcApi {
         addresses: Option<&[&Address]>,
     ) -> Result<Vec<ListUnspentResultEntry>>;
     fn get_raw_mempool(&self) -> Result<Vec<Txid>>;
-    fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult>;
+    fn get_mempool_entry(&self, txid: &Txid) -> Result<BtcGetMempoolEntryResult>;
     fn get_new_address(&self) -> Result<Address>;
     fn add_node(&self, addr: &str) -> Result<()>;
     fn onetry_node(&self, addr: &str) -> Result<()>;
@@ -424,7 +424,7 @@ impl RpcApi for RpcClient {
         self.call("getrawmempool", &[])
     }
 
-    fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult> {
+    fn get_mempool_entry(&self, txid: &Txid) -> Result<BtcGetMempoolEntryResult> {
         self.call("getmempoolentry", &[into_json(txid)?])
     }
 
