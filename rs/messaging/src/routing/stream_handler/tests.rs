@@ -2712,7 +2712,11 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (
+                    LABEL_VALUE_TYPE_REQUEST,
+                    LABEL_VALUE_CANISTER_LIKELY_MIGRATED,
+                    1,
+                ),
                 (
                     LABEL_VALUE_TYPE_REQUEST,
                     LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
